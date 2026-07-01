@@ -6,7 +6,8 @@ GPU="${GPU:-0}"
 MODE="${MODE:-shared_mma}"
 W_SM_KIB="${W_SM_KIB:-128}"
 BLOCKS_PER_SM="${BLOCKS_PER_SM:-1}"
-ACTIVE_SM="${ACTIVE_SM:-108}"
+ACTIVE_SM="${ACTIVE_SM:-82}"
+TARGET_PROFILE="${TARGET_PROFILE:-rtx3090}"
 ITERS="${ITERS:-4096}"
 OUTDIR="${OUTDIR:-results/ncu}"
 CACHE_CONTROL="${CACHE_CONTROL:-none}"
@@ -35,6 +36,7 @@ ncu \
     --mode "${MODE}" \
     --w-sm-kib "${W_SM_KIB}" \
     --blocks-per-sm "${BLOCKS_PER_SM}" \
+    --target-profile "${TARGET_PROFILE}" \
     --active-sm "${ACTIVE_SM}" \
     --iters "${ITERS}" \
     --repeats 1 \

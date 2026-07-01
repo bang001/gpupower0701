@@ -1,7 +1,11 @@
-# A100 FP16 Tensor Core Energy Experiment v2
+# FP16 Tensor Core Energy Experiment v2
 
 CUDA/C++ microbenchmark framework for estimating effective energy of a logical
-warp-level FP16 `m16n16k16` MMA operation on NVIDIA A100 (`sm_80`).
+warp-level FP16 `m16n16k16` MMA operation on NVIDIA Ampere GPUs.
+
+The default runtime profile in this checkout targets GeForce RTX 3090
+(`sm_86`, 82 SMs, 6 MiB nominal L2). The original A100 profile is still
+available with `--target-profile a100`.
 
 This repository implements the v2 design in
 `docs/a100_fp16_energy_experiment_design_v2.md`.
@@ -13,7 +17,7 @@ This repository implements the v2 design in
 - 1 logical op input footprint = A+B FP16 = 1KiB = 8192 bits.
 - `threads/block = 32`, so `blocks/SM = resident warps/SM`.
 
-The current kernel implementation uses CUDA WMMA as the portable A100 Tensor Core
+The current kernel implementation uses CUDA WMMA as the portable Tensor Core
 path. In low-level SASS this may compile to multiple tensor instructions for one
 logical `m16n16k16` op. Raw inline PTX `mma.sync.aligned.m16n8k16` and explicit
 `ldmatrix` are not the primary implementation yet; CSV rows mark
@@ -22,8 +26,12 @@ logical `m16n16k16` op. Raw inline PTX `mma.sync.aligned.m16n8k16` and explicit
 ## Build
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=80
-cmake --build build -j
+/home/bang001/miniforge3/envs/ssc21env/bin/cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_COMPILER=/home/bang001/miniforge3/envs/ssc21env/bin/nvcc \
+  -DCUDAToolkit_ROOT=/home/bang001/miniforge3/envs/ssc21env \
+  -DCMAKE_CUDA_ARCHITECTURES=86
+/home/bang001/miniforge3/envs/ssc21env/bin/cmake --build build -j
 ```
 
 NVML is required. If CMake cannot find it, make sure the NVIDIA driver
@@ -51,8 +59,9 @@ Feasibility only:
   --gpu-list 0 \
   --mode shared_mma \
   --w-sm-kib 128 \
-  --blocks-per-sm 32 \
-  --active-sm 108 \
+  --blocks-per-sm 16 \
+  --target-profile rtx3090 \
+  --active-sm 82 \
   --dry-run
 ```
 
@@ -64,7 +73,8 @@ Single GPU register/Tensor Core run:
   --mode reg_mma \
   --w-sm-kib 32 \
   --blocks-per-sm 16 \
-  --active-sm 108 \
+  --target-profile rtx3090 \
+  --active-sm 82 \
   --seconds 10 \
   --repeats 5 \
   --output results/raw/a100_fp16_energy_v2_raw.csv
@@ -74,10 +84,10 @@ L2 and DRAM path examples:
 
 ```bash
 ./build/a100_fp16_energy_v2 --gpu-list 0 --mode l2_mma \
-  --w-sm-kib 256 --blocks-per-sm 8 --active-sm 108 --seconds 10
+  --w-sm-kib 64 --blocks-per-sm 8 --target-profile rtx3090 --active-sm 82 --seconds 10
 
 ./build/a100_fp16_energy_v2 --gpu-list 0 --mode dram_mma \
-  --w-sm-kib 8192 --blocks-per-sm 8 --active-sm 108 --seconds 10
+  --w-sm-kib 128 --blocks-per-sm 8 --target-profile rtx3090 --active-sm 82 --seconds 10
 ```
 
 Idle baseline with zero active GPUs:
@@ -85,7 +95,7 @@ Idle baseline with zero active GPUs:
 ```bash
 ./build/a100_fp16_energy_v2 \
   --gpu-list none --mode idle --w-sm-kib 1 --blocks-per-sm 1 \
-  --active-sm 108 --seconds 10 --repeats 5
+  --target-profile rtx3090 --active-sm 82 --seconds 10 --repeats 5
 ```
 
 ## Modes
@@ -98,13 +108,21 @@ Idle baseline with zero active GPUs:
 - `dram_mma`: large global working set with streaming tile order.
 - `store_path`: global store-focused path for output-side overhead checks.
 
+`shared_mma` is not an A100-only concept. On RTX 3090 / Ampere GA102 it means
+the operands are staged through CUDA shared memory and loaded into WMMA
+fragments from the shared-memory address space. The physical L1/shared-memory
+organization and limits differ from A100, so feasibility uses the RTX 3090
+profile values rather than the A100 164 KiB shared/L1 budget.
+
 Invalid combinations fail before execution. The shared/L2/DRAM classification is
 the design rule:
 
 - `invalid_min_tile`: `W_SM_KiB < blocks_per_SM`.
-- `shared_resident`: `W_SM + B KiB <= 164KiB` and `W_SM/B <= 163KiB`.
-- `l2_candidate`: shared impossible and full 108-SM working set <= 40MiB.
-- `dram_mixed_streaming`: full 108-SM working set > 40MiB.
+- `shared_resident`: `W_SM + B KiB <= profile shared KiB` and
+  `W_SM/B <= profile max shared/block KiB`.
+- `l2_candidate`: full-profile working set fits the nominal profile L2
+  (`82 * W_SM <= 6MiB` for RTX 3090).
+- `dram_mixed_streaming`: full-profile working set exceeds nominal profile L2.
 
 ## Sweep
 
@@ -120,8 +138,9 @@ Run the matrix:
 python3 scripts/run_sweep.py \
   --include-idle \
   --execute \
-  --gpu-ids 0,1,2 \
-  --max-active-gpus 3 \
+  --target-profile rtx3090 \
+  --gpu-ids 0 \
+  --max-active-gpus 1 \
   --seconds 10 \
   --repeats 5
 ```
@@ -133,8 +152,8 @@ python3 scripts/run_sweep.py --execute \
   --gpu-ids 0 \
   --modes reg_mma,shared_mma \
   --w-sm-kib-values 32,128 \
-  --blocks-per-sm-values 1,8,32 \
-  --active-sm-values 108 \
+  --blocks-per-sm-values 1,8,16 \
+  --active-sm-values 82 \
   --seconds 2 \
   --repeats 1
 ```
@@ -146,7 +165,7 @@ Energy runs and NCU profiling runs are intentionally separate.
 ```bash
 scripts/run_ncu.sh --query-metrics
 
-MODE=shared_mma W_SM_KIB=128 BLOCKS_PER_SM=32 ACTIVE_SM=108 GPU=0 \
+MODE=shared_mma W_SM_KIB=64 BLOCKS_PER_SM=16 ACTIVE_SM=82 GPU=0 \
   scripts/run_ncu.sh
 
 MODE=dram_mma W_SM_KIB=8192 BLOCKS_PER_SM=8 CACHE_CONTROL=all \

@@ -39,7 +39,8 @@ struct Options {
   Mode mode = Mode::reg_mma;
   std::uint64_t w_sm_kib = 1;
   int blocks_per_sm = 1;
-  int active_sm = kA100FullSmCount;
+  HardwareProfile profile = kDefaultHardwareProfile;
+  int active_sm = kDefaultHardwareProfile.full_sm_count;
   double seconds = 10.0;
   std::uint64_t iters = 0;
   int repeats = 5;
@@ -106,8 +107,9 @@ void print_usage(const char* argv0) {
       << "  --gpu-list <list|none>       CUDA/NVML ids for active GPUs\n"
       << "  --mode idle|empty|reg_mma|shared_mma|l2_mma|dram_mma|store_path\n"
       << "  --w-sm-kib <int>             1..131072 power-of-two KiB sweep point\n"
-      << "  --blocks-per-sm <int>        1,2,4,8,16,32\n"
-      << "  --active-sm <int>            default 108\n"
+      << "  --blocks-per-sm <int>        power-of-two up to target resident block limit\n"
+      << "  --active-sm <int>            default target full SM count\n"
+      << "  --target-profile <name>      rtx3090 (default) or a100\n"
       << "  --seconds <float>            target measurement time, default 10\n"
       << "  --iters <int>                bypass calibration if nonzero\n"
       << "  --repeats <int>              default 5\n"
@@ -118,6 +120,7 @@ void print_usage(const char* argv0) {
 
 Options parse_args(int argc, char** argv) {
   Options opts;
+  bool active_sm_explicit = false;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
     auto need_value = [&](const std::string& name) -> std::string {
@@ -136,8 +139,12 @@ Options parse_args(int argc, char** argv) {
       opts.w_sm_kib = static_cast<std::uint64_t>(std::stoull(need_value(arg)));
     } else if (arg == "--blocks-per-sm") {
       opts.blocks_per_sm = std::stoi(need_value(arg));
+    } else if (arg == "--target-profile") {
+      opts.profile = profile_from_string(need_value(arg));
+      if (!active_sm_explicit) opts.active_sm = opts.profile.full_sm_count;
     } else if (arg == "--active-sm") {
       opts.active_sm = std::stoi(need_value(arg));
+      active_sm_explicit = true;
     } else if (arg == "--seconds") {
       opts.seconds = std::stod(need_value(arg));
     } else if (arg == "--iters") {
@@ -189,6 +196,7 @@ void print_dry_run(const Options& opts, const Feasibility& f, bool allowed,
   std::cout << "dry_run=true\n";
   std::cout << "mode=" << to_string(opts.mode) << "\n";
   std::cout << "gpu_list=" << join_ints(opts.gpu_list) << "\n";
+  std::cout << "target_profile=" << opts.profile.name << "\n";
   std::cout << "W_SM_KiB=" << opts.w_sm_kib << "\n";
   std::cout << "W_SM_label=" << w_sm_label(opts.w_sm_kib) << "\n";
   std::cout << "blocks_per_SM=" << opts.blocks_per_sm << "\n";
@@ -197,11 +205,17 @@ void print_dry_run(const Options& opts, const Feasibility& f, bool allowed,
   std::cout << "valid_feasibility=" << (f.valid ? "true" : "false") << "\n";
   std::cout << "mode_allowed=" << (allowed ? "true" : "false") << "\n";
   std::cout << "regime=" << f.regime << "\n";
+  std::cout << "shared_resident=" << (f.shared_resident ? "true" : "false")
+            << "\n";
+  std::cout << "l2_candidate=" << (f.l2_candidate ? "true" : "false")
+            << "\n";
+  std::cout << "dram_candidate=" << (f.dram_candidate ? "true" : "false")
+            << "\n";
   std::cout << "reason=" << f.reason << "\n";
   if (!mode_reason.empty()) std::cout << "mode_reason=" << mode_reason << "\n";
   std::cout << "W_block_KiB=" << f.w_block_kib << "\n";
   std::cout << "tiles_per_block=" << f.tiles_per_block << "\n";
-  std::cout << "full108_working_set_MiB=" << f.full108_working_set_mib
+  std::cout << "full_gpu_working_set_MiB=" << f.full_gpu_working_set_mib
             << "\n";
 }
 
@@ -213,6 +227,15 @@ std::vector<double> energy_delta_j(const std::vector<GpuEnergySample>& before,
         (static_cast<double>(after[i].energy_mj) -
          static_cast<double>(before[i].energy_mj)) /
         1000.0;
+    if (!(before[i].energy_counter_supported &&
+          after[i].energy_counter_supported)) {
+      const double dt = after[i].timestamp_s - before[i].timestamp_s;
+      const double avg_power_w =
+          (static_cast<double>(before[i].power_mw) +
+           static_cast<double>(after[i].power_mw)) /
+          2.0e3;
+      delta[i] = std::max(0.0, dt * avg_power_w);
+    }
   }
   return delta;
 }
@@ -260,9 +283,12 @@ DeviceState setup_device(int gpu_id, const Options& opts,
         << " SM count " << state.actual_sm;
     throw std::runtime_error(oss.str());
   }
-  if (!(prop.major == 8 && prop.minor == 0)) {
+  if (!(prop.major == opts.profile.compute_major &&
+        prop.minor == opts.profile.compute_minor)) {
     std::ostringstream oss;
-    oss << "warning_non_a100_cc=" << prop.major << "." << prop.minor << ";";
+    oss << "warning_target_cc_mismatch=device_" << prop.major << "."
+        << prop.minor << "_target_" << opts.profile.compute_major << "."
+        << opts.profile.compute_minor << ";";
     state.notes += oss.str();
   }
 
@@ -488,6 +514,12 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
 
   std::ostringstream notes;
   notes << "regime=" << f.regime << ";feasibility_reason=" << f.reason
+        << ";target_profile=" << opts.profile.name
+        << ";target_full_sm=" << opts.profile.full_sm_count
+        << ";target_l2_mib=" << opts.profile.l2_mib
+        << ";shared_resident=" << (f.shared_resident ? 1 : 0)
+        << ";l2_candidate=" << (f.l2_candidate ? 1 : 0)
+        << ";dram_candidate=" << (f.dram_candidate ? 1 : 0)
         << ";row_scope=per_gpu;"
         << "logical_op=warp_m16n16k16;"
         << "wmma_fallback=1;"
@@ -517,7 +549,8 @@ int run_idle(const Options& opts, NvmlEnergy& nvml) {
     const std::string run_id =
         "idle_" + now_token() + "_r" + std::to_string(repeat);
 
-    Feasibility f = classify_feasibility(opts.w_sm_kib, opts.blocks_per_sm);
+    Feasibility f =
+        classify_feasibility(opts.w_sm_kib, opts.blocks_per_sm, opts.profile);
     for (int gpu = 0; gpu < nvml.device_count(); ++gpu) {
       const double delta_j = delta.at(gpu);
       SmidCheck smid;
@@ -617,7 +650,8 @@ int main(int argc, char** argv) {
   try {
     const auto opts = a100fp16::parse_args(argc, argv);
     const auto f =
-        a100fp16::classify_feasibility(opts.w_sm_kib, opts.blocks_per_sm);
+        a100fp16::classify_feasibility(opts.w_sm_kib, opts.blocks_per_sm,
+                                       opts.profile);
     std::string mode_reason;
     const bool allowed =
         a100fp16::mode_allowed_for_feasibility(opts.mode, f, &mode_reason);

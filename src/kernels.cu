@@ -76,11 +76,13 @@ __global__ void empty_kernel(std::uint64_t iters, float* output,
                              int* smid_by_block, int* rank_by_block,
                              int* sm_counts, int sm_count_capacity) {
   record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+  unsigned sink = static_cast<unsigned>(threadIdx.x ^ blockIdx.x);
   for (std::uint64_t i = 0; i < iters; ++i) {
-    asm volatile("" : : "l"(i) : "memory");
+    asm volatile("add.u32 %0, %0, 1;" : "+r"(sink));
   }
   if (threadIdx.x == 0 && output) {
-    output[blockIdx.x * 256] = static_cast<float>((iters ^ blockIdx.x) & 0xffff);
+    output[blockIdx.x * 256] =
+        static_cast<float>((sink ^ static_cast<unsigned>(iters)) & 0xffffu);
   }
 }
 

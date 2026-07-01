@@ -12,7 +12,7 @@ namespace a100fp16 {
 
 struct KernelLaunchConfig {
   Mode mode = Mode::empty;
-  int active_sm = kA100FullSmCount;
+  int active_sm = kDefaultHardwareProfile.full_sm_count;
   int blocks_per_sm = 1;
   std::uint64_t w_block_bytes = kLogicalMmaInputBytes;
   std::uint64_t tiles_per_block = 1;

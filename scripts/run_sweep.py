@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run or materialize the A100 FP16 energy v2 design matrix."""
+"""Run or materialize the FP16 energy v2 design matrix."""
 
 from __future__ import annotations
 
@@ -7,10 +7,28 @@ import argparse
 import csv
 import subprocess
 from pathlib import Path
+from typing import Any
 
 
-A100_FULL_SM = 108
-L2_MIB = 40
+PROFILES: dict[str, dict[str, Any]] = {
+    "rtx3090": {
+        "full_sm": 82,
+        "l2_mib": 6,
+        "max_blocks_per_sm": 16,
+        "shared_capacity_per_sm_kib": 100,
+        "max_shared_per_block_kib": 99,
+        "active_sm": [1, 2, 4, 8, 16, 32, 64, 82],
+    },
+    "a100": {
+        "full_sm": 108,
+        "l2_mib": 40,
+        "max_blocks_per_sm": 32,
+        "shared_capacity_per_sm_kib": 164,
+        "max_shared_per_block_kib": 163,
+        "active_sm": [1, 2, 4, 8, 16, 32, 64, 108],
+    },
+}
+DEFAULT_PROFILE = "rtx3090"
 BLOCKS_PER_SM = [1, 2, 4, 8, 16, 32]
 W_SM_KIB = [
     1,
@@ -32,34 +50,65 @@ W_SM_KIB = [
     65536,
     131072,
 ]
-ACTIVE_SM = [1, 2, 4, 8, 16, 32, 64, 108]
 MODES = ["empty", "reg_mma", "shared_mma", "l2_mma", "dram_mma", "store_path"]
 
 
-def classify(w_sm_kib: int, blocks_per_sm: int) -> tuple[bool, str, str]:
-    if blocks_per_sm not in BLOCKS_PER_SM:
-        return False, "invalid_blocks_per_sm", "unsupported blocks/SM"
+def classify(w_sm_kib: int, blocks_per_sm: int, profile: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "valid": False,
+        "regime": "invalid",
+        "reason": "",
+        "shared_resident": False,
+        "l2_candidate": False,
+        "dram_candidate": False,
+    }
+    if blocks_per_sm not in BLOCKS_PER_SM or blocks_per_sm > profile["max_blocks_per_sm"]:
+        out["regime"] = "invalid_blocks_per_sm"
+        out["reason"] = (
+            f"blocks_per_SM exceeds resident block limit {profile['max_blocks_per_sm']}"
+        )
+        return out
     if w_sm_kib not in W_SM_KIB:
-        return False, "invalid_w_sm", "unsupported W_SM_KiB"
+        out["regime"] = "invalid_w_sm"
+        out["reason"] = "unsupported W_SM_KiB"
+        return out
     if w_sm_kib < blocks_per_sm:
-        return False, "invalid_min_tile", "W_SM_KiB < blocks_per_SM"
-    if w_sm_kib + blocks_per_sm <= 164 and (w_sm_kib / blocks_per_sm) <= 163:
-        return True, "shared_resident", "fits shared memory"
-    full108_mib = A100_FULL_SM * w_sm_kib / 1024.0
-    if full108_mib <= L2_MIB:
-        return True, "l2_candidate", "full-108SM working set fits nominal L2"
-    return True, "dram_mixed_streaming", "full-108SM working set exceeds nominal L2"
+        out["regime"] = "invalid_min_tile"
+        out["reason"] = "W_SM_KiB < blocks_per_SM"
+        return out
+
+    full_gpu_mib = profile["full_sm"] * w_sm_kib / 1024.0
+    shared_resident = (
+        w_sm_kib + blocks_per_sm <= profile["shared_capacity_per_sm_kib"]
+        and (w_sm_kib / blocks_per_sm) <= profile["max_shared_per_block_kib"]
+    )
+    l2_candidate = full_gpu_mib <= profile["l2_mib"]
+
+    out["valid"] = True
+    out["shared_resident"] = shared_resident
+    out["l2_candidate"] = l2_candidate
+    out["dram_candidate"] = not l2_candidate
+    if shared_resident:
+        out["regime"] = "shared_resident"
+        out["reason"] = "fits shared memory"
+    elif l2_candidate:
+        out["regime"] = "l2_candidate"
+        out["reason"] = "full-GPU working set fits nominal L2"
+    else:
+        out["regime"] = "dram_mixed_streaming"
+        out["reason"] = "full-GPU working set exceeds nominal L2"
+    return out
 
 
-def mode_allowed(mode: str, valid: bool, regime: str) -> bool:
-    if not valid:
+def mode_allowed(mode: str, info: dict[str, Any]) -> bool:
+    if not info["valid"]:
         return False
     if mode == "shared_mma":
-        return regime == "shared_resident"
+        return bool(info["shared_resident"])
     if mode == "l2_mma":
-        return regime == "l2_candidate"
+        return bool(info["l2_candidate"])
     if mode == "dram_mma":
-        return regime == "dram_mixed_streaming"
+        return bool(info["dram_candidate"])
     return True
 
 
@@ -85,9 +134,12 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", default="./build/a100_fp16_energy_v2")
     parser.add_argument("--output", default="results/raw/a100_fp16_energy_v2_raw.csv")
-    parser.add_argument("--matrix-csv", default="results/raw/a100_fp16_energy_v2_dry_run_matrix.csv")
-    parser.add_argument("--gpu-ids", default="0,1,2")
-    parser.add_argument("--max-active-gpus", type=int, default=3)
+    parser.add_argument(
+        "--matrix-csv", default="results/raw/a100_fp16_energy_v2_dry_run_matrix.csv"
+    )
+    parser.add_argument("--target-profile", default=DEFAULT_PROFILE, choices=sorted(PROFILES))
+    parser.add_argument("--gpu-ids", default="0")
+    parser.add_argument("--max-active-gpus", type=int, default=1)
     parser.add_argument("--modes", default=",".join(MODES))
     parser.add_argument("--w-sm-kib-values", default="")
     parser.add_argument("--blocks-per-sm-values", default="")
@@ -100,11 +152,13 @@ def main() -> int:
     parser.add_argument("--include-idle", action="store_true")
     args = parser.parse_args()
 
-    gpu_ids = parse_int_list(args.gpu_ids, [0, 1, 2])
+    profile = PROFILES[args.target_profile]
+    gpu_ids = parse_int_list(args.gpu_ids, [0])
     modes = parse_str_list(args.modes, MODES)
     w_values = parse_int_list(args.w_sm_kib_values, W_SM_KIB)
-    b_values = parse_int_list(args.blocks_per_sm_values, BLOCKS_PER_SM)
-    active_sm_values = parse_int_list(args.active_sm_values, ACTIVE_SM)
+    b_default = [b for b in BLOCKS_PER_SM if b <= profile["max_blocks_per_sm"]]
+    b_values = parse_int_list(args.blocks_per_sm_values, b_default)
+    active_sm_values = parse_int_list(args.active_sm_values, profile["active_sm"])
     n_gpu_values = list(range(1, min(args.max_active_gpus, len(gpu_ids)) + 1))
 
     matrix_path = Path(args.matrix_csv)
@@ -116,6 +170,7 @@ def main() -> int:
             f,
             fieldnames=[
                 "mode",
+                "target_profile",
                 "W_SM_KiB",
                 "blocks_per_SM",
                 "active_SM",
@@ -123,6 +178,9 @@ def main() -> int:
                 "gpu_list",
                 "valid",
                 "regime",
+                "shared_resident",
+                "l2_candidate",
+                "dram_candidate",
                 "reason",
                 "command",
             ],
@@ -140,8 +198,10 @@ def main() -> int:
                 "1",
                 "--blocks-per-sm",
                 "1",
+                "--target-profile",
+                args.target_profile,
                 "--active-sm",
-                "108",
+                str(profile["full_sm"]),
                 "--seconds",
                 str(args.seconds),
                 "--repeats",
@@ -153,13 +213,17 @@ def main() -> int:
             writer.writerow(
                 {
                     "mode": "idle",
+                    "target_profile": args.target_profile,
                     "W_SM_KiB": 1,
                     "blocks_per_SM": 1,
-                    "active_SM": 108,
+                    "active_SM": profile["full_sm"],
                     "n_gpu_active": 0,
                     "gpu_list": "none",
                     "valid": True,
                     "regime": "idle",
+                    "shared_resident": True,
+                    "l2_candidate": True,
+                    "dram_candidate": False,
                     "reason": "0 active GPU baseline",
                     "command": " ".join(cmd),
                 }
@@ -168,8 +232,8 @@ def main() -> int:
         for mode in modes:
             for w_sm_kib in w_values:
                 for blocks_per_sm in b_values:
-                    valid, regime, reason = classify(w_sm_kib, blocks_per_sm)
-                    allowed = mode_allowed(mode, valid, regime)
+                    info = classify(w_sm_kib, blocks_per_sm, profile)
+                    allowed = mode_allowed(mode, info)
                     for active_sm in active_sm_values:
                         for n_gpu in n_gpu_values:
                             gpu_list = gpu_list_for_count(gpu_ids, n_gpu)
@@ -183,6 +247,8 @@ def main() -> int:
                                 str(w_sm_kib),
                                 "--blocks-per-sm",
                                 str(blocks_per_sm),
+                                "--target-profile",
+                                args.target_profile,
                                 "--active-sm",
                                 str(active_sm),
                                 "--seconds",
@@ -201,14 +267,22 @@ def main() -> int:
                             writer.writerow(
                                 {
                                     "mode": mode,
+                                    "target_profile": args.target_profile,
                                     "W_SM_KiB": w_sm_kib,
                                     "blocks_per_SM": blocks_per_sm,
                                     "active_SM": active_sm,
                                     "n_gpu_active": n_gpu,
                                     "gpu_list": gpu_list,
                                     "valid": allowed,
-                                    "regime": regime,
-                                    "reason": reason if allowed else f"skipped_for_mode_or_invalid:{reason}",
+                                    "regime": info["regime"],
+                                    "shared_resident": info["shared_resident"],
+                                    "l2_candidate": info["l2_candidate"],
+                                    "dram_candidate": info["dram_candidate"],
+                                    "reason": (
+                                        info["reason"]
+                                        if allowed
+                                        else f"skipped_for_mode_or_invalid:{info['reason']}"
+                                    ),
                                     "command": " ".join(cmd),
                                 }
                             )

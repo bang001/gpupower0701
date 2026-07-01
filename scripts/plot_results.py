@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate standard PNG visualizations for A100 FP16 energy v2 CSV files."""
+"""Generate standard PNG visualizations for FP16 energy v2 CSV files."""
 
 from __future__ import annotations
 
@@ -18,6 +18,22 @@ except ModuleNotFoundError as exc:
 
 
 BLOCKS_PER_SM = [1, 2, 4, 8, 16, 32]
+PROFILES = {
+    "rtx3090": {
+        "full_sm": 82,
+        "l2_mib": 6,
+        "max_blocks_per_sm": 16,
+        "shared_capacity_per_sm_kib": 100,
+        "max_shared_per_block_kib": 99,
+    },
+    "a100": {
+        "full_sm": 108,
+        "l2_mib": 40,
+        "max_blocks_per_sm": 32,
+        "shared_capacity_per_sm_kib": 164,
+        "max_shared_per_block_kib": 163,
+    },
+}
 W_SM_KIB = [
     1,
     2,
@@ -160,28 +176,32 @@ def plot_ncu_bytes_per_op(rows: list[dict[str, str]], outdir: Path) -> None:
     save_line_plot(outdir / "ncu_bytes_per_logical_op_vs_wsm.png", "W_SM (KiB)", "bytes / logical op", "NCU bytes per logical op vs W_SM", series, logx=True)
 
 
-def classify(w_sm: int, b: int) -> int:
-    if w_sm < b:
+def classify(w_sm: int, b: int, profile: dict[str, int]) -> int:
+    if b > profile["max_blocks_per_sm"] or w_sm < b:
         return 0
-    if w_sm + b <= 164 and (w_sm / b) <= 163:
+    if (
+        w_sm + b <= profile["shared_capacity_per_sm_kib"]
+        and (w_sm / b) <= profile["max_shared_per_block_kib"]
+    ):
         return 1
-    if 108 * w_sm / 1024.0 <= 40:
+    if profile["full_sm"] * w_sm / 1024.0 <= profile["l2_mib"]:
         return 2
     return 3
 
 
-def plot_feasibility_heatmap(outdir: Path) -> None:
+def plot_feasibility_heatmap(outdir: Path, profile_name: str) -> None:
+    profile = PROFILES[profile_name]
     labels = ["invalid_min_tile", "shared_resident", "l2_candidate", "dram_mixed_streaming"]
     colors = ["#d9d9d9", "#4c78a8", "#59a14f", "#f28e2b"]
     cmap = ListedColormap(colors)
-    matrix = [[classify(w, b) for b in BLOCKS_PER_SM] for w in W_SM_KIB]
+    matrix = [[classify(w, b, profile) for b in BLOCKS_PER_SM] for w in W_SM_KIB]
     plt.figure(figsize=(8, 7))
     plt.imshow(matrix, aspect="auto", interpolation="nearest", cmap=cmap, vmin=0, vmax=3)
     plt.xticks(range(len(BLOCKS_PER_SM)), BLOCKS_PER_SM)
     plt.yticks(range(len(W_SM_KIB)), [str(w) for w in W_SM_KIB])
     plt.xlabel("blocks/SM")
     plt.ylabel("W_SM (KiB)")
-    plt.title("Feasibility heatmap")
+    plt.title(f"Feasibility heatmap ({profile_name})")
     handles = [plt.Rectangle((0, 0), 1, 1, color=colors[i]) for i in range(len(labels))]
     plt.legend(handles, labels, loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=8)
     plt.tight_layout()
@@ -216,6 +236,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("csv")
     parser.add_argument("--outdir", default="results/plots")
+    parser.add_argument("--target-profile", default="rtx3090", choices=sorted(PROFILES))
     args = parser.parse_args()
 
     outdir = Path(args.outdir)
@@ -228,7 +249,7 @@ def main() -> int:
     plot_pj_vs_wsm(rows, outdir, "pJ_per_FLOP", "pj_flop_vs_wsm.png", "pJ/FLOP")
     plot_pj_vs_wsm(rows, outdir, "pJ_per_input_bit", "pj_input_bit_vs_wsm.png", "pJ/input-bit")
     plot_ncu_bytes_per_op(rows, outdir)
-    plot_feasibility_heatmap(outdir)
+    plot_feasibility_heatmap(outdir, args.target_profile)
     plot_residual_if_present(rows, outdir)
     print(f"plots written to {outdir}")
     return 0

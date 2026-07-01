@@ -1,12 +1,15 @@
 #include "nvml_energy.hpp"
 
-#include <nvml.h>
+#include "nvml_compat.hpp"
 
+#include <chrono>
 #include <sstream>
 #include <stdexcept>
 
 namespace a100fp16 {
 namespace {
+
+using Clock = std::chrono::steady_clock;
 
 void check_nvml(nvmlReturn_t status, const char* what) {
   if (status != NVML_SUCCESS) {
@@ -14,6 +17,10 @@ void check_nvml(nvmlReturn_t status, const char* what) {
     oss << what << " failed: " << nvmlErrorString(status);
     throw std::runtime_error(oss.str());
   }
+}
+
+double now_seconds() {
+  return std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
 }
 
 }  // namespace
@@ -41,15 +48,32 @@ GpuEnergySample NvmlEnergy::sample(int gpu_id) const {
 
   GpuEnergySample sample;
   sample.gpu_id = gpu_id;
+  sample.timestamp_s = now_seconds();
 
   unsigned long long energy_mj = 0;
-  check_nvml(nvmlDeviceGetTotalEnergyConsumption(device, &energy_mj),
-             "nvmlDeviceGetTotalEnergyConsumption");
-  sample.energy_mj = static_cast<std::uint64_t>(energy_mj);
-
   std::ostringstream notes;
+  nvmlReturn_t status =
+      nvmlDeviceGetTotalEnergyConsumption(device, &energy_mj);
+  if (status == NVML_SUCCESS) {
+    sample.energy_mj = static_cast<std::uint64_t>(energy_mj);
+    sample.energy_counter_supported = true;
+    notes << "energy_source=nvml_total_energy;";
+  } else {
+    notes << "energy_counter_unavailable=" << nvmlErrorString(status) << ";"
+          << "energy_source=power_trapezoid;";
+  }
+
   unsigned int value = 0;
-  nvmlReturn_t status = nvmlDeviceGetClockInfo(device, NVML_CLOCK_SM, &value);
+  status = nvmlDeviceGetPowerUsage(device, &value);
+  if (status == NVML_SUCCESS) {
+    sample.power_mw = value;
+    notes << "power_mw=" << value << ";";
+  } else {
+    notes << "power_unavailable=" << nvmlErrorString(status) << ";";
+  }
+
+  value = 0;
+  status = nvmlDeviceGetClockInfo(device, NVML_CLOCK_SM, &value);
   if (status == NVML_SUCCESS) {
     sample.sm_clock_mhz = value;
   } else {
