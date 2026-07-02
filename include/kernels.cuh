@@ -17,6 +17,9 @@ struct KernelLaunchConfig {
   std::uint64_t w_block_bytes = kLogicalMmaInputBytes;
   std::uint64_t tiles_per_block = 1;
   std::uint64_t iters = 1;
+  std::uint64_t reuse_factor = 1;
+  std::uint64_t load_repeat = 1;
+  std::uint64_t store_repeat = 1;
   half* input = nullptr;
   float* output = nullptr;
   int* smid_by_block = nullptr;

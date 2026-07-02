@@ -37,8 +37,15 @@ SHARED_W_SM_KIB="${SHARED_W_SM_KIB:-64}"
 L2_W_SM_KIB="${L2_W_SM_KIB:-64}"
 DRAM_W_SM_KIB="${DRAM_W_SM_KIB_OVERRIDE:-${DRAM_W_SM_KIB}}"
 BLOCKS_PER_SM="${BLOCKS_PER_SM:-16}"
+REUSE_FACTOR="${REUSE_FACTOR:-1}"
+LOAD_REPEAT="${LOAD_REPEAT:-1}"
+STORE_REPEAT="${STORE_REPEAT:-1}"
+SUMMARY_CSV="${SUMMARY_CSV:-${OUTDIR}/ncu_cache_validation_summary.csv}"
+SUMMARY_MD="${SUMMARY_MD:-${OUTDIR}/ncu_cache_validation_summary.md}"
+CASE_MANIFEST="${CASE_MANIFEST:-${OUTDIR}/ncu_validation_cases.csv}"
 
 mkdir -p "${OUTDIR}" "$(dirname "${RAW_OUT}")"
+printf "label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,report\n" > "${CASE_MANIFEST}"
 
 COMMON_SECTIONS=(
   --section LaunchStats
@@ -61,6 +68,10 @@ run_case() {
   local report="${OUTDIR}/${label}"
 
   echo "== ${label}: mode=${mode} W=${w_sm_kib}KiB B=${blocks_per_sm} iters=${iters}"
+  printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" \
+    "${label}" "${kernel_regex}" "${mode}" "${w_sm_kib}" "${blocks_per_sm}" \
+    "${ACTIVE_SM}" "${iters}" "${REUSE_FACTOR}" "${LOAD_REPEAT}" \
+    "${STORE_REPEAT}" "${report}" >> "${CASE_MANIFEST}"
   "${NCU_CMD[@]}" \
     "${COMMON_SECTIONS[@]}" \
     --target-processes application-only \
@@ -80,6 +91,9 @@ run_case() {
       --target-profile "${TARGET_PROFILE}" \
       --active-sm "${ACTIVE_SM}" \
       --iters "${iters}" \
+      --reuse-factor "${REUSE_FACTOR}" \
+      --load-repeat "${LOAD_REPEAT}" \
+      --store-repeat "${STORE_REPEAT}" \
       --repeats 1 \
       --seconds 1 \
       --output "${RAW_OUT}" \
@@ -92,9 +106,21 @@ run_case() {
 }
 
 run_case "empty_W64_B${BLOCKS_PER_SM}" "empty_kernel" "empty" 64 "${BLOCKS_PER_SM}" 1000000
+run_case "reg_fragment_only_W2048_B4" "reg_fragment_only_kernel" "reg_fragment_only" 2048 4 100000
 run_case "reg_mma_W2048_B4" "reg_mma_kernel" "reg_mma" 2048 4 100000
+run_case "shared_load_only_W${SHARED_W_SM_KIB}_B${BLOCKS_PER_SM}" "shared_load_only_kernel" "shared_load_only" "${SHARED_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000
 run_case "shared_mma_W${SHARED_W_SM_KIB}_B${BLOCKS_PER_SM}" "shared_mma_kernel" "shared_mma" "${SHARED_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000
+run_case "l2_load_only_W${L2_W_SM_KIB}_B${BLOCKS_PER_SM}" "global_load_only_kernel" "l2_load_only" "${L2_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000
 run_case "l2_mma_W${L2_W_SM_KIB}_B${BLOCKS_PER_SM}" "global_mma_kernel" "l2_mma" "${L2_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000
+run_case "dram_load_only_W${DRAM_W_SM_KIB}_B${BLOCKS_PER_SM}" "global_load_only_kernel" "dram_load_only" "${DRAM_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000
 run_case "dram_mma_W${DRAM_W_SM_KIB}_B${BLOCKS_PER_SM}" "global_mma_kernel" "dram_mma" "${DRAM_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000
+run_case "store_only_W64_B${BLOCKS_PER_SM}" "store_path_kernel" "store_only" 64 "${BLOCKS_PER_SM}" 100000
+
+python3 scripts/summarize_ncu_cache_metrics.py \
+  "${OUTDIR}/*_raw_metrics.csv" \
+  --case-manifest "${CASE_MANIFEST}" \
+  --out-csv "${SUMMARY_CSV}" \
+  --out-md "${SUMMARY_MD}"
 
 echo "NCU validation reports written to ${OUTDIR}"
+echo "NCU cache summary written to ${SUMMARY_CSV} and ${SUMMARY_MD}"

@@ -302,7 +302,7 @@ ERR_NVGPUCTRPERM
 | mode summary | mode, pJ/FLOP median, pJ/FLOP min/max, net_E_J median (J) |
 | blocks sweep | mode, B=1, B=2, B=4, B=8, B=16, B=32 |
 | W sweep | mode, W_SM range (KiB/MiB), pJ/FLOP range |
-| NCU validation | mode, tensor %, shared bytes/op, L2 bytes/op, DRAM bytes/op, top stall %, status |
+| NCU validation | mode, tensor %, L1 hit rate (%), L2 hit rate (%), L1 accesses (requests/sectors), L2 accesses (sectors), DRAM accesses (sectors), shared bytes/op, L2 bytes/op, DRAM bytes/op, top stall %, status |
 
 Plot 생성:
 

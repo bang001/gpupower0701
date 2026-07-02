@@ -123,10 +123,15 @@ Idle baseline with zero active GPUs:
 
 - `idle`: no kernel, NVML energy delta during sleep.
 - `empty`: same grid shape, persistent loop, no MMA.
+- `reg_fragment_only`: WMMA fragment/register setup without MMA.
 - `reg_mma`: WMMA fragments filled in registers, repeated MMA, final checksum store.
+- `shared_load_only`: dynamic shared working set, shared WMMA operand loads, no MMA.
 - `shared_mma`: dynamic shared working set, shared load to WMMA fragments, MMA.
+- `l2_load_only`: global working set warm-up, L2-hit candidate operand loads, no MMA.
 - `l2_mma`: global working set, warm-up before measurement, cache-hit candidate.
+- `dram_load_only`: large global working set with streaming operand loads, no MMA.
 - `dram_mma`: large global working set with streaming tile order.
+- `store_only`: repeated global store loop without MMA.
 - `store_path`: global store-focused path for output-side overhead checks.
 
 `shared_mma` is not an A100-only concept. On RTX 3090 / Ampere GA102 it means
@@ -181,6 +186,28 @@ python3 scripts/run_sweep.py --execute \
   --repeats 1
 ```
 
+Component-decomposition pair runs use a separate pair-centric runner. It
+calibrates a reference mode once per coordinate and reuses the same `ITER` for
+paired control modes:
+
+```bash
+python3 scripts/run_component_pairs.py \
+  --target-profile rtx3090 \
+  --gpu-ids 0 \
+  --w-sm-kib-values 64,128 \
+  --blocks-per-sm-values 8,16 \
+  --active-sm-values 82 \
+  --seconds 10 \
+  --repeats 5
+
+python3 scripts/analyze_component_pairs.py results/raw/component_pairs_raw.csv
+```
+
+Use `--reuse-factors`, `--load-repeats`, and `--store-repeats` to vary logical
+MMA reuse, operand-load count, and store count independently. The raw CSV writes
+`expected_shared_bytes`, `expected_l2_bytes`, `expected_dram_bytes`, and
+`expected_store_bytes` for static paired-difference and regression analysis.
+
 ## Nsight Compute
 
 Energy runs and NCU profiling runs are intentionally separate.
@@ -198,6 +225,11 @@ MODE=dram_mma W_SM_KIB=8192 BLOCKS_PER_SM=8 CACHE_CONTROL=all \
 NCU reports are written under `results/ncu/`. The raw energy CSV includes NCU
 columns, initialized to zero; populate or join those columns from NCU exports
 before using the NCU bytes/op visualization.
+`scripts/run_ncu.sh` and `scripts/run_ncu_validation.sh` also export raw/details
+NCU CSV files and generate cache summaries. The summary table includes L1 hit
+rate (%), L2 hit rate (%), L1 accesses, L2 accesses (sectors), DRAM accesses
+(sectors), and L1/L2/DRAM bytes. L1 accesses prefer request counters when NCU
+provides them and fall back to sector counters otherwise.
 
 Nsight Compute support is version dependent. Current Nsight Compute supports
 GA10x, GA100, and GH100, while V100/GV100 requires an older supported NCU

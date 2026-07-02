@@ -46,6 +46,9 @@ struct Options {
   int active_sm = kDefaultHardwareProfile.full_sm_count;
   double seconds = 10.0;
   std::uint64_t iters = 0;
+  std::uint64_t reuse_factor = 1;
+  std::uint64_t load_repeat = 1;
+  std::uint64_t store_repeat = 1;
   int repeats = 5;
   std::filesystem::path output = "results/raw/a100_fp16_energy_v2_raw.csv";
   bool verify_smid = true;
@@ -108,13 +111,16 @@ void print_usage(const char* argv0) {
       << "Usage: " << argv0 << " --gpu-list 0[,1,2] --mode MODE [options]\n\n"
       << "Required/primary options:\n"
       << "  --gpu-list <list|none>       CUDA/NVML ids for active GPUs\n"
-      << "  --mode idle|empty|reg_mma|shared_mma|l2_mma|dram_mma|store_path\n"
+      << "  --mode idle|empty|reg_fragment_only|reg_mma|shared_load_only|shared_mma|l2_load_only|l2_mma|dram_load_only|dram_mma|store_only|store_path\n"
       << "  --w-sm-kib <int>             1..131072 power-of-two KiB sweep point\n"
       << "  --blocks-per-sm <int>        power-of-two up to target resident block limit\n"
       << "  --active-sm <int>            default target full SM count\n"
       << "  --target-profile <name>      auto, rtx3090, v100, a100, h100\n"
       << "  --seconds <float>            target measurement time, default 10\n"
       << "  --iters <int>                bypass calibration if nonzero\n"
+      << "  --reuse-factor <int>         MMA repeats per iteration, default 1\n"
+      << "  --load-repeat <int>          operand loads per iteration, default 1\n"
+      << "  --store-repeat <int>         store writes per iteration for store modes, default 1\n"
       << "  --repeats <int>              default 5\n"
       << "  --output <csv>               default results/raw/a100_fp16_energy_v2_raw.csv\n"
       << "  --verify-smid 0|1            default 1\n"
@@ -157,6 +163,15 @@ Options parse_args(int argc, char** argv) {
       opts.seconds = std::stod(need_value(arg));
     } else if (arg == "--iters") {
       opts.iters = static_cast<std::uint64_t>(std::stoull(need_value(arg)));
+    } else if (arg == "--reuse-factor") {
+      opts.reuse_factor =
+          static_cast<std::uint64_t>(std::stoull(need_value(arg)));
+    } else if (arg == "--load-repeat") {
+      opts.load_repeat =
+          static_cast<std::uint64_t>(std::stoull(need_value(arg)));
+    } else if (arg == "--store-repeat") {
+      opts.store_repeat =
+          static_cast<std::uint64_t>(std::stoull(need_value(arg)));
     } else if (arg == "--repeats") {
       opts.repeats = std::stoi(need_value(arg));
     } else if (arg == "--output") {
@@ -173,6 +188,15 @@ Options parse_args(int argc, char** argv) {
   if (opts.seconds <= 0.0) throw std::invalid_argument("--seconds must be > 0");
   if (opts.repeats <= 0) throw std::invalid_argument("--repeats must be > 0");
   if (opts.active_sm <= 0) throw std::invalid_argument("--active-sm must be > 0");
+  if (opts.reuse_factor == 0) {
+    throw std::invalid_argument("--reuse-factor must be > 0");
+  }
+  if (opts.load_repeat == 0) {
+    throw std::invalid_argument("--load-repeat must be > 0");
+  }
+  if (opts.store_repeat == 0) {
+    throw std::invalid_argument("--store-repeat must be > 0");
+  }
   return opts;
 }
 
@@ -221,6 +245,37 @@ bool is_mma_mode(Mode mode) {
          mode == Mode::l2_mma || mode == Mode::dram_mma;
 }
 
+bool is_shared_operand_mode(Mode mode) {
+  return mode == Mode::shared_load_only || mode == Mode::shared_mma;
+}
+
+bool is_l2_operand_mode(Mode mode) {
+  return mode == Mode::l2_load_only || mode == Mode::l2_mma;
+}
+
+bool is_dram_operand_mode(Mode mode) {
+  return mode == Mode::dram_load_only || mode == Mode::dram_mma;
+}
+
+bool is_global_operand_mode(Mode mode) {
+  return is_l2_operand_mode(mode) || is_dram_operand_mode(mode);
+}
+
+bool has_operand_loads(Mode mode) {
+  return is_shared_operand_mode(mode) || is_global_operand_mode(mode);
+}
+
+bool has_final_matrix_store(Mode mode) {
+  return mode == Mode::reg_fragment_only || mode == Mode::reg_mma ||
+         mode == Mode::shared_load_only || mode == Mode::shared_mma ||
+         mode == Mode::l2_load_only || mode == Mode::l2_mma ||
+         mode == Mode::dram_load_only || mode == Mode::dram_mma;
+}
+
+bool is_store_loop_mode(Mode mode) {
+  return mode == Mode::store_only || mode == Mode::store_path;
+}
+
 void print_dry_run(const Options& opts, const Feasibility& f, bool allowed,
                    const std::string& mode_reason) {
   std::cout << "dry_run=true\n";
@@ -247,6 +302,9 @@ void print_dry_run(const Options& opts, const Feasibility& f, bool allowed,
   std::cout << "blocks_per_SM=" << opts.blocks_per_sm << "\n";
   std::cout << "threads_per_block=" << kThreadsPerBlock << "\n";
   std::cout << "active_SM=" << opts.active_sm << "\n";
+  std::cout << "reuse_factor=" << opts.reuse_factor << "\n";
+  std::cout << "load_repeat=" << opts.load_repeat << "\n";
+  std::cout << "store_repeat=" << opts.store_repeat << "\n";
   std::cout << "valid_feasibility=" << (f.valid ? "true" : "false") << "\n";
   std::cout << "mode_allowed=" << (allowed ? "true" : "false") << "\n";
   std::cout << "regime=" << f.regime << "\n";
@@ -363,7 +421,7 @@ DeviceState setup_device(int gpu_id, const Options& opts,
       grid_blocks * sizeof(int) * 2ull +
       static_cast<std::size_t>(state.sm_count_capacity) * sizeof(int);
 
-  if (opts.mode == Mode::l2_mma || opts.mode == Mode::dram_mma) {
+  if (is_global_operand_mode(opts.mode)) {
     state.input_bytes =
         static_cast<std::size_t>(opts.active_sm) *
         static_cast<std::size_t>(opts.w_sm_kib) * 1024ull;
@@ -417,7 +475,7 @@ void reset_smid_buffers(const Options& opts, DeviceState& state) {
 
 void warmup_global_inputs(const Options& opts,
                           std::vector<DeviceState>& states) {
-  if (!(opts.mode == Mode::l2_mma || opts.mode == Mode::dram_mma)) return;
+  if (!is_global_operand_mode(opts.mode)) return;
   for (auto& state : states) {
     CUDA_CHECK(cudaSetDevice(state.gpu_id));
     CUDA_CHECK(launch_global_warmup(state.input, state.input_half_count,
@@ -448,6 +506,9 @@ double launch_all(const Options& opts, const Feasibility& f,
     cfg.w_block_bytes = f.w_block_bytes;
     cfg.tiles_per_block = f.tiles_per_block;
     cfg.iters = iters;
+    cfg.reuse_factor = opts.reuse_factor;
+    cfg.load_repeat = opts.load_repeat;
+    cfg.store_repeat = opts.store_repeat;
     cfg.input = state.input;
     cfg.output = state.output;
     cfg.smid_by_block = state.d_smid;
@@ -547,13 +608,23 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
   row.threads_per_block = kThreadsPerBlock;
   row.active_SM = opts.active_sm;
   row.ITER = iters;
-  row.sweeps = gpu_active ? ceil_div(iters, f.tiles_per_block) : 0;
+  const std::uint64_t tile_loads_per_block =
+      has_operand_loads(opts.mode) ? iters * opts.load_repeat : 0;
+  row.sweeps =
+      gpu_active && f.tiles_per_block > 0
+          ? ceil_div(tile_loads_per_block, f.tiles_per_block)
+          : 0;
   row.elapsed_s = elapsed_s;
   row.E_before_mJ = before.energy_mj;
   row.E_after_mJ = after.energy_mj;
   row.delta_E_J = delta_j;
   row.idle_baseline_J = idle_baseline_j;
   row.net_E_J = opts.mode == Mode::idle ? 0.0 : (delta_j - idle_baseline_j);
+  row.w_block_bytes = f.w_block_bytes;
+  row.tiles_per_block = f.tiles_per_block;
+  row.reuse_factor = opts.reuse_factor;
+  row.load_repeat = opts.load_repeat;
+  row.store_repeat = opts.store_repeat;
   row.smid_histogram_ok = gpu_active && smid_check.ok;
   row.clock_sm_mhz = after.sm_clock_mhz;
   row.clock_mem_mhz = after.mem_clock_mhz;
@@ -594,15 +665,38 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
   row.driver_version = after.driver_version;
   row.nvml_version = after.nvml_version;
 
+  const std::uint64_t active_blocks =
+      static_cast<std::uint64_t>(opts.active_sm) *
+      static_cast<std::uint64_t>(opts.blocks_per_sm);
   if (gpu_active && is_mma_mode(opts.mode)) {
-    row.N_MMA = static_cast<std::uint64_t>(opts.active_sm) *
-                static_cast<std::uint64_t>(opts.blocks_per_sm) * iters;
+    row.N_MMA = active_blocks * iters * opts.reuse_factor;
     row.FLOP = row.N_MMA * static_cast<std::uint64_t>(kLogicalMmaFlop);
     row.input_bits =
         row.N_MMA * static_cast<std::uint64_t>(kLogicalMmaInputBits);
     if (row.FLOP > 0) {
       row.pJ_per_FLOP = row.net_E_J * 1.0e12 / row.FLOP;
       row.pJ_per_input_bit = row.net_E_J * 1.0e12 / row.input_bits;
+    }
+  }
+  if (gpu_active) {
+    const std::uint64_t expected_operand_bytes =
+        active_blocks * iters * opts.load_repeat *
+        static_cast<std::uint64_t>(kLogicalMmaInputBytes);
+    if (is_shared_operand_mode(opts.mode)) {
+      row.expected_shared_bytes = expected_operand_bytes;
+    } else if (is_l2_operand_mode(opts.mode)) {
+      row.expected_l2_bytes = expected_operand_bytes;
+    } else if (is_dram_operand_mode(opts.mode)) {
+      row.expected_dram_bytes = expected_operand_bytes;
+    }
+
+    if (has_final_matrix_store(opts.mode)) {
+      row.expected_store_bytes = active_blocks * 256ull * sizeof(float);
+    } else if (is_store_loop_mode(opts.mode)) {
+      row.expected_store_bytes =
+          active_blocks * iters * opts.store_repeat * sizeof(float);
+    } else if (opts.mode == Mode::empty) {
+      row.expected_store_bytes = active_blocks * sizeof(float);
     }
   }
 
@@ -626,7 +720,17 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
         << ";row_scope=per_gpu;"
         << "logical_op=warp_m16n16k16;"
         << "wmma_fallback=1;"
+        << "reuse_factor=" << opts.reuse_factor
+        << ";load_repeat=" << opts.load_repeat
+        << ";store_repeat=" << opts.store_repeat
+        << ";expected_shared_bytes=" << row.expected_shared_bytes
+        << ";expected_l2_bytes=" << row.expected_l2_bytes
+        << ";expected_dram_bytes=" << row.expected_dram_bytes
+        << ";expected_store_bytes=" << row.expected_store_bytes << ";"
         << "gpu_active=" << (gpu_active ? 1 : 0) << ";";
+  if (is_shared_operand_mode(opts.mode)) {
+    notes << "shared_init_included=1;";
+  }
   notes << before.notes << after.notes << smid_check.notes << extra_notes;
   row.notes = notes.str();
   return row;

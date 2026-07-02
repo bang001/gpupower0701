@@ -116,7 +116,7 @@ python3 scripts/run_sweep.py --execute \
 
 ## NCU Validation
 
-Keep NCU validation separate from energy measurements. Use NCU to confirm tensor instruction count, shared/L2/DRAM bytes, spill/local bytes, occupancy, active warps, and SMID distribution.
+Keep NCU validation separate from energy measurements. Use NCU to confirm tensor instruction count, L1/L2 cache hit rate, L1/L2/DRAM access counts, shared/L2/DRAM bytes, spill/local bytes, occupancy, active warps, and SMID distribution.
 
 Query metrics when the NCU version is unknown:
 
@@ -137,6 +137,17 @@ For WSL on Windows drivers, `sudo` inside Linux may not be sufficient for NCU co
 V100/GV100 requires an older supported Nsight Compute toolchain such as the 2024.3 or 2025.1 release series. Current Nsight Compute 13.3 supports GA10x, GA100, and GH100 but no longer lists Volta support.
 
 Do not merge NCU replay energy with NVML energy-run CSV values. Join exported NCU counters later by run metadata when needed.
+
+NCU validation reports must include a cache/memory table with units:
+
+| field | unit |
+|---|---|
+| L1 hit rate | % |
+| L2 hit rate | % |
+| L1 accesses | requests preferred, sectors fallback |
+| L2 accesses | sectors |
+| DRAM accesses | sectors |
+| L1/L2/DRAM bytes | bytes |
 
 ## Result Handling
 
@@ -169,10 +180,15 @@ Every experiment report must explain what each reported mode means before interp
 |---|---|---|
 | `idle` | No benchmark kernel is launched; NVML energy is measured during sleep. | System/GPU idle baseline |
 | `empty` | Same persistent grid shape as active modes, but no MMA work is performed. | Launch, scheduling, loop, and placement overhead |
+| `reg_fragment_only` | WMMA fragment/register setup without MMA. | Register/fragment setup control |
 | `reg_mma` | WMMA fragments are filled from register values and repeatedly accumulated. | Effective Tensor Engine + register path |
+| `shared_load_only` | Operands are staged in CUDA shared memory and loaded into WMMA fragments without MMA. | Effective shared/L1 load control |
 | `shared_mma` | Operands are staged in CUDA shared memory and loaded into WMMA fragments from shared memory. | Effective shared/L1 operand path |
+| `l2_load_only` | Operands are loaded from a global working set selected to fit nominal GPU L2 after warm-up, without MMA. | Effective L2-hit load control |
 | `l2_mma` | Operands are loaded from a global working set selected to fit nominal GPU L2 after warm-up. | Effective L2-hit operand path |
+| `dram_load_only` | Operands are loaded from a larger streaming global working set exceeding nominal L2, without MMA. | Effective DRAM streaming load control |
 | `dram_mma` | Operands are loaded from a larger streaming global working set exceeding nominal L2. | Effective DRAM streaming operand path |
+| `store_only` | Repeated global store loop without MMA. | Store-only control |
 | `store_path` | Focuses on global store/output-side overhead with the same persistent execution style. | Store-side overhead check |
 
 When a report includes `shared_mma`, explicitly state that it is not A100-only: it means CUDA shared-memory operand staging, while the physical shared/L1 capacity and carveout limits are GPU-profile dependent.

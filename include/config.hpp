@@ -195,10 +195,15 @@ inline const std::vector<std::uint64_t>& allowed_w_sm_kib() {
 enum class Mode {
   idle,
   empty,
+  reg_fragment_only,
   reg_mma,
+  shared_load_only,
   shared_mma,
+  l2_load_only,
   l2_mma,
+  dram_load_only,
   dram_mma,
+  store_only,
   store_path,
 };
 
@@ -208,14 +213,24 @@ inline std::string to_string(Mode mode) {
       return "idle";
     case Mode::empty:
       return "empty";
+    case Mode::reg_fragment_only:
+      return "reg_fragment_only";
     case Mode::reg_mma:
       return "reg_mma";
+    case Mode::shared_load_only:
+      return "shared_load_only";
     case Mode::shared_mma:
       return "shared_mma";
+    case Mode::l2_load_only:
+      return "l2_load_only";
     case Mode::l2_mma:
       return "l2_mma";
+    case Mode::dram_load_only:
+      return "dram_load_only";
     case Mode::dram_mma:
       return "dram_mma";
+    case Mode::store_only:
+      return "store_only";
     case Mode::store_path:
       return "store_path";
   }
@@ -225,10 +240,15 @@ inline std::string to_string(Mode mode) {
 inline Mode mode_from_string(const std::string& value) {
   if (value == "idle") return Mode::idle;
   if (value == "empty") return Mode::empty;
+  if (value == "reg_fragment_only") return Mode::reg_fragment_only;
   if (value == "reg_mma") return Mode::reg_mma;
+  if (value == "shared_load_only") return Mode::shared_load_only;
   if (value == "shared_mma") return Mode::shared_mma;
+  if (value == "l2_load_only") return Mode::l2_load_only;
   if (value == "l2_mma") return Mode::l2_mma;
+  if (value == "dram_load_only") return Mode::dram_load_only;
   if (value == "dram_mma") return Mode::dram_mma;
+  if (value == "store_only") return Mode::store_only;
   if (value == "store_path") return Mode::store_path;
   throw std::invalid_argument("unknown mode: " + value);
 }
@@ -331,16 +351,19 @@ inline bool mode_allowed_for_feasibility(Mode mode, const Feasibility& f,
     if (reason) *reason = f.regime + ": " + f.reason;
     return false;
   }
-  if (mode == Mode::shared_mma && f.regime != "shared_resident") {
-    if (reason) *reason = "shared_mma requires shared_resident";
+  if ((mode == Mode::shared_load_only || mode == Mode::shared_mma) &&
+      f.regime != "shared_resident") {
+    if (reason) *reason = to_string(mode) + " requires shared_resident";
     return false;
   }
-  if (mode == Mode::l2_mma && !f.l2_candidate) {
-    if (reason) *reason = "l2_mma requires l2_candidate";
+  if ((mode == Mode::l2_load_only || mode == Mode::l2_mma) &&
+      !f.l2_candidate) {
+    if (reason) *reason = to_string(mode) + " requires l2_candidate";
     return false;
   }
-  if (mode == Mode::dram_mma && !f.dram_candidate) {
-    if (reason) *reason = "dram_mma requires dram_mixed_streaming";
+  if ((mode == Mode::dram_load_only || mode == Mode::dram_mma) &&
+      !f.dram_candidate) {
+    if (reason) *reason = to_string(mode) + " requires dram_mixed_streaming";
     return false;
   }
   return true;

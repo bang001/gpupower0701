@@ -26,6 +26,15 @@ struct ResultRow {
   std::uint64_t N_MMA = 0;
   std::uint64_t FLOP = 0;
   std::uint64_t input_bits = 0;
+  std::uint64_t w_block_bytes = 0;
+  std::uint64_t tiles_per_block = 0;
+  std::uint64_t reuse_factor = 1;
+  std::uint64_t load_repeat = 1;
+  std::uint64_t store_repeat = 1;
+  std::uint64_t expected_shared_bytes = 0;
+  std::uint64_t expected_l2_bytes = 0;
+  std::uint64_t expected_dram_bytes = 0;
+  std::uint64_t expected_store_bytes = 0;
   double pJ_per_FLOP = 0.0;
   double pJ_per_input_bit = 0.0;
   std::uint64_t ncu_tensor_inst = 0;

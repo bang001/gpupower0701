@@ -66,7 +66,19 @@ W_SM_KIB = [
     65536,
     131072,
 ]
-MODES = ["empty", "reg_mma", "shared_mma", "l2_mma", "dram_mma", "store_path"]
+MODES = [
+    "empty",
+    "reg_fragment_only",
+    "reg_mma",
+    "shared_load_only",
+    "shared_mma",
+    "l2_load_only",
+    "l2_mma",
+    "dram_load_only",
+    "dram_mma",
+    "store_only",
+    "store_path",
+]
 
 
 def classify(w_sm_kib: int, blocks_per_sm: int, profile: dict[str, Any]) -> dict[str, Any]:
@@ -119,11 +131,11 @@ def classify(w_sm_kib: int, blocks_per_sm: int, profile: dict[str, Any]) -> dict
 def mode_allowed(mode: str, info: dict[str, Any]) -> bool:
     if not info["valid"]:
         return False
-    if mode == "shared_mma":
+    if mode in {"shared_load_only", "shared_mma"}:
         return bool(info["shared_resident"])
-    if mode == "l2_mma":
+    if mode in {"l2_load_only", "l2_mma"}:
         return bool(info["l2_candidate"])
-    if mode == "dram_mma":
+    if mode in {"dram_load_only", "dram_mma"}:
         return bool(info["dram_candidate"])
     return True
 
@@ -163,6 +175,9 @@ def main() -> int:
     parser.add_argument("--seconds", type=float, default=10.0)
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--iters", type=int, default=0)
+    parser.add_argument("--reuse-factor", type=int, default=1)
+    parser.add_argument("--load-repeat", type=int, default=1)
+    parser.add_argument("--store-repeat", type=int, default=1)
     parser.add_argument("--verify-smid", type=int, default=1)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--include-idle", action="store_true")
@@ -190,6 +205,9 @@ def main() -> int:
                 "W_SM_KiB",
                 "blocks_per_SM",
                 "active_SM",
+                "reuse_factor",
+                "load_repeat",
+                "store_repeat",
                 "n_gpu_active",
                 "gpu_list",
                 "valid",
@@ -222,6 +240,12 @@ def main() -> int:
                 str(args.seconds),
                 "--repeats",
                 str(args.repeats),
+                "--reuse-factor",
+                str(args.reuse_factor),
+                "--load-repeat",
+                str(args.load_repeat),
+                "--store-repeat",
+                str(args.store_repeat),
                 "--output",
                 args.output,
             ]
@@ -233,6 +257,9 @@ def main() -> int:
                     "W_SM_KiB": 1,
                     "blocks_per_SM": 1,
                     "active_SM": profile["full_sm"],
+                    "reuse_factor": args.reuse_factor,
+                    "load_repeat": args.load_repeat,
+                    "store_repeat": args.store_repeat,
                     "n_gpu_active": 0,
                     "gpu_list": "none",
                     "valid": True,
@@ -271,6 +298,12 @@ def main() -> int:
                                 str(args.seconds),
                                 "--repeats",
                                 str(args.repeats),
+                                "--reuse-factor",
+                                str(args.reuse_factor),
+                                "--load-repeat",
+                                str(args.load_repeat),
+                                "--store-repeat",
+                                str(args.store_repeat),
                                 "--output",
                                 args.output,
                                 "--verify-smid",
@@ -287,6 +320,9 @@ def main() -> int:
                                     "W_SM_KiB": w_sm_kib,
                                     "blocks_per_SM": blocks_per_sm,
                                     "active_SM": active_sm,
+                                    "reuse_factor": args.reuse_factor,
+                                    "load_repeat": args.load_repeat,
+                                    "store_repeat": args.store_repeat,
                                     "n_gpu_active": n_gpu,
                                     "gpu_list": gpu_list,
                                     "valid": allowed,
