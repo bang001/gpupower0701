@@ -2,7 +2,9 @@
 
 #if __has_include(<nvml.h>)
 #include <nvml.h>
+#define A100FP16_HAS_NVML_HEADER 1
 #else
+#define A100FP16_HAS_NVML_HEADER 0
 
 extern "C" {
 
@@ -32,6 +34,12 @@ const char* nvmlErrorString(nvmlReturn_t result);
 nvmlReturn_t nvmlDeviceGetCount_v2(unsigned int* deviceCount);
 nvmlReturn_t nvmlDeviceGetHandleByIndex_v2(unsigned int index,
                                            nvmlDevice_t* device);
+nvmlReturn_t nvmlSystemGetDriverVersion(char* version, unsigned int length);
+nvmlReturn_t nvmlSystemGetNVMLVersion(char* version, unsigned int length);
+nvmlReturn_t nvmlDeviceGetName(nvmlDevice_t device, char* name,
+                               unsigned int length);
+nvmlReturn_t nvmlDeviceGetCudaComputeCapability(nvmlDevice_t device,
+                                                int* major, int* minor);
 nvmlReturn_t nvmlDeviceGetTotalEnergyConsumption(nvmlDevice_t device,
                                                  unsigned long long* energy);
 nvmlReturn_t nvmlDeviceGetPowerUsage(nvmlDevice_t device, unsigned int* power);

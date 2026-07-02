@@ -1,11 +1,12 @@
 # FP16 Tensor Core Energy Experiment v2
 
 CUDA/C++ microbenchmark framework for estimating effective energy of a logical
-warp-level FP16 `m16n16k16` MMA operation on NVIDIA Ampere GPUs.
+warp-level FP16 `m16n16k16` MMA operation on NVIDIA Tensor Core GPUs.
 
 The default runtime profile in this checkout targets GeForce RTX 3090
-(`sm_86`, 82 SMs, 6 MiB nominal L2). The original A100 profile is still
-available with `--target-profile a100`.
+(`sm_86`, 82 SMs, 6 MiB nominal L2). Additional profiles are available for
+V100, A100, and H100. Use `--target-profile auto` to select a profile from the
+runtime CUDA device when running on the target machine.
 
 This repository implements the v2 design in
 `docs/a100_fp16_energy_experiment_design_v2.md`.
@@ -65,6 +66,26 @@ Feasibility only:
   --dry-run
 ```
 
+Supported target profiles:
+
+| profile | GPU family | CC | default SMs | L2 | shared/SM | max blocks/SM | NVML `GetPowerUsage` meaning |
+|---|---|---:|---:|---:|---:|---:|---|
+| `v100` | Volta GV100 | 7.0 | 80 | 6 MiB | 96 KiB | 32 | instantaneous |
+| `rtx3090` | Ampere GA10x | 8.6 | 82 | 6 MiB | 100 KiB | 16 | 1-second average |
+| `a100` | Ampere GA100 | 8.0 | 108 | 40 MiB | 164 KiB | 32 | instantaneous |
+| `h100` | Hopper GH100 | 9.0 | 132 default, runtime/SKU should be checked | 50 MiB | 228 KiB | 32 | 1-second average |
+
+Run a support preflight before collecting new data:
+
+```bash
+python3 scripts/preflight_gpu_support.py --gpu 0 --target-profile auto \
+  --ncu /path/to/ncu \
+  --out results/summary/gpu_support_preflight.md
+```
+
+The preflight records the detected profile, NVML/NVIDIA driver state, Nsight
+Compute chip support, and a binary dry-run result.
+
 Single GPU register/Tensor Core run:
 
 ```bash
@@ -113,6 +134,8 @@ the operands are staged through CUDA shared memory and loaded into WMMA
 fragments from the shared-memory address space. The physical L1/shared-memory
 organization and limits differ from A100, so feasibility uses the RTX 3090
 profile values rather than the A100 164 KiB shared/L1 budget.
+The same interpretation applies to V100 and H100, but with their own profile
+limits.
 
 Invalid combinations fail before execution. The shared/L2/DRAM classification is
 the design rule:
@@ -175,6 +198,10 @@ MODE=dram_mma W_SM_KIB=8192 BLOCKS_PER_SM=8 CACHE_CONTROL=all \
 NCU reports are written under `results/ncu/`. The raw energy CSV includes NCU
 columns, initialized to zero; populate or join those columns from NCU exports
 before using the NCU bytes/op visualization.
+
+Nsight Compute support is version dependent. Current Nsight Compute supports
+GA10x, GA100, and GH100, while V100/GV100 requires an older supported NCU
+toolchain such as the 2024.3 or 2025.1 release series.
 
 ## Plotting
 

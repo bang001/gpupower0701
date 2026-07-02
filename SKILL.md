@@ -20,7 +20,7 @@ Use this skill to operate the repository as an experiment harness, not as a gene
 1. Read `README.md` and `docs/a100_fp16_energy_experiment_design_v2.md` from the current workspace root when the task involves experiment interpretation or design changes.
 2. Check `git status --short` before editing; do not overwrite user data or measured results.
 3. Confirm the target machine has Ampere-class CUDA, NVML, `cmake`, `nvcc`, `nvidia-smi`, and Python with `matplotlib` before promising build or plot success.
-4. The default runtime profile is RTX 3090 (`--target-profile rtx3090`, `sm_86`, 82 SMs). Use `--target-profile a100` and `sm_80` only when explicitly targeting A100.
+4. The default runtime profile is RTX 3090 (`--target-profile rtx3090`, `sm_86`, 82 SMs). Supported profiles are `v100`, `rtx3090`, `a100`, and `h100`; use `--target-profile auto` on the target machine when the profile should be selected from the runtime CUDA device.
 5. If running without CUDA tooling, limit work to dry-run matrix generation, code inspection, and documentation updates.
 
 ## Build Workflow
@@ -43,7 +43,14 @@ Use the same profile-aware classification in code, sweeps, plots, and explanatio
 - `l2_candidate`: shared-resident is impossible and the full-profile working set fits profile L2.
 - `dram_mixed_streaming`: full-profile working set exceeds profile L2.
 
-For RTX 3090, the default profile uses 82 SMs, 100 KiB shared/L1 per SM, 99 KiB max dynamic shared memory per block, 6 MiB nominal L2, and max 16 resident blocks per SM. `blocks/SM=32` is valid for A100 but invalid/skipped on RTX 3090.
+Profile boundaries:
+
+- V100: 80 SMs, 96 KiB shared/L1 per SM, max 32 resident blocks/SM, 6 MiB nominal L2.
+- RTX 3090: 82 SMs, 100 KiB shared/L1 per SM, 99 KiB max dynamic shared memory per block, 6 MiB nominal L2, max 16 resident blocks/SM.
+- A100: 108 SMs, 164 KiB shared/L1 per SM, 163 KiB max dynamic shared memory per block, 40 MiB nominal L2, max 32 resident blocks/SM.
+- H100: SKU-dependent SM count, default profile 132 SMs, 228 KiB shared/L1 per SM, 227 KiB max dynamic shared memory per block, 50 MiB nominal L2, max 32 resident blocks/SM.
+
+`blocks/SM=32` is valid for V100/A100/H100 but invalid/skipped on RTX 3090.
 
 Reject or skip mode/regime mismatches:
 
@@ -73,6 +80,7 @@ Use NVML energy runs without Nsight Compute attached:
 Before measurement, record or ask the user to record:
 
 ```bash
+python3 scripts/preflight_gpu_support.py --gpu 0 --target-profile auto --ncu /path/to/ncu --out results/summary/gpu_support_preflight.md
 nvidia-smi -L
 nvidia-smi --query-gpu=index,name,clocks.sm,clocks.mem,power.limit,temperature.gpu,ecc.mode.current --format=csv
 ```
@@ -119,12 +127,14 @@ scripts/run_ncu.sh --query-metrics
 Run representative validation:
 
 ```bash
-MODE=shared_mma W_SM_KIB=64 BLOCKS_PER_SM=16 ACTIVE_SM=82 GPU=0 scripts/run_ncu.sh
-MODE=l2_mma W_SM_KIB=64 BLOCKS_PER_SM=16 ACTIVE_SM=82 GPU=0 scripts/run_ncu.sh
-MODE=dram_mma W_SM_KIB=128 BLOCKS_PER_SM=16 ACTIVE_SM=82 GPU=0 scripts/run_ncu.sh
+MODE=shared_mma W_SM_KIB=64 BLOCKS_PER_SM=16 ACTIVE_SM=82 GPU=0 TARGET_PROFILE=rtx3090 scripts/run_ncu.sh
+MODE=l2_mma W_SM_KIB=64 BLOCKS_PER_SM=16 ACTIVE_SM=82 GPU=0 TARGET_PROFILE=rtx3090 scripts/run_ncu.sh
+MODE=dram_mma W_SM_KIB=128 BLOCKS_PER_SM=16 ACTIVE_SM=82 GPU=0 TARGET_PROFILE=rtx3090 scripts/run_ncu.sh
 ```
 
 For WSL on Windows drivers, `sudo` inside Linux may not be sufficient for NCU counters. If `ERR_NVGPUCTRPERM` persists, enable GPU Performance Counters for all users in the NVIDIA App or NVIDIA Control Panel on Windows, then run `wsl --shutdown` before retrying.
+
+V100/GV100 requires an older supported Nsight Compute toolchain such as the 2024.3 or 2025.1 release series. Current Nsight Compute 13.3 supports GA10x, GA100, and GH100 but no longer lists Volta support.
 
 Do not merge NCU replay energy with NVML energy-run CSV values. Join exported NCU counters later by run metadata when needed.
 
@@ -136,6 +146,8 @@ Do not merge NCU replay energy with NVML energy-run CSV values. Join exported NC
 - Do not delete or rewrite existing result files unless the user explicitly asks.
 - Treat rows as per-GPU rows. Sum active GPU rows with the same `run_id` for aggregate multi-GPU energy.
 - Exclude primary-analysis rows with `smid_histogram_ok=false` unless the user specifically wants placement-failure diagnostics.
+- When reporting completed sweep experiments, summarize the sweep conditions and results in tables whenever practical. Include units in every table header or cell label, such as `W_SM (KiB)`, `blocks/SM`, `active_SM (SMs)`, `elapsed_s (s)`, `net_E_J (J)`, `pJ/FLOP`, `pJ/input-bit`, `power (mW)`, `L2 (MiB)`, and `shared memory (KiB)`.
+- Do not present sweep results only as prose when the data has clear axes such as mode, `W_SM`, `blocks/SM`, GPU profile, or pJ/FLOP. Use prose to explain trends after the table.
 
 Compute:
 
@@ -148,6 +160,22 @@ pJ/input-bit = net_E_J * 1e12 / input_bits
 ```
 
 The binary already writes these columns for active MMA rows; recompute only when auditing.
+
+## Mode Descriptions
+
+Every experiment report must explain what each reported mode means before interpreting the numbers. Use a concise table like this when the report includes multiple modes:
+
+| mode | meaning | main path being isolated |
+|---|---|---|
+| `idle` | No benchmark kernel is launched; NVML energy is measured during sleep. | System/GPU idle baseline |
+| `empty` | Same persistent grid shape as active modes, but no MMA work is performed. | Launch, scheduling, loop, and placement overhead |
+| `reg_mma` | WMMA fragments are filled from register values and repeatedly accumulated. | Effective Tensor Engine + register path |
+| `shared_mma` | Operands are staged in CUDA shared memory and loaded into WMMA fragments from shared memory. | Effective shared/L1 operand path |
+| `l2_mma` | Operands are loaded from a global working set selected to fit nominal GPU L2 after warm-up. | Effective L2-hit operand path |
+| `dram_mma` | Operands are loaded from a larger streaming global working set exceeding nominal L2. | Effective DRAM streaming operand path |
+| `store_path` | Focuses on global store/output-side overhead with the same persistent execution style. | Store-side overhead check |
+
+When a report includes `shared_mma`, explicitly state that it is not A100-only: it means CUDA shared-memory operand staging, while the physical shared/L1 capacity and carveout limits are GPU-profile dependent.
 
 ## Plotting
 

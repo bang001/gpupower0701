@@ -40,6 +40,9 @@ struct Options {
   std::uint64_t w_sm_kib = 1;
   int blocks_per_sm = 1;
   HardwareProfile profile = kDefaultHardwareProfile;
+  std::string target_profile_arg = kDefaultHardwareProfile.name;
+  bool target_profile_auto = false;
+  bool active_sm_explicit = false;
   int active_sm = kDefaultHardwareProfile.full_sm_count;
   double seconds = 10.0;
   std::uint64_t iters = 0;
@@ -109,7 +112,7 @@ void print_usage(const char* argv0) {
       << "  --w-sm-kib <int>             1..131072 power-of-two KiB sweep point\n"
       << "  --blocks-per-sm <int>        power-of-two up to target resident block limit\n"
       << "  --active-sm <int>            default target full SM count\n"
-      << "  --target-profile <name>      rtx3090 (default) or a100\n"
+      << "  --target-profile <name>      auto, rtx3090, v100, a100, h100\n"
       << "  --seconds <float>            target measurement time, default 10\n"
       << "  --iters <int>                bypass calibration if nonzero\n"
       << "  --repeats <int>              default 5\n"
@@ -120,7 +123,6 @@ void print_usage(const char* argv0) {
 
 Options parse_args(int argc, char** argv) {
   Options opts;
-  bool active_sm_explicit = false;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
     auto need_value = [&](const std::string& name) -> std::string {
@@ -140,11 +142,17 @@ Options parse_args(int argc, char** argv) {
     } else if (arg == "--blocks-per-sm") {
       opts.blocks_per_sm = std::stoi(need_value(arg));
     } else if (arg == "--target-profile") {
-      opts.profile = profile_from_string(need_value(arg));
-      if (!active_sm_explicit) opts.active_sm = opts.profile.full_sm_count;
+      opts.target_profile_arg = need_value(arg);
+      if (opts.target_profile_arg == "auto") {
+        opts.target_profile_auto = true;
+      } else {
+        opts.target_profile_auto = false;
+        opts.profile = profile_from_string(opts.target_profile_arg);
+        if (!opts.active_sm_explicit) opts.active_sm = opts.profile.full_sm_count;
+      }
     } else if (arg == "--active-sm") {
       opts.active_sm = std::stoi(need_value(arg));
-      active_sm_explicit = true;
+      opts.active_sm_explicit = true;
     } else if (arg == "--seconds") {
       opts.seconds = std::stod(need_value(arg));
     } else if (arg == "--iters") {
@@ -166,6 +174,28 @@ Options parse_args(int argc, char** argv) {
   if (opts.repeats <= 0) throw std::invalid_argument("--repeats must be > 0");
   if (opts.active_sm <= 0) throw std::invalid_argument("--active-sm must be > 0");
   return opts;
+}
+
+int first_runtime_gpu(const Options& opts) {
+  if (!opts.gpu_list.empty()) return opts.gpu_list.front();
+  int count = 0;
+  CUDA_CHECK(cudaGetDeviceCount(&count));
+  if (count <= 0) {
+    throw std::runtime_error("no CUDA devices available for --target-profile auto");
+  }
+  return 0;
+}
+
+void resolve_auto_profile(Options& opts) {
+  if (!opts.target_profile_auto) return;
+  const int gpu = first_runtime_gpu(opts);
+  cudaDeviceProp prop{};
+  CUDA_CHECK(cudaGetDeviceProperties(&prop, gpu));
+  opts.profile =
+      profile_from_compute_capability(prop.major, prop.minor, prop.name);
+  if (!opts.active_sm_explicit) {
+    opts.active_sm = prop.multiProcessorCount;
+  }
 }
 
 std::string now_token() {
@@ -197,6 +227,21 @@ void print_dry_run(const Options& opts, const Feasibility& f, bool allowed,
   std::cout << "mode=" << to_string(opts.mode) << "\n";
   std::cout << "gpu_list=" << join_ints(opts.gpu_list) << "\n";
   std::cout << "target_profile=" << opts.profile.name << "\n";
+  std::cout << "architecture_family=" << opts.profile.architecture_family
+            << "\n";
+  std::cout << "chip=" << opts.profile.chip << "\n";
+  std::cout << "cuda_arch=" << opts.profile.cuda_arch << "\n";
+  std::cout << "compute_capability=" << opts.profile.compute_major << "."
+            << opts.profile.compute_minor << "\n";
+  std::cout << "max_blocks_per_SM=" << opts.profile.max_blocks_per_sm << "\n";
+  std::cout << "target_l2_MiB=" << opts.profile.l2_mib << "\n";
+  std::cout << "target_shared_KiB_per_SM="
+            << opts.profile.shared_capacity_per_sm_kib << "\n";
+  std::cout << "target_max_shared_KiB_per_block="
+            << opts.profile.max_shared_per_block_kib << "\n";
+  std::cout << "nvml_power_usage_semantics="
+            << opts.profile.nvml_power_usage_semantics << "\n";
+  std::cout << "tensor_modes=" << opts.profile.tensor_modes << "\n";
   std::cout << "W_SM_KiB=" << opts.w_sm_kib << "\n";
   std::cout << "W_SM_label=" << w_sm_label(opts.w_sm_kib) << "\n";
   std::cout << "blocks_per_SM=" << opts.blocks_per_sm << "\n";
@@ -229,6 +274,10 @@ std::vector<double> energy_delta_j(const std::vector<GpuEnergySample>& before,
         1000.0;
     if (!(before[i].energy_counter_supported &&
           after[i].energy_counter_supported)) {
+      if (!(before[i].power_usage_supported && after[i].power_usage_supported)) {
+        throw std::runtime_error(
+            "NVML total energy and power usage are both unavailable");
+      }
       const double dt = after[i].timestamp_s - before[i].timestamp_s;
       const double avg_power_w =
           (static_cast<double>(before[i].power_mw) +
@@ -289,6 +338,16 @@ DeviceState setup_device(int gpu_id, const Options& opts,
     oss << "warning_target_cc_mismatch=device_" << prop.major << "."
         << prop.minor << "_target_" << opts.profile.compute_major << "."
         << opts.profile.compute_minor << ";";
+    state.notes += oss.str();
+  }
+  {
+    std::ostringstream oss;
+    oss << "runtime_device_name=" << prop.name
+        << ";runtime_compute_capability=" << prop.major << "." << prop.minor
+        << ";runtime_sm_count=" << prop.multiProcessorCount
+        << ";runtime_l2_bytes=" << prop.l2CacheSize
+        << ";runtime_shared_mem_per_block_optin_bytes="
+        << prop.sharedMemPerBlockOptin << ";";
     state.notes += oss.str();
   }
 
@@ -477,7 +536,7 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
                    const GpuEnergySample& after, double elapsed_s,
                    double idle_baseline_j, double delta_j,
                    const SmidCheck& smid_check, std::uint64_t iters,
-                   const std::string& extra_notes) {
+                   int actual_sm_count, const std::string& extra_notes) {
   ResultRow row;
   row.run_id = run_id;
   row.gpu_id = gpu_id;
@@ -499,6 +558,41 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
   row.clock_sm_mhz = after.sm_clock_mhz;
   row.clock_mem_mhz = after.mem_clock_mhz;
   row.temp_C = after.temp_c;
+  row.profile_name = opts.profile.name;
+  row.architecture_family = opts.profile.architecture_family;
+  row.chip = opts.profile.chip;
+  if (after.compute_major > 0) {
+    row.compute_capability =
+        std::to_string(after.compute_major) + "." + std::to_string(after.compute_minor);
+  } else {
+    row.compute_capability =
+        std::to_string(opts.profile.compute_major) + "." +
+        std::to_string(opts.profile.compute_minor);
+  }
+  row.sm_count = actual_sm_count > 0 ? actual_sm_count : opts.profile.full_sm_count;
+  row.l2_mib = opts.profile.l2_mib;
+  row.shared_kib_per_sm = opts.profile.shared_capacity_per_sm_kib;
+  row.tensor_modes = opts.profile.tensor_modes;
+  row.nvml_total_energy_supported =
+      before.energy_counter_supported && after.energy_counter_supported;
+  row.energy_source =
+      row.nvml_total_energy_supported ? "nvml_total_energy"
+                                      : "legacy_get_power_usage_integral";
+  row.energy_integration_method =
+      row.nvml_total_energy_supported ? "total_energy_mj_delta"
+                                      : "endpoint_power_trapezoid";
+  row.nvml_power_usage_semantics = opts.profile.nvml_power_usage_semantics;
+  row.nvml_field_power_instant_supported =
+      before.field_power_instant_supported && after.field_power_instant_supported;
+  row.nvml_field_power_average_supported =
+      before.field_power_average_supported && after.field_power_average_supported;
+  row.power_before_mw = before.power_mw;
+  row.power_after_mw = after.power_mw;
+  row.power_sample_count = row.nvml_total_energy_supported ? 0 : 2;
+  row.power_sample_period_ms =
+      row.nvml_total_energy_supported ? 0.0 : elapsed_s * 1000.0;
+  row.driver_version = after.driver_version;
+  row.nvml_version = after.nvml_version;
 
   if (gpu_active && is_mma_mode(opts.mode)) {
     row.N_MMA = static_cast<std::uint64_t>(opts.active_sm) *
@@ -515,8 +609,17 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
   std::ostringstream notes;
   notes << "regime=" << f.regime << ";feasibility_reason=" << f.reason
         << ";target_profile=" << opts.profile.name
+        << ";architecture_family=" << opts.profile.architecture_family
+        << ";chip=" << opts.profile.chip
         << ";target_full_sm=" << opts.profile.full_sm_count
         << ";target_l2_mib=" << opts.profile.l2_mib
+        << ";target_shared_kib_per_sm="
+        << opts.profile.shared_capacity_per_sm_kib
+        << ";target_max_shared_kib_per_block="
+        << opts.profile.max_shared_per_block_kib
+        << ";nvml_power_usage_semantics="
+        << opts.profile.nvml_power_usage_semantics
+        << ";tensor_modes=" << opts.profile.tensor_modes
         << ";shared_resident=" << (f.shared_resident ? 1 : 0)
         << ";l2_candidate=" << (f.l2_candidate ? 1 : 0)
         << ";dram_candidate=" << (f.dram_candidate ? 1 : 0)
@@ -556,7 +659,7 @@ int run_idle(const Options& opts, NvmlEnergy& nvml) {
       SmidCheck smid;
       ResultRow row = make_row(opts, f, run_id, gpu, 0, false, before[gpu],
                                after[gpu], elapsed, delta_j, delta_j, smid, 0,
-                               "idle_measurement=1;");
+                               opts.profile.full_sm_count, "idle_measurement=1;");
       writer.write(row);
     }
   }
@@ -622,16 +725,20 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
         auto it = smid_by_gpu.find(gpu);
         if (it != smid_by_gpu.end()) smid = it->second;
         std::string extra;
+        int actual_sm_count = opts.profile.full_sm_count;
         if (active) {
           auto state_it =
               std::find_if(states.begin(), states.end(),
                            [&](const DeviceState& s) { return s.gpu_id == gpu; });
-          if (state_it != states.end()) extra += state_it->notes;
+          if (state_it != states.end()) {
+            extra += state_it->notes;
+            actual_sm_count = state_it->actual_sm;
+          }
         }
         ResultRow row =
             make_row(opts, f, run_id, gpu, static_cast<int>(opts.gpu_list.size()),
                      active, before[gpu], after[gpu], elapsed, baseline_scaled,
-                     delta.at(gpu), smid, iters, extra);
+                     delta.at(gpu), smid, iters, actual_sm_count, extra);
         writer.write(row);
       }
     }
@@ -648,7 +755,8 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
 
 int main(int argc, char** argv) {
   try {
-    const auto opts = a100fp16::parse_args(argc, argv);
+    auto opts = a100fp16::parse_args(argc, argv);
+    a100fp16::resolve_auto_profile(opts);
     const auto f =
         a100fp16::classify_feasibility(opts.w_sm_kib, opts.blocks_per_sm,
                                        opts.profile);

@@ -7,8 +7,36 @@ BIN="${BIN:-./build/a100_fp16_energy_v2}"
 OUTDIR="${OUTDIR:-results/ncu/rtx3090_validation_20260701}"
 RAW_OUT="${RAW_OUT:-results/raw/ncu_validation_sidecar_20260701.csv}"
 GPU="${GPU:-0}"
-ACTIVE_SM="${ACTIVE_SM:-82}"
 TARGET_PROFILE="${TARGET_PROFILE:-rtx3090}"
+
+case "${TARGET_PROFILE}" in
+  v100)
+    DEFAULT_ACTIVE_SM=80
+    DRAM_W_SM_KIB=128
+    ;;
+  rtx3090)
+    DEFAULT_ACTIVE_SM=82
+    DRAM_W_SM_KIB=128
+    ;;
+  a100)
+    DEFAULT_ACTIVE_SM=108
+    DRAM_W_SM_KIB=512
+    ;;
+  h100)
+    DEFAULT_ACTIVE_SM=132
+    DRAM_W_SM_KIB=512
+    ;;
+  *)
+    DEFAULT_ACTIVE_SM=82
+    DRAM_W_SM_KIB=128
+    ;;
+esac
+
+ACTIVE_SM="${ACTIVE_SM:-${DEFAULT_ACTIVE_SM}}"
+SHARED_W_SM_KIB="${SHARED_W_SM_KIB:-64}"
+L2_W_SM_KIB="${L2_W_SM_KIB:-64}"
+DRAM_W_SM_KIB="${DRAM_W_SM_KIB_OVERRIDE:-${DRAM_W_SM_KIB}}"
+BLOCKS_PER_SM="${BLOCKS_PER_SM:-16}"
 
 mkdir -p "${OUTDIR}" "$(dirname "${RAW_OUT}")"
 
@@ -63,10 +91,10 @@ run_case() {
     > "${report}_details.csv"
 }
 
-run_case "empty_W64_B16" "empty_kernel" "empty" 64 16 1000000
+run_case "empty_W64_B${BLOCKS_PER_SM}" "empty_kernel" "empty" 64 "${BLOCKS_PER_SM}" 1000000
 run_case "reg_mma_W2048_B4" "reg_mma_kernel" "reg_mma" 2048 4 100000
-run_case "shared_mma_W64_B16" "shared_mma_kernel" "shared_mma" 64 16 100000
-run_case "l2_mma_W64_B16" "global_mma_kernel" "l2_mma" 64 16 100000
-run_case "dram_mma_W128_B16" "global_mma_kernel" "dram_mma" 128 16 100000
+run_case "shared_mma_W${SHARED_W_SM_KIB}_B${BLOCKS_PER_SM}" "shared_mma_kernel" "shared_mma" "${SHARED_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000
+run_case "l2_mma_W${L2_W_SM_KIB}_B${BLOCKS_PER_SM}" "global_mma_kernel" "l2_mma" "${L2_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000
+run_case "dram_mma_W${DRAM_W_SM_KIB}_B${BLOCKS_PER_SM}" "global_mma_kernel" "dram_mma" "${DRAM_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000
 
 echo "NCU validation reports written to ${OUTDIR}"

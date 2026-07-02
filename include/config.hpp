@@ -17,30 +17,162 @@ constexpr int kLogicalMmaFlop = 8192;
 
 struct HardwareProfile {
   const char* name = "rtx3090";
+  const char* architecture_family = "ampere_ga10x";
+  const char* chip = "ga102";
   int cuda_arch = 86;
   int compute_major = 8;
   int compute_minor = 6;
   int full_sm_count = 82;
   int max_blocks_per_sm = 16;
+  int max_warps_per_sm = 48;
+  int max_threads_per_sm = 1536;
+  int unified_l1_shared_kib = 128;
   int shared_capacity_per_sm_kib = 100;
   int max_shared_per_block_kib = 99;
   int l2_mib = 6;
+  bool supports_l2_persistence = true;
+  bool supports_async_copy = true;
+  bool supports_tma = false;
+  bool supports_clusters = false;
+  const char* tensor_modes =
+      "fp16_wmma,tf32,bf16,int8,int4,sparsity";
+  const char* ncu_chip_alias = "ga102";
+  const char* recommended_ncu = "current";
+  const char* nvml_power_usage_semantics = "one_sec_average";
 };
 
+constexpr HardwareProfile kV100Profile{
+    "v100",
+    "volta",
+    "gv100",
+    70,
+    7,
+    0,
+    80,
+    32,
+    64,
+    2048,
+    128,
+    96,
+    96,
+    6,
+    false,
+    false,
+    false,
+    false,
+    "fp16_wmma",
+    "gv100",
+    "ncu_2024_3_or_2025_1",
+    "instant"};
 constexpr HardwareProfile kRtx3090Profile{
-    "rtx3090", 86, 8, 6, 82, 16, 100, 99, 6};
+    "rtx3090",
+    "ampere_ga10x",
+    "ga102",
+    86,
+    8,
+    6,
+    82,
+    16,
+    48,
+    1536,
+    128,
+    100,
+    99,
+    6,
+    true,
+    true,
+    false,
+    false,
+    "fp16_wmma,tf32,bf16,int8,int4,sparsity",
+    "ga102",
+    "current",
+    "one_sec_average"};
 constexpr HardwareProfile kA100Profile{
-    "a100", 80, 8, 0, 108, 32, 164, 163, 40};
+    "a100",
+    "ampere_ga100",
+    "ga100",
+    80,
+    8,
+    0,
+    108,
+    32,
+    64,
+    2048,
+    192,
+    164,
+    163,
+    40,
+    true,
+    true,
+    false,
+    false,
+    "fp16_wmma,tf32,bf16,fp64_tc,int8,int4,binary,sparsity",
+    "ga100",
+    "current",
+    "instant"};
+constexpr HardwareProfile kH100Profile{
+    "h100",
+    "hopper_gh100",
+    "gh100",
+    90,
+    9,
+    0,
+    132,
+    32,
+    64,
+    2048,
+    256,
+    228,
+    227,
+    50,
+    true,
+    true,
+    true,
+    true,
+    "fp16_wmma,bf16,tf32,fp8,wgmma,tma,int8,int4",
+    "gh100",
+    "current",
+    "one_sec_average"};
 constexpr HardwareProfile kDefaultHardwareProfile = kRtx3090Profile;
 
 inline HardwareProfile profile_from_string(const std::string& value) {
+  if (value == "v100" || value == "gv100" || value == "sm70") {
+    return kV100Profile;
+  }
   if (value == "rtx3090" || value == "3090" || value == "sm86") {
     return kRtx3090Profile;
   }
   if (value == "a100" || value == "sm80") {
     return kA100Profile;
   }
+  if (value == "h100" || value == "gh100" || value == "sm90") {
+    return kH100Profile;
+  }
   throw std::invalid_argument("unknown target profile: " + value);
+}
+
+inline HardwareProfile profile_from_compute_capability(int major, int minor,
+                                                       const std::string& name) {
+  if (major == 7 && minor == 0) return kV100Profile;
+  if (major == 8 && minor == 0) return kA100Profile;
+  if (major == 8 && minor == 6) return kRtx3090Profile;
+  if (major == 9 && minor == 0) return kH100Profile;
+
+  if (name.find("V100") != std::string::npos) return kV100Profile;
+  if (name.find("A100") != std::string::npos) return kA100Profile;
+  if (name.find("H100") != std::string::npos ||
+      name.find("H800") != std::string::npos) {
+    return kH100Profile;
+  }
+  if (name.find("RTX 3090") != std::string::npos ||
+      name.find("GeForce RTX 3090") != std::string::npos) {
+    return kRtx3090Profile;
+  }
+
+  std::ostringstream oss;
+  oss << "no built-in target profile for compute capability " << major << "."
+      << minor << " device '" << name << "'";
+  throw std::invalid_argument(oss.str());
 }
 
 inline std::vector<int> allowed_blocks_per_sm(const HardwareProfile& profile) {

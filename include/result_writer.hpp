@@ -37,6 +37,26 @@ struct ResultRow {
   unsigned int clock_sm_mhz = 0;
   unsigned int clock_mem_mhz = 0;
   unsigned int temp_C = 0;
+  std::string profile_name;
+  std::string architecture_family;
+  std::string chip;
+  std::string compute_capability;
+  int sm_count = 0;
+  int l2_mib = 0;
+  int shared_kib_per_sm = 0;
+  std::string tensor_modes;
+  std::string energy_source;
+  std::string energy_integration_method;
+  bool nvml_total_energy_supported = false;
+  std::string nvml_power_usage_semantics;
+  bool nvml_field_power_instant_supported = false;
+  bool nvml_field_power_average_supported = false;
+  unsigned int power_before_mw = 0;
+  unsigned int power_after_mw = 0;
+  unsigned int power_sample_count = 0;
+  double power_sample_period_ms = 0.0;
+  std::string driver_version;
+  std::string nvml_version;
   std::string notes;
 };
 

@@ -11,6 +11,14 @@ from typing import Any
 
 
 PROFILES: dict[str, dict[str, Any]] = {
+    "v100": {
+        "full_sm": 80,
+        "l2_mib": 6,
+        "max_blocks_per_sm": 32,
+        "shared_capacity_per_sm_kib": 96,
+        "max_shared_per_block_kib": 96,
+        "active_sm": [1, 2, 4, 8, 16, 32, 64, 80],
+    },
     "rtx3090": {
         "full_sm": 82,
         "l2_mib": 6,
@@ -26,6 +34,14 @@ PROFILES: dict[str, dict[str, Any]] = {
         "shared_capacity_per_sm_kib": 164,
         "max_shared_per_block_kib": 163,
         "active_sm": [1, 2, 4, 8, 16, 32, 64, 108],
+    },
+    "h100": {
+        "full_sm": 132,
+        "l2_mib": 50,
+        "max_blocks_per_sm": 32,
+        "shared_capacity_per_sm_kib": 228,
+        "max_shared_per_block_kib": 227,
+        "active_sm": [1, 2, 4, 8, 16, 32, 64, 132],
     },
 }
 DEFAULT_PROFILE = "rtx3090"

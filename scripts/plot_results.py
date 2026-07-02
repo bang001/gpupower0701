@@ -19,6 +19,13 @@ except ModuleNotFoundError as exc:
 
 BLOCKS_PER_SM = [1, 2, 4, 8, 16, 32]
 PROFILES = {
+    "v100": {
+        "full_sm": 80,
+        "l2_mib": 6,
+        "max_blocks_per_sm": 32,
+        "shared_capacity_per_sm_kib": 96,
+        "max_shared_per_block_kib": 96,
+    },
     "rtx3090": {
         "full_sm": 82,
         "l2_mib": 6,
@@ -32,6 +39,13 @@ PROFILES = {
         "max_blocks_per_sm": 32,
         "shared_capacity_per_sm_kib": 164,
         "max_shared_per_block_kib": 163,
+    },
+    "h100": {
+        "full_sm": 132,
+        "l2_mib": 50,
+        "max_blocks_per_sm": 32,
+        "shared_capacity_per_sm_kib": 228,
+        "max_shared_per_block_kib": 227,
     },
 }
 W_SM_KIB = [
