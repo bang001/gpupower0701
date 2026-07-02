@@ -31,6 +31,7 @@ struct ResultRow {
   std::uint64_t reuse_factor = 1;
   std::uint64_t load_repeat = 1;
   std::uint64_t store_repeat = 1;
+  std::uint64_t expected_reg_operand_ops = 0;
   std::uint64_t expected_shared_bytes = 0;
   std::uint64_t expected_l2_bytes = 0;
   std::uint64_t expected_dram_bytes = 0;

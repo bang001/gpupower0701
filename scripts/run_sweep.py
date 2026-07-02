@@ -69,6 +69,7 @@ W_SM_KIB = [
 MODES = [
     "empty",
     "reg_fragment_only",
+    "reg_operand_only",
     "reg_mma",
     "shared_load_only",
     "shared_mma",

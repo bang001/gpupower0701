@@ -124,6 +124,8 @@ Idle baseline with zero active GPUs:
 - `idle`: no kernel, NVML energy delta during sleep.
 - `empty`: same grid shape, persistent loop, no MMA.
 - `reg_fragment_only`: WMMA fragment/register setup without MMA.
+- `reg_operand_only`: WMMA register fragments kept live and sampled in the
+  same `ITER * reuse_factor` loop shape as `reg_mma`, but without `mma_sync`.
 - `reg_mma`: WMMA fragments filled in registers, repeated MMA, final checksum store.
 - `shared_load_only`: dynamic shared working set, shared WMMA operand loads, no MMA.
 - `shared_mma`: dynamic shared working set, shared load to WMMA fragments, MMA.
@@ -203,10 +205,24 @@ python3 scripts/run_component_pairs.py \
 python3 scripts/analyze_component_pairs.py results/raw/component_pairs_raw.csv
 ```
 
+The most important register/Tensor Core pairs are:
+
+| pair | interpretation | unit |
+|---|---|---|
+| `reg_operand_only - empty` | no-MMA register-fragment/control baseline | pJ/reg-op |
+| `reg_mma - reg_operand_only` | effective Tensor Core MMA incremental cost candidate | pJ/FLOP |
+| `reg_mma - empty` | legacy effective Tensor Engine + register path baseline | pJ/FLOP |
+
+`reg_operand_only` is not pure register-file energy. It is a matched no-MMA
+control that keeps WMMA fragments live and samples fragment values to prevent
+optimization, so `reg_mma - reg_operand_only` must still be reported as an
+effective incremental cost.
+
 Use `--reuse-factors`, `--load-repeats`, and `--store-repeats` to vary logical
 MMA reuse, operand-load count, and store count independently. The raw CSV writes
-`expected_shared_bytes`, `expected_l2_bytes`, `expected_dram_bytes`, and
-`expected_store_bytes` for static paired-difference and regression analysis.
+`expected_reg_operand_ops`, `expected_shared_bytes`, `expected_l2_bytes`,
+`expected_dram_bytes`, and `expected_store_bytes` for static
+paired-difference and regression analysis.
 
 ## Nsight Compute
 

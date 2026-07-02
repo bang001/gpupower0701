@@ -196,6 +196,7 @@ enum class Mode {
   idle,
   empty,
   reg_fragment_only,
+  reg_operand_only,
   reg_mma,
   shared_load_only,
   shared_mma,
@@ -215,6 +216,8 @@ inline std::string to_string(Mode mode) {
       return "empty";
     case Mode::reg_fragment_only:
       return "reg_fragment_only";
+    case Mode::reg_operand_only:
+      return "reg_operand_only";
     case Mode::reg_mma:
       return "reg_mma";
     case Mode::shared_load_only:
@@ -241,6 +244,7 @@ inline Mode mode_from_string(const std::string& value) {
   if (value == "idle") return Mode::idle;
   if (value == "empty") return Mode::empty;
   if (value == "reg_fragment_only") return Mode::reg_fragment_only;
+  if (value == "reg_operand_only") return Mode::reg_operand_only;
   if (value == "reg_mma") return Mode::reg_mma;
   if (value == "shared_load_only") return Mode::shared_load_only;
   if (value == "shared_mma") return Mode::shared_mma;

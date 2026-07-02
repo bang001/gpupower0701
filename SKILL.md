@@ -1,6 +1,6 @@
 ---
 name: fp16-energy-experiment
-description: Run, debug, validate, and analyze the FP16 Tensor Core energy microbenchmark in this repository. Use when Codex is asked to build the CUDA/NVML project, run idle/empty/reg_mma/shared_mma/l2_mma/dram_mma/store_path experiments, generate RTX 3090 or A100 sweep matrices, collect Nsight Compute validation reports, compute pJ/FLOP or pJ/input-bit metrics, inspect feasibility rules, or produce plots for the FP16 energy experiment.
+description: Run, debug, validate, and analyze the FP16 Tensor Core energy microbenchmark in this repository. Use when Codex is asked to build the CUDA/NVML project, run idle/empty/reg_fragment_only/reg_operand_only/reg_mma/shared_mma/l2_mma/dram_mma/store_path experiments, generate RTX 3090 or A100 sweep matrices, collect Nsight Compute validation reports, compute pJ/FLOP or pJ/input-bit metrics, inspect feasibility rules, or produce plots for the FP16 energy experiment.
 ---
 
 # FP16 Energy Experiment
@@ -181,6 +181,7 @@ Every experiment report must explain what each reported mode means before interp
 | `idle` | No benchmark kernel is launched; NVML energy is measured during sleep. | System/GPU idle baseline |
 | `empty` | Same persistent grid shape as active modes, but no MMA work is performed. | Launch, scheduling, loop, and placement overhead |
 | `reg_fragment_only` | WMMA fragment/register setup without MMA. | Register/fragment setup control |
+| `reg_operand_only` | WMMA register fragments are kept live and sampled in the same `ITER * reuse_factor` loop shape as `reg_mma`, but `mma_sync` is not executed. | No-MMA register-fragment/control baseline |
 | `reg_mma` | WMMA fragments are filled from register values and repeatedly accumulated. | Effective Tensor Engine + register path |
 | `shared_load_only` | Operands are staged in CUDA shared memory and loaded into WMMA fragments without MMA. | Effective shared/L1 load control |
 | `shared_mma` | Operands are staged in CUDA shared memory and loaded into WMMA fragments from shared memory. | Effective shared/L1 operand path |

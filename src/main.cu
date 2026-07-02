@@ -111,7 +111,7 @@ void print_usage(const char* argv0) {
       << "Usage: " << argv0 << " --gpu-list 0[,1,2] --mode MODE [options]\n\n"
       << "Required/primary options:\n"
       << "  --gpu-list <list|none>       CUDA/NVML ids for active GPUs\n"
-      << "  --mode idle|empty|reg_fragment_only|reg_mma|shared_load_only|shared_mma|l2_load_only|l2_mma|dram_load_only|dram_mma|store_only|store_path\n"
+      << "  --mode idle|empty|reg_fragment_only|reg_operand_only|reg_mma|shared_load_only|shared_mma|l2_load_only|l2_mma|dram_load_only|dram_mma|store_only|store_path\n"
       << "  --w-sm-kib <int>             1..131072 power-of-two KiB sweep point\n"
       << "  --blocks-per-sm <int>        power-of-two up to target resident block limit\n"
       << "  --active-sm <int>            default target full SM count\n"
@@ -245,6 +245,10 @@ bool is_mma_mode(Mode mode) {
          mode == Mode::l2_mma || mode == Mode::dram_mma;
 }
 
+bool is_register_operand_mode(Mode mode) {
+  return mode == Mode::reg_operand_only || mode == Mode::reg_mma;
+}
+
 bool is_shared_operand_mode(Mode mode) {
   return mode == Mode::shared_load_only || mode == Mode::shared_mma;
 }
@@ -266,10 +270,11 @@ bool has_operand_loads(Mode mode) {
 }
 
 bool has_final_matrix_store(Mode mode) {
-  return mode == Mode::reg_fragment_only || mode == Mode::reg_mma ||
-         mode == Mode::shared_load_only || mode == Mode::shared_mma ||
-         mode == Mode::l2_load_only || mode == Mode::l2_mma ||
-         mode == Mode::dram_load_only || mode == Mode::dram_mma;
+  return mode == Mode::reg_fragment_only || mode == Mode::reg_operand_only ||
+         mode == Mode::reg_mma || mode == Mode::shared_load_only ||
+         mode == Mode::shared_mma || mode == Mode::l2_load_only ||
+         mode == Mode::l2_mma || mode == Mode::dram_load_only ||
+         mode == Mode::dram_mma;
 }
 
 bool is_store_loop_mode(Mode mode) {
@@ -679,6 +684,11 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
     }
   }
   if (gpu_active) {
+    if (is_register_operand_mode(opts.mode)) {
+      row.expected_reg_operand_ops =
+          active_blocks * iters * opts.reuse_factor;
+    }
+
     const std::uint64_t expected_operand_bytes =
         active_blocks * iters * opts.load_repeat *
         static_cast<std::uint64_t>(kLogicalMmaInputBytes);
@@ -723,6 +733,7 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
         << "reuse_factor=" << opts.reuse_factor
         << ";load_repeat=" << opts.load_repeat
         << ";store_repeat=" << opts.store_repeat
+        << ";expected_reg_operand_ops=" << row.expected_reg_operand_ops
         << ";expected_shared_bytes=" << row.expected_shared_bytes
         << ";expected_l2_bytes=" << row.expected_l2_bytes
         << ";expected_dram_bytes=" << row.expected_dram_bytes

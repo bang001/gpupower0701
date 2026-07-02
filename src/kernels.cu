@@ -74,6 +74,10 @@ __device__ __forceinline__ void consume_float(float value) {
   asm volatile("" : : "f"(value));
 }
 
+__device__ __forceinline__ void compiler_barrier() {
+  asm volatile("" ::: "memory");
+}
+
 __global__ void init_half_kernel(half* input, std::size_t half_count,
                                  std::uint64_t seed) {
   const std::size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -154,6 +158,40 @@ __global__ void reg_fragment_only_kernel(std::uint64_t iters, float* output,
     nvcuda::wmma::fill_fragment(a, __float2half_rn(0.125f * iter_scale));
     nvcuda::wmma::fill_fragment(b, __float2half_rn(0.0625f * iter_scale));
     checksum += checksum_fragment(a) + checksum_fragment(b);
+  }
+
+  nvcuda::wmma::fill_fragment(c, checksum);
+  if (output) {
+    store_matrix_sync(output + blockIdx.x * 256, c, 16, mem_row_major);
+  }
+}
+
+__global__ void reg_operand_only_kernel(std::uint64_t iters, float* output,
+                                        std::uint64_t reuse_factor,
+                                        int* smid_by_block,
+                                        int* rank_by_block, int* sm_counts,
+                                        int sm_count_capacity) {
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+
+  fragment<matrix_a, 16, 16, 16, half, row_major> a;
+  fragment<matrix_b, 16, 16, 16, half, col_major> b;
+  fragment<accumulator, 16, 16, 16, float> c;
+
+  const float block_scale = 1.0f + static_cast<float>(blockIdx.x & 7) * 0.03125f;
+  nvcuda::wmma::fill_fragment(a, __float2half_rn(0.125f * block_scale));
+  nvcuda::wmma::fill_fragment(b, __float2half_rn(0.0625f * block_scale));
+  nvcuda::wmma::fill_fragment(c, 0.0f);
+
+  float checksum = 0.0f;
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    for (std::uint64_t r = 0; r < reuse_factor; ++r) {
+      compiler_barrier();
+      const float operand_sum = __half2float(a.x[0]) + __half2float(b.x[0]);
+      checksum = __fmaf_rn(
+          checksum, 1.000000119f,
+          operand_sum + static_cast<float>((i + r) & 31ull) * 0.0009765625f);
+      consume_float(checksum);
+    }
   }
 
   nvcuda::wmma::fill_fragment(c, checksum);
@@ -419,6 +457,11 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
       reg_fragment_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
           cfg.iters, cfg.output, cfg.smid_by_block, cfg.rank_by_block,
           cfg.sm_counts, cfg.sm_count_capacity);
+      break;
+    case Mode::reg_operand_only:
+      reg_operand_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
+          cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+          cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
       break;
     case Mode::shared_load_only:
       shared_load_only_kernel<<<grid_dim, block,

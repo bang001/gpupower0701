@@ -30,7 +30,7 @@ from run_sweep import (
 GROUPS: dict[str, dict[str, Any]] = {
     "register": {
         "reference": "reg_mma",
-        "modes": ["empty", "reg_fragment_only", "reg_mma"],
+        "modes": ["empty", "reg_fragment_only", "reg_operand_only", "reg_mma"],
     },
     "shared": {
         "reference": "shared_mma",

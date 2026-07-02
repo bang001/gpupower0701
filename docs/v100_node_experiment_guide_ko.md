@@ -217,6 +217,23 @@ preflight에서 확인할 항목:
   --verify-smid 1
 ```
 
+register/tensor 분리 control도 짧게 확인한다.
+
+```bash
+./build-v100/a100_fp16_energy_v2 \
+  --gpu-list 0 \
+  --mode reg_operand_only \
+  --w-sm-kib 32 \
+  --blocks-per-sm 16 \
+  --target-profile v100 \
+  --active-sm 80 \
+  --seconds 1 \
+  --repeats 1 \
+  --reuse-factor 2 \
+  --output results/raw/v100_smoke_reg_operand_only.csv \
+  --verify-smid 1
+```
+
 CSV에서 확인할 항목:
 
 | 컬럼 | 기대 |
@@ -227,6 +244,7 @@ CSV에서 확인할 항목:
 | `energy_source` | `nvml_total_energy` 우선, 미지원이면 fallback source 명시 |
 | `nvml_power_usage_semantics` | `instant` |
 | `smid_histogram_ok` | active row에서 `true` |
+| `expected_reg_operand_ops` | `reg_operand_only`, `reg_mma`에서 `active_SM * blocks/SM * ITER * reuse_factor` |
 
 ## 8. Full sweep 실행
 
@@ -281,7 +299,7 @@ python3 scripts/run_sweep.py \
   --execute \
   --target-profile v100 \
   --gpu-ids 0 \
-  --modes empty,reg_mma,shared_mma,l2_mma,dram_mma,store_path \
+  --modes empty,reg_fragment_only,reg_operand_only,reg_mma,shared_mma,l2_mma,dram_mma,store_path \
   --w-sm-kib-values 32,64,128,512,8192 \
   --blocks-per-sm-values 1,8,16,32 \
   --active-sm-values 80 \
@@ -290,6 +308,46 @@ python3 scripts/run_sweep.py \
   --output results/raw/v100_sanity_sweep_$(date +%Y%m%d).csv \
   --matrix-csv results/raw/v100_sanity_sweep_$(date +%Y%m%d)_matrix.csv
 ```
+
+### Component pair 실행
+
+component-like coefficient를 계산할 때는 mode별 raw sweep만 쓰지 말고 pair runner를 별도로 실행한다. 이 runner는 각 좌표에서 reference mode를 calibration하고 같은 `ITER`를 control mode에 재사용한다.
+
+```bash
+python3 scripts/run_component_pairs.py \
+  --binary ./build-v100/a100_fp16_energy_v2 \
+  --execute \
+  --target-profile v100 \
+  --gpu-ids 0 \
+  --groups register,shared,l2,dram,store \
+  --w-sm-kib-values 32,64,128,512,8192 \
+  --blocks-per-sm-values 1,8,16,32 \
+  --active-sm-values 80 \
+  --reuse-factors 1,2,4,8 \
+  --seconds 10 \
+  --repeats 5 \
+  --output results/raw/v100_component_pairs_$(date +%Y%m%d).csv \
+  --matrix-csv results/raw/v100_component_pairs_$(date +%Y%m%d)_matrix.csv
+```
+
+분석:
+
+```bash
+python3 scripts/analyze_component_pairs.py \
+  results/raw/v100_component_pairs_$(date +%Y%m%d).csv \
+  --out-csv results/summary/v100_component_pair_summary_$(date +%Y%m%d).csv \
+  --out-md results/summary/v100_component_pair_summary_$(date +%Y%m%d).md
+```
+
+중요한 register/tensor 해석:
+
+| pair | 해석 | 단위 |
+|---|---|---|
+| `reg_operand_only - empty` | no-MMA register-fragment/control baseline | pJ/reg-op |
+| `reg_mma - reg_operand_only` | effective Tensor Core MMA incremental cost 후보 | pJ/FLOP |
+| `reg_mma - empty` | 기존 effective Tensor Engine + register path baseline | pJ/FLOP |
+
+`reg_operand_only`는 pure register energy가 아니라 sampled fragment consume과 compiler 최적화 방지 경로가 포함된 matched control이다.
 
 ## 9. NCU validation
 
@@ -332,10 +390,16 @@ NCU가 실패해도 NVML energy run 자체와 섞지 말고, 보고서에는 “
 |---|---|---|
 | `idle` | 커널 없이 NVML energy delta 측정 | idle baseline |
 | `empty` | 같은 persistent grid에서 MMA 없음 | loop/scheduler baseline |
+| `reg_fragment_only` | WMMA fragment/register setup, MMA 없음 | fragment setup control |
+| `reg_operand_only` | `reg_mma`와 같은 `ITER * reuse_factor` loop에서 sampled register fragment 값을 소비, MMA 없음 | no-MMA register-fragment/control baseline |
 | `reg_mma` | register 값으로 WMMA fragment를 채우고 MMA 반복 | effective Tensor Engine + register |
+| `shared_load_only` | shared memory operand staging 후 WMMA load, MMA 없음 | effective shared/L1 load control |
 | `shared_mma` | shared memory operand staging 후 WMMA load + MMA | effective shared/L1 path |
+| `l2_load_only` | L2 후보 global working set warm-up 후 load, MMA 없음 | effective L2-hit load control |
 | `l2_mma` | L2에 들어가는 global working set warm-up 후 load + MMA | effective L2-hit path |
+| `dram_load_only` | nominal L2보다 큰 global working set streaming load, MMA 없음 | effective DRAM streaming load control |
 | `dram_mma` | nominal L2보다 큰 global working set streaming load + MMA | effective DRAM streaming path |
+| `store_only` | 반복 global store loop, MMA 없음 | store-only control |
 | `store_path` | global store/output-side overhead 확인 | store-side path |
 
 ## 11. 결과 정리
@@ -349,6 +413,7 @@ NCU가 실패해도 NVML energy run 자체와 섞지 말고, 보고서에는 “
 | 실험 조건 | GPU, CC, SMs, L2 (MiB), shared/SM (KiB), seconds (s), repeats |
 | sweep coverage | mode, valid rows, skipped rows, W_SM range (KiB/MiB), blocks/SM range |
 | mode summary | mode, pJ/FLOP median, pJ/FLOP min/max, net_E_J median (J) |
+| paired-difference | pair, delta_E_J (J), denominator, coefficient, unit |
 | blocks sweep | mode, B=1, B=2, B=4, B=8, B=16, B=32 |
 | W sweep | mode, W_SM range (KiB/MiB), pJ/FLOP range |
 | NCU validation | mode, tensor %, L1 hit rate (%), L2 hit rate (%), L1 accesses (requests/sectors), L2 accesses (sectors), DRAM accesses (sectors), shared bytes/op, L2 bytes/op, DRAM bytes/op, top stall %, status |
@@ -381,5 +446,6 @@ python3 scripts/plot_results.py \
 | dry-run | `target_profile=v100`, `mode_allowed=true` |
 | smoke | `energy_source` 기록, `smid_histogram_ok=true` |
 | full sweep | raw CSV와 matrix CSV 모두 생성 |
+| component pairs | `reg_mma_minus_reg_operand` pair와 단위 포함 summary 생성 |
 | NCU | counter 수집 성공 또는 실패 사유 문서화 |
 | report | mode 설명 표와 단위 포함 sweep 표 작성 |

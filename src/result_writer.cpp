@@ -36,7 +36,8 @@ std::string csv_header() {
          "threads_per_block,active_SM,ITER,sweeps,elapsed_s,E_before_mJ,"
          "E_after_mJ,delta_E_J,idle_baseline_J,net_E_J,N_MMA,FLOP,"
          "input_bits,w_block_bytes,tiles_per_block,reuse_factor,"
-         "load_repeat,store_repeat,expected_shared_bytes,expected_l2_bytes,"
+         "load_repeat,store_repeat,expected_reg_operand_ops,"
+         "expected_shared_bytes,expected_l2_bytes,"
          "expected_dram_bytes,expected_store_bytes,pJ_per_FLOP,"
          "pJ_per_input_bit,ncu_tensor_inst,ncu_shared_bytes,ncu_l2_bytes,"
          "ncu_dram_bytes,ncu_spill_bytes,smid_histogram_ok,clock_sm_mhz,"
@@ -97,6 +98,7 @@ void CsvWriter::write(const ResultRow& row) {
       << row.input_bits << ',' << row.w_block_bytes << ','
       << row.tiles_per_block << ',' << row.reuse_factor << ','
       << row.load_repeat << ',' << row.store_repeat << ','
+      << row.expected_reg_operand_ops << ','
       << row.expected_shared_bytes << ',' << row.expected_l2_bytes << ','
       << row.expected_dram_bytes << ',' << row.expected_store_bytes << ','
       << row.pJ_per_FLOP << ','

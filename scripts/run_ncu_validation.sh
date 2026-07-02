@@ -107,6 +107,7 @@ run_case() {
 
 run_case "empty_W64_B${BLOCKS_PER_SM}" "empty_kernel" "empty" 64 "${BLOCKS_PER_SM}" 1000000
 run_case "reg_fragment_only_W2048_B4" "reg_fragment_only_kernel" "reg_fragment_only" 2048 4 100000
+run_case "reg_operand_only_W2048_B4" "reg_operand_only_kernel" "reg_operand_only" 2048 4 100000
 run_case "reg_mma_W2048_B4" "reg_mma_kernel" "reg_mma" 2048 4 100000
 run_case "shared_load_only_W${SHARED_W_SM_KIB}_B${BLOCKS_PER_SM}" "shared_load_only_kernel" "shared_load_only" "${SHARED_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000
 run_case "shared_mma_W${SHARED_W_SM_KIB}_B${BLOCKS_PER_SM}" "shared_mma_kernel" "shared_mma" "${SHARED_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000

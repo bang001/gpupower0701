@@ -21,6 +21,22 @@ PAIR_SPECS = [
         "coefficient_unit": "pJ/FLOP",
     },
     {
+        "pair": "reg_operand_minus_empty",
+        "numerator_mode": "reg_operand_only",
+        "baseline_mode": "empty",
+        "denominator_mode": "reg_operand_only",
+        "denominator_column": "expected_reg_operand_ops",
+        "coefficient_unit": "pJ/reg-op",
+    },
+    {
+        "pair": "reg_mma_minus_reg_operand",
+        "numerator_mode": "reg_mma",
+        "baseline_mode": "reg_operand_only",
+        "denominator_mode": "reg_mma",
+        "denominator_column": "FLOP",
+        "coefficient_unit": "pJ/FLOP",
+    },
+    {
         "pair": "reg_fragment_minus_empty",
         "numerator_mode": "reg_fragment_only",
         "baseline_mode": "empty",
@@ -143,6 +159,7 @@ def summarize_mode(rows: list[dict[str, str]]) -> dict[str, float]:
         "expected_l2_bytes",
         "expected_dram_bytes",
         "expected_store_bytes",
+        "expected_reg_operand_ops",
     ]
     out: dict[str, float] = {"row_count": float(len(rows))}
     for column in numeric_columns:
