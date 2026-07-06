@@ -235,6 +235,79 @@ reg_mma net_E_J
 
 따라서 `reg_mma`는 사용자가 생각한 것처럼 **Tensor Core + register 중심 baseline**이 맞다. 다만 순수 Tensor Core 에너지는 아니다. scheduler, issue, accumulator, final store가 같이 들어간다.
 
+#### `reg_mma` register footprint와 `W_SM` 주의점
+
+`reg_mma`의 실제 register footprint는 `W_SM`으로 정해지지 않는다. `W_SM=1 KiB` 또는 `W_SM=32 KiB`를 지정해도 A/B/C fragment가 그 크기로 줄거나 커지지 않는다. `reg_mma`에서 `W_SM`은 shared/L2/DRAM mode와 같은 sweep table에 놓기 위한 좌표값에 가깝고, 실제 register 사용량은 compiler가 할당한 `registers/thread`와 resident block 수로 계산해야 한다.
+
+RTX 3090 sm_86 빌드에서 확인한 값:
+
+```text
+reg_mma_kernel:          26 registers/thread, spill stores=0, spill loads=0
+reg_operand_only_kernel: 26 registers/thread, spill stores=0, spill loads=0
+reg_fragment_only_kernel:17 registers/thread, spill stores=0, spill loads=0
+empty_kernel:            16 registers/thread, spill stores=0, spill loads=0
+```
+
+현재 block은 1 warp, 즉 32 threads/block이다. 따라서 `reg_mma`의 compiler-visible register footprint는 대략 다음과 같다.
+
+```text
+26 registers/thread * 32 threads/block * 4 bytes/register
+  = 3,328 bytes/block
+  ~= 3.25 KiB/block
+
+blocks/SM=16이면:
+3.25 KiB/block * 16 blocks/SM ~= 52 KiB/SM
+```
+
+여기서 흔히 말하는 64K register/SM은 64 KiB가 아니라 64K개의 32-bit register entry를 뜻한다. 바이트로 환산하면 64K * 4 B = 256 KiB/SM이다. 즉 현재 `reg_mma`는 SM register file 전체를 채우는 실험이 아니라, 작은 WMMA fragment를 register-resident 상태로 두고 반복 재사용하는 실험이다.
+
+WMMA logical fragment 크기도 작다.
+
+| fragment | logical 크기 |
+|---|---:|
+| A, FP16 16x16 | 512 B/warp |
+| B, FP16 16x16 | 512 B/warp |
+| C, FP32 16x16 accumulator | 1024 B/warp |
+| 합계 | 2048 B/warp |
+
+따라서 더 precise한 `reg_mma` 결과를 얻기 위해 `W_SM`을 3.25 KiB 미만, 예를 들어 1 KiB로 잡는다는 해석은 현재 구현에는 맞지 않는다. `W_SM=1 KiB`는 register footprint를 줄이지 않는다. precision을 높이는 핵심은 다음 조건이다.
+
+중요한 정정:
+
+```text
+이전 실험에서 W_SM=32 KiB부터 register/Tensor Core pair를 실행한 것은
+register working set을 32 KiB로 설정했다는 뜻이 아니다.
+
+그 값은 shared/L2/DRAM sweep과 같은 좌표계에 올려 둔 label이었고,
+reg_mma의 실제 working set 또는 footprint로 해석하면 안 된다.
+```
+
+사용자가 제안한 256 B 출발점은 다음처럼 구분해서 봐야 한다.
+
+| 설계 대상 | 256 B부터 sweep 가능 여부 | 이유 |
+|---|---|---|
+| WMMA `m16n16k16` `reg_mma` | 부적절 | A 또는 B 한쪽 logical tile만 512 B/warp이고, A+B는 1 KiB/warp다. C accumulator까지 포함하면 2 KiB/warp이며 ptxas footprint는 약 3.25 KiB/block이다. |
+| scalar/register pressure microbenchmark | 가능 | Tensor Core를 쓰지 않고 live scalar register 개수를 template/inline PTX로 조절하면 256 B/block 같은 작은 footprint 축을 만들 수 있다. |
+| 향후 stricter Tensor Core microbenchmark | `W_SM`이 아니라 ptxas footprint 축으로 설계 | 여러 kernel variant를 만들어 `registers/thread`, spill 여부, occupancy를 고정/기록해야 한다. |
+
+따라서 register 실험의 축은 `W_SM`이 아니라 다음처럼 정의하는 편이 더 정확하다.
+
+```text
+register_footprint_B_per_block
+  = ptxas_registers_per_thread * threads_per_block * 4
+
+register_footprint_B_per_SM
+  = register_footprint_B_per_block * resident_blocks_per_SM
+```
+
+| 조건 | 이유 |
+|---|---|
+| ptxas에서 spill stores/loads=0 확인 | register spill이 생기면 local memory가 L1/L2/DRAM을 오염시킨다. |
+| loop 내부에 shared/global load가 없는지 SASS/NCU로 확인 | `reg_mma`가 memory-backed operand path로 바뀌지 않았는지 확인한다. |
+| `ITER`와 `reuse_factor`를 충분히 크게 유지 | SMID 기록, prologue, final store 같은 고정 비용을 amortize한다. |
+| `reg_operand_only`와 paired-difference로 해석 | register-fragment/control 비용을 뺀 MMA incremental 후보를 본다. |
+| NCU counter로 L1/L2/DRAM access가 prologue/epilogue 수준인지 확인 | “register-fed MMA baseline” 주장을 뒷받침한다. |
+
 계산되는 logical count:
 
 ```text
@@ -244,6 +317,49 @@ FLOP = N_MMA * 8192
 input_bits = N_MMA * 8192
 pJ_per_FLOP = net_E_J * 1e12 / FLOP
 ```
+
+### `reg_pressure`
+
+`reg_pressure`는 WMMA/Tensor Core를 쓰지 않는 scalar register-pressure mode다. 사용자가 제안한 256 B 같은 작은 register payload 축은 이 mode에서 다룬다.
+
+동작:
+
+1. compile-time template variant가 thread당 payload register 수를 정한다.
+2. `--reg-payload-bytes`로 block당 target payload를 선택한다.
+3. loop 안에서 payload register들을 반복 갱신하고 checksum으로 소비한다.
+4. block당 작은 scalar output을 final store한다.
+
+지원 target payload:
+
+| target payload (B/block) | payload regs/thread | 주의 |
+|---:|---:|---|
+| 256 | 2 | ptxas total footprint는 base overhead 때문에 더 큼 |
+| 512 | 4 | ptxas 측정값으로 다시 해석 |
+| 1024 | 8 | WMMA A+B logical tile 1 KiB와는 다른 scalar 실험 |
+| 2048 | 16 | scalar register-pressure |
+| 4096 | 32 | scalar register-pressure |
+| 8192 | 64 | occupancy 제한 확인 필요 |
+| 16384 | 128 | occupancy 제한 확인 필요 |
+
+raw row의 의미:
+
+```text
+reg_pressure net_E_J
+  ~= scheduler
+   + warp issue
+   + scalar register payload update
+   + final scalar store
+   + measurement residual
+```
+
+해석:
+
+```text
+reg_pressure - empty
+  ~= scalar register-pressure/control coefficient
+```
+
+단위는 `pJ/reg-update`로 보고한다. 이 값은 pure register-file energy도 아니고, WMMA `reg_mma`의 Tensor Core incremental energy도 아니다.
 
 ### `shared_load_only`
 

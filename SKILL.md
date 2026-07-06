@@ -17,11 +17,17 @@ Use this skill to operate the repository as an experiment harness, not as a gene
 
 ## First Checks
 
-1. Read `README.md` and `docs/a100_fp16_energy_experiment_design_v2.md` from the current workspace root when the task involves experiment interpretation or design changes.
+1. Read `README.md`, `docs/a100_fp16_energy_experiment_design_v2.md`, and `docs/cross_platform_component_experiment_guide_ko.md` from the current workspace root when the task involves experiment interpretation or design changes. For component-energy claims also read `docs/component_energy_final_experiment_plan_ko.md` and `docs/component_energy_self_critique_ko.md`.
 2. Check `git status --short` before editing; do not overwrite user data or measured results.
 3. Confirm the target machine has Ampere-class CUDA, NVML, `cmake`, `nvcc`, `nvidia-smi`, and Python with `matplotlib` before promising build or plot success.
 4. The default runtime profile is RTX 3090 (`--target-profile rtx3090`, `sm_86`, 82 SMs). Supported profiles are `v100`, `rtx3090`, `a100`, and `h100`; use `--target-profile auto` on the target machine when the profile should be selected from the runtime CUDA device.
 5. If running without CUDA tooling, limit work to dry-run matrix generation, code inspection, and documentation updates.
+
+Platform guide routing:
+
+- A100 node runs: read `docs/a100_node_experiment_guide_ko.md`.
+- V100 node runs: read `docs/v100_node_experiment_guide_ko.md`.
+- H100 node runs: read `docs/h100_node_experiment_guide_ko.md`.
 
 ## Build Workflow
 
@@ -138,6 +144,32 @@ V100/GV100 requires an older supported Nsight Compute toolchain such as the 2024
 
 Do not merge NCU replay energy with NVML energy-run CSV values. Join exported NCU counters later by run metadata when needed.
 
+## Cross-Platform Component Finalplan
+
+For A100/V100/H100 component-energy runs, prefer the generated finalplan command
+script over hand-written command sequences:
+
+```bash
+python3 scripts/plan_platform_component_experiment.py \
+  --target-profile a100 \
+  --binary ./build-a100/a100_fp16_energy_v2 \
+  --ncu "$(command -v ncu)" \
+  --seconds 10 \
+  --repeats 5
+```
+
+Review and then run the generated shell script under `results/summary/`. The
+flow must remain:
+
+1. preflight,
+2. energy sweeps without NCU,
+3. NCU sidecar validation,
+4. `analyze_ncu_path_acceptance.py`,
+5. `analyze_matched_control_energy.py --require-ncu-denominator`.
+
+For H100, explicitly state that the current kernels use the repository's WMMA
+compatibility path, not Hopper-native WGMMA/TMA/FP8 paths.
+
 NCU validation reports must include a cache/memory table with units:
 
 | field | unit |
@@ -183,6 +215,7 @@ Every experiment report must explain what each reported mode means before interp
 | `reg_fragment_only` | WMMA fragment/register setup without MMA. | Register/fragment setup control |
 | `reg_operand_only` | WMMA register fragments are kept live and sampled in the same `ITER * reuse_factor` loop shape as `reg_mma`, but `mma_sync` is not executed. | No-MMA register-fragment/control baseline |
 | `reg_mma` | WMMA fragments are filled from register values and repeatedly accumulated. | Effective Tensor Engine + register path |
+| `reg_pressure` | Tensor Core is not used; scalar register payload variants are compiled and updated in a persistent loop. | Scalar register-pressure/control coefficient |
 | `shared_load_only` | Operands are staged in CUDA shared memory and loaded into WMMA fragments without MMA. | Effective shared/L1 load control |
 | `shared_mma` | Operands are staged in CUDA shared memory and loaded into WMMA fragments from shared memory. | Effective shared/L1 operand path |
 | `l2_load_only` | Operands are loaded from a global working set selected to fit nominal GPU L2 after warm-up, without MMA. | Effective L2-hit load control |
@@ -220,6 +253,34 @@ Use these labels in reports and summaries:
 - `idle NVML baseline`
 
 Avoid claiming pure Tensor Core, pure register file, pure L2, or pure DRAM physical energy.
+
+For `reg_mma`, never interpret `W_SM_KiB` as the register working-set size. In
+the current WMMA implementation, `W_SM` is only a sweep coordinate for
+register/control modes. The real register footprint is determined by ptxas
+`registers/thread`, `threads_per_block`, and resident `blocks/SM`. Record the
+ptxas register count and spill stores/loads whenever discussing `reg_mma`
+precision. On the RTX 3090 sm_86 build checked on 2026-07-02,
+`reg_mma_kernel` and `reg_operand_only_kernel` used 26 registers/thread with
+0 spill stores/loads, which is about 3.25 KiB/block for 32 threads/block and
+about 52 KiB/SM at 16 blocks/SM. Do not claim that choosing `W_SM=1 KiB`
+or `W_SM=256 B` shrinks this register footprint; it does not. A 256 B
+starting point can be a valid axis for a separate scalar/register-pressure
+microbenchmark, but it is not a valid physical working-set axis for the
+current WMMA `m16n16k16` `reg_mma` kernel because one FP16 A or B logical tile
+is already 512 B/warp, A+B is 1 KiB/warp, and A+B+C is 2 KiB/warp before
+compiler overhead. Better `reg_mma` precision comes from spill-free
+compilation, large enough `ITER * reuse_factor` to amortize
+prologue/epilogue/final-store costs, paired-difference against
+`reg_operand_only`, and NCU/SASS confirmation that the steady loop has no
+shared/global operand loads.
+
+For scalar register-footprint experiments, use
+`scripts/run_register_footprint_sweep.py` and
+`scripts/analyze_register_footprint.py`. Always report both target payload
+bytes/block and measured ptxas footprint bytes/block. Treat
+`reg_pressure - empty` as a scalar register-pressure/control coefficient in
+pJ/reg-update, not as pure register-file energy and not as the WMMA
+`reg_mma` footprint.
 
 ## Known Implementation Boundary
 

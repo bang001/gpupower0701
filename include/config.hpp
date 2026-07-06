@@ -195,14 +195,21 @@ inline const std::vector<std::uint64_t>& allowed_w_sm_kib() {
 enum class Mode {
   idle,
   empty,
+  clocked_empty,
   reg_fragment_only,
   reg_operand_only,
   reg_mma,
+  reg_pressure,
+  addr_only,
+  global_l1_load_only,
+  shared_scalar_load_only,
   shared_load_only,
   shared_mma,
   l2_load_only,
+  l2_cg_load_only,
   l2_mma,
   dram_load_only,
+  dram_cg_load_only,
   dram_mma,
   store_only,
   store_path,
@@ -214,22 +221,36 @@ inline std::string to_string(Mode mode) {
       return "idle";
     case Mode::empty:
       return "empty";
+    case Mode::clocked_empty:
+      return "clocked_empty";
     case Mode::reg_fragment_only:
       return "reg_fragment_only";
     case Mode::reg_operand_only:
       return "reg_operand_only";
     case Mode::reg_mma:
       return "reg_mma";
+    case Mode::reg_pressure:
+      return "reg_pressure";
+    case Mode::addr_only:
+      return "addr_only";
+    case Mode::global_l1_load_only:
+      return "global_l1_load_only";
+    case Mode::shared_scalar_load_only:
+      return "shared_scalar_load_only";
     case Mode::shared_load_only:
       return "shared_load_only";
     case Mode::shared_mma:
       return "shared_mma";
     case Mode::l2_load_only:
       return "l2_load_only";
+    case Mode::l2_cg_load_only:
+      return "l2_cg_load_only";
     case Mode::l2_mma:
       return "l2_mma";
     case Mode::dram_load_only:
       return "dram_load_only";
+    case Mode::dram_cg_load_only:
+      return "dram_cg_load_only";
     case Mode::dram_mma:
       return "dram_mma";
     case Mode::store_only:
@@ -243,14 +264,21 @@ inline std::string to_string(Mode mode) {
 inline Mode mode_from_string(const std::string& value) {
   if (value == "idle") return Mode::idle;
   if (value == "empty") return Mode::empty;
+  if (value == "clocked_empty") return Mode::clocked_empty;
   if (value == "reg_fragment_only") return Mode::reg_fragment_only;
   if (value == "reg_operand_only") return Mode::reg_operand_only;
   if (value == "reg_mma") return Mode::reg_mma;
+  if (value == "reg_pressure") return Mode::reg_pressure;
+  if (value == "addr_only") return Mode::addr_only;
+  if (value == "global_l1_load_only") return Mode::global_l1_load_only;
+  if (value == "shared_scalar_load_only") return Mode::shared_scalar_load_only;
   if (value == "shared_load_only") return Mode::shared_load_only;
   if (value == "shared_mma") return Mode::shared_mma;
   if (value == "l2_load_only") return Mode::l2_load_only;
+  if (value == "l2_cg_load_only") return Mode::l2_cg_load_only;
   if (value == "l2_mma") return Mode::l2_mma;
   if (value == "dram_load_only") return Mode::dram_load_only;
+  if (value == "dram_cg_load_only") return Mode::dram_cg_load_only;
   if (value == "dram_mma") return Mode::dram_mma;
   if (value == "store_only") return Mode::store_only;
   if (value == "store_path") return Mode::store_path;
@@ -273,6 +301,7 @@ struct Feasibility {
   bool shared_resident = false;
   bool l2_candidate = false;
   bool dram_candidate = false;
+  bool below_logical_tile = false;
   std::string regime;
   std::string reason;
   double w_block_kib = 0.0;
@@ -301,12 +330,6 @@ inline Feasibility classify_feasibility(std::uint64_t w_sm_kib,
     f.reason = "W_SM_KiB must be a power-of-two sweep point from 1KiB to 128MiB";
     return f;
   }
-  if (w_sm_kib < static_cast<std::uint64_t>(blocks_per_sm)) {
-    f.regime = "invalid_min_tile";
-    f.reason = "W_SM_KiB < blocks_per_SM; each warp/block needs a 1KiB logical tile";
-    return f;
-  }
-
   f.valid = true;
   f.w_block_kib = static_cast<double>(w_sm_kib) / blocks_per_sm;
   f.w_block_bytes =
@@ -314,6 +337,17 @@ inline Feasibility classify_feasibility(std::uint64_t w_sm_kib,
       static_cast<std::uint64_t>(blocks_per_sm);
   f.tiles_per_block =
       std::max<std::uint64_t>(1, f.w_block_bytes / kLogicalMmaInputBytes);
+  f.below_logical_tile = w_sm_kib < static_cast<std::uint64_t>(blocks_per_sm);
+
+  if (f.below_logical_tile) {
+    f.shared_resident = false;
+    f.l2_candidate = false;
+    f.dram_candidate = false;
+    f.regime = "below_logical_tile";
+    f.reason =
+        "W_SM_KiB < blocks_per_SM; memory-backed MMA modes would not have a 1KiB logical tile per warp/block";
+    return f;
+  }
 
   const bool within_sm_capacity =
       (static_cast<double>(w_sm_kib) + blocks_per_sm) <=
@@ -355,17 +389,35 @@ inline bool mode_allowed_for_feasibility(Mode mode, const Feasibility& f,
     if (reason) *reason = f.regime + ": " + f.reason;
     return false;
   }
-  if ((mode == Mode::shared_load_only || mode == Mode::shared_mma) &&
+  const bool memory_backed =
+      mode == Mode::global_l1_load_only ||
+      mode == Mode::shared_scalar_load_only ||
+      mode == Mode::shared_load_only || mode == Mode::shared_mma ||
+      mode == Mode::l2_load_only || mode == Mode::l2_cg_load_only ||
+      mode == Mode::l2_mma || mode == Mode::dram_load_only ||
+      mode == Mode::dram_cg_load_only || mode == Mode::dram_mma;
+  if (f.below_logical_tile && memory_backed) {
+    if (reason) *reason = to_string(mode) + " requires at least 1KiB tile per block";
+    return false;
+  }
+  if ((mode == Mode::shared_scalar_load_only ||
+       mode == Mode::shared_load_only || mode == Mode::shared_mma) &&
       f.regime != "shared_resident") {
     if (reason) *reason = to_string(mode) + " requires shared_resident";
     return false;
   }
-  if ((mode == Mode::l2_load_only || mode == Mode::l2_mma) &&
+  if (mode == Mode::global_l1_load_only && !f.l2_candidate) {
+    if (reason) *reason = to_string(mode) + " requires l2_candidate";
+    return false;
+  }
+  if ((mode == Mode::l2_load_only || mode == Mode::l2_cg_load_only ||
+       mode == Mode::l2_mma) &&
       !f.l2_candidate) {
     if (reason) *reason = to_string(mode) + " requires l2_candidate";
     return false;
   }
-  if ((mode == Mode::dram_load_only || mode == Mode::dram_mma) &&
+  if ((mode == Mode::dram_load_only || mode == Mode::dram_cg_load_only ||
+       mode == Mode::dram_mma) &&
       !f.dram_candidate) {
     if (reason) *reason = to_string(mode) + " requires dram_mixed_streaming";
     return false;

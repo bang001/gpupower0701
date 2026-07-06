@@ -10,6 +10,20 @@ runtime CUDA device when running on the target machine.
 
 This repository implements the v2 design in
 `docs/a100_fp16_energy_experiment_design_v2.md`.
+For component-energy claims, use the acceptance-first finalplan flow:
+`docs/component_energy_final_experiment_plan_ko.md` and
+`docs/cross_platform_component_experiment_guide_ko.md`. Memory pJ/bit results
+must use NCU actual traffic counters and should be reported as transaction-path
+effective coefficients, not as SRAM/HBM bitcell energy. The self-critique and
+known limitations are tracked in `docs/component_energy_self_critique_ko.md`.
+
+Platform guides:
+
+| GPU | guide |
+|---|---|
+| A100 | `docs/a100_node_experiment_guide_ko.md` |
+| V100 | `docs/v100_node_experiment_guide_ko.md` |
+| H100 | `docs/h100_node_experiment_guide_ko.md` |
 
 ## Operation Definition
 
@@ -123,10 +137,16 @@ Idle baseline with zero active GPUs:
 
 - `idle`: no kernel, NVML energy delta during sleep.
 - `empty`: same grid shape, persistent loop, no MMA.
+- `clocked_empty`: duration-calibrated scheduler/control loop with no memory
+  operand traffic.
 - `reg_fragment_only`: WMMA fragment/register setup without MMA.
 - `reg_operand_only`: WMMA register fragments kept live and sampled in the
   same `ITER * reuse_factor` loop shape as `reg_mma`, but without `mma_sync`.
 - `reg_mma`: WMMA fragments filled in registers, repeated MMA, final checksum store.
+- `reg_pressure`: scalar register-pressure payload sweep without Tensor Core work.
+- `addr_only`: global-memory tile address walk without issuing operand loads.
+- `global_l1_load_only`: small global working set candidate for L1-hit operand
+  loads. Treat as a candidate until NCU verifies L1 hit rate and traffic.
 - `shared_load_only`: dynamic shared working set, shared WMMA operand loads, no MMA.
 - `shared_mma`: dynamic shared working set, shared load to WMMA fragments, MMA.
 - `l2_load_only`: global working set warm-up, L2-hit candidate operand loads, no MMA.
@@ -188,9 +208,91 @@ python3 scripts/run_sweep.py --execute \
   --repeats 1
 ```
 
-Component-decomposition pair runs use a separate pair-centric runner. It
+Component-decomposition now uses an acceptance-first finalplan flow for primary
+results. Generate a platform-specific command plan, run energy sweeps without
+NCU attached, run NCU sidecar validation separately, classify accepted paths,
+then analyze matched controls with NCU byte-denominator scaling:
+
+```bash
+python3 scripts/plan_platform_component_experiment.py \
+  --target-profile a100 \
+  --binary ./build-a100/a100_fp16_energy_v2 \
+  --ncu "$(command -v ncu)" \
+  --seconds 10 \
+  --repeats 5
+
+bash results/summary/a100_component_finalplan_$(date +%Y%m%d)_commands.sh
+```
+
+Use `--target-profile v100` or `--target-profile h100` on those platforms.
+Review the generated shell script before submitting a long cluster job. Final
+byte-path claims must use `scripts/analyze_ncu_path_acceptance.py` and
+`scripts/analyze_matched_control_energy.py --require-ncu-denominator`.
+
+The older duration-calibrated regression/NNLS path remains useful for model
+stress tests. It lets each mode calibrate to the requested measurement time and
+then fits `net_E_J` with an explicit `elapsed_s` term:
+
+```bash
+python3 scripts/run_component_regression_sweep.py \
+  --target-profile rtx3090 \
+  --gpu-ids 0 \
+  --modes empty,reg_operand_only,reg_mma,shared_load_only,shared_mma,l2_load_only,l2_mma,dram_load_only,dram_mma,store_only \
+  --w-sm-kib-values 64,8192 \
+  --blocks-per-sm-values 8,16 \
+  --active-sm-values 82 \
+  --reuse-factors 1,2,4,8 \
+  --load-repeats 1,2,4,8 \
+  --store-repeats 1,2,4,8 \
+  --seconds 10 \
+  --repeats 5 \
+  --execute
+
+python3 scripts/fit_component_energy_model.py \
+  results/raw/component_regression_raw.csv \
+  --out-csv results/summary/component_regression_fit.csv \
+  --out-md results/summary/component_regression_fit.md \
+  --baseline-terms mode \
+  --non-negative
+```
+
+`--baseline-terms mode|family` separates mode-specific fixed/control offsets
+from physical candidate slopes. `--non-negative` uses an active-set constrained
+fit so elapsed and component candidate coefficients are not reported as
+negative. If a coefficient is clamped to zero, treat it as
+`zero_bound_or_not_identified`, not as proof that the physical component has
+zero energy. For noisy smoke runs, add `--min-elapsed-s` and
+`--exclude-negative-net-energy`.
+
+For a supplemental byte-variation stress test, the regression runner can bypass
+per-mode calibration and use fixed `ITER`:
+
+```bash
+python3 scripts/run_component_regression_sweep.py \
+  --target-profile rtx3090 \
+  --gpu-ids 0 \
+  --modes shared_load_only,l2_load_only,dram_load_only \
+  --w-sm-kib-values 64,8192 \
+  --blocks-per-sm-values 16 \
+  --active-sm-values 82 \
+  --reuse-factors 1 \
+  --load-repeats 1,2,4,8 \
+  --store-repeats 1 \
+  --seconds 1 \
+  --iters 1000000 \
+  --repeats 1 \
+  --execute
+```
+
+Fixed-ITER runs make logical bytes vary directly, but elapsed can spread widely.
+Use them to check monotonicity and model identifiability, not as final physical
+pJ/byte values without NCU traffic and stall validation.
+
+The older pair-centric runner is retained as a diagnostic/sanity-check tool. It
 calibrates a reference mode once per coordinate and reuses the same `ITER` for
-paired control modes:
+paired control modes, so elapsed-time mismatch can invalidate component
+interpretation. `scripts/analyze_component_pairs.py` now emits
+`elapsed_ratio`, `valid_component_estimate`, and `diagnostic` columns:
 
 ```bash
 python3 scripts/run_component_pairs.py \
@@ -223,6 +325,46 @@ MMA reuse, operand-load count, and store count independently. The raw CSV writes
 `expected_reg_operand_ops`, `expected_shared_bytes`, `expected_l2_bytes`,
 `expected_dram_bytes`, and `expected_store_bytes` for static
 paired-difference and regression analysis.
+
+Static expected-byte regression is still not physical SRAM/L2/DRAM energy.
+For final cache hierarchy claims, run NCU validation and prefer actual L1/L2/DRAM
+traffic counters over `expected_*_bytes`.
+
+## Register Footprint Sweep
+
+Do not use `W_SM` as the register working-set axis for `reg_mma`. For register
+footprint experiments, use the dedicated scalar `reg_pressure` mode and the
+ptxas-derived footprint metadata.
+
+```bash
+python3 scripts/run_register_footprint_sweep.py \
+  --binary ./build/a100_fp16_energy_v2 \
+  --target-profile rtx3090 \
+  --gpu-ids 0 \
+  --reg-payload-bytes-values 256,512,1024,2048,4096,8192,16384 \
+  --blocks-per-sm-values 1,2,4,8,16 \
+  --active-sm-values 82 \
+  --reuse-factors 1,2,4,8 \
+  --seconds 10 \
+  --repeats 3 \
+  --output results/raw/rtx3090_register_footprint.csv \
+  --calibration-output results/raw/rtx3090_register_footprint_calibration.csv \
+  --matrix-csv results/raw/rtx3090_register_footprint_matrix.csv \
+  --ptxas-csv results/summary/rtx3090_register_footprint_ptxas.csv \
+  --execute
+
+python3 scripts/analyze_register_footprint.py \
+  results/raw/rtx3090_register_footprint.csv \
+  --matrix-csv results/raw/rtx3090_register_footprint_matrix.csv \
+  --out-csv results/summary/rtx3090_register_footprint_summary.csv \
+  --out-md results/summary/rtx3090_register_footprint_summary.md
+```
+
+The runner first writes ptxas metadata: target payload bytes/block, measured
+registers/thread, compiler footprint bytes/block, estimated resident
+blocks/SM, and spill-free status. By default it skips payload/block
+coordinates that would spill or exceed the ptxas-estimated resident block
+limit. Use `--allow-spills` only for an explicit spill-sensitivity experiment.
 
 ## Nsight Compute
 
@@ -297,6 +439,10 @@ elapsed-time-scaled `idle_baseline_J`. `net_E_J = delta_E_J - idle_baseline_J`.
   physical component energies. Prefer labels such as `effective Tensor Engine +
   register`, `effective shared/L1 path`, `effective L2-hit path`, and `effective
   DRAM streaming path`.
+- Do not report `*_load_only - empty` pair coefficients as physical component
+  energy unless elapsed-time matching and NCU traffic validation pass. Large
+  elapsed ratios or negative `*_mma - *_load_only` coefficients mean the pair is
+  diagnostic-only.
 
 ## Included Reference Assets
 

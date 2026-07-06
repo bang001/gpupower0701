@@ -49,6 +49,7 @@ struct Options {
   std::uint64_t reuse_factor = 1;
   std::uint64_t load_repeat = 1;
   std::uint64_t store_repeat = 1;
+  std::uint64_t reg_payload_bytes_per_block = 0;
   int repeats = 5;
   std::filesystem::path output = "results/raw/a100_fp16_energy_v2_raw.csv";
   bool verify_smid = true;
@@ -111,7 +112,7 @@ void print_usage(const char* argv0) {
       << "Usage: " << argv0 << " --gpu-list 0[,1,2] --mode MODE [options]\n\n"
       << "Required/primary options:\n"
       << "  --gpu-list <list|none>       CUDA/NVML ids for active GPUs\n"
-      << "  --mode idle|empty|reg_fragment_only|reg_operand_only|reg_mma|shared_load_only|shared_mma|l2_load_only|l2_mma|dram_load_only|dram_mma|store_only|store_path\n"
+      << "  --mode idle|empty|clocked_empty|reg_fragment_only|reg_operand_only|reg_mma|reg_pressure|addr_only|global_l1_load_only|shared_scalar_load_only|shared_load_only|shared_mma|l2_load_only|l2_cg_load_only|l2_mma|dram_load_only|dram_cg_load_only|dram_mma|store_only|store_path\n"
       << "  --w-sm-kib <int>             1..131072 power-of-two KiB sweep point\n"
       << "  --blocks-per-sm <int>        power-of-two up to target resident block limit\n"
       << "  --active-sm <int>            default target full SM count\n"
@@ -121,6 +122,7 @@ void print_usage(const char* argv0) {
       << "  --reuse-factor <int>         MMA repeats per iteration, default 1\n"
       << "  --load-repeat <int>          operand loads per iteration, default 1\n"
       << "  --store-repeat <int>         store writes per iteration for store modes, default 1\n"
+      << "  --reg-payload-bytes <int>    register payload target per block for reg_pressure; default 256 for reg_pressure, 0 otherwise\n"
       << "  --repeats <int>              default 5\n"
       << "  --output <csv>               default results/raw/a100_fp16_energy_v2_raw.csv\n"
       << "  --verify-smid 0|1            default 1\n"
@@ -172,6 +174,9 @@ Options parse_args(int argc, char** argv) {
     } else if (arg == "--store-repeat") {
       opts.store_repeat =
           static_cast<std::uint64_t>(std::stoull(need_value(arg)));
+    } else if (arg == "--reg-payload-bytes") {
+      opts.reg_payload_bytes_per_block =
+          static_cast<std::uint64_t>(std::stoull(need_value(arg)));
     } else if (arg == "--repeats") {
       opts.repeats = std::stoi(need_value(arg));
     } else if (arg == "--output") {
@@ -196,6 +201,23 @@ Options parse_args(int argc, char** argv) {
   }
   if (opts.store_repeat == 0) {
     throw std::invalid_argument("--store-repeat must be > 0");
+  }
+  if (opts.mode == Mode::reg_pressure && opts.reg_payload_bytes_per_block == 0) {
+    opts.reg_payload_bytes_per_block = 256;
+  }
+  if (opts.reg_payload_bytes_per_block != 0 &&
+      opts.reg_payload_bytes_per_block % (kThreadsPerBlock * sizeof(unsigned)) != 0) {
+    throw std::invalid_argument(
+        "--reg-payload-bytes must be a positive multiple of 128 bytes for 32-thread blocks");
+  }
+  if (opts.mode == Mode::reg_pressure) {
+    const std::vector<std::uint64_t> supported{256, 512, 1024, 2048,
+                                               4096, 8192, 16384};
+    if (std::find(supported.begin(), supported.end(),
+                  opts.reg_payload_bytes_per_block) == supported.end()) {
+      throw std::invalid_argument(
+          "--reg-payload-bytes for reg_pressure must be one of 256,512,1024,2048,4096,8192,16384");
+    }
   }
   return opts;
 }
@@ -250,19 +272,31 @@ bool is_register_operand_mode(Mode mode) {
 }
 
 bool is_shared_operand_mode(Mode mode) {
-  return mode == Mode::shared_load_only || mode == Mode::shared_mma;
+  return mode == Mode::shared_scalar_load_only ||
+         mode == Mode::shared_load_only || mode == Mode::shared_mma;
+}
+
+bool is_l1_operand_mode(Mode mode) {
+  return mode == Mode::global_l1_load_only;
 }
 
 bool is_l2_operand_mode(Mode mode) {
-  return mode == Mode::l2_load_only || mode == Mode::l2_mma;
+  return mode == Mode::l2_load_only || mode == Mode::l2_cg_load_only ||
+         mode == Mode::l2_mma;
 }
 
 bool is_dram_operand_mode(Mode mode) {
-  return mode == Mode::dram_load_only || mode == Mode::dram_mma;
+  return mode == Mode::dram_load_only || mode == Mode::dram_cg_load_only ||
+         mode == Mode::dram_mma;
 }
 
 bool is_global_operand_mode(Mode mode) {
-  return is_l2_operand_mode(mode) || is_dram_operand_mode(mode);
+  return is_l1_operand_mode(mode) || is_l2_operand_mode(mode) ||
+         is_dram_operand_mode(mode);
+}
+
+bool is_address_control_mode(Mode mode) {
+  return mode == Mode::addr_only;
 }
 
 bool has_operand_loads(Mode mode) {
@@ -271,7 +305,8 @@ bool has_operand_loads(Mode mode) {
 
 bool has_final_matrix_store(Mode mode) {
   return mode == Mode::reg_fragment_only || mode == Mode::reg_operand_only ||
-         mode == Mode::reg_mma || mode == Mode::shared_load_only ||
+         mode == Mode::reg_mma || mode == Mode::global_l1_load_only ||
+         mode == Mode::shared_load_only ||
          mode == Mode::shared_mma || mode == Mode::l2_load_only ||
          mode == Mode::l2_mma || mode == Mode::dram_load_only ||
          mode == Mode::dram_mma;
@@ -279,6 +314,35 @@ bool has_final_matrix_store(Mode mode) {
 
 bool is_store_loop_mode(Mode mode) {
   return mode == Mode::store_only || mode == Mode::store_path;
+}
+
+std::string mode_family(Mode mode) {
+  if (mode == Mode::idle) return "idle";
+  if (mode == Mode::empty || mode == Mode::clocked_empty) return "control";
+  if (mode == Mode::addr_only) return "address_control";
+  if (mode == Mode::reg_fragment_only || mode == Mode::reg_operand_only ||
+      mode == Mode::reg_mma || mode == Mode::reg_pressure) {
+    return "register_tensor";
+  }
+  if (is_shared_operand_mode(mode)) return "shared";
+  if (is_l1_operand_mode(mode)) return "global_l1";
+  if (is_l2_operand_mode(mode)) return "global_l2";
+  if (is_dram_operand_mode(mode)) return "global_dram";
+  if (is_store_loop_mode(mode)) return "store";
+  return "other";
+}
+
+std::string denominator_level(Mode mode) {
+  if (is_mma_mode(mode)) return "FLOP";
+  if (is_register_operand_mode(mode)) return "logical_register_operand";
+  if (mode == Mode::reg_pressure) return "logical_scalar_register_update";
+  if (is_shared_operand_mode(mode)) return "expected_shared_bytes_static";
+  if (is_l1_operand_mode(mode)) return "expected_l1_bytes_static";
+  if (is_l2_operand_mode(mode)) return "expected_l2_bytes_static";
+  if (is_dram_operand_mode(mode)) return "expected_dram_bytes_static";
+  if (is_address_control_mode(mode)) return "expected_addr_ops";
+  if (is_store_loop_mode(mode)) return "expected_store_bytes_static";
+  return "none";
 }
 
 void print_dry_run(const Options& opts, const Feasibility& f, bool allowed,
@@ -310,6 +374,11 @@ void print_dry_run(const Options& opts, const Feasibility& f, bool allowed,
   std::cout << "reuse_factor=" << opts.reuse_factor << "\n";
   std::cout << "load_repeat=" << opts.load_repeat << "\n";
   std::cout << "store_repeat=" << opts.store_repeat << "\n";
+  std::cout << "reg_payload_bytes_per_block="
+            << opts.reg_payload_bytes_per_block << "\n";
+  std::cout << "reg_payload_regs_per_thread="
+            << (opts.reg_payload_bytes_per_block /
+                (kThreadsPerBlock * sizeof(unsigned))) << "\n";
   std::cout << "valid_feasibility=" << (f.valid ? "true" : "false") << "\n";
   std::cout << "mode_allowed=" << (allowed ? "true" : "false") << "\n";
   std::cout << "regime=" << f.regime << "\n";
@@ -514,6 +583,10 @@ double launch_all(const Options& opts, const Feasibility& f,
     cfg.reuse_factor = opts.reuse_factor;
     cfg.load_repeat = opts.load_repeat;
     cfg.store_repeat = opts.store_repeat;
+    cfg.reg_payload_bytes_per_block = opts.reg_payload_bytes_per_block;
+    cfg.streaming =
+        is_dram_operand_mode(opts.mode) ||
+        (is_address_control_mode(opts.mode) && f.dram_candidate);
     cfg.input = state.input;
     cfg.output = state.output;
     cfg.smid_by_block = state.d_smid;
@@ -630,6 +703,15 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
   row.reuse_factor = opts.reuse_factor;
   row.load_repeat = opts.load_repeat;
   row.store_repeat = opts.store_repeat;
+  row.reg_payload_bytes_per_block = opts.reg_payload_bytes_per_block;
+  row.reg_payload_regs_per_thread =
+      opts.reg_payload_bytes_per_block > 0
+          ? opts.reg_payload_bytes_per_block /
+                (kThreadsPerBlock * sizeof(unsigned))
+          : 0;
+  row.reg_payload_bytes_per_sm =
+      row.reg_payload_bytes_per_block *
+      static_cast<std::uint64_t>(opts.blocks_per_sm);
   row.smid_histogram_ok = gpu_active && smid_check.ok;
   row.clock_sm_mhz = after.sm_clock_mhz;
   row.clock_mem_mhz = after.mem_clock_mhz;
@@ -657,6 +739,8 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
   row.energy_integration_method =
       row.nvml_total_energy_supported ? "total_energy_mj_delta"
                                       : "endpoint_power_trapezoid";
+  row.mode_family = mode_family(opts.mode);
+  row.denominator_level = denominator_level(opts.mode);
   row.nvml_power_usage_semantics = opts.profile.nvml_power_usage_semantics;
   row.nvml_field_power_instant_supported =
       before.field_power_instant_supported && after.field_power_instant_supported;
@@ -688,16 +772,27 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
       row.expected_reg_operand_ops =
           active_blocks * iters * opts.reuse_factor;
     }
+    if (opts.mode == Mode::reg_pressure) {
+      row.expected_reg_pressure_ops =
+          active_blocks * iters * opts.reuse_factor *
+          static_cast<std::uint64_t>(kThreadsPerBlock) *
+          row.reg_payload_regs_per_thread;
+    }
 
     const std::uint64_t expected_operand_bytes =
         active_blocks * iters * opts.load_repeat *
         static_cast<std::uint64_t>(kLogicalMmaInputBytes);
     if (is_shared_operand_mode(opts.mode)) {
       row.expected_shared_bytes = expected_operand_bytes;
+    } else if (is_l1_operand_mode(opts.mode)) {
+      row.expected_l1_bytes = expected_operand_bytes;
     } else if (is_l2_operand_mode(opts.mode)) {
       row.expected_l2_bytes = expected_operand_bytes;
     } else if (is_dram_operand_mode(opts.mode)) {
       row.expected_dram_bytes = expected_operand_bytes;
+    }
+    if (is_address_control_mode(opts.mode)) {
+      row.expected_addr_ops = active_blocks * iters * opts.load_repeat;
     }
 
     if (has_final_matrix_store(opts.mode)) {
@@ -705,7 +800,9 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
     } else if (is_store_loop_mode(opts.mode)) {
       row.expected_store_bytes =
           active_blocks * iters * opts.store_repeat * sizeof(float);
-    } else if (opts.mode == Mode::empty) {
+    } else if (opts.mode == Mode::empty || opts.mode == Mode::clocked_empty ||
+               opts.mode == Mode::addr_only ||
+               opts.mode == Mode::shared_scalar_load_only) {
       row.expected_store_bytes = active_blocks * sizeof(float);
     }
   }
@@ -733,11 +830,23 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
         << "reuse_factor=" << opts.reuse_factor
         << ";load_repeat=" << opts.load_repeat
         << ";store_repeat=" << opts.store_repeat
+        << ";reg_payload_bytes_per_block="
+        << row.reg_payload_bytes_per_block
+        << ";reg_payload_regs_per_thread="
+        << row.reg_payload_regs_per_thread
+        << ";reg_payload_bytes_per_sm="
+        << row.reg_payload_bytes_per_sm
+        << ";expected_reg_pressure_ops="
+        << row.expected_reg_pressure_ops
         << ";expected_reg_operand_ops=" << row.expected_reg_operand_ops
         << ";expected_shared_bytes=" << row.expected_shared_bytes
+        << ";expected_l1_bytes=" << row.expected_l1_bytes
         << ";expected_l2_bytes=" << row.expected_l2_bytes
         << ";expected_dram_bytes=" << row.expected_dram_bytes
-        << ";expected_store_bytes=" << row.expected_store_bytes << ";"
+        << ";expected_store_bytes=" << row.expected_store_bytes
+        << ";expected_addr_ops=" << row.expected_addr_ops
+        << ";mode_family=" << row.mode_family
+        << ";denominator_level=" << row.denominator_level << ";"
         << "gpu_active=" << (gpu_active ? 1 : 0) << ";";
   if (is_shared_operand_mode(opts.mode)) {
     notes << "shared_init_included=1;";

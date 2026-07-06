@@ -174,15 +174,37 @@ def coefficient(delta_j: float, denominator: float, unit: str) -> float:
     return delta_j * 1.0e12 / denominator
 
 
+def diagnostic_for_pair(
+    *,
+    coefficient_value: float,
+    coefficient_unit: str,
+    numerator_elapsed: float,
+    baseline_elapsed: float,
+    max_elapsed_ratio: float,
+) -> tuple[bool, str, float]:
+    elapsed_min = min(numerator_elapsed, baseline_elapsed)
+    elapsed_max = max(numerator_elapsed, baseline_elapsed)
+    elapsed_ratio = elapsed_max / elapsed_min if elapsed_min > 0.0 else float("inf")
+    reasons: list[str] = []
+    if elapsed_ratio > max_elapsed_ratio:
+        reasons.append(f"elapsed_ratio>{max_elapsed_ratio:g}")
+    if coefficient_unit != "J" and coefficient_value < 0.0:
+        reasons.append("negative_coefficient")
+    return (not reasons, ";".join(reasons), elapsed_ratio)
+
+
 def write_markdown(rows: list[dict[str, Any]], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w") as f:
         f.write("# Component Pair Summary\n\n")
         f.write(
             "| profile | GPU | W_SM (KiB) | blocks/SM | active_SM (SMs) | "
-            "ITER | factors | pair | delta_E_J (J) | denominator | coefficient |\n"
+            "ITER | factors | pair | delta_E_J (J) | denominator | coefficient | "
+            "elapsed ratio | valid | diagnostic |\n"
         )
-        f.write("|---|---:|---:|---:|---:|---:|---|---|---:|---:|---:|\n")
+        f.write(
+            "|---|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---|---|\n"
+        )
         for row in rows:
             factors = (
                 f"reuse={row['reuse_factor']}, "
@@ -196,7 +218,9 @@ def write_markdown(rows: list[dict[str, Any]], path: Path) -> None:
                 f"{row['W_SM_KiB']} | {row['blocks_per_SM']} | "
                 f"{row['active_SM']} | {row['ITER']} | {factors} | "
                 f"{row['pair']} | {row['delta_E_J']:.6g} | "
-                f"{row['denominator']:.6g} | {coefficient_text} |\n"
+                f"{row['denominator']:.6g} | {coefficient_text} | "
+                f"{row['elapsed_ratio']:.6g} | "
+                f"{row['valid_component_estimate']} | {row['diagnostic']} |\n"
             )
 
 
@@ -213,6 +237,12 @@ def main() -> int:
         "--include-placement-failures",
         action="store_true",
         help="Include rows where smid_histogram_ok is false.",
+    )
+    parser.add_argument(
+        "--max-elapsed-ratio",
+        type=float,
+        default=1.25,
+        help="Mark pair invalid when numerator/baseline elapsed ratio exceeds this.",
     )
     args = parser.parse_args()
 
@@ -251,6 +281,15 @@ def main() -> int:
                 else 0.0
             )
             coeff = coefficient(delta_j, denominator, spec["coefficient_unit"])
+            numerator_elapsed = numerator.get("elapsed_s", 0.0)
+            baseline_elapsed = baseline.get("elapsed_s", 0.0)
+            valid_component_estimate, diagnostic, elapsed_ratio = diagnostic_for_pair(
+                coefficient_value=coeff,
+                coefficient_unit=spec["coefficient_unit"],
+                numerator_elapsed=numerator_elapsed,
+                baseline_elapsed=baseline_elapsed,
+                max_elapsed_ratio=args.max_elapsed_ratio,
+            )
             (
                 profile_name,
                 gpu_id,
@@ -278,6 +317,9 @@ def main() -> int:
                     "pair": spec["pair"],
                     "numerator_mode": spec["numerator_mode"],
                     "baseline_mode": spec["baseline_mode"],
+                    "numerator_elapsed_s": numerator_elapsed,
+                    "baseline_elapsed_s": baseline_elapsed,
+                    "elapsed_ratio": elapsed_ratio,
                     "delta_E_J": delta_j,
                     "denominator": denominator,
                     "denominator_column": denominator_column,
@@ -285,6 +327,8 @@ def main() -> int:
                     "coefficient_unit": spec["coefficient_unit"],
                     "numerator_rows": numerator["row_count"],
                     "baseline_rows": baseline["row_count"],
+                    "valid_component_estimate": valid_component_estimate,
+                    "diagnostic": diagnostic,
                 }
             )
 
@@ -317,6 +361,9 @@ def main() -> int:
             "pair",
             "numerator_mode",
             "baseline_mode",
+            "numerator_elapsed_s",
+            "baseline_elapsed_s",
+            "elapsed_ratio",
             "delta_E_J",
             "denominator",
             "denominator_column",
@@ -324,6 +371,8 @@ def main() -> int:
             "coefficient_unit",
             "numerator_rows",
             "baseline_rows",
+            "valid_component_estimate",
+            "diagnostic",
         ]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()

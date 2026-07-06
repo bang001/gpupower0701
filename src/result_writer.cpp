@@ -36,14 +36,18 @@ std::string csv_header() {
          "threads_per_block,active_SM,ITER,sweeps,elapsed_s,E_before_mJ,"
          "E_after_mJ,delta_E_J,idle_baseline_J,net_E_J,N_MMA,FLOP,"
          "input_bits,w_block_bytes,tiles_per_block,reuse_factor,"
-         "load_repeat,store_repeat,expected_reg_operand_ops,"
-         "expected_shared_bytes,expected_l2_bytes,"
-         "expected_dram_bytes,expected_store_bytes,pJ_per_FLOP,"
-         "pJ_per_input_bit,ncu_tensor_inst,ncu_shared_bytes,ncu_l2_bytes,"
-         "ncu_dram_bytes,ncu_spill_bytes,smid_histogram_ok,clock_sm_mhz,"
+         "load_repeat,store_repeat,reg_payload_bytes_per_block,"
+         "reg_payload_regs_per_thread,reg_payload_bytes_per_sm,"
+         "expected_reg_pressure_ops,expected_reg_operand_ops,"
+         "expected_shared_bytes,expected_l1_bytes,expected_l2_bytes,"
+         "expected_dram_bytes,expected_store_bytes,expected_addr_ops,"
+         "pJ_per_FLOP,pJ_per_input_bit,ncu_tensor_inst,ncu_shared_bytes,"
+         "ncu_l1_bytes,ncu_l2_bytes,ncu_dram_bytes,ncu_spill_bytes,"
+         "smid_histogram_ok,clock_sm_mhz,"
          "clock_mem_mhz,temp_C,profile_name,architecture_family,chip,"
          "compute_capability,sm_count,l2_mib,shared_kib_per_sm,tensor_modes,"
-         "energy_source,energy_integration_method,nvml_total_energy_supported,"
+         "energy_source,energy_integration_method,mode_family,"
+         "denominator_level,nvml_total_energy_supported,"
          "nvml_power_usage_semantics,nvml_field_power_instant_supported,"
          "nvml_field_power_average_supported,power_before_mw,power_after_mw,"
          "power_sample_count,power_sample_period_ms,driver_version,"
@@ -98,12 +102,18 @@ void CsvWriter::write(const ResultRow& row) {
       << row.input_bits << ',' << row.w_block_bytes << ','
       << row.tiles_per_block << ',' << row.reuse_factor << ','
       << row.load_repeat << ',' << row.store_repeat << ','
+      << row.reg_payload_bytes_per_block << ','
+      << row.reg_payload_regs_per_thread << ','
+      << row.reg_payload_bytes_per_sm << ','
+      << row.expected_reg_pressure_ops << ','
       << row.expected_reg_operand_ops << ','
-      << row.expected_shared_bytes << ',' << row.expected_l2_bytes << ','
+      << row.expected_shared_bytes << ',' << row.expected_l1_bytes << ','
+      << row.expected_l2_bytes << ','
       << row.expected_dram_bytes << ',' << row.expected_store_bytes << ','
-      << row.pJ_per_FLOP << ','
+      << row.expected_addr_ops << ',' << row.pJ_per_FLOP << ','
       << row.pJ_per_input_bit << ',' << row.ncu_tensor_inst << ','
-      << row.ncu_shared_bytes << ',' << row.ncu_l2_bytes << ','
+      << row.ncu_shared_bytes << ',' << row.ncu_l1_bytes << ','
+      << row.ncu_l2_bytes << ','
       << row.ncu_dram_bytes << ',' << row.ncu_spill_bytes << ','
       << (row.smid_histogram_ok ? "true" : "false") << ','
       << row.clock_sm_mhz << ',' << row.clock_mem_mhz << ',' << row.temp_C
@@ -115,6 +125,8 @@ void CsvWriter::write(const ResultRow& row) {
       << row.shared_kib_per_sm << ',' << csv_escape(row.tensor_modes) << ','
       << csv_escape(row.energy_source) << ','
       << csv_escape(row.energy_integration_method) << ','
+      << csv_escape(row.mode_family) << ','
+      << csv_escape(row.denominator_level) << ','
       << (row.nvml_total_energy_supported ? "true" : "false") << ','
       << csv_escape(row.nvml_power_usage_semantics) << ','
       << (row.nvml_field_power_instant_supported ? "true" : "false") << ','

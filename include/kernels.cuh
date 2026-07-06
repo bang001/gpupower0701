@@ -20,6 +20,8 @@ struct KernelLaunchConfig {
   std::uint64_t reuse_factor = 1;
   std::uint64_t load_repeat = 1;
   std::uint64_t store_repeat = 1;
+  std::uint64_t reg_payload_bytes_per_block = 256;
+  int streaming = 0;
   half* input = nullptr;
   float* output = nullptr;
   int* smid_by_block = nullptr;

@@ -397,3 +397,54 @@ python3 scripts/plot_results.py \
 | component pairs | `reg_mma_minus_reg_operand` pair와 단위 포함 summary 생성 |
 | NCU | counter 수집 성공 또는 실패 사유 문서화 |
 | report | mode 설명 표와 단위 포함 sweep 표 작성 |
+
+## 11. 2026-07-06 Component finalplan 업데이트
+
+기존 `run_component_pairs.py` 방식은 보조 진단으로 남긴다. Tensor/Register/L1/Shared/L2/DRAM component coefficient 후보를 만들 때는 다음 acceptance-first flow를 우선한다.
+
+| 단계 | script | 목적 |
+|---|---|---|
+| command plan | `scripts/plan_platform_component_experiment.py` | A100용 표준 energy/NCU/analyze 명령 생성 |
+| energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 duration-calibrated energy row 수집 |
+| NCU sidecar | `scripts/run_ncu_validation.sh` | path hit/access/stall/spill 검증 |
+| path acceptance | `scripts/analyze_ncu_path_acceptance.py` | accepted component 후보만 선별 |
+| matched-control | `scripts/analyze_matched_control_energy.py` | NCU actual-byte denominator로 pJ/bit 계산 |
+
+표준 명령 생성:
+
+```bash
+python3 scripts/plan_platform_component_experiment.py \
+  --target-profile a100 \
+  --binary ./build-a100/a100_fp16_energy_v2 \
+  --ncu "$(command -v ncu)" \
+  --active-sm 108 \
+  --seconds 10 \
+  --repeats 5
+```
+
+생성된 shell script를 검토한 뒤 실행한다.
+
+```bash
+bash results/summary/a100_component_finalplan_$(date +%Y%m%d)_commands.sh
+```
+
+A100 추천 finalplan 좌표:
+
+| Component | modes | W_SM (KiB) | blocks/SM | factor |
+|---|---|---:|---:|---|
+| Tensor | `reg_operand_only,reg_mma` | 2048 | 16,32 | reuse 1,2,4,8,16 |
+| Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | 16,32 | load_repeat 1,2,4,8,16 |
+| Global L1 | `clocked_empty,global_l1_load_only` | 16,32 | 16,32 | load_repeat 1,2,4,8,16 |
+| L2 capacity/CG | `clocked_empty,l2_load_only,l2_cg_load_only` | 256 | 16,32 | load_repeat 1,2,4,8,16 |
+| DRAM sanity | `clocked_empty,dram_cg_load_only` | 8192 | 16,32 | load_repeat 1,4,16 |
+
+A100은 40 MiB L2가 있으므로 `W_SM=256 KiB`에서 capacity 기반 `l2_load_only`가 L2 후보가 될 수 있다. 하지만 최종 채택은 NCU 기준이다.
+
+| NCU 기준 | 통과 조건 |
+|---|---:|
+| Global L1 | L1 hit >= 95%, L2/L1 bytes <= 1% |
+| L2 capacity | L1 hit <= 1%, L2 hit >= 95%, DRAM/L2 bytes <= 2% |
+| Shared scalar | shared bytes 존재, bank conflict 0 또는 매우 낮음 |
+| Tensor | HMMA > 0, spill/local 0 |
+
+보고서에는 `board-level effective coefficient`, `not pure physical component energy`를 명시한다. A100의 HBM2 물리 pJ/bit 문헌값과 본 실험의 DRAM streaming pJ/bit는 같은 의미가 아니다.

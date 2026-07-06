@@ -15,6 +15,8 @@ PROFILES: dict[str, dict[str, Any]] = {
         "full_sm": 80,
         "l2_mib": 6,
         "max_blocks_per_sm": 32,
+        "max_warps_per_sm": 64,
+        "max_threads_per_sm": 2048,
         "shared_capacity_per_sm_kib": 96,
         "max_shared_per_block_kib": 96,
         "active_sm": [1, 2, 4, 8, 16, 32, 64, 80],
@@ -23,6 +25,8 @@ PROFILES: dict[str, dict[str, Any]] = {
         "full_sm": 82,
         "l2_mib": 6,
         "max_blocks_per_sm": 16,
+        "max_warps_per_sm": 48,
+        "max_threads_per_sm": 1536,
         "shared_capacity_per_sm_kib": 100,
         "max_shared_per_block_kib": 99,
         "active_sm": [1, 2, 4, 8, 16, 32, 64, 82],
@@ -31,6 +35,8 @@ PROFILES: dict[str, dict[str, Any]] = {
         "full_sm": 108,
         "l2_mib": 40,
         "max_blocks_per_sm": 32,
+        "max_warps_per_sm": 64,
+        "max_threads_per_sm": 2048,
         "shared_capacity_per_sm_kib": 164,
         "max_shared_per_block_kib": 163,
         "active_sm": [1, 2, 4, 8, 16, 32, 64, 108],
@@ -39,6 +45,8 @@ PROFILES: dict[str, dict[str, Any]] = {
         "full_sm": 132,
         "l2_mib": 50,
         "max_blocks_per_sm": 32,
+        "max_warps_per_sm": 64,
+        "max_threads_per_sm": 2048,
         "shared_capacity_per_sm_kib": 228,
         "max_shared_per_block_kib": 227,
         "active_sm": [1, 2, 4, 8, 16, 32, 64, 132],
@@ -68,14 +76,20 @@ W_SM_KIB = [
 ]
 MODES = [
     "empty",
+    "clocked_empty",
     "reg_fragment_only",
     "reg_operand_only",
     "reg_mma",
+    "addr_only",
+    "global_l1_load_only",
+    "shared_scalar_load_only",
     "shared_load_only",
     "shared_mma",
     "l2_load_only",
+    "l2_cg_load_only",
     "l2_mma",
     "dram_load_only",
+    "dram_cg_load_only",
     "dram_mma",
     "store_only",
     "store_path",
@@ -90,6 +104,7 @@ def classify(w_sm_kib: int, blocks_per_sm: int, profile: dict[str, Any]) -> dict
         "shared_resident": False,
         "l2_candidate": False,
         "dram_candidate": False,
+        "below_logical_tile": False,
     }
     if blocks_per_sm not in BLOCKS_PER_SM or blocks_per_sm > profile["max_blocks_per_sm"]:
         out["regime"] = "invalid_blocks_per_sm"
@@ -101,12 +116,15 @@ def classify(w_sm_kib: int, blocks_per_sm: int, profile: dict[str, Any]) -> dict
         out["regime"] = "invalid_w_sm"
         out["reason"] = "unsupported W_SM_KiB"
         return out
-    if w_sm_kib < blocks_per_sm:
-        out["regime"] = "invalid_min_tile"
-        out["reason"] = "W_SM_KiB < blocks_per_SM"
+    full_gpu_mib = profile["full_sm"] * w_sm_kib / 1024.0
+    below_logical_tile = w_sm_kib < blocks_per_sm
+    if below_logical_tile:
+        out["valid"] = True
+        out["below_logical_tile"] = True
+        out["regime"] = "below_logical_tile"
+        out["reason"] = "W_SM_KiB < blocks_per_SM; only register/control/store modes are valid"
         return out
 
-    full_gpu_mib = profile["full_sm"] * w_sm_kib / 1024.0
     shared_resident = (
         w_sm_kib + blocks_per_sm <= profile["shared_capacity_per_sm_kib"]
         and (w_sm_kib / blocks_per_sm) <= profile["max_shared_per_block_kib"]
@@ -132,11 +150,26 @@ def classify(w_sm_kib: int, blocks_per_sm: int, profile: dict[str, Any]) -> dict
 def mode_allowed(mode: str, info: dict[str, Any]) -> bool:
     if not info["valid"]:
         return False
-    if mode in {"shared_load_only", "shared_mma"}:
+    if info.get("below_logical_tile") and mode in {
+        "global_l1_load_only",
+        "shared_scalar_load_only",
+        "shared_load_only",
+        "shared_mma",
+        "l2_load_only",
+        "l2_cg_load_only",
+        "l2_mma",
+        "dram_load_only",
+        "dram_cg_load_only",
+        "dram_mma",
+    }:
+        return False
+    if mode in {"shared_scalar_load_only", "shared_load_only", "shared_mma"}:
         return bool(info["shared_resident"])
-    if mode in {"l2_load_only", "l2_mma"}:
+    if mode == "global_l1_load_only":
         return bool(info["l2_candidate"])
-    if mode in {"dram_load_only", "dram_mma"}:
+    if mode in {"l2_load_only", "l2_cg_load_only", "l2_mma"}:
+        return bool(info["l2_candidate"])
+    if mode in {"dram_load_only", "dram_cg_load_only", "dram_mma"}:
         return bool(info["dram_candidate"])
     return True
 
@@ -179,6 +212,7 @@ def main() -> int:
     parser.add_argument("--reuse-factor", type=int, default=1)
     parser.add_argument("--load-repeat", type=int, default=1)
     parser.add_argument("--store-repeat", type=int, default=1)
+    parser.add_argument("--reg-payload-bytes", type=int, default=0)
     parser.add_argument("--verify-smid", type=int, default=1)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--include-idle", action="store_true")
@@ -209,6 +243,7 @@ def main() -> int:
                 "reuse_factor",
                 "load_repeat",
                 "store_repeat",
+                "reg_payload_bytes_per_block",
                 "n_gpu_active",
                 "gpu_list",
                 "valid",
@@ -216,6 +251,7 @@ def main() -> int:
                 "shared_resident",
                 "l2_candidate",
                 "dram_candidate",
+                "below_logical_tile",
                 "reason",
                 "command",
             ],
@@ -247,6 +283,8 @@ def main() -> int:
                 str(args.load_repeat),
                 "--store-repeat",
                 str(args.store_repeat),
+                "--reg-payload-bytes",
+                str(args.reg_payload_bytes),
                 "--output",
                 args.output,
             ]
@@ -261,13 +299,15 @@ def main() -> int:
                     "reuse_factor": args.reuse_factor,
                     "load_repeat": args.load_repeat,
                     "store_repeat": args.store_repeat,
+                    "reg_payload_bytes_per_block": args.reg_payload_bytes,
                     "n_gpu_active": 0,
                     "gpu_list": "none",
                     "valid": True,
                     "regime": "idle",
                     "shared_resident": True,
                     "l2_candidate": True,
-                    "dram_candidate": False,
+                                    "dram_candidate": False,
+                                    "below_logical_tile": False,
                     "reason": "0 active GPU baseline",
                     "command": " ".join(cmd),
                 }
@@ -281,6 +321,11 @@ def main() -> int:
                     for active_sm in active_sm_values:
                         for n_gpu in n_gpu_values:
                             gpu_list = gpu_list_for_count(gpu_ids, n_gpu)
+                            reg_payload_bytes = (
+                                args.reg_payload_bytes
+                                if args.reg_payload_bytes
+                                else (256 if mode == "reg_pressure" else 0)
+                            )
                             cmd = [
                                 args.binary,
                                 "--gpu-list",
@@ -305,6 +350,8 @@ def main() -> int:
                                 str(args.load_repeat),
                                 "--store-repeat",
                                 str(args.store_repeat),
+                                "--reg-payload-bytes",
+                                str(reg_payload_bytes),
                                 "--output",
                                 args.output,
                                 "--verify-smid",
@@ -324,6 +371,7 @@ def main() -> int:
                                     "reuse_factor": args.reuse_factor,
                                     "load_repeat": args.load_repeat,
                                     "store_repeat": args.store_repeat,
+                                    "reg_payload_bytes_per_block": reg_payload_bytes,
                                     "n_gpu_active": n_gpu,
                                     "gpu_list": gpu_list,
                                     "valid": allowed,
@@ -331,6 +379,7 @@ def main() -> int:
                                     "shared_resident": info["shared_resident"],
                                     "l2_candidate": info["l2_candidate"],
                                     "dram_candidate": info["dram_candidate"],
+                                    "below_logical_tile": info["below_logical_tile"],
                                     "reason": (
                                         info["reason"]
                                         if allowed

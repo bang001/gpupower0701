@@ -6,6 +6,14 @@
 
 현재 실험은 FP16 Tensor Core `m16n16k16` logical MMA를 기준으로 RTX 3090에서 `blocks/SM`과 `W_SM`을 sweep하여 register, shared/L1, L2, DRAM 경로의 유효 에너지 차이를 관찰했다. 다음 단계의 목표는 이 관찰을 더 방어 가능한 component-level 추정으로 바꾸는 것이다.
 
+> 2026-07-03 정정: 이 문서의 초기 paired-difference 설계는 같은 `ITER`를
+> mode 간에 재사용하는 방향으로 작성되어 있었다. 후속 감사 결과,
+> `empty`와 `load_only` 계열의 elapsed time이 수백 배까지 달라져
+> `*_load_only - empty`를 component pJ로 해석할 수 없었다. 최종
+> coefficient 추정은 `docs/component_energy_regression_redesign_ko.md`의
+> duration-calibrated regression 설계를 우선한다. 기존 pair runner는
+> sanity/diagnostic 용도로만 사용한다.
+
 핵심 방향은 두 가지다.
 
 - 기존 mode별 비교를 유지하되, 각 mode에 대응되는 `memory-only` 또는 `path-only` control mode를 추가한다.

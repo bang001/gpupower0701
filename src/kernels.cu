@@ -78,6 +78,17 @@ __device__ __forceinline__ void compiler_barrier() {
   asm volatile("" ::: "memory");
 }
 
+__device__ __forceinline__ std::uint64_t select_tile(std::uint64_t load_index,
+                                                     std::uint64_t tiles_per_block,
+                                                     std::uint64_t block_id,
+                                                     int streaming) {
+  std::uint64_t tile = load_index % tiles_per_block;
+  if (streaming) {
+    tile = (load_index * 1315423911ull + block_id * 17ull) % tiles_per_block;
+  }
+  return tile;
+}
+
 __global__ void init_half_kernel(half* input, std::size_t half_count,
                                  std::uint64_t seed) {
   const std::size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -107,6 +118,25 @@ __global__ void empty_kernel(std::uint64_t iters, float* output,
   unsigned sink = static_cast<unsigned>(threadIdx.x ^ blockIdx.x);
   for (std::uint64_t i = 0; i < iters; ++i) {
     asm volatile("add.u32 %0, %0, 1;" : "+r"(sink));
+  }
+  if (threadIdx.x == 0 && output) {
+    output[blockIdx.x * 256] =
+        static_cast<float>((sink ^ static_cast<unsigned>(iters)) & 0xffffu);
+  }
+}
+
+__global__ void clocked_empty_kernel(std::uint64_t iters,
+                                     std::uint64_t load_repeat, float* output,
+                                     int* smid_by_block, int* rank_by_block,
+                                     int* sm_counts, int sm_count_capacity) {
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+  unsigned sink =
+      static_cast<unsigned>((blockIdx.x + 1) * 2654435761u + threadIdx.x);
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    for (std::uint64_t r = 0; r < load_repeat; ++r) {
+      sink ^= static_cast<unsigned>((i + r) & 0xffffffffull);
+      asm volatile("add.u32 %0, %0, 17;" : "+r"(sink));
+    }
   }
   if (threadIdx.x == 0 && output) {
     output[blockIdx.x * 256] =
@@ -200,6 +230,47 @@ __global__ void reg_operand_only_kernel(std::uint64_t iters, float* output,
   }
 }
 
+template <int PayloadRegsPerThread>
+__global__ void reg_pressure_kernel(std::uint64_t iters, float* output,
+                                    std::uint64_t reuse_factor,
+                                    int* smid_by_block, int* rank_by_block,
+                                    int* sm_counts, int sm_count_capacity) {
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+
+  unsigned regs[PayloadRegsPerThread];
+  unsigned acc =
+      static_cast<unsigned>((blockIdx.x + 1) * 1103515245u + threadIdx.x);
+
+  #pragma unroll
+  for (int j = 0; j < PayloadRegsPerThread; ++j) {
+    regs[j] = acc ^ static_cast<unsigned>((j + 1) * 2654435761u);
+  }
+
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    for (std::uint64_t r = 0; r < reuse_factor; ++r) {
+      compiler_barrier();
+      #pragma unroll
+      for (int j = 0; j < PayloadRegsPerThread; ++j) {
+        const unsigned mix =
+            static_cast<unsigned>((i + r + static_cast<std::uint64_t>(j)) &
+                                  0xffffffffull);
+        regs[j] = regs[j] * 1664525u + 1013904223u + (acc ^ mix);
+        acc ^= regs[j] + static_cast<unsigned>(j * 17 + 3);
+      }
+      asm volatile("" : "+r"(acc));
+    }
+  }
+
+  #pragma unroll
+  for (int j = 0; j < PayloadRegsPerThread; ++j) {
+    acc ^= regs[j] + static_cast<unsigned>(j);
+  }
+
+  if (threadIdx.x == 0 && output) {
+    output[blockIdx.x * 256] = static_cast<float>(acc & 0xffffffu);
+  }
+}
+
 __global__ void shared_load_only_kernel(std::uint64_t iters,
                                         std::uint64_t tiles_per_block,
                                         std::uint64_t load_repeat,
@@ -235,6 +306,51 @@ __global__ void shared_load_only_kernel(std::uint64_t iters,
   nvcuda::wmma::fill_fragment(c, checksum);
   if (output) {
     store_matrix_sync(output + blockIdx.x * 256, c, 16, mem_row_major);
+  }
+}
+
+__global__ void shared_scalar_load_only_kernel(std::uint64_t iters,
+                                               std::uint64_t tiles_per_block,
+                                               std::uint64_t load_repeat,
+                                               float* output,
+                                               int* smid_by_block,
+                                               int* rank_by_block,
+                                               int* sm_counts,
+                                               int sm_count_capacity) {
+  extern __shared__ __align__(16) unsigned char smem_raw[];
+  auto* smem = reinterpret_cast<std::uint32_t*>(smem_raw);
+  const std::uint64_t words_per_tile = kLogicalMmaInputBytes / sizeof(std::uint32_t);
+  const std::uint64_t word_count = tiles_per_block * words_per_tile;
+
+  for (std::uint64_t i = threadIdx.x; i < word_count; i += blockDim.x) {
+    smem[i] = static_cast<std::uint32_t>(
+        (i + 1ull) * 1664525ull + (static_cast<std::uint64_t>(blockIdx.x) + 17ull));
+  }
+  __syncthreads();
+
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+
+  volatile const std::uint32_t* vsmem = smem;
+  std::uint32_t checksum =
+      static_cast<std::uint32_t>(threadIdx.x + 1) * 2654435761u;
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    for (std::uint64_t r = 0; r < load_repeat; ++r) {
+      const std::uint64_t tile = ((i * load_repeat) + r) % tiles_per_block;
+      const std::uint64_t base = tile * words_per_tile;
+#pragma unroll
+      for (int k = 0; k < 8; ++k) {
+        const std::uint64_t word_index =
+            base + static_cast<std::uint64_t>(threadIdx.x) +
+            static_cast<std::uint64_t>(k * kWarpSize);
+        checksum ^= vsmem[word_index];
+        checksum = checksum * 1664525u + 1013904223u;
+      }
+    }
+  }
+
+  if (threadIdx.x == 0 && output) {
+    output[blockIdx.x * 256] =
+        static_cast<float>(checksum & 0x00ffffffu);
   }
 }
 
@@ -310,12 +426,9 @@ __global__ void global_mma_kernel(const half* input, std::uint64_t w_block_bytes
   for (std::uint64_t i = 0; i < iters; ++i) {
     for (std::uint64_t r = 0; r < load_repeat; ++r) {
       const std::uint64_t load_index = (i * load_repeat) + r;
-      std::uint64_t tile = load_index % tiles_per_block;
-      if (streaming) {
-        tile = (load_index * 1315423911ull +
-                static_cast<std::uint64_t>(blockIdx.x) * 17ull) %
-               tiles_per_block;
-      }
+      const std::uint64_t tile =
+          select_tile(load_index, tiles_per_block,
+                      static_cast<std::uint64_t>(blockIdx.x), streaming);
       const half* base = block_base + tile * 512ull;
       load_matrix_sync(a, base, 16);
       load_matrix_sync(b, base + 256, 16);
@@ -359,12 +472,9 @@ __global__ void global_load_only_kernel(const half* input,
   for (std::uint64_t i = 0; i < iters; ++i) {
     for (std::uint64_t r = 0; r < load_repeat; ++r) {
       const std::uint64_t load_index = (i * load_repeat) + r;
-      std::uint64_t tile = load_index % tiles_per_block;
-      if (streaming) {
-        tile = (load_index * 1315423911ull +
-                static_cast<std::uint64_t>(blockIdx.x) * 17ull) %
-               tiles_per_block;
-      }
+      const std::uint64_t tile =
+          select_tile(load_index, tiles_per_block,
+                      static_cast<std::uint64_t>(blockIdx.x), streaming);
       const half* base = block_base + tile * 512ull;
       load_matrix_sync(a, base, 16);
       load_matrix_sync(b, base + 256, 16);
@@ -375,6 +485,127 @@ __global__ void global_load_only_kernel(const half* input,
   nvcuda::wmma::fill_fragment(c, checksum);
   if (output) {
     store_matrix_sync(output + blockIdx.x * 256, c, 16, mem_row_major);
+  }
+}
+
+__device__ __forceinline__ std::uint32_t load_global_cg_u32(
+    const std::uint32_t* ptr) {
+  std::uint32_t value;
+  asm volatile("ld.global.cg.u32 %0, [%1];" : "=r"(value) : "l"(ptr));
+  return value;
+}
+
+__global__ void global_cg_load_only_kernel(const half* input,
+                                           std::uint64_t w_block_bytes,
+                                           std::uint64_t tiles_per_block,
+                                           std::uint64_t iters,
+                                           std::uint64_t load_repeat,
+                                           int streaming, float* output,
+                                           int* smid_by_block,
+                                           int* rank_by_block, int* sm_counts,
+                                           int sm_count_capacity) {
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+
+  const std::uint64_t block_half_offset =
+      (static_cast<std::uint64_t>(blockIdx.x) * w_block_bytes) / sizeof(half);
+  const half* block_base = input + block_half_offset;
+  std::uint32_t checksum =
+      static_cast<std::uint32_t>(threadIdx.x + 1) * 2654435761u;
+
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    for (std::uint64_t r = 0; r < load_repeat; ++r) {
+      const std::uint64_t load_index = (i * load_repeat) + r;
+      const std::uint64_t tile =
+          select_tile(load_index, tiles_per_block,
+                      static_cast<std::uint64_t>(blockIdx.x), streaming);
+      const half* base = block_base + tile * 512ull;
+      const auto* words = reinterpret_cast<const std::uint32_t*>(base);
+#pragma unroll
+      for (int k = 0; k < 8; ++k) {
+        const int word_index = static_cast<int>(threadIdx.x) + k * kWarpSize;
+        checksum ^= load_global_cg_u32(words + word_index);
+        checksum = checksum * 1664525u + 1013904223u;
+      }
+    }
+  }
+
+  if (threadIdx.x == 0 && output) {
+    output[blockIdx.x * 256] =
+        static_cast<float>(checksum & 0x00ffffffu);
+  }
+}
+
+__global__ void global_l1_load_only_kernel(const half* input,
+                                           std::uint64_t w_block_bytes,
+                                           std::uint64_t tiles_per_block,
+                                           std::uint64_t iters,
+                                           std::uint64_t load_repeat,
+                                           float* output,
+                                           int* smid_by_block,
+                                           int* rank_by_block, int* sm_counts,
+                                           int sm_count_capacity) {
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+
+  fragment<matrix_a, 16, 16, 16, half, row_major> a;
+  fragment<matrix_b, 16, 16, 16, half, col_major> b;
+  fragment<accumulator, 16, 16, 16, float> c;
+  float checksum = 0.0f;
+
+  const std::uint64_t block_half_offset =
+      (static_cast<std::uint64_t>(blockIdx.x) * w_block_bytes) / sizeof(half);
+  const half* block_base = input + block_half_offset;
+
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    for (std::uint64_t r = 0; r < load_repeat; ++r) {
+      const std::uint64_t load_index = (i * load_repeat) + r;
+      const std::uint64_t tile =
+          select_tile(load_index, tiles_per_block,
+                      static_cast<std::uint64_t>(blockIdx.x), 0);
+      const half* base = block_base + tile * 512ull;
+      load_matrix_sync(a, base, 16);
+      load_matrix_sync(b, base + 256, 16);
+      checksum += checksum_fragment(a) + checksum_fragment(b);
+    }
+  }
+
+  nvcuda::wmma::fill_fragment(c, checksum);
+  if (output) {
+    store_matrix_sync(output + blockIdx.x * 256, c, 16, mem_row_major);
+  }
+}
+
+__global__ void global_addr_only_kernel(std::uint64_t w_block_bytes,
+                                        std::uint64_t tiles_per_block,
+                                        std::uint64_t iters,
+                                        std::uint64_t load_repeat,
+                                        int streaming, float* output,
+                                        int* smid_by_block,
+                                        int* rank_by_block, int* sm_counts,
+                                        int sm_count_capacity) {
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+
+  std::uint64_t checksum =
+      static_cast<std::uint64_t>(threadIdx.x + 1) * 11400714819323198485ull;
+  const std::uint64_t block_byte_offset =
+      static_cast<std::uint64_t>(blockIdx.x) * w_block_bytes;
+
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    for (std::uint64_t r = 0; r < load_repeat; ++r) {
+      const std::uint64_t load_index = (i * load_repeat) + r;
+      const std::uint64_t tile =
+          select_tile(load_index, tiles_per_block,
+                      static_cast<std::uint64_t>(blockIdx.x), streaming);
+      const std::uint64_t byte_offset =
+          block_byte_offset + tile * static_cast<std::uint64_t>(kLogicalMmaInputBytes);
+      checksum ^= byte_offset + (load_index << 7);
+      checksum = checksum * 2862933555777941757ull + 3037000493ull;
+      asm volatile("" : "+l"(checksum));
+    }
+  }
+
+  if (threadIdx.x == 0 && output) {
+    output[blockIdx.x * 256] =
+        static_cast<float>(checksum & 0xffffffull);
   }
 }
 
@@ -398,7 +629,8 @@ __global__ void store_path_kernel(std::uint64_t iters, float* output,
 }  // namespace
 
 cudaError_t configure_kernel_attributes(Mode mode, std::size_t dynamic_smem_bytes) {
-  if (mode == Mode::shared_load_only || mode == Mode::shared_mma) {
+  if (mode == Mode::shared_scalar_load_only ||
+      mode == Mode::shared_load_only || mode == Mode::shared_mma) {
     cudaError_t err = cudaFuncSetAttribute(
         shared_mma_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize,
         static_cast<int>(dynamic_smem_bytes));
@@ -407,11 +639,19 @@ cudaError_t configure_kernel_attributes(Mode mode, std::size_t dynamic_smem_byte
         shared_load_only_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize,
         static_cast<int>(dynamic_smem_bytes));
     if (err != cudaSuccess) return err;
+    err = cudaFuncSetAttribute(
+        shared_scalar_load_only_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize,
+        static_cast<int>(dynamic_smem_bytes));
+    if (err != cudaSuccess) return err;
     err = cudaFuncSetAttribute(shared_mma_kernel,
                                cudaFuncAttributePreferredSharedMemoryCarveout,
                                cudaSharedmemCarveoutMaxShared);
     if (err != cudaSuccess) return err;
     err = cudaFuncSetAttribute(shared_load_only_kernel,
+                               cudaFuncAttributePreferredSharedMemoryCarveout,
+                               cudaSharedmemCarveoutMaxShared);
+    if (err != cudaSuccess) return err;
+    err = cudaFuncSetAttribute(shared_scalar_load_only_kernel,
                                cudaFuncAttributePreferredSharedMemoryCarveout,
                                cudaSharedmemCarveoutMaxShared);
     if (err != cudaSuccess) return err;
@@ -448,6 +688,11 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
           cfg.iters, cfg.output, cfg.smid_by_block, cfg.rank_by_block,
           cfg.sm_counts, cfg.sm_count_capacity);
       break;
+    case Mode::clocked_empty:
+      clocked_empty_kernel<<<grid_dim, block, 0, cfg.stream>>>(
+          cfg.iters, cfg.load_repeat, cfg.output, cfg.smid_by_block,
+          cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+      break;
     case Mode::reg_mma:
       reg_mma_kernel<<<grid_dim, block, 0, cfg.stream>>>(
           cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
@@ -462,6 +707,67 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
       reg_operand_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
           cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
           cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+      break;
+    case Mode::reg_pressure:
+      switch (cfg.reg_payload_bytes_per_block) {
+        case 256:
+          reg_pressure_kernel<2><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 512:
+          reg_pressure_kernel<4><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 1024:
+          reg_pressure_kernel<8><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 2048:
+          reg_pressure_kernel<16><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 4096:
+          reg_pressure_kernel<32><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 8192:
+          reg_pressure_kernel<64><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 16384:
+          reg_pressure_kernel<128><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        default:
+          return cudaErrorInvalidValue;
+      }
+      break;
+    case Mode::addr_only:
+      global_addr_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
+          cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters, cfg.load_repeat,
+          cfg.streaming, cfg.output, cfg.smid_by_block, cfg.rank_by_block,
+          cfg.sm_counts, cfg.sm_count_capacity);
+      break;
+    case Mode::global_l1_load_only:
+      global_l1_load_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
+          cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
+          cfg.load_repeat, cfg.output, cfg.smid_by_block, cfg.rank_by_block,
+          cfg.sm_counts, cfg.sm_count_capacity);
+      break;
+    case Mode::shared_scalar_load_only:
+      shared_scalar_load_only_kernel<<<grid_dim, block,
+                                       static_cast<std::size_t>(cfg.w_block_bytes),
+                                       cfg.stream>>>(
+          cfg.iters, cfg.tiles_per_block, cfg.load_repeat, cfg.output,
+          cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+          cfg.sm_count_capacity);
       break;
     case Mode::shared_load_only:
       shared_load_only_kernel<<<grid_dim, block,
@@ -485,6 +791,12 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
           cfg.load_repeat, 0, cfg.output, cfg.smid_by_block,
           cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
       break;
+    case Mode::l2_cg_load_only:
+      global_cg_load_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
+          cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
+          cfg.load_repeat, 0, cfg.output, cfg.smid_by_block,
+          cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+      break;
     case Mode::l2_mma:
       global_mma_kernel<<<grid_dim, block, 0, cfg.stream>>>(
           cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
@@ -493,6 +805,12 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
       break;
     case Mode::dram_load_only:
       global_load_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
+          cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
+          cfg.load_repeat, 1, cfg.output, cfg.smid_by_block,
+          cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+      break;
+    case Mode::dram_cg_load_only:
+      global_cg_load_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
           cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
           cfg.load_repeat, 1, cfg.output, cfg.smid_by_block,
           cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
