@@ -82,12 +82,16 @@ Feasibility only:
 
 Supported target profiles:
 
-| profile | GPU family | CC | default SMs | L2 | shared/SM | max blocks/SM | NVML `GetPowerUsage` meaning |
-|---|---|---:|---:|---:|---:|---:|---|
-| `v100` | Volta GV100 | 7.0 | 80 | 6 MiB | 96 KiB | 32 | instantaneous |
-| `rtx3090` | Ampere GA10x | 8.6 | 82 | 6 MiB | 100 KiB | 16 | 1-second average |
-| `a100` | Ampere GA100 | 8.0 | 108 | 40 MiB | 164 KiB | 32 | instantaneous |
-| `h100` | Hopper GH100 | 9.0 | 132 default, runtime/SKU should be checked | 50 MiB | 228 KiB | 32 | 1-second average |
+| profile | GPU family | CC | default SMs | L2 | combined L1/shared | shared allocation | max shared/block | max blocks/SM | NVML `GetPowerUsage` meaning |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `v100` | Volta GV100 | 7.0 | 80 | 6 MiB | 128 KiB/SM | 96 KiB/SM | 96 KiB/block | 32 | instantaneous |
+| `rtx3090` | Ampere GA10x | 8.6 | 82 | 6 MiB | 128 KiB/SM | 100 KiB/SM | 99 KiB/block | 16 | 1-second average |
+| `a100` | Ampere GA100 | 8.0 | 108 | 40 MiB | 192 KiB/SM | 164 KiB/SM | 163 KiB/block | 32 | instantaneous |
+| `h100` | Hopper GH100 | 9.0 | 132 default, runtime/SKU should be checked | 50 MiB | 256 KiB/SM | 228 KiB/SM | 227 KiB/block | 32 | 1-second average |
+
+`combined L1/shared` is the SM-local unified capacity. `shared allocation`
+is the CUDA shared-memory capacity used for feasibility checks. Do not treat
+these two columns as the same quantity.
 
 Run a support preflight before collecting new data:
 
@@ -97,8 +101,9 @@ python3 scripts/preflight_gpu_support.py --gpu 0 --target-profile auto \
   --out results/summary/gpu_support_preflight.md
 ```
 
-The preflight records the detected profile, NVML/NVIDIA driver state, Nsight
-Compute chip support, and a binary dry-run result.
+The preflight records the detected profile, combined/shared capacity metadata,
+NVML/NVIDIA driver state, Nsight Compute chip support, and a binary dry-run
+result.
 
 Single GPU register/Tensor Core run:
 
@@ -389,9 +394,11 @@ rate (%), L2 hit rate (%), L1 accesses, L2 accesses (sectors), DRAM accesses
 (sectors), and L1/L2/DRAM bytes. L1 accesses prefer request counters when NCU
 provides them and fall back to sector counters otherwise.
 
-Nsight Compute support is version dependent. Current Nsight Compute supports
-GA10x, GA100, and GH100, while V100/GV100 requires an older supported NCU
-toolchain such as the 2024.3 or 2025.1 release series.
+Nsight Compute support is version dependent. As of the 2026-06-29 release
+history, NVIDIA lists Nsight Compute 2026.2.1 as the latest public release, and
+the release highlights announce dropped Volta support. For V100/GV100, use an
+NCU toolchain whose `ncu --list-chips` output includes `gv100`; 2024.3/2025.1
+are examples, not a hard-coded rule.
 
 ## Plotting
 

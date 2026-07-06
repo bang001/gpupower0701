@@ -1,6 +1,7 @@
 # How It Works: FP16 MMA Energy Microbenchmark
 
 작성일: 2026-07-02
+최종 업데이트: 2026-07-06
 
 이 문서는 현재 코드가 각 mode별 실험을 실제로 어떻게 실행하고, 어떤 값을 CSV에 저장하며, component-like energy coefficient를 어떻게 해석해야 하는지 설명한다.
 
@@ -14,6 +15,179 @@
 | component 분해는 어디서 하는가? | `scripts/analyze_component_pairs.py`가 `*_load_only`, `*_mma`, `empty` row를 이용해 paired-difference를 계산한다. |
 | `W_SM`은 모든 mode에서 실제 working set인가? | 아니다. `shared_*`, `l2_*`, `dram_*`에서는 실제 working set에 쓰이고, register/control/store 계열에서는 비교 좌표에 가깝다. |
 | 최종 주장은 무엇으로 제한해야 하는가? | 물리적 순수 component energy가 아니라, 이 microbenchmark 구조에서 관측되는 effective component coefficient다. |
+| parameter sweep은 왜 하는가? | blocks/SM, W_SM, reuse, load_repeat를 바꿔 어떤 조건에서 Tensor/Shared/L1/L2/DRAM 경로가 분리되는지 찾기 위해서다. |
+| 최종 coefficient는 어떻게 채택하는가? | energy 차분이 양수이고, NCU hit/access/stall 검증으로 의도한 path가 확인된 row만 후보로 사용한다. |
+
+## 이 문서의 읽는 법
+
+이 문서는 두 종류의 결과를 구분해서 읽어야 한다.
+
+| 구분 | 무엇인가 | 어디에 쓰는가 | 주의 |
+|---|---|---|---|
+| Raw sweep result | 각 mode를 독립 실행해서 얻은 `net_E_J`, `pJ/FLOP`, expected bytes | workload가 커질 때 전체 에너지가 어떻게 변하는지 보는 1차 탐색 | component별 에너지로 바로 해석하면 안 된다. |
+| NCU path validation | Nsight Compute로 L1/L2/DRAM/shared bytes, hit rate, stall, Tensor instruction을 확인한 결과 | 해당 mode가 의도한 memory hierarchy를 실제로 탔는지 판정 | NCU replay가 energy 측정 자체를 바꿀 수 있으므로 energy run과 분리한다. |
+| Matched-control coefficient | 같은 조건의 treatment와 control을 차분한 뒤 FLOP 또는 NCU actual bytes로 나눈 값 | Tensor, L1/shared, L2, DRAM 경로의 effective coefficient 후보 | 순수 회로 energy가 아니라 board-level microbenchmark coefficient다. |
+
+따라서 문서를 읽는 순서는 다음이 안전하다.
+
+```mermaid
+flowchart LR
+  A[Raw sweep<br/>전체 추세 확인] --> B[NCU validation<br/>path 확인]
+  B --> C[Matched-control<br/>차분 계산]
+  C --> D[Accepted candidate<br/>최종 후보 표]
+  A -. 단독으로는 부족 .-> X[component energy로 단정 금지]
+  B -. rejected .-> Y[최종 coefficient 제외]
+```
+
+## Effective Microbenchmark Coefficient의 의미
+
+이 실험에서 말하는 `Tensor`, `L1`, `L2`, `DRAM` 값은 GPU 회로 내부의 순수 bitcell energy가 아니다. NVML은 GPU 보드 또는 디바이스 전체 에너지를 측정한다. 그래서 측정값에는 Tensor Core, register file, scheduler, warp issue, LSU, cache tag/data, memory controller, clock 변화, stall에 의한 대기 비용이 함께 들어간다.
+
+이 문서에서 채택하는 표현은 다음이다.
+
+```text
+effective microbenchmark coefficient
+  = NCU로 의도한 path가 확인된 microbenchmark에서
+    treatment-control 추가 에너지를
+    FLOP 또는 실제 traffic bytes/bits로 나눈 값
+```
+
+예를 들어 `L2 CG hit path = 1.176 pJ/bit`는 "RTX 3090의 L2 SRAM bitcell 하나를 읽는 데 1.176 pJ가 든다"는 뜻이 아니다. 더 정확히는 "이 microbenchmark에서 L1을 우회하고 L2 hit가 지배적인 global load path를 만들었을 때, `clocked_empty` 대비 추가 board-level energy를 NCU L2 traffic bit로 나누면 median 1.176 pJ/bit가 나왔다"는 뜻이다.
+
+| 항목 | 장점 | 한계 | 오해하기 쉬운 표현 | 권장 표현 |
+|---|---|---|---|---|
+| NVML energy | 실제 GPU에서 관측된 에너지라 현실성이 있다. | component별 전력계를 직접 읽는 것이 아니다. | `L1 순수 에너지` | `L1-hit path effective coefficient` |
+| NCU path 검증 | L1/L2/DRAM/shared traffic과 hit rate를 확인할 수 있다. | 모든 energy row를 1:1로 profiling하지 않으면 대표값 가정이 남는다. | `W_SM만 맞으면 L2 실험` | `NCU에서 L2 hit가 확인된 row` |
+| matched-control 차분 | 공통 오버헤드를 일부 제거할 수 있다. | control instruction mix가 완전히 같지 않으면 음수/분산이 생긴다. | `차분하면 순수 component만 남는다` | `control 대비 추가 effective energy` |
+| pJ/bit, pJ/FLOP | 계층/연산 간 비교가 쉽다. | denominator 정의가 다르면 직접 비교하면 안 된다. | `HBM 3.9 pJ/bit와 직접 비교` | `device energy와 path coefficient는 별도 비교` |
+
+최종 보고서에서 쓸 수 있는 안전한 문장은 다음과 같다.
+
+```text
+본 값은 NCU로 path가 검증된 microbenchmark에서 얻은
+board-level effective coefficient이며, 순수 회로/bitcell energy가 아니다.
+```
+
+## Parameter Sweep 개요
+
+Sweep은 실험자가 한 조건을 바꿔 보면서 결과가 어떻게 변하는지 보는 절차다. 이 실험에서는 GPU 구조상 어느 계층이 쓰이는지를 의도적으로 바꾸기 위해 sweep을 사용한다.
+
+| 실험자가 조절한 파라미터 | 단위 | 의미 | 주로 적용되는 mode | 관찰한 값 |
+|---|---:|---|---|---|
+| `blocks_per_SM` | blocks/SM | SM 하나에 동시에 올릴 block 수 | 모든 non-idle mode | `pJ/FLOP`, `net_E_J`, elapsed, SMID 분포 |
+| `W_SM` | KiB 또는 MiB per SM | SM당 logical working set | shared/L2/DRAM 계열 | cache/shared/L2/DRAM regime, pJ/FLOP, pJ/bit |
+| `reuse_factor` | count | 한 번 준비한 operand로 MMA를 반복하는 횟수 | `*_mma`, `reg_mma`, `reg_operand_only` | Tensor FLOP 대비 energy |
+| `load_repeat` | count | iteration당 operand load 반복 횟수 | shared/L1/L2/DRAM load-only mode | memory traffic 대비 energy |
+| `seconds` | s | 각 실행의 목표 측정 시간 | 전체 | NVML noise와 thermal drift |
+| `repeats` | count | 같은 조건 반복 횟수 | 전체 | median, min, max, variance |
+
+실험자가 바꾼 것과 관찰한 것을 분리하면 다음과 같다.
+
+```mermaid
+flowchart TD
+  P1[blocks/SM 증가] --> O1[occupancy 및 scheduling pressure 변화]
+  P2[W_SM 증가] --> O2[shared/L1 -> L2 -> DRAM regime 변화]
+  P3[reuse_factor 증가] --> O3[FLOP 증가<br/>load cost amortization]
+  P4[load_repeat 증가] --> O4[memory bytes 증가<br/>pJ/bit 식별성 증가]
+  O1 --> M[측정: energy, elapsed, pJ/FLOP]
+  O2 --> M
+  O3 --> M
+  O4 --> N[검증: NCU hit/access/stall]
+  M --> C[차분/회귀 coefficient]
+  N --> C
+```
+
+### 초기 탐색 sweep
+
+초기 sweep은 component coefficient를 확정하기 위한 실험이 아니라, 어떤 범위에서 실행 가능하고 어떤 mode가 에너지를 크게 쓰는지 보는 탐색이다.
+
+| Sweep | 변경한 조건 | 실행/선택 조건 | 측정값 | 얻은 정보 | 주의 |
+|---|---|---|---|---|---|
+| Sweep 1, blocks/SM | `1,2,4,8,16,32` 요청 | RTX 3090에서는 `1,2,4,8,16` 실행, `32`는 resident block 한계로 invalid | `pJ/FLOP`, `net_E_J`, elapsed | blocks/SM 증가 시 pJ/FLOP가 대체로 감소하는 경향 | scheduling, occupancy, memory pressure가 함께 바뀌므로 단일 원인으로 해석 금지 |
+| Sweep 2, W_SM | `1 KiB`부터 `128 MiB`까지 2배 증가 | shared/L2/DRAM 가능 범위만 실행 | mode별 pJ/FLOP, 실행 가능 여부 | shared-resident, L2-candidate, DRAM-candidate 범위 탐색 | `reg_mma`의 `W_SM`은 register working set이 아님 |
+
+초기 탐색에서 사용한 대표 고정 working set은 다음과 같다.
+
+| mode | W_SM | 당시 의도 | 현재 해석 |
+|---|---:|---|---|
+| `reg_mma` | 32 KiB | register/Tensor baseline 좌표 | register file 32 KiB 사용이 아니라 표 정렬용 좌표 |
+| `shared_mma` | 64 KiB | shared-resident 조건 | NCU 없이 shared path 확정 불가 |
+| `l2_mma` | 64 KiB | full-GPU working set이 L2 후보 범위 | RTX 3090에서는 일반 `l2_load_only`가 L1 hit 지배로 나중에 제외 |
+| `dram_mma` | 8192 KiB | L2를 크게 초과하는 DRAM-dominant 조건 | DRAM streaming sanity 후보 |
+
+### 최종 component 실험에서 선택한 sweep
+
+최종 실험은 raw `*_mma` 비교가 아니라 NCU path 검증과 matched-control 차분을 전제로 설계했다.
+
+| Component | treatment/control modes | 선택 W_SM | blocks/SM | active_SM | sweep factor | seconds | repeats | 선택 이유 |
+|---|---|---:|---:|---:|---|---:|---:|---|
+| Tensor | `reg_mma` / `reg_operand_only` | 2048 KiB | 16 | 82 | `reuse_factor=1,2,4,8,16` | 5 s | 3 | no-MMA register/control 대비 WMMA 추가분 추정 |
+| Shared scalar | `shared_scalar_load_only` / `clocked_empty` | 64 KiB | 16 | 82 | `load_repeat=1,2,4,8,16` | 5 s | 3 | bank conflict가 낮은 shared scalar path 사용 |
+| Global L1 | `global_l1_load_only` / `clocked_empty` | 16, 64 KiB | 16 | 82 | `load_repeat=1,2,4,8,16` | 5 s | 3 | L1 hit path 확인. 최종값은 NCU denominator가 있는 W=16만 사용 |
+| L2 CG | `l2_cg_load_only` / `clocked_empty` | 64 KiB | 16 | 82 | `load_repeat=1,2,4,8,16` | 5 s | 3 | RTX 3090에서 L1을 우회해 L2 hit path를 만들기 위해 `.cg` 사용 |
+| DRAM CG | `dram_cg_load_only` / `clocked_empty` | 8192 KiB | 16 | 82 | `load_repeat=1,4,16` | 5 s | 3 | 필수 목표가 아니라 L2/DRAM 순서 sanity check |
+
+최종 채택/제외 기준은 다음이다.
+
+| 기준 | 채택 | 제외 |
+|---|---|---|
+| Energy coefficient | 양수이고 반복 간 해석 가능 | 음수 coefficient 또는 분산이 너무 커서 control 실패가 의심되는 경우 |
+| NCU denominator | NCU actual bytes가 있거나 같은 working set 대표 row로 보정 가능 | byte path인데 NCU denominator가 없는 경우 |
+| L1 path | L1 hit가 높고 L2/L1, DRAM/L1 ratio가 낮음 | L1 hit가 낮거나 실제 traffic이 다른 계층으로 새는 경우 |
+| L2 path | L1 hit가 낮고 L2 hit가 높으며 DRAM/L2 ratio가 낮음 | RTX 3090 일반 `l2_load_only`처럼 L1 hit가 높은 경우 |
+| Shared path | shared bytes가 충분하고 bank conflict가 낮음 | bank conflict가 높아 path가 오염된 경우 |
+| Tensor path | HMMA > 0, spill/local 0, memory traffic이 작음 | spill/local 또는 과도한 memory traffic |
+
+## Component 분해 시각화
+
+최종 component 후보는 아래처럼 raw mode를 그대로 비교하지 않고, control과 treatment를 맞춰 차분한다.
+
+```mermaid
+flowchart TD
+  subgraph Controls[Control modes]
+    E[clocked_empty<br/>scheduler/loop baseline]
+    RO[reg_operand_only<br/>no-MMA register/control]
+  end
+
+  subgraph Treatments[Treatment modes]
+    RM[reg_mma<br/>WMMA Tensor path]
+    SH[shared_scalar_load_only<br/>shared scalar path]
+    L1[global_l1_load_only<br/>L1 hit path]
+    L2[l2_cg_load_only<br/>L2 hit path]
+    DR[dram_cg_load_only<br/>DRAM streaming sanity]
+  end
+
+  RO -->|subtract from| RM
+  E -->|subtract from| SH
+  E -->|subtract from| L1
+  E -->|subtract from| L2
+  E -->|subtract from| DR
+
+  RM --> Tcoef[Tensor MMA incremental<br/>pJ/FLOP]
+  SH --> Scoef[Shared scalar path<br/>pJ/bit]
+  L1 --> L1coef[Global L1 hit path<br/>pJ/bit]
+  L2 --> L2coef[L2 CG hit path<br/>pJ/bit]
+  DR --> Dcoef[DRAM CG sanity<br/>pJ/bit]
+```
+
+Memory hierarchy 관점에서는 다음처럼 이해한다.
+
+```mermaid
+flowchart LR
+  TC[Tensor Core<br/>mma_sync] <--> RF[Register fragments]
+  RF <--> SL1[Shared / L1<br/>SM-local path]
+  SL1 <--> L2C[L2 cache<br/>chip-wide path]
+  L2C <--> MEM[GDDR6X / HBM<br/>off-chip memory]
+
+  RGM[reg_mma] -. mostly .-> TC
+  RGM -. uses .-> RF
+  SHM[shared_scalar_load_only] -. validates .-> SL1
+  L1M[global_l1_load_only] -. validates .-> SL1
+  L2M[l2_cg_load_only] -. validates .-> L2C
+  DRM[dram_cg_load_only] -. validates .-> MEM
+```
+
+이 그림의 핵심은 `DRAM path`도 DRAM만 의미하지 않는다는 점이다. GPU의 global load는 일반적으로 L2/cache/memory controller를 지나므로, DRAM coefficient에는 path 전체의 stall/control 비용이 섞일 수 있다.
 
 ## 전체 구조
 

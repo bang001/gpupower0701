@@ -140,7 +140,7 @@ MODE=dram_mma W_SM_KIB=128 BLOCKS_PER_SM=16 ACTIVE_SM=82 GPU=0 TARGET_PROFILE=rt
 
 For WSL on Windows drivers, `sudo` inside Linux may not be sufficient for NCU counters. If `ERR_NVGPUCTRPERM` persists, enable GPU Performance Counters for all users in the NVIDIA App or NVIDIA Control Panel on Windows, then run `wsl --shutdown` before retrying.
 
-V100/GV100 requires an older supported Nsight Compute toolchain such as the 2024.3 or 2025.1 release series. Current Nsight Compute 13.3 supports GA10x, GA100, and GH100 but no longer lists Volta support.
+V100/GV100 requires an Nsight Compute toolchain whose `ncu --list-chips` output includes `gv100`. NVIDIA's current release highlights announce dropped Volta support, so 2024.3/2025.1 are examples of candidate toolchains rather than a hard-coded rule.
 
 Do not merge NCU replay energy with NVML energy-run CSV values. Join exported NCU counters later by run metadata when needed.
 

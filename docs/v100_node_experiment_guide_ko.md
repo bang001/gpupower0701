@@ -378,7 +378,7 @@ bash scripts/run_ncu_validation.sh
 | 오류/상태 | 의미 | 조치 |
 |---|---|---|
 | `ERR_NVGPUCTRPERM` | performance counter 권한 없음 | 관리자/root 권한 또는 counter 접근 허용 필요 |
-| `gv100` chip 미지원 | NCU 버전이 Volta를 지원하지 않음 | NCU 2024.3/2025.1 계열 지정 |
+| `gv100` chip 미지원 | NCU 버전이 Volta를 지원하지 않음 | `ncu --list-chips`에 `gv100`이 있는 toolchain 지정. 2024.3/2025.1 계열은 예시 |
 | metric query 실패 | metric 이름/section 호환 문제 | `--query-metrics --chips gv100`로 metric availability 확인 |
 
 NCU가 실패해도 NVML energy run 자체와 섞지 말고, 보고서에는 “NCU counter 검증 미완료”로 분리 기록한다.
