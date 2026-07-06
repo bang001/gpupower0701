@@ -359,6 +359,8 @@ void print_dry_run(const Options& opts, const Feasibility& f, bool allowed,
             << opts.profile.compute_minor << "\n";
   std::cout << "max_blocks_per_SM=" << opts.profile.max_blocks_per_sm << "\n";
   std::cout << "target_l2_MiB=" << opts.profile.l2_mib << "\n";
+  std::cout << "target_unified_L1_shared_KiB_per_SM="
+            << opts.profile.unified_l1_shared_kib << "\n";
   std::cout << "target_shared_KiB_per_SM="
             << opts.profile.shared_capacity_per_sm_kib << "\n";
   std::cout << "target_max_shared_KiB_per_block="
@@ -729,6 +731,7 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
   }
   row.sm_count = actual_sm_count > 0 ? actual_sm_count : opts.profile.full_sm_count;
   row.l2_mib = opts.profile.l2_mib;
+  row.unified_l1_shared_kib_per_sm = opts.profile.unified_l1_shared_kib;
   row.shared_kib_per_sm = opts.profile.shared_capacity_per_sm_kib;
   row.tensor_modes = opts.profile.tensor_modes;
   row.nvml_total_energy_supported =
@@ -814,6 +817,8 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
         << ";chip=" << opts.profile.chip
         << ";target_full_sm=" << opts.profile.full_sm_count
         << ";target_l2_mib=" << opts.profile.l2_mib
+        << ";target_unified_l1_shared_kib_per_sm="
+        << opts.profile.unified_l1_shared_kib
         << ";target_shared_kib_per_sm="
         << opts.profile.shared_capacity_per_sm_kib
         << ";target_max_shared_kib_per_block="

@@ -60,6 +60,7 @@ struct ResultRow {
   std::string compute_capability;
   int sm_count = 0;
   int l2_mib = 0;
+  int unified_l1_shared_kib_per_sm = 0;
   int shared_kib_per_sm = 0;
   std::string tensor_modes;
   std::string energy_source;

@@ -28,6 +28,7 @@
 - H100 SXM/PCIe, H800, MIG, 클러스터 partition에 따라 runtime SM 수와 memory 구성이 달라질 수 있다.
 - preflight에서 runtime SM 수가 132가 아니면 `--active-sm`을 runtime 값으로 바꾼다.
 - 현재 harness profile의 50 MiB L2는 기본 가이드 값이다. SKU별 L2가 다르면 결과 보고서에 runtime/profile 차이를 명시한다.
+- `combined L1/shared profile`은 SM 내부 통합 capacity이고, `shared allocation profile`은 shared-memory 실험 feasibility에 쓰는 CUDA shared capacity다.
 
 ## 1. 저장소 준비
 

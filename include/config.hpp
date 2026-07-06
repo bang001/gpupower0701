@@ -35,7 +35,7 @@ struct HardwareProfile {
   bool supports_tma = false;
   bool supports_clusters = false;
   const char* tensor_modes =
-      "fp16_wmma,tf32,bf16,int8,int4,sparsity";
+      "implemented:fp16_wmma;hardware_optional:tf32,bf16,int8,int4,sparsity";
   const char* ncu_chip_alias = "ga102";
   const char* recommended_ncu = "current";
   const char* nvml_power_usage_semantics = "one_sec_average";
@@ -60,9 +60,9 @@ constexpr HardwareProfile kV100Profile{
     false,
     false,
     false,
-    "fp16_wmma",
+    "implemented:fp16_wmma",
     "gv100",
-    "ncu_2024_3_or_2025_1",
+    "gv100_required",
     "instant"};
 constexpr HardwareProfile kRtx3090Profile{
     "rtx3090",
@@ -83,7 +83,7 @@ constexpr HardwareProfile kRtx3090Profile{
     true,
     false,
     false,
-    "fp16_wmma,tf32,bf16,int8,int4,sparsity",
+    "implemented:fp16_wmma;hardware_optional:tf32,bf16,int8,int4,sparsity",
     "ga102",
     "current",
     "one_sec_average"};
@@ -106,7 +106,7 @@ constexpr HardwareProfile kA100Profile{
     true,
     false,
     false,
-    "fp16_wmma,tf32,bf16,fp64_tc,int8,int4,binary,sparsity",
+    "implemented:fp16_wmma;hardware_optional:tf32,bf16,fp64_tc,int8,int4,binary,sparsity",
     "ga100",
     "current",
     "instant"};
@@ -129,7 +129,7 @@ constexpr HardwareProfile kH100Profile{
     true,
     true,
     true,
-    "fp16_wmma,bf16,tf32,fp8,wgmma,tma,int8,int4",
+    "implemented:fp16_wmma;hardware_optional:bf16,tf32,fp8,wgmma,tma,int8,int4",
     "gh100",
     "current",
     "one_sec_average"};

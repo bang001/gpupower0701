@@ -35,7 +35,7 @@ PROFILES: dict[str, dict[str, Any]] = {
         "ncu_chip": "gv100",
         "tensor_threshold": "2e8",
         "register_threshold": "2e8",
-        "note": "Volta path. Use an NCU version that still supports gv100.",
+        "note": "Volta path. Use an NCU toolchain whose --list-chips includes gv100.",
     },
     "a100": {
         "cuda_arch": "80",

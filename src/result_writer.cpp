@@ -45,7 +45,8 @@ std::string csv_header() {
          "ncu_l1_bytes,ncu_l2_bytes,ncu_dram_bytes,ncu_spill_bytes,"
          "smid_histogram_ok,clock_sm_mhz,"
          "clock_mem_mhz,temp_C,profile_name,architecture_family,chip,"
-         "compute_capability,sm_count,l2_mib,shared_kib_per_sm,tensor_modes,"
+         "compute_capability,sm_count,l2_mib,unified_l1_shared_kib_per_sm,"
+         "shared_kib_per_sm,tensor_modes,"
          "energy_source,energy_integration_method,mode_family,"
          "denominator_level,nvml_total_energy_supported,"
          "nvml_power_usage_semantics,nvml_field_power_instant_supported,"
@@ -122,7 +123,8 @@ void CsvWriter::write(const ResultRow& row) {
       << ',' << csv_escape(row.chip)
       << ',' << csv_escape(row.compute_capability)
       << ',' << row.sm_count << ',' << row.l2_mib << ','
-      << row.shared_kib_per_sm << ',' << csv_escape(row.tensor_modes) << ','
+      << row.unified_l1_shared_kib_per_sm << ',' << row.shared_kib_per_sm
+      << ',' << csv_escape(row.tensor_modes) << ','
       << csv_escape(row.energy_source) << ','
       << csv_escape(row.energy_integration_method) << ','
       << csv_escape(row.mode_family) << ','

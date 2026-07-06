@@ -52,17 +52,18 @@ bash results/summary/a100_component_finalplan_$(date +%Y%m%d)_commands.sh
 
 ## 3. 플랫폼별 핵심 차이
 
-| GPU | build arch | default SMs | register/SM | L1/shared | L2 | memory | 주요 실험 차이 |
+| GPU | build arch | default SMs | register/SM | L1/shared capacity | L2 | memory | 주요 실험 차이 |
 |---|---:|---:|---:|---:|---:|---|---|
-| V100 / GV100 | sm_70 | 80 | 256 KiB급 | 96 KiB shared profile | 6 MiB | HBM2 | Volta NCU 지원 버전 확인 필수, L2는 CG path 우선 |
+| V100 / GV100 | sm_70 | 80 | 256 KiB급 | 128 KiB combined, 96 KiB shared allocation | 6 MiB | HBM2 | Volta NCU 지원 버전 확인 필수, L2는 CG path 우선 |
 | A100 / GA100 | sm_80 | 108 | 256 KiB | 192 KiB combined, 164 KiB shared allocation | 40 MiB | HBM2 | capacity L2와 CG L2를 모두 비교 가능 |
 | H100 / GH100 | sm_90 | 132 default | 256 KiB급 | 256 KiB combined, 228 KiB shared allocation profile | 50 MiB | HBM2e/HBM3 SKU별 상이 | 현재 kernel은 WMMA compatibility path, WGMMA/TMA 실험 아님 |
 
 주의:
 
 - `active_SM`은 profile 기본값이 아니라 runtime/preflight에서 확인한 값을 우선한다. MIG, partition, SKU 차이가 있으면 `--active-sm`을 반드시 조정한다.
+- `combined L1/shared`는 SM 내부의 통합 L1/shared capacity이고, `shared allocation`은 CUDA dynamic/shared-memory 실험에서 사용할 수 있는 shared memory profile이다. 두 값을 같은 의미로 쓰면 안 된다.
 - H100은 SKU에 따라 SM 수와 HBM 구성이 달라질 수 있다. profile default 132는 가이드용 기본값이다.
-- V100은 최신 NCU에서 `gv100` chip support가 없을 수 있다. NCU 검증이 안 되면 energy run과 별도로 “NCU 검증 미완료”로 보고한다.
+- V100은 최신 Nsight Compute release highlights에서 Volta/GV100 support 제거가 공지되어 있다. `ncu --list-chips`에 `gv100`이 없으면 energy run과 별도로 “NCU 검증 미완료”로 보고한다.
 
 ## 4. 추천 좌표
 

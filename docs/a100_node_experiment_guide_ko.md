@@ -16,12 +16,13 @@
 | CUDA arch flag | `sm_80` | - |
 | default full SM count | 108 | SMs |
 | nominal L2 | 40 | MiB |
-| shared memory per SM | 164 | KiB |
-| max dynamic shared memory per block | 163 | KiB |
+| combined L1/shared profile | 192 | KiB/SM |
+| shared allocation profile | 164 | KiB/SM |
+| max dynamic shared memory per block | 163 | KiB/block |
 | max resident blocks per SM | 32 | blocks/SM |
 | NVML `GetPowerUsage` 의미 | instantaneous | mW |
 
-주의: 실제 A100 SKU, MIG 설정, 클러스터 정책에 따라 보이는 SM 수가 달라질 수 있다. 실행 전 preflight 결과의 runtime SM 수를 확인한다.
+주의: 실제 A100 SKU, MIG 설정, 클러스터 정책에 따라 보이는 SM 수가 달라질 수 있다. 실행 전 preflight 결과의 runtime SM 수를 확인한다. `combined L1/shared profile`은 SM 내부 통합 capacity이고, `shared allocation profile`은 shared-memory 실험 feasibility에 쓰는 CUDA shared capacity다.
 
 ## 1. 저장소 준비
 

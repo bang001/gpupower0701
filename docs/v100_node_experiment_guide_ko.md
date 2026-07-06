@@ -10,7 +10,7 @@ V100은 Volta GV100 / compute capability 7.0 GPU이므로 A100/RTX 3090/H100과 
 
 - CUDA build arch는 `sm_70`이다.
 - FP16 Tensor Core baseline은 가능하지만 TF32/BF16/FP64 Tensor Core baseline은 A100/H100과 다르다.
-- 최신 Nsight Compute 계열에서 Volta/GV100 support가 빠져 있을 수 있다. V100 NCU 검증은 `ncu --list-chips`에 `gv100`이 있는 toolchain으로 진행한다.
+- 최신 Nsight Compute release highlights에는 Volta/GV100 support 제거가 공지되어 있다. V100 NCU 검증은 `ncu --list-chips`에 `gv100`이 있는 toolchain으로 진행한다.
 - NVML `GetPowerUsage` 의미는 instantaneous로 취급한다. 최종 비교에서는 `energy_source`와 `nvml_power_usage_semantics`를 반드시 표기한다.
 
 ## V100 기준 profile
@@ -23,13 +23,14 @@ V100은 Volta GV100 / compute capability 7.0 GPU이므로 A100/RTX 3090/H100과 
 | CUDA arch flag | `sm_70` | - |
 | default full SM count | 80 | SMs |
 | nominal L2 | 6 | MiB |
-| shared memory per SM | 96 | KiB |
-| max dynamic shared memory per block | 96 | KiB |
+| combined L1/shared profile | 128 | KiB/SM |
+| shared allocation profile | 96 | KiB/SM |
+| max dynamic shared memory per block | 96 | KiB/block |
 | max resident blocks per SM | 32 | blocks/SM |
 | NVML `GetPowerUsage` 의미 | instantaneous | mW |
 | NCU chip alias | `gv100` | - |
 
-주의: V100 PCIe/SXM, MIG가 아닌 다른 가상화 환경, 클러스터 할당 정책에 따라 보이는 GPU와 clock/power state가 달라질 수 있다. 실행 전 preflight 결과의 runtime SM 수와 power limit을 확인한다.
+주의: V100 PCIe/SXM, MIG가 아닌 다른 가상화 환경, 클러스터 할당 정책에 따라 보이는 GPU와 clock/power state가 달라질 수 있다. 실행 전 preflight 결과의 runtime SM 수와 power limit을 확인한다. `combined L1/shared profile`은 SM 내부 통합 capacity이고, `shared allocation profile`은 shared-memory 실험 feasibility에 쓰는 CUDA shared capacity다.
 
 ## 1. 저장소 준비
 
@@ -86,7 +87,7 @@ echo $?
 | 결과 | 의미 | 조치 |
 |---|---|---|
 | `gv100` 있음, query 성공 | V100 NCU validation 가능 | 현재 `ncu` 사용 |
-| `gv100` 없음 또는 query 실패 | 현재 NCU로 Volta profiling 불가 | NCU 2024.3 또는 2025.1 계열 toolchain 지정 |
+| `gv100` 없음 또는 query 실패 | 현재 NCU로 Volta profiling 불가 | `gv100`을 지원하는 NCU toolchain 지정. 2024.3/2025.1 계열은 예시 |
 
 예시:
 
