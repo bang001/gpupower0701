@@ -28,7 +28,7 @@
 <line x1="92.0" y1="405.0" x2="852.0" y2="405.0" stroke="#18181B" stroke-width="1.2"/>
 <line x1="92.0" y1="95.0" x2="92.0" y2="405.0" stroke="#18181B" stroke-width="1.2"/>
 <text x="472.0" y="453.0" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#52525B" text-anchor="middle">blocks/SM</text>
-<text x="22.0" y="250.0" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#52525B" text-anchor="middle">pJ/FLOP</text>
+<text x="92.0" y="83.0" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#52525B" text-anchor="start">pJ/FLOP</text>
 <polyline points="92.0,303.5 282.0,344.2 472.0,370.8 662.0,389.6 852.0,387.3" fill="none" stroke="#5B5FC7" stroke-width="2.6"/>
 <circle cx="92.0" cy="303.5" r="4.0" fill="#5B5FC7"/>
 <circle cx="282.0" cy="344.2" r="4.0" fill="#5B5FC7"/>

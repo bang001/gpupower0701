@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520">
+<title>Sweep 2 W_SM trend</title>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="38.0" y="38.0" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#18181B" text-anchor="start">Sweep 2: W_SM trend</text>
+<text x="38.0" y="62.0" font-family="Arial, sans-serif" font-size="13" font-weight="400" fill="#52525B" text-anchor="start">Initial 1-second sweep. x-axis is per-SM working set in KiB; y-axis is median pJ/FLOP.</text>
+<line x1="92.0" y1="389.7" x2="872.0" y2="389.7" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="80.0" y="393.7" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#52525B" text-anchor="end">5</text>
+<line x1="92.0" y1="326.5" x2="872.0" y2="326.5" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="80.0" y="330.5" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#52525B" text-anchor="end">10</text>
+<line x1="92.0" y1="263.3" x2="872.0" y2="263.3" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="80.0" y="267.3" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#52525B" text-anchor="end">20</text>
+<line x1="92.0" y1="179.8" x2="872.0" y2="179.8" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="80.0" y="183.8" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#52525B" text-anchor="end">50</text>
+<line x1="92.0" y1="116.6" x2="872.0" y2="116.6" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="80.0" y="120.6" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#52525B" text-anchor="end">100</text>
+<line x1="92.0" y1="100.0" x2="92.0" y2="410.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="92.0" y="432.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">1 KiB</text>
+<line x1="275.5" y1="100.0" x2="275.5" y2="410.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="275.5" y="432.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">16 KiB</text>
+<line x1="367.3" y1="100.0" x2="367.3" y2="410.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="367.3" y="432.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">64 KiB</text>
+<line x1="413.2" y1="100.0" x2="413.2" y2="410.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="413.2" y="432.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">128 KiB</text>
+<line x1="688.5" y1="100.0" x2="688.5" y2="410.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="688.5" y="432.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">8 MiB</text>
+<line x1="872.0" y1="100.0" x2="872.0" y2="410.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="872.0" y="432.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">128 MiB</text>
+<line x1="92.0" y1="410.0" x2="872.0" y2="410.0" stroke="#18181B" stroke-width="1.2"/>
+<line x1="92.0" y1="100.0" x2="92.0" y2="410.0" stroke="#18181B" stroke-width="1.2"/>
+<text x="482.0" y="458.0" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#52525B" text-anchor="middle">W_SM working set per SM</text>
+<text x="92.0" y="88.0" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#52525B" text-anchor="start">pJ/FLOP</text>
+<polyline points="92.0,324.1 137.9,382.3 183.8,377.0 229.6,398.4 275.5,393.9 321.4,388.1 367.3,390.5" fill="none" stroke="#D97706" stroke-width="2.5"/>
+<circle cx="92.0" cy="324.1" r="3.8" fill="#D97706"/>
+<circle cx="137.9" cy="382.3" r="3.8" fill="#D97706"/>
+<circle cx="183.8" cy="377.0" r="3.8" fill="#D97706"/>
+<circle cx="229.6" cy="398.4" r="3.8" fill="#D97706"/>
+<circle cx="275.5" cy="393.9" r="3.8" fill="#D97706"/>
+<circle cx="321.4" cy="388.1" r="3.8" fill="#D97706"/>
+<circle cx="367.3" cy="390.5" r="3.8" fill="#D97706"/>
+<polyline points="92.0,341.7 137.9,369.6 183.8,346.9 229.6,383.6 275.5,380.4 321.4,365.5 367.3,364.3" fill="none" stroke="#2563EB" stroke-width="2.5"/>
+<circle cx="92.0" cy="341.7" r="3.8" fill="#2563EB"/>
+<circle cx="137.9" cy="369.6" r="3.8" fill="#2563EB"/>
+<circle cx="183.8" cy="346.9" r="3.8" fill="#2563EB"/>
+<circle cx="229.6" cy="383.6" r="3.8" fill="#2563EB"/>
+<circle cx="275.5" cy="380.4" r="3.8" fill="#2563EB"/>
+<circle cx="321.4" cy="365.5" r="3.8" fill="#2563EB"/>
+<circle cx="367.3" cy="364.3" r="3.8" fill="#2563EB"/>
+<polyline points="413.2,250.3 459.1,210.1 504.9,205.6 550.8,202.7 596.7,204.8 642.6,214.1 688.5,211.0 734.4,218.3 780.2,210.7 826.1,218.2 872.0,210.1" fill="none" stroke="#B91C1C" stroke-width="2.5"/>
+<circle cx="413.2" cy="250.3" r="3.8" fill="#B91C1C"/>
+<circle cx="459.1" cy="210.1" r="3.8" fill="#B91C1C"/>
+<circle cx="504.9" cy="205.6" r="3.8" fill="#B91C1C"/>
+<circle cx="550.8" cy="202.7" r="3.8" fill="#B91C1C"/>
+<circle cx="596.7" cy="204.8" r="3.8" fill="#B91C1C"/>
+<circle cx="642.6" cy="214.1" r="3.8" fill="#B91C1C"/>
+<circle cx="688.5" cy="211.0" r="3.8" fill="#B91C1C"/>
+<circle cx="734.4" cy="218.3" r="3.8" fill="#B91C1C"/>
+<circle cx="780.2" cy="210.7" r="3.8" fill="#B91C1C"/>
+<circle cx="826.1" cy="218.2" r="3.8" fill="#B91C1C"/>
+<circle cx="872.0" cy="210.1" r="3.8" fill="#B91C1C"/>
+<rect x="700.0" y="95.0" width="16.0" height="8.0" fill="#D97706"/>
+<text x="724.0" y="103.0" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#18181B" text-anchor="start">shared_mma</text>
+<rect x="700.0" y="119.0" width="16.0" height="8.0" fill="#2563EB"/>
+<text x="724.0" y="127.0" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#18181B" text-anchor="start">l2_mma</text>
+<rect x="700.0" y="143.0" width="16.0" height="8.0" fill="#B91C1C"/>
+<text x="724.0" y="151.0" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#18181B" text-anchor="start">dram_mma</text>
+<text x="38.0" y="476.0" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#52525B" text-anchor="start">Interpretation: this sweep located candidate regions; it is not the final component coefficient estimate.</text>
+</svg>

@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="470" viewBox="0 0 1160 470">
+<title>Finalplan sweep design matrix</title>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="38.0" y="38.0" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#18181B" text-anchor="start">Finalplan sweep conditions</text>
+<text x="38.0" y="62.0" font-family="Arial, sans-serif" font-size="13" font-weight="400" fill="#52525B" text-anchor="start">All swept parameters are listed with units. Energy coefficients are derived after matched-control subtraction.</text>
+<rect x="28.0" y="82.0" width="105.0" height="30.0" fill="#F4F4F5" stroke="#D4D4D8"/>
+<text x="35.0" y="102.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#18181B" text-anchor="start">Component</text>
+<rect x="133.0" y="82.0" width="238.0" height="30.0" fill="#F4F4F5" stroke="#D4D4D8"/>
+<text x="140.0" y="102.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#18181B" text-anchor="start">Treatment-control pair</text>
+<rect x="371.0" y="82.0" width="82.0" height="30.0" fill="#F4F4F5" stroke="#D4D4D8"/>
+<text x="378.0" y="102.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#18181B" text-anchor="start">W_SM</text>
+<rect x="453.0" y="82.0" width="78.0" height="30.0" fill="#F4F4F5" stroke="#D4D4D8"/>
+<text x="460.0" y="102.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#18181B" text-anchor="start">blocks/SM</text>
+<rect x="531.0" y="82.0" width="78.0" height="30.0" fill="#F4F4F5" stroke="#D4D4D8"/>
+<text x="538.0" y="102.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#18181B" text-anchor="start">active_SM</text>
+<rect x="609.0" y="82.0" width="222.0" height="30.0" fill="#F4F4F5" stroke="#D4D4D8"/>
+<text x="616.0" y="102.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#18181B" text-anchor="start">Sweep</text>
+<rect x="831.0" y="82.0" width="74.0" height="30.0" fill="#F4F4F5" stroke="#D4D4D8"/>
+<text x="838.0" y="102.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#18181B" text-anchor="start">Run</text>
+<rect x="905.0" y="82.0" width="218.0" height="30.0" fill="#F4F4F5" stroke="#D4D4D8"/>
+<text x="912.0" y="102.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#18181B" text-anchor="start">NCU validation</text>
+<rect x="28.0" y="112.0" width="105.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="35.0" y="145.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#18181B" text-anchor="start">Tensor</text>
+<rect x="133.0" y="112.0" width="238.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="140.0" y="145.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">reg_mma - reg_operand_only</text>
+<rect x="371.0" y="112.0" width="82.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="378.0" y="145.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">2048 KiB</text>
+<rect x="453.0" y="112.0" width="78.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="460.0" y="145.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">16</text>
+<rect x="531.0" y="112.0" width="78.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="538.0" y="145.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">82 SM</text>
+<rect x="609.0" y="112.0" width="222.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="616.0" y="145.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">reuse = 1, 2, 4, 8, 16</text>
+<rect x="831.0" y="112.0" width="74.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="838.0" y="145.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">5 s x 3</text>
+<rect x="905.0" y="112.0" width="218.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="912.0" y="145.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">HMMA present; spill/local 0</text>
+<rect x="28.0" y="170.0" width="105.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="35.0" y="203.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#18181B" text-anchor="start">Shared scalar</text>
+<rect x="133.0" y="170.0" width="238.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="140.0" y="192.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">shared_scalar_load_only - clocked_empty</text>
+<text x="140.0" y="209.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start"></text>
+<rect x="371.0" y="170.0" width="82.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="378.0" y="203.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">64 KiB</text>
+<rect x="453.0" y="170.0" width="78.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="460.0" y="203.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">16</text>
+<rect x="531.0" y="170.0" width="78.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="538.0" y="203.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">82 SM</text>
+<rect x="609.0" y="170.0" width="222.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="616.0" y="203.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">load_repeat = 1, 2, 4, 8, 16</text>
+<rect x="831.0" y="170.0" width="74.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="838.0" y="203.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">5 s x 3</text>
+<rect x="905.0" y="170.0" width="218.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="912.0" y="192.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">shared bytes dominant</text>
+<text x="912.0" y="209.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">bank conflicts 0</text>
+<rect x="28.0" y="228.0" width="105.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="35.0" y="261.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#18181B" text-anchor="start">Global L1</text>
+<rect x="133.0" y="228.0" width="238.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="140.0" y="250.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">global_l1_load_only - clocked_empty</text>
+<text x="140.0" y="267.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start"></text>
+<rect x="371.0" y="228.0" width="82.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="378.0" y="261.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">16, 64 KiB</text>
+<rect x="453.0" y="228.0" width="78.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="460.0" y="261.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">16</text>
+<rect x="531.0" y="228.0" width="78.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="538.0" y="261.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">82 SM</text>
+<rect x="609.0" y="228.0" width="222.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="616.0" y="261.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">load_repeat = 1, 2, 4, 8, 16</text>
+<rect x="831.0" y="228.0" width="74.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="838.0" y="261.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">5 s x 3</text>
+<rect x="905.0" y="228.0" width="218.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="912.0" y="261.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">W=16 accepted; W=64 rejected</text>
+<rect x="28.0" y="286.0" width="105.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="35.0" y="319.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#18181B" text-anchor="start">L2 CG</text>
+<rect x="133.0" y="286.0" width="238.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="140.0" y="319.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">l2_cg_load_only - clocked_empty</text>
+<rect x="371.0" y="286.0" width="82.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="378.0" y="319.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">64 KiB</text>
+<rect x="453.0" y="286.0" width="78.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="460.0" y="319.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">16</text>
+<rect x="531.0" y="286.0" width="78.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="538.0" y="319.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">82 SM</text>
+<rect x="609.0" y="286.0" width="222.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="616.0" y="319.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">load_repeat = 1, 2, 4, 8, 16</text>
+<rect x="831.0" y="286.0" width="74.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="838.0" y="319.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">5 s x 3</text>
+<rect x="905.0" y="286.0" width="218.0" height="58.0" fill="#FAFAFA" stroke="#D4D4D8"/>
+<text x="912.0" y="319.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">L1 bypass; L2 hit 99.941%</text>
+<rect x="28.0" y="344.0" width="105.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="35.0" y="377.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#18181B" text-anchor="start">DRAM CG</text>
+<rect x="133.0" y="344.0" width="238.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="140.0" y="377.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">dram_cg_load_only - clocked_empty</text>
+<rect x="371.0" y="344.0" width="82.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="378.0" y="377.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">8192 KiB</text>
+<rect x="453.0" y="344.0" width="78.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="460.0" y="377.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">16</text>
+<rect x="531.0" y="344.0" width="78.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="538.0" y="377.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">82 SM</text>
+<rect x="609.0" y="344.0" width="222.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="616.0" y="377.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">load_repeat = 1, 4, 16</text>
+<rect x="831.0" y="344.0" width="74.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="838.0" y="377.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">5 s x 3</text>
+<rect x="905.0" y="344.0" width="218.0" height="58.0" fill="#FFFFFF" stroke="#D4D4D8"/>
+<text x="912.0" y="377.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#18181B" text-anchor="start">sanity path; DRAM traffic dominant</text>
+<text x="38.0" y="435.0" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#52525B" text-anchor="start">W_SM is working-set size per SM. blocks/SM and active_SM fix occupancy/load while the factor sweep changes operation or byte count.</text>
+</svg>
