@@ -50,6 +50,8 @@ bash results/summary/a100_component_finalplan_$(date +%Y%m%d)_commands.sh
 
 `--target-profile`은 `a100`, `v100`, `h100`을 지원한다.
 
+V100 노드 작업을 다른 작업자나 에이전트에게 전달할 때는 실행 프롬프트를 [v100_experiment_prompt_ko.md](v100_experiment_prompt_ko.md)에 따로 분리해 두었다. 이 프롬프트는 `sm_70`, `NCU_CHIP=gv100`, V100 L2/shared capacity, NCU path acceptance 기준을 명시해서 RTX 3090/A100 좌표가 섞이는 문제를 줄이기 위한 것이다.
+
 ## 3. 플랫폼별 핵심 차이
 
 | GPU | build arch | default SMs | register/SM | L1/shared capacity | L2 | memory | 주요 실험 차이 |

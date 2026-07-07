@@ -13,6 +13,8 @@ V100은 Volta GV100 / compute capability 7.0 GPU이므로 A100/RTX 3090/H100과 
 - 최신 Nsight Compute release highlights에는 Volta/GV100 support 제거가 공지되어 있다. V100 NCU 검증은 `ncu --list-chips`에 `gv100`이 있는 toolchain으로 진행한다.
 - NVML `GetPowerUsage` 의미는 instantaneous로 취급한다. 최종 비교에서는 `energy_source`와 `nvml_power_usage_semantics`를 반드시 표기한다.
 
+새 V100 노드에서 다른 작업자나 에이전트에게 실험을 맡길 때는 프롬프트를 본 문서에 섞지 말고 [v100_experiment_prompt_ko.md](v100_experiment_prompt_ko.md)를 별도로 전달한다. 이 가이드는 실행 절차와 판정 기준이고, 프롬프트 문서는 “무엇을 확인하고 어떤 산출물을 만들어야 하는지”를 지시하는 용도다.
+
 ## V100 기준 profile
 
 | 항목 | 값 | 단위 |
@@ -31,6 +33,20 @@ V100은 Volta GV100 / compute capability 7.0 GPU이므로 A100/RTX 3090/H100과 
 | NCU chip alias | `gv100` | - |
 
 주의: V100 PCIe/SXM, MIG가 아닌 다른 가상화 환경, 클러스터 할당 정책에 따라 보이는 GPU와 clock/power state가 달라질 수 있다. 실행 전 preflight 결과의 runtime SM 수와 power limit을 확인한다. `combined L1/shared profile`은 SM 내부 통합 capacity이고, `shared allocation profile`은 shared-memory 실험 feasibility에 쓰는 CUDA shared capacity다.
+
+## V100에서 반드시 분리할 기준
+
+RTX 3090이나 A100에서 쓰던 좌표를 그대로 V100에 적용하면 L1/L2 path acceptance가 쉽게 깨진다. 다음 값이 섞이면 최종 component coefficient로 채택하지 않는다.
+
+| 혼입 신호 | 왜 문제인가 | 조치 |
+|---|---|---|
+| `sm_86`, `active_SM=82`, `max_blocks_per_SM=16` | RTX 3090/GA102 기준이 V100 실행에 섞인 상태 | build와 run option을 `sm_70`, `target_profile=v100`, `active_SM=80`으로 재확인 |
+| `sm_80`, `ga100`, `L2=40 MiB`, `shared=164 KiB/SM` | A100/GA100 기준이 섞인 상태 | A100 결과와 V100 결과를 다른 CSV/report로 분리 |
+| `NCU_CHIP` 미지정 또는 `gv100` query 실패 | Volta counter 경로 검증이 불가능할 수 있음 | `NCU_CHIP=gv100`으로 재실행하고, 실패하면 “NCU path acceptance 미완료”로 보고 |
+| L2 후보에서 L1 hit가 높음 | L2 coefficient가 L1 hit path와 섞임 | V100 L2는 `l2_cg_load_only` 우선, NCU에서 L1 hit <= 1% 확인 |
+| DRAM sanity에서 `W_SM`이 L2와 비슷함 | DRAM streaming이 아니라 L2 재사용을 측정할 수 있음 | `DRAM_W_SM_KIB_OVERRIDE=8192` 이상으로 sidecar를 재실행 |
+
+이 실험의 최종값은 순수 회로 에너지가 아니라 NCU로 경로가 검증된 effective microbenchmark coefficient다. 즉 `pJ/FLOP`, `pJ/bit`, `pJ/Byte`는 “이 커널, 이 access pattern, 이 GPU 상태에서 관찰된 board-level incremental coefficient”로 해석해야 한다.
 
 ## 1. 저장소 준비
 
@@ -364,14 +380,18 @@ NCU="${NCU:-$(command -v ncu)}" NCU_CHIP=gv100 scripts/run_ncu.sh --query-metric
 
 ```bash
 NCU="${NCU:-$(command -v ncu)}" \
+NCU_CHIP=gv100 \
 BIN=./build-v100/a100_fp16_energy_v2 \
 TARGET_PROFILE=v100 \
 ACTIVE_SM=80 \
 GPU=0 \
+DRAM_W_SM_KIB_OVERRIDE=8192 \
 OUTDIR=results/ncu/v100_validation_$(date +%Y%m%d) \
 RAW_OUT=results/raw/v100_ncu_validation_sidecar_$(date +%Y%m%d).csv \
 bash scripts/run_ncu_validation.sh
 ```
+
+`DRAM_W_SM_KIB_OVERRIDE=8192`는 V100의 6 MiB L2보다 충분히 큰 per-SM working set으로 DRAM streaming 후보를 검증하기 위한 기본값이다. 이 값이 너무 작으면 DRAM row가 L2 재사용 row로 오인될 수 있으므로 DRAM coefficient 후보로 쓰지 않는다.
 
 권한 또는 버전 문제가 있으면 다음을 구분해서 기록한다.
 

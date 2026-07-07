@@ -27,6 +27,12 @@ Platform guides:
 | V100 | `docs/v100_node_experiment_guide_ko.md` |
 | H100 | `docs/h100_node_experiment_guide_ko.md` |
 
+Prompt templates:
+
+| GPU | prompt |
+|---|---|
+| V100 | `docs/v100_experiment_prompt_ko.md` |
+
 ## Operation Definition
 
 - 1 logical op = 1 warp-level FP16 `m16n16k16` MMA.
