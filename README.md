@@ -16,6 +16,8 @@ For component-energy claims, use the acceptance-first finalplan flow:
 must use NCU actual traffic counters and should be reported as transaction-path
 effective coefficients, not as SRAM/HBM bitcell energy. The self-critique and
 known limitations are tracked in `docs/component_energy_self_critique_ko.md`.
+For the detailed NCU validation and pJ/FLOP or pJ/byte calculation method, see
+`docs/ncu_validation_energy_calculation_ko.md`.
 
 Platform guides:
 

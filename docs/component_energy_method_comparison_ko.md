@@ -10,6 +10,7 @@
 |---|---|
 | 최종 실험 계획 | `docs/component_energy_final_experiment_plan_ko.md` |
 | 구현 동작 설명 | `docs/howitworks.md` |
+| NCU 검증과 pJ 계산 | `docs/ncu_validation_energy_calculation_ko.md` |
 | 자가비판 | `docs/component_energy_self_critique_ko.md` |
 | 최종 RTX 3090 결과 | `results/summary/rtx3090_finalplan_component_energy_report_20260705_ko.md` |
 | 최종 matched-control 결과 | `results/summary/rtx3090_finalplan_matched_control_report_20260705.md` |
