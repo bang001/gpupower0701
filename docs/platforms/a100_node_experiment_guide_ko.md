@@ -103,7 +103,7 @@ cmake -S . -B build-a100 \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CUDA_ARCHITECTURES=80
 
-cmake --build build-a100 -j
+cmake --build build-a100 --clean-first -j
 ```
 
 conda/toolkit 경로를 명시해야 하는 환경이면 다음처럼 지정한다.
@@ -115,10 +115,13 @@ cmake -S . -B build-a100 \
   -DCUDAToolkit_ROOT=/path/to/cuda \
   -DCMAKE_CUDA_ARCHITECTURES=80
 
-cmake --build build-a100 -j
+cmake --build build-a100 --clean-first -j
 ```
 
 빌드 로그에서 `ptxas` register count와 spill을 확인한다. 주요 kernel에서 `spill stores` 또는 `spill loads`가 발생하면 보고서에 위험으로 기록한다.
+`git pull` 후 `src/`, `include/`, `CMakeLists.txt`가 바뀐 경우에는 반드시 clean rebuild를 한다.
+특히 final run raw CSV는 C++ harness의 CSV header에 `measurement_scope` 컬럼이 있는
+바이너리로 생성되어야 한다.
 
 ## 4. Dry-run sanity check
 
@@ -215,9 +218,30 @@ CSV에서 확인할 항목:
 | `compute_capability` | `8.0` |
 | `sm_count` | 보통 `108`, MIG/SKU에 따라 다를 수 있음 |
 | `energy_source` | `nvml_total_energy` 우선 |
+| `measurement_scope` | `gpu_device_total_energy_counter` |
 | `nvml_power_usage_semantics` | `instant` |
 | `smid_histogram_ok` | active row에서 `true` |
 | `expected_reg_operand_ops` | `reg_operand_only`, `reg_mma`에서 `active_SM * blocks/SM * ITER * reuse_factor` |
+
+schema smoke audit:
+
+```bash
+python3 scripts/audit_power_api_measurements.py \
+  results/raw/a100_smoke_reg_mma.csv \
+  --target-profile a100 \
+  --out-csv results/summary/a100_smoke_power_api_audit.csv \
+  --out-md results/summary/a100_smoke_power_api_audit.md \
+  --fail-on-reject \
+  --fail-on-provisional \
+  --require-explicit-measurement-scope
+```
+
+이 단계에서 모든 row가 `missing_column:measurement_scope` 또는
+`missing_explicit_measurement_scope`로 reject되면, GPU 측정값 문제가 아니라 stale
+binary/schema 문제다. 현재 source를 pull한 뒤 `cmake --build build-a100
+--clean-first -j`로 다시 빌드하고, 기존 `results/raw/a100_component_finalplan_*.csv`는
+archive로 옮긴 뒤 재실행한다. 구버전 CSV에 새 row를 append하면 power API audit이
+전체 reject될 수 있다.
 
 ## 6. Full sweep 실행
 
@@ -360,7 +384,7 @@ ERR_NVGPUCTRPERM
 | paired-difference | pair, delta_E_J (J), denominator, coefficient, unit |
 | blocks sweep | mode, B=1, B=2, B=4, B=8, B=16, B=32 |
 | W sweep | mode, W_SM range (KiB/MiB), pJ/FLOP range |
-| NCU validation | mode, tensor %, L1 hit rate (%), L2 hit rate (%), L1 accesses (requests/sectors), L2 accesses (sectors), DRAM accesses (sectors), shared bytes/op, L2 bytes/op, DRAM bytes/op, top stall %, status |
+| NCU validation | mode, tensor %, L1 hit rate (%), L2 hit rate (%), L1 accesses (requests/sectors), L2 accesses (sectors), DRAM accesses (sectors), L1 bytes, L2 bytes, DRAM bytes, shared bytes, top stall %, status |
 
 Plot 생성:
 
@@ -435,9 +459,9 @@ A100은 40 MiB L2가 있으므로 `W_SM=256 KiB`에서 capacity 기반 `l2_load_
 
 | NCU 기준 | 통과 조건 |
 |---|---:|
-| Global L1 | L1 hit >= 95%, L2/L1 bytes <= 1% |
-| L2 capacity | L1 hit <= 1%, L2 hit >= 95%, DRAM/L2 bytes <= 2% |
-| Shared scalar | shared bytes 존재, bank conflict 0 또는 매우 낮음 |
+| Global L1 | L1 hit >= 95%, L1 access/bytes 존재, L2/L1 bytes <= 1% |
+| L2 capacity | L1 hit <= 1%, L2 hit >= 95%, L2 access/bytes 존재, DRAM/L2 bytes <= 2% |
+| Shared scalar | shared access/bytes 존재, bank conflict 0 또는 매우 낮음 |
 | Tensor | HMMA > 0, spill/local 0 |
 
 보고서에는 `board-level effective coefficient`, `not pure physical component energy`를 명시한다. A100의 HBM2 물리 pJ/bit 문헌값과 본 실험의 DRAM streaming pJ/bit는 같은 의미가 아니다.

@@ -65,6 +65,7 @@ struct ResultRow {
   std::string tensor_modes;
   std::string energy_source;
   std::string energy_integration_method;
+  std::string measurement_scope;
   std::string mode_family;
   std::string denominator_level;
   bool nvml_total_energy_supported = false;

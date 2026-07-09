@@ -742,6 +742,9 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
   row.energy_integration_method =
       row.nvml_total_energy_supported ? "total_energy_mj_delta"
                                       : "endpoint_power_trapezoid";
+  row.measurement_scope =
+      row.nvml_total_energy_supported ? "gpu_device_total_energy_counter"
+                                      : "gpu_device_power_usage_fallback";
   row.mode_family = mode_family(opts.mode);
   row.denominator_level = denominator_level(opts.mode);
   row.nvml_power_usage_semantics = opts.profile.nvml_power_usage_semantics;
@@ -850,6 +853,7 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
         << ";expected_dram_bytes=" << row.expected_dram_bytes
         << ";expected_store_bytes=" << row.expected_store_bytes
         << ";expected_addr_ops=" << row.expected_addr_ops
+        << ";measurement_scope=" << row.measurement_scope
         << ";mode_family=" << row.mode_family
         << ";denominator_level=" << row.denominator_level << ";"
         << "gpu_active=" << (gpu_active ? 1 : 0) << ";";

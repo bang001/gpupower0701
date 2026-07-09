@@ -47,7 +47,7 @@ std::string csv_header() {
          "clock_mem_mhz,temp_C,profile_name,architecture_family,chip,"
          "compute_capability,sm_count,l2_mib,unified_l1_shared_kib_per_sm,"
          "shared_kib_per_sm,tensor_modes,"
-         "energy_source,energy_integration_method,mode_family,"
+         "energy_source,energy_integration_method,measurement_scope,mode_family,"
          "denominator_level,nvml_total_energy_supported,"
          "nvml_power_usage_semantics,nvml_field_power_instant_supported,"
          "nvml_field_power_average_supported,power_before_mw,power_after_mw,"
@@ -127,6 +127,7 @@ void CsvWriter::write(const ResultRow& row) {
       << ',' << csv_escape(row.tensor_modes) << ','
       << csv_escape(row.energy_source) << ','
       << csv_escape(row.energy_integration_method) << ','
+      << csv_escape(row.measurement_scope) << ','
       << csv_escape(row.mode_family) << ','
       << csv_escape(row.denominator_level) << ','
       << (row.nvml_total_energy_supported ? "true" : "false") << ','

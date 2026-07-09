@@ -71,7 +71,10 @@ def audit_row(
     target_profile: str,
     require_explicit_measurement_scope: bool,
 ) -> dict[str, str]:
-    missing = sorted(col for col in REQUIRED_COLUMNS if col not in row)
+    required_columns = set(REQUIRED_COLUMNS)
+    if require_explicit_measurement_scope:
+        required_columns.add("measurement_scope")
+    missing = sorted(col for col in required_columns if col not in row)
     reasons: list[str] = [f"missing_column:{col}" for col in missing]
     notes: list[str] = []
 
@@ -115,7 +118,10 @@ def audit_row(
 
     raw_measurement_scope = row.get("measurement_scope", "")
     measurement_scope = raw_measurement_scope or inferred_measurement_scope
-    if require_explicit_measurement_scope and not raw_measurement_scope:
+    if require_explicit_measurement_scope and "measurement_scope" not in row:
+        reasons.append("missing_explicit_measurement_scope")
+        notes.append("raw_csv_schema_missing_measurement_scope_rebuild_harness")
+    elif require_explicit_measurement_scope and not raw_measurement_scope:
         reasons.append("missing_explicit_measurement_scope")
     if raw_measurement_scope and raw_measurement_scope != inferred_measurement_scope:
         reasons.append("measurement_scope_energy_source_mismatch")
@@ -298,6 +304,13 @@ def write_markdown(path: str, rows: list[dict[str, str]], csv_path: str) -> None
             "or lacks required metadata.\n"
         )
         f.write(
+            "- If every row is rejected with `missing_column:measurement_scope` "
+            "or `raw_csv_schema_missing_measurement_scope_rebuild_harness`, the "
+            "raw CSV was produced by an old benchmark binary or appended to an "
+            "old schema. Pull the current source, rebuild the target-profile "
+            "binary, move the stale raw CSVs aside, and rerun the energy sweep.\n"
+        )
+        f.write(
             "- This audit does not prove L1/L2/DRAM path correctness. NCU path "
             "acceptance is still required after this step.\n"
         )
@@ -374,6 +387,7 @@ def run_self_test() -> None:
     )
     assert_selftest(
         missing_scope_result["status"] == "reject"
+        and "missing_column:measurement_scope" in missing_scope_result["reasons"]
         and "missing_explicit_measurement_scope" in missing_scope_result["reasons"],
         "missing_explicit_measurement_scope",
         missing_scope_result["reasons"],

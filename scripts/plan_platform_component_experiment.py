@@ -178,6 +178,9 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     power_audit_md = f"{summary_prefix}_power_api_audit.md"
     power_state_audit_csv = f"{summary_prefix}_power_state_audit.csv"
     power_state_audit_md = f"{summary_prefix}_power_state_audit.md"
+    schema_smoke_csv = f"{raw_prefix}_schema_smoke.csv"
+    schema_smoke_audit_csv = f"{summary_prefix}_schema_smoke_power_api_audit.csv"
+    schema_smoke_audit_md = f"{summary_prefix}_schema_smoke_power_api_audit.md"
     matched_summary = f"{summary_prefix}_matched_control_summary.csv"
     matched_detail = f"{summary_prefix}_matched_control_detail.csv"
     matched_md = f"{summary_prefix}_matched_control_report.md"
@@ -231,6 +234,44 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         f"{raw_prefix}_l2.csv",
         f"{raw_prefix}_dram.csv",
     ]
+    matrix_csvs = [
+        f"{raw_prefix}_tensor_matrix.csv",
+        f"{raw_prefix}_shared_matrix.csv",
+        f"{raw_prefix}_l1_matrix.csv",
+        f"{raw_prefix}_l2_matrix.csv",
+        f"{raw_prefix}_dram_matrix.csv",
+    ]
+    stale_paths = [
+        schema_smoke_csv,
+        schema_smoke_audit_csv,
+        schema_smoke_audit_md,
+        *energy_csvs,
+        *matrix_csvs,
+        ncu_raw,
+        acceptance_csv,
+        acceptance_md,
+        power_audit_csv,
+        power_audit_md,
+        power_state_audit_csv,
+        power_state_audit_md,
+        matched_summary,
+        matched_detail,
+        matched_md,
+        reliability_csv,
+        reliability_md,
+        instability_csv,
+        instability_md,
+        strict_summary_csv,
+        strict_summary_md,
+        strict_audit_csv,
+        strict_audit_md,
+        result_manifest_csv,
+        result_manifest_md,
+        package_audit_csv,
+        package_audit_md,
+        gap_report_csv,
+        gap_report_md,
+    ]
 
     commands = [
         "#!/usr/bin/env bash",
@@ -266,7 +307,75 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         line(["python3", "scripts/build_strict_component_summary.py", "--self-test"]),
         line(["python3", "scripts/audit_strict_component_summary.py", "--self-test"]),
         "",
-        "# 3. Energy sweeps. Keep NCU detached from these runs.",
+        "# 3. Move stale generated outputs aside before writing new CSV schemas.",
+        "RUN_STAMP=$(date +%Y%m%d_%H%M%S)",
+        f"STALE_DIR=results/archive/{args.target_profile}_component_finalplan_{tag}_stale_${{RUN_STAMP}}",
+        "STALE_PATHS=(",
+        *(f"  {q(path)}" for path in stale_paths),
+        ")",
+        "for path in \"${STALE_PATHS[@]}\"; do",
+        "  if [[ -e \"${path}\" ]]; then",
+        "    mkdir -p \"${STALE_DIR}/$(dirname \"${path}\")\"",
+        "    mv \"${path}\" \"${STALE_DIR}/${path}\"",
+        "  fi",
+        "done",
+        f"if [[ -e {q(ncu_dir)} ]]; then",
+        f"  mkdir -p \"${{STALE_DIR}}/$(dirname {q(ncu_dir)})\"",
+        f"  mv {q(ncu_dir)} \"${{STALE_DIR}}/{ncu_dir}\"",
+        "fi",
+        "",
+        "# 4. One-row schema smoke test. This catches old binaries before the full sweep.",
+        line(
+            [
+                q(binary),
+                "--gpu-list",
+                q(args.gpu_ids.split(",")[0]),
+                "--mode",
+                "clocked_empty",
+                "--w-sm-kib",
+                "1",
+                "--blocks-per-sm",
+                "1",
+                "--target-profile",
+                q(args.target_profile),
+                "--active-sm",
+                "1",
+                "--seconds",
+                "0.2",
+                "--iters",
+                "1",
+                "--repeats",
+                "1",
+                "--reuse-factor",
+                "1",
+                "--load-repeat",
+                "1",
+                "--store-repeat",
+                "1",
+                "--output",
+                q(schema_smoke_csv),
+                "--verify-smid",
+                "0",
+            ]
+        ),
+        line(
+            [
+                "python3",
+                "scripts/audit_power_api_measurements.py",
+                q(schema_smoke_csv),
+                "--target-profile",
+                q(args.target_profile),
+                "--out-csv",
+                q(schema_smoke_audit_csv),
+                "--out-md",
+                q(schema_smoke_audit_md),
+                "--fail-on-reject",
+                "--fail-on-provisional",
+                "--require-explicit-measurement-scope",
+            ]
+        ),
+        "",
+        "# 5. Energy sweeps. Keep NCU detached from these runs.",
         run_component_command(
             binary=binary,
             profile=args.target_profile,
@@ -280,7 +389,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             reuse_factors="1,2,4,8,16",
             load_repeats="1",
             output=energy_csvs[0],
-            matrix=f"{raw_prefix}_tensor_matrix.csv",
+            matrix=matrix_csvs[0],
         ),
         run_component_command(
             binary=binary,
@@ -295,7 +404,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             reuse_factors="1",
             load_repeats="1,2,4,8,16",
             output=energy_csvs[1],
-            matrix=f"{raw_prefix}_shared_matrix.csv",
+            matrix=matrix_csvs[1],
         ),
         run_component_command(
             binary=binary,
@@ -310,7 +419,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             reuse_factors="1",
             load_repeats="1,2,4,8,16",
             output=energy_csvs[2],
-            matrix=f"{raw_prefix}_l1_matrix.csv",
+            matrix=matrix_csvs[2],
         ),
         run_component_command(
             binary=binary,
@@ -325,7 +434,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             reuse_factors="1",
             load_repeats="1,2,4,8,16",
             output=energy_csvs[3],
-            matrix=f"{raw_prefix}_l2_matrix.csv",
+            matrix=matrix_csvs[3],
         ),
         run_component_command(
             binary=binary,
@@ -340,10 +449,10 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             reuse_factors="1",
             load_repeats="1,4,16",
             output=energy_csvs[4],
-            matrix=f"{raw_prefix}_dram_matrix.csv",
+            matrix=matrix_csvs[4],
         ),
         "",
-        "# 4. Power API audit before spending time on NCU.",
+        "# 6. Power API audit before spending time on NCU.",
         line(
             [
                 "python3",
@@ -361,7 +470,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
-        "# 5. Power-state row-quality audit. This does not replace the power API gate.",
+        "# 7. Power-state row-quality audit. This does not replace the power API gate.",
         line(
             [
                 "python3",
@@ -374,7 +483,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
-        "# 6. NCU sidecar validation. These profiler runs are not energy rows.",
+        "# 8. NCU sidecar validation. These profiler runs are not energy rows.",
         line(
             [
                 f"NCU_EXPLICIT_METRICS_ONLY=1",
@@ -405,7 +514,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
-        "# 7. Path acceptance.",
+        "# 9. Path acceptance.",
         line(
             [
                 "python3",
@@ -426,7 +535,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
-        "# 8. Matched-control analysis with NCU byte-denominator scaling.",
+        "# 10. Matched-control analysis with NCU byte-denominator scaling.",
         line(
             [
                 "python3",
@@ -462,7 +571,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
-        "# 9. Component reliability audit.",
+        "# 11. Component reliability audit.",
         line(
             [
                 "python3",
@@ -485,7 +594,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
-        "# 10. Matched-control instability/root-cause audit.",
+        "# 12. Matched-control instability/root-cause audit.",
         line(
             [
                 "python3",
@@ -498,7 +607,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
-        "# 11. Build strict component summary package from accepted evidence.",
+        "# 13. Build strict component summary package from accepted evidence.",
         line(
             [
                 "python3",
@@ -530,7 +639,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
-        "# 12. Audit strict component summary against reliability/detail artifacts.",
+        "# 14. Audit strict component summary against reliability/detail artifacts.",
         line(
             [
                 "python3",
@@ -547,7 +656,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
-        "# 13. Write the expected result manifest for copy-back and gap triage.",
+        "# 15. Write the expected result manifest for copy-back and gap triage.",
         line(
             [
                 "python3",
@@ -565,7 +674,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
-        "# 14. Audit the full platform result package before publishing or copying back.",
+        "# 16. Audit the full platform result package before publishing or copying back.",
         "set +e",
         line(
             [
@@ -587,7 +696,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         "PACKAGE_AUDIT_RC=$?",
         "set -e",
         "",
-        "# 15. Always write triage/goal-readiness/dashboard artifacts.",
+        "# 17. Always write triage/goal-readiness/dashboard artifacts.",
         line(
             [
                 "python3",
@@ -691,8 +800,12 @@ target node allocation.
 
 ```bash
 cmake -S . -B {build_dir} -DCMAKE_CUDA_ARCHITECTURES={profile['cuda_arch']}
-cmake --build {build_dir} -j
+cmake --build {build_dir} --clean-first -j
 ```
+
+Use a clean rebuild after every `git pull` that changes `src/`, `include/`, or
+`CMakeLists.txt`. In particular, raw CSVs for final runs must be produced by a
+binary whose CSV header includes `measurement_scope`.
 
 ## Component Coordinates
 
@@ -703,6 +816,27 @@ cmake --build {build_dir} -j
 | Global L1 | `clocked_empty,global_l1_load_only` | {profile['l1_w']} | load_repeat 1,2,4,8,16 |
 | L2 | `{profile['l2_modes']}` | {profile['l2_w']} | load_repeat 1,2,4,8,16 |
 | DRAM sanity | `clocked_empty,dram_cg_load_only` | {profile['dram_w']} | load_repeat 1,4,16 |
+
+## Architecture-Specific NCU Evidence
+
+The generated package is not valid from hit rate alone. Every V100/A100/H100
+run must keep the architecture-specific NCU sidecar and acceptance report with
+both cache-hit direction and traffic magnitude:
+
+| evidence | required columns | unit / meaning |
+|---|---|---|
+| L1 hit direction | `l1_hit_rate_pct` | percent |
+| L2 hit direction | `l2_hit_rate_pct` | percent |
+| access magnitude | `l1_accesses`, `l2_accesses`, `dram_accesses` | L1 requests when available, otherwise sectors; L2/DRAM sectors |
+| byte magnitude | `shared_bytes`, `l1_bytes`, `l2_bytes`, `dram_bytes` | bytes, preferred denominator for memory pJ/byte or pJ/bit |
+| stall context | `stall_long_scoreboard_pct` | percent-like NCU stall signal |
+
+V100 uses `NCU_CHIP=gv100` and primarily trusts `l2_cg_load_only` for L2 path
+validation. A100 uses `NCU_CHIP=ga100` and compares capacity `l2_load_only`
+against `l2_cg_load_only` because GA100 has a much larger 40 MiB L2. H100 uses
+`NCU_CHIP=gh100`; the current kernels are WMMA compatibility kernels, so the
+NCU evidence validates the executed compatibility path, not Hopper-native
+WGMMA/TMA/FP8 paths.
 
 ## How To Run
 
@@ -722,7 +856,14 @@ set manually.
 For a quick profiler preflight only, override the sidecar lists manually, for
 example `TENSOR_REUSE_FACTORS=4 MEMORY_LOAD_REPEATS=4 DRAM_LOAD_REPEATS=4`.
 
-Before the energy sweeps, the generated shell runs
+Before the energy sweeps, the generated shell moves stale generated artifacts
+for this profile/tag into `results/archive/..._stale_<timestamp>`. This avoids
+appending new rows to an old CSV schema. It then runs a one-row schema smoke
+test and audits that row with `--require-explicit-measurement-scope`. If the
+binary is stale and the CSV header lacks `measurement_scope`, the script stops
+there instead of producing thousands of unusable rows.
+
+Before the schema smoke and energy sweeps, the generated shell runs
 `scripts/audit_power_api_measurements.py --self-test` and
 `scripts/build_strict_component_summary.py --self-test` and
 `scripts/audit_strict_component_summary.py --self-test` so the A100 semantics,
@@ -773,8 +914,10 @@ partitioning, or an SKU with fewer visible SMs, regenerate this plan with
 `--active-sm <runtime SM count>` after preflight and keep the same value in the
 package audit.
 The package audit also verifies that the NCU summary exposes L1/L2 hit rates,
-L1/L2/DRAM access counts, bytes, and long-scoreboard stall counters before the
-result can be treated as final evidence. The NCU summary must include
+L1/L2/DRAM access counts, byte traffic, and long-scoreboard stall counters
+before the result can be treated as final evidence. Hit rate alone is not enough:
+accepted cache rows must also show path-relevant access/byte magnitude. The NCU
+summary must include
 `clocked_empty`, `reg_operand_only`, `reg_mma`, `shared_scalar_load_only`,
 `global_l1_load_only`, `l2_cg_load_only`, and `dram_cg_load_only` coverage.
 A100/H100 packages must also include `l2_load_only` coverage. Tensor pair NCU

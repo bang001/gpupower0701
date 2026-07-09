@@ -28,8 +28,12 @@ target node allocation.
 
 ```bash
 cmake -S . -B build-a100 -DCMAKE_CUDA_ARCHITECTURES=80
-cmake --build build-a100 -j
+cmake --build build-a100 --clean-first -j
 ```
+
+Use a clean rebuild after every `git pull` that changes `src/`, `include/`, or
+`CMakeLists.txt`. In particular, raw CSVs for final runs must be produced by a
+binary whose CSV header includes `measurement_scope`.
 
 ## Component Coordinates
 
@@ -40,6 +44,27 @@ cmake --build build-a100 -j
 | Global L1 | `clocked_empty,global_l1_load_only` | 16,32 | load_repeat 1,2,4,8,16 |
 | L2 | `clocked_empty,l2_load_only,l2_cg_load_only` | 256 | load_repeat 1,2,4,8,16 |
 | DRAM sanity | `clocked_empty,dram_cg_load_only` | 8192 | load_repeat 1,4,16 |
+
+## Architecture-Specific NCU Evidence
+
+The generated package is not valid from hit rate alone. Every V100/A100/H100
+run must keep the architecture-specific NCU sidecar and acceptance report with
+both cache-hit direction and traffic magnitude:
+
+| evidence | required columns | unit / meaning |
+|---|---|---|
+| L1 hit direction | `l1_hit_rate_pct` | percent |
+| L2 hit direction | `l2_hit_rate_pct` | percent |
+| access magnitude | `l1_accesses`, `l2_accesses`, `dram_accesses` | L1 requests when available, otherwise sectors; L2/DRAM sectors |
+| byte magnitude | `shared_bytes`, `l1_bytes`, `l2_bytes`, `dram_bytes` | bytes, preferred denominator for memory pJ/byte or pJ/bit |
+| stall context | `stall_long_scoreboard_pct` | percent-like NCU stall signal |
+
+V100 uses `NCU_CHIP=gv100` and primarily trusts `l2_cg_load_only` for L2 path
+validation. A100 uses `NCU_CHIP=ga100` and compares capacity `l2_load_only`
+against `l2_cg_load_only` because GA100 has a much larger 40 MiB L2. H100 uses
+`NCU_CHIP=gh100`; the current kernels are WMMA compatibility kernels, so the
+NCU evidence validates the executed compatibility path, not Hopper-native
+WGMMA/TMA/FP8 paths.
 
 ## How To Run
 
@@ -59,7 +84,14 @@ set manually.
 For a quick profiler preflight only, override the sidecar lists manually, for
 example `TENSOR_REUSE_FACTORS=4 MEMORY_LOAD_REPEATS=4 DRAM_LOAD_REPEATS=4`.
 
-Before the energy sweeps, the generated shell runs
+Before the energy sweeps, the generated shell moves stale generated artifacts
+for this profile/tag into `results/archive/..._stale_<timestamp>`. This avoids
+appending new rows to an old CSV schema. It then runs a one-row schema smoke
+test and audits that row with `--require-explicit-measurement-scope`. If the
+binary is stale and the CSV header lacks `measurement_scope`, the script stops
+there instead of producing thousands of unusable rows.
+
+Before the schema smoke and energy sweeps, the generated shell runs
 `scripts/audit_power_api_measurements.py --self-test` and
 `scripts/build_strict_component_summary.py --self-test` and
 `scripts/audit_strict_component_summary.py --self-test` so the A100 semantics,
@@ -110,8 +142,10 @@ partitioning, or an SKU with fewer visible SMs, regenerate this plan with
 `--active-sm <runtime SM count>` after preflight and keep the same value in the
 package audit.
 The package audit also verifies that the NCU summary exposes L1/L2 hit rates,
-L1/L2/DRAM access counts, bytes, and long-scoreboard stall counters before the
-result can be treated as final evidence. The NCU summary must include
+L1/L2/DRAM access counts, byte traffic, and long-scoreboard stall counters
+before the result can be treated as final evidence. Hit rate alone is not enough:
+accepted cache rows must also show path-relevant access/byte magnitude. The NCU
+summary must include
 `clocked_empty`, `reg_operand_only`, `reg_mma`, `shared_scalar_load_only`,
 `global_l1_load_only`, `l2_cg_load_only`, and `dram_cg_load_only` coverage.
 A100/H100 packages must also include `l2_load_only` coverage. Tensor pair NCU
