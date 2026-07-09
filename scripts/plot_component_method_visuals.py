@@ -718,6 +718,136 @@ def plot_finalplan_factor_sweeps() -> None:
     svg.save(OUT_DIR / "finalplan_factor_sweep_coefficients.svg")
 
 
+def plot_tensor_reuse_factor_trend() -> None:
+    rows = read_csv("results/summary/rtx3090_finalplan_stability_factor_exactncu_matched_control_detail_20260708.csv")
+    grouped: dict[int, list[float]] = defaultdict(list)
+    for row in rows:
+        if row.get("component") != "tensor_mma_increment":
+            continue
+        if row.get("valid_component_estimate") != "True":
+            continue
+        reuse_factor = int(fnum(row.get("reuse_factor")))
+        coefficient = fnum(row.get("coefficient"), float("nan"))
+        if reuse_factor > 0 and math.isfinite(coefficient) and coefficient >= 0:
+            grouped[reuse_factor].append(coefficient)
+
+    if not grouped:
+        return
+
+    summary = []
+    for reuse_factor in sorted(grouped):
+        values = sorted(grouped[reuse_factor])
+        mid = values[len(values) // 2]
+        summary.append(
+            {
+                "reuse_factor": reuse_factor,
+                "values": values,
+                "median": mid,
+                "min": values[0],
+                "max": values[-1],
+                "n": len(values),
+            }
+        )
+
+    svg = Svg(1240, 580, "Tensor MMA reuse-factor incremental energy trend")
+    svg.text(38, 38, "Tensor MMA incremental energy vs reuse factor", 22, 700)
+    svg.text(
+        38,
+        62,
+        "Broad factor-exact NCU sweep: reg_mma - reg_operand_only, RTX 3090, W_SM=2048 KiB, blocks/SM=16, active_SM=82.",
+        13,
+        400,
+        COLORS["muted"],
+    )
+    svg.text(
+        38,
+        82,
+        "RF1/RF2/RF4 are shown to inspect the Tensor MMA increment trend; this sweep is diagnostic because repeat spread is large.",
+        13,
+        400,
+        COLORS["muted"],
+    )
+
+    chart_x, chart_y = 82, 120
+    chart_w, chart_h = 760, 300
+    x_min = min(item["reuse_factor"] for item in summary)
+    x_max = max(item["reuse_factor"] for item in summary)
+    y_max = max(0.4, max(item["max"] for item in summary) * 1.1)
+    y_ticks = [0.0, y_max * 0.25, y_max * 0.50, y_max * 0.75, y_max]
+
+    def xmap(value: float) -> float:
+        if x_min == x_max:
+            return chart_x + chart_w / 2
+        return chart_x + chart_w * ((math.log2(value) - math.log2(x_min)) / (math.log2(x_max) - math.log2(x_min)))
+
+    def ymap(value: float) -> float:
+        return chart_y + chart_h - chart_h * (value / y_max)
+
+    svg.line(chart_x, chart_y + chart_h, chart_x + chart_w, chart_y + chart_h, COLORS["text"], 1.2)
+    svg.line(chart_x, chart_y, chart_x, chart_y + chart_h, COLORS["text"], 1.2)
+    for tick in y_ticks:
+        y = ymap(tick)
+        svg.line(chart_x, y, chart_x + chart_w, y, COLORS["grid"])
+        svg.text(chart_x - 10, y + 4, f"{tick:.3f}", 10, 400, COLORS["muted"], "end")
+    for item in summary:
+        x = xmap(item["reuse_factor"])
+        svg.line(x, chart_y, x, chart_y + chart_h, COLORS["grid"])
+        svg.text(x, chart_y + chart_h + 20, f"RF{item['reuse_factor']}", 11, 700, COLORS["muted"], "middle")
+
+    median_points = [(xmap(item["reuse_factor"]), ymap(item["median"])) for item in summary]
+    svg.polyline(median_points, COLORS["tensor"], 3.0)
+    for item in summary:
+        x = xmap(item["reuse_factor"])
+        y_lo = ymap(item["min"])
+        y_hi = ymap(item["max"])
+        y_mid = ymap(item["median"])
+        svg.line(x, y_hi, x, y_lo, COLORS["tensor"], 1.6)
+        svg.line(x - 8, y_hi, x + 8, y_hi, COLORS["tensor"], 1.6)
+        svg.line(x - 8, y_lo, x + 8, y_lo, COLORS["tensor"], 1.6)
+        for idx, value in enumerate(item["values"]):
+            jitter = (idx - (len(item["values"]) - 1) / 2) * 7
+            svg.circle(x + jitter, ymap(value), 3.6, "#A5B4FC")
+        svg.circle(x, y_mid, 5.5, COLORS["tensor"])
+        svg.text(x, y_mid - 13, f"{item['median']:.3f}", 10, 700, COLORS["tensor"], "middle")
+
+    svg.text(chart_x + chart_w / 2, chart_y + chart_h + 48, "reuse factor (unitless)", 12, 700, COLORS["muted"], "middle")
+    svg.text(chart_x, chart_y - 12, "pJ/FLOP", 12, 700, COLORS["muted"])
+
+    table_x, table_y = 890, 128
+    svg.text(table_x, table_y - 16, "Median and repeat range", 15, 700)
+    svg.rect(table_x, table_y, 310, 216, "#FAFAFA", "#D4D4D8")
+    headers = [("RF", 915), ("median", 975), ("min-max", 1065)]
+    for label, x in headers:
+        svg.text(x, table_y + 24, label, 11, 700, COLORS["muted"], "middle" if label == "RF" else "start")
+    for idx, item in enumerate(summary):
+        y = table_y + 52 + idx * 30
+        if idx % 2 == 0:
+            svg.rect(table_x + 1, y - 18, 308, 27, "#F4F4F5")
+        svg.text(915, y, str(item["reuse_factor"]), 11, 700, COLORS["text"], "middle")
+        svg.text(975, y, f"{item['median']:.3f}", 11, 700, COLORS["tensor"])
+        svg.text(1065, y, f"{item['min']:.3f}-{item['max']:.3f}", 11, 400, COLORS["muted"])
+
+    svg.text(890, 390, "How to read this", 14, 700)
+    notes = [
+        "3 valid treatment-control rows per RF.",
+        "Line = median; whisker = min-max; pale dots = repeats.",
+        "RF1/2/4 show trend only; repeat spread is high.",
+        "Reported Tensor range uses RF8/RF16 targeted/duration.",
+    ]
+    for idx, note in enumerate(notes):
+        svg.text(890, 414 + idx * 20, note, 11, 400, COLORS["muted"])
+
+    svg.text(
+        38,
+        530,
+        "Coefficient meaning: board-level effective pJ/FLOP for the additional WMMA/HMMA work after subtracting the register-operand control; not pure Tensor Core silicon energy.",
+        12,
+        400,
+        COLORS["muted"],
+    )
+    svg.save(OUT_DIR / "tensor_reuse_factor_trend.svg")
+
+
 def plot_finalplan_sweep_design_matrix() -> None:
     rows = [
         (
@@ -1120,6 +1250,7 @@ def main() -> None:
     plot_sweep2_wsm()
     plot_ncu_path_bytes()
     plot_finalplan_factor_sweeps()
+    plot_tensor_reuse_factor_trend()
     plot_finalplan_sweep_design_matrix()
     plot_ncu_hit_rate_validation()
     plot_strict_scope_component_coefficients_summary()

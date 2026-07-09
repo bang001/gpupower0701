@@ -207,6 +207,21 @@ register file access energy
 
 ![Final component coefficients](../assets/component_energy_method/final_component_coefficients.svg)
 
+Tensor는 RF=8/16 targeted와 duration-scaling 결과를 현재 보고 anchor로 사용하지만,
+RF=1/2/4까지 포함한 broad sweep의 증분 추세도 별도 그림으로 남긴다. 이 그림은
+Tensor MMA reuse factor에 따른 board-level 차분 계수가 안정적으로 단조 변화한다고
+단정하기 위한 것이 아니라, RF 선택이 결과에 영향을 준다는 것을 확인하는 diagnostic이다.
+
+![Tensor reuse factor trend](../assets/component_energy_method/tensor_reuse_factor_trend.svg)
+
+이 그림은 x축을 `reuse factor`, y축을 `reg_mma - reg_operand_only`의 `pJ/FLOP`
+coefficient로 둔다. 진한 선은 RF별 median, 세로선은 min-max 반복 범위, 연한 점은
+개별 반복 row다. RF1/RF2/RF4까지 포함했을 때 단조적인 Tensor energy scaling이
+보이지 않고 반복 범위가 크므로, 이 그래프는 “RF 선택이 Tensor effective coefficient에
+영향을 준다”는 증거로 읽어야 한다. 반대로 “RF1 또는 RF4 median이 곧 Tensor Core
+순수 회로 에너지다”라고 읽으면 안 된다. 현재 보고 anchor는 반복 안정도가 더 좋은
+RF8/RF16 targeted 및 duration-scaling 결과다.
+
 최종 후보값:
 
 | Component/path | median | unit | bootstrap median 95% CI | confidence | 상태 |
