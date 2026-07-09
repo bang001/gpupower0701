@@ -470,7 +470,7 @@ Global L1은 9개 중 2개가 negative 또는 weak-signal gate에 걸렸다. 이
 
 | 그림 | 파일 | 보여주는 내용 |
 |---|---|---|
-| 최종 component coefficient | `docs/assets/component_energy_method/final_component_coefficients.svg` | primary median/min/max와 L1 paired 30초, Shared auxiliary, L2 LR4/LR8 paired 및 non-paired auxiliary tick |
+| 최종 component coefficient | `docs/assets/component_energy_method/final_component_coefficients.svg` | primary coefficient bar, bootstrap CI, auxiliary median range summary |
 | finalplan factor sweep | `docs/assets/component_energy_method/finalplan_factor_sweep_coefficients.svg` | reuse/load_repeat 변화에 따른 coefficient 변화 |
 | finalplan sweep 조건 | `docs/assets/component_energy_method/finalplan_sweep_design_matrix.svg` | component별 W_SM, blocks/SM, active_SM, factor sweep 조건 |
 | NCU hit-rate 검증 | `docs/assets/component_energy_method/ncu_hit_rate_validation.svg` | L1/L2 hit rate와 accepted/rejected path |

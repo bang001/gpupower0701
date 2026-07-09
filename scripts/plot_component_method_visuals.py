@@ -237,202 +237,146 @@ class Svg:
 
 
 def plot_component_coefficients() -> None:
-    rows = read_csv(
-        "results/summary/rtx3090_finalplan_stability_factor_exactncu_matched_control_summary_20260708.csv"
-    )
-    tensor_source = "factor exact-NCU broad RF sweep"
-    tensor_aux_summary = None
-    targeted_tensor_summary = (
-        "results/summary/rtx3090_tensor_targeted_rf8_rf16_matched_control_summary_20260708.csv"
-    )
-    if (ROOT / targeted_tensor_summary).exists():
-        targeted_rows = read_csv(targeted_tensor_summary)
-        targeted_tensor = next(
-            (row for row in targeted_rows if row["component"] == "tensor_mma_increment"),
-            None,
-        )
-        if targeted_tensor:
-            rows = [
-                targeted_tensor if row["component"] == "tensor_mma_increment" else row
-                for row in rows
-            ]
-            tensor_source = "targeted RF=8/16, 20 s, 6 repeats"
-    fixed_iter_tensor_summary = (
-        "results/summary/rtx3090_tensor_fixed_iter_rf8_rf16_matched_control_summary_20260708.csv"
-    )
-    if (ROOT / fixed_iter_tensor_summary).exists():
-        fixed_iter_rows = read_csv(fixed_iter_tensor_summary)
-        tensor_aux_summary = next(
-            (row for row in fixed_iter_rows if row["component"] == "tensor_mma_increment"),
-            None,
-        )
-    tensor_rf8_duration_summary = None
-    rf8_duration_summary = (
-        "results/summary/rtx3090_tensor_rf8_duration_scaling_matched_control_summary_20260708.csv"
-    )
-    if (ROOT / rf8_duration_summary).exists():
-        rf8_duration_rows = read_csv(rf8_duration_summary)
-        tensor_rf8_duration_summary = next(
-            (row for row in rf8_duration_rows if row["component"] == "tensor_mma_increment"),
-            None,
-        )
-    tensor_rf16_duration_summary = None
-    rf16_duration_summary = (
-        "results/summary/rtx3090_tensor_rf16_duration_scaling_matched_control_summary_20260708.csv"
-    )
-    if (ROOT / rf16_duration_summary).exists():
-        rf16_duration_rows = read_csv(rf16_duration_summary)
-        tensor_rf16_duration_summary = next(
-            (row for row in rf16_duration_rows if row["component"] == "tensor_mma_increment"),
-            None,
-        )
-    rows = replace_with_current_reporting_sources(rows)
-    memory_aux = current_memory_auxiliaries()
-    labels = {
-        "global_l1_hit_path": ("Global L1 hit", "l1"),
-        "shared_l1_scalar_path": ("Shared scalar", "shared"),
-        "l2_hit_cg_path": ("L2 CG hit", "l2"),
-        "dram_cg_stream_path": ("DRAM CG stream", "dram"),
-        "tensor_mma_increment": ("Tensor MMA incr.", "tensor"),
-    }
+    rows = current_reporting_rows()
+    if not rows:
+        return
+    by_component = {row["component"]: row for row in rows}
 
-    memory = []
-    tensor = None
-    for row in rows:
-        name = row["component"]
-        if name == "tensor_mma_increment":
-            tensor = row
-        elif name in labels:
-            memory.append(row)
+    def row_value(component: str) -> float:
+        return fnum(by_component[component].get("median"))
 
-    order = ["global_l1_hit_path", "shared_l1_scalar_path", "l2_hit_cg_path", "dram_cg_stream_path"]
-    memory.sort(key=lambda r: order.index(r["component"]))
+    def row_ci(component: str) -> tuple[float, float]:
+        row = by_component[component]
+        median = fnum(row.get("median"))
+        return fnum(row.get("ci_low"), median), fnum(row.get("ci_high"), median)
 
-    aux_max = max(
-        (fnum(row.get("ci_high")) for rows in memory_aux.values() for row in rows),
-        default=0.0,
-    )
-    svg = Svg(940, 500, "Current component coefficient candidates")
+    def aux_range(prefix: str) -> tuple[int, float, float]:
+        values = [
+            fnum(row.get("median"), float("nan"))
+            for row in rows
+            if row.get("component", "").startswith(prefix)
+            and row.get("component", "") != prefix
+            and "aux" in row.get("component", "")
+        ]
+        values = [value for value in values if math.isfinite(value)]
+        if not values:
+            return 0, float("nan"), float("nan")
+        return len(values), min(values), max(values)
+
+    memory_specs = [
+        ("shared_l1_scalar_path", "Shared scalar", COLORS["shared"], "primary"),
+        ("global_l1_hit_path", "Global L1 hit", COLORS["l1"], "primary"),
+        ("l2_hit_cg_path", "L2 CG hit", COLORS["l2"], "primary"),
+        ("dram_cg_stream_path", "DRAM CG stream", COLORS["dram"], "sanity only"),
+    ]
+    memory_specs = [spec for spec in memory_specs if spec[0] in by_component]
+    tensor_components = [
+        ("tensor_mma_increment_rf16_duration_scaling_aux", "RF16 duration", "#E0E7FF"),
+        ("tensor_mma_increment_duration_targeted", "RF8/16 targeted", COLORS["tensor"]),
+        ("tensor_mma_increment_rf8_duration_scaling_aux", "RF8 duration", "#C7D2FE"),
+        ("tensor_mma_increment_fixed_iter_aux", "fixed ITER", "#A5B4FC"),
+    ]
+    tensor_components = [spec for spec in tensor_components if spec[0] in by_component]
+
+    svg = Svg(1280, 800, "Current component coefficient candidates")
     svg.text(38, 38, "Current accepted candidate coefficients", 22, 700)
-    svg.text(38, 62, "Memory bars are primary pJ/bit; outlined ticks show auxiliary checks where available. Values are effective coefficients.", 13, 400, COLORS["muted"])
+    svg.text(
+        38,
+        62,
+        "Large bars show primary report values. Auxiliary runs are summarized separately to avoid overplotting. Values are effective board-level coefficients.",
+        13,
+        400,
+        COLORS["muted"],
+    )
 
-    x0, y0, w, row_h = 230, 105, 560, 58
-    max_val = max(max(fnum(r["max_pJ_per_bit"]) for r in memory), aux_max) * 1.08
-    for tick in [0, 1, 2, 3, 4, 5, 6]:
+    x0, y0, w, row_h = 275, 140, 600, 78
+    max_val = 4.8
+    svg.text(38, 112, "Memory paths", 16, 700)
+    svg.text(38, 132, "Unit: pJ/bit", 11, 700, COLORS["muted"])
+    for tick in [0, 1, 2, 3, 4]:
         x = x0 + w * tick / max_val
-        svg.line(x, y0 - 20, x, y0 + row_h * len(memory) - 8, COLORS["grid"])
-        svg.text(x, y0 + row_h * len(memory) + 14, tick, 11, 400, COLORS["muted"], "middle")
-    svg.text(x0 + w / 2, y0 + row_h * len(memory) + 38, "pJ/bit", 12, 700, COLORS["muted"], "middle")
+        svg.line(x, y0 - 28, x, y0 + row_h * len(memory_specs) - 16, COLORS["grid"])
+        svg.text(x, y0 + row_h * len(memory_specs) + 10, tick, 11, 400, COLORS["muted"], "middle")
+    svg.text(x0 + w / 2, y0 + row_h * len(memory_specs) + 40, "pJ/bit", 12, 700, COLORS["muted"], "middle")
 
-    for idx, row in enumerate(memory):
+    for idx, (component, label, color, status) in enumerate(memory_specs):
+        row = by_component[component]
         y = y0 + idx * row_h
-        label, color_key = labels[row["component"]]
-        med = fnum(row["median_pJ_per_bit"])
-        mn = fnum(row["min_pJ_per_bit"])
-        mx = fnum(row["max_pJ_per_bit"])
-        bar_w = w * med / max_val
-        min_x = x0 + w * mn / max_val
-        max_x = x0 + w * mx / max_val
-        svg.text(38, y + 22, label, 14, 700)
-        aux_rows = memory_aux.get(row["component"], [])
-        aux_text = ""
-        if aux_rows:
-            aux_text = "; " + ", ".join(
-                f"{aux.get('aux_label', 'aux')} {fnum(aux.get('median')):.3g}"
-                for aux in aux_rows
-            )
-        svg.text(38, y + 41, f"min {mn:.3g}, median {med:.3g}, max {mx:.3g}{aux_text}", 11, 400, COLORS["muted"])
-        svg.rect(x0, y + 8, bar_w, 20, COLORS[color_key])
-        svg.line(min_x, y + 18, max_x, y + 18, COLORS["text"], 1.2)
-        svg.line(min_x, y + 13, min_x, y + 23, COLORS["text"], 1.2)
-        svg.line(max_x, y + 13, max_x, y + 23, COLORS["text"], 1.2)
-        svg.text(x0 + bar_w + 8, y + 24, f"{med:.3g}", 12, 700)
-        for aux_idx, aux in enumerate(aux_rows):
-            aux_med = fnum(aux.get("median"))
-            aux_label = aux.get("aux_label", "aux")
-            aux_low = fnum(aux.get("ci_low"), aux_med)
-            aux_high = fnum(aux.get("ci_high"), aux_med)
-            aux_x = x0 + w * aux_med / max_val
-            aux_low_x = x0 + w * aux_low / max_val
-            aux_high_x = x0 + w * aux_high / max_val
-            aux_y = y + 39 + aux_idx * 8
-            svg.line(aux_low_x, aux_y, aux_high_x, aux_y, COLORS["muted"], 1.2)
-            svg.line(aux_x, aux_y - 7, aux_x, aux_y + 7, COLORS["muted"], 2.0)
-            svg.text(aux_x + 5, aux_y + 10, aux_label, 8, 700, COLORS["muted"])
+        median = row_value(component)
+        ci_low, ci_high = row_ci(component)
+        bar_w = w * median / max_val
+        low_x = x0 + w * ci_low / max_val
+        high_x = x0 + w * ci_high / max_val
+        svg.text(38, y + 17, label, 14, 700)
+        svg.text(38, y + 37, row.get("path", ""), 10, 400, COLORS["muted"])
+        svg.text(38, y + 57, status, 10, 700, COLORS["muted"])
+        svg.rect(x0, y + 5, bar_w, 24, color)
+        svg.line(low_x, y + 17, high_x, y + 17, COLORS["text"], 1.2)
+        svg.line(low_x, y + 10, low_x, y + 24, COLORS["text"], 1.2)
+        svg.line(high_x, y + 10, high_x, y + 24, COLORS["text"], 1.2)
+        value_x = max(x0 + bar_w + 10, high_x + 10)
+        svg.text(value_x, y + 23, f"{median:.3f}", 13, 700)
+        svg.text(value_x, y + 43, f"CI {ci_low:.3g}-{ci_high:.3g}", 10, 400, COLORS["muted"])
 
-    if tensor:
-        y = 396
-        mn = fnum(tensor["min"])
-        med = fnum(tensor["median"])
-        mx = fnum(tensor["max"])
-        aux_med = fnum(tensor_aux_summary["median"]) if tensor_aux_summary else None
-        aux_min = fnum(tensor_aux_summary["min"]) if tensor_aux_summary else None
-        aux_max = fnum(tensor_aux_summary["max"]) if tensor_aux_summary else None
-        rf8_med = fnum(tensor_rf8_duration_summary["median"]) if tensor_rf8_duration_summary else None
-        rf8_min = fnum(tensor_rf8_duration_summary["min"]) if tensor_rf8_duration_summary else None
-        rf8_max = fnum(tensor_rf8_duration_summary["max"]) if tensor_rf8_duration_summary else None
-        rf16_med = fnum(tensor_rf16_duration_summary["median"]) if tensor_rf16_duration_summary else None
-        rf16_min = fnum(tensor_rf16_duration_summary["min"]) if tensor_rf16_duration_summary else None
-        rf16_max = fnum(tensor_rf16_duration_summary["max"]) if tensor_rf16_duration_summary else None
-        visual_max = max(mx, aux_max or 0.0, rf8_max or 0.0, rf16_max or 0.0)
-        scale = 520 / max(0.38, visual_max * 1.1)
-        svg.text(38, y, "Tensor MMA incremental", 14, 700)
-        if aux_med is not None and rf8_med is not None and rf16_med is not None:
-            range_low = min(med, aux_med, rf8_med, rf16_med)
-            range_high = max(med, aux_med, rf8_med, rf16_med)
-            desc = (
-                f"RF16 duration {rf16_med:.3g}; RF8 duration {rf8_med:.3g}; "
-                f"fixed-ITER {aux_med:.3g} pJ/FLOP"
-            )
-        elif aux_med is not None and rf8_med is not None:
-            range_low = min(med, aux_med, rf8_med)
-            range_high = max(med, aux_med, rf8_med)
-            desc = (
-                f"duration RF8/16 {med:.3g}; fixed-ITER {aux_med:.3g}; "
-                f"RF8 duration {rf8_med:.3g} pJ/FLOP"
-            )
-        elif aux_med is not None:
-            desc = (
-                f"duration median {med:.3g}; fixed-ITER auxiliary median {aux_med:.3g} "
-                f"pJ/FLOP; report as method-sensitive range"
-            )
-            range_low = min(med, aux_med)
-            range_high = max(med, aux_med)
+    side_x, side_y, side_w = 920, 112, 320
+    svg.text(side_x, side_y, "Auxiliary range summary", 16, 700)
+    svg.text(side_x, side_y + 21, "Ranges are medians from follow-up runs.", 11, 400, COLORS["muted"])
+    aux_specs = [
+        ("Tensor MMA", "tensor_mma_increment", "pJ/FLOP", COLORS["tensor"]),
+        ("Shared scalar", "shared_l1_scalar_path", "pJ/bit", COLORS["shared"]),
+        ("Global L1", "global_l1_hit_path", "pJ/bit", COLORS["l1"]),
+        ("L2 CG", "l2_hit_cg_path", "pJ/bit", COLORS["l2"]),
+    ]
+    for idx, (label, prefix, unit, color) in enumerate(aux_specs):
+        y = side_y + 58 + idx * 94
+        n, low, high = aux_range(prefix)
+        primary_row = by_component.get(prefix) or by_component.get("tensor_mma_increment_duration_targeted")
+        primary = fnum(primary_row.get("median")) if primary_row else float("nan")
+        svg.rect(side_x, y - 20, side_w, 78, "#FAFAFA", COLORS["grid"])
+        svg.rect(side_x + 10, y - 7, 12, 12, color)
+        svg.text(side_x + 30, y + 3, label, 13, 700)
+        if math.isfinite(primary):
+            svg.text(side_x + 30, y + 24, f"primary {primary:.3g} {unit}", 11, 400, COLORS["muted"])
+        if n:
+            svg.text(side_x + 30, y + 44, f"aux n={n}, median span {low:.3g}-{high:.3g}", 11, 400, COLORS["muted"])
         else:
-            desc = f"min {mn:.3g}, median {med:.3g}, max {mx:.3g} pJ/FLOP; {tensor_source}"
-            range_low = med
-            range_high = med
-        svg.text(38, y + 19, desc, 11, 400, COLORS["muted"])
-        svg.rect(x0, y - 14, med * scale, 20, COLORS["tensor"])
-        svg.line(x0 + mn * scale, y - 4, x0 + mx * scale, y - 4, COLORS["text"], 1.2)
-        if aux_med is not None:
-            svg.rect(x0, y + 10, aux_med * scale, 12, "#A5B4FC")
-            svg.line(x0 + aux_min * scale, y + 16, x0 + aux_max * scale, y + 16, COLORS["muted"], 1.0)
-            if rf8_med is not None:
-                svg.rect(x0, y + 28, rf8_med * scale, 12, "#C7D2FE")
-                svg.line(x0 + rf8_min * scale, y + 34, x0 + rf8_max * scale, y + 34, COLORS["muted"], 1.0)
-            if rf16_med is not None:
-                svg.rect(x0, y + 44, rf16_med * scale, 12, "#E0E7FF")
-                svg.line(x0 + rf16_min * scale, y + 50, x0 + rf16_max * scale, y + 50, COLORS["muted"], 1.0)
-            svg.text(
-                x0 + range_high * scale + 8,
-                y + 2,
-                f"{range_low:.3g}-{range_high:.3g} pJ/FLOP",
-                12,
-                700,
-            )
-            svg.text(
-                x0 + 4,
-                y + 66,
-                "dark: RF8/16, mid: fixed-ITER, light: RF8 duration, pale: RF16 duration",
-                10,
-                400,
-                COLORS["muted"],
-            )
-        else:
-            svg.text(x0 + med * scale + 8, y + 2, f"{med:.3g} pJ/FLOP", 12, 700)
+            svg.text(side_x + 30, y + 44, "auxiliary range not used", 11, 400, COLORS["muted"])
 
-    svg.text(38, 474, "Error bars show min-max across valid rows. DRAM is sanity-only; outlined ticks are auxiliary, not replacement values.", 12, 400, COLORS["muted"])
+    if tensor_components:
+        tx, ty, tw, th = 275, 590, 450, 18
+        max_tensor = max(fnum(by_component[component].get("ci_high")) for component, _label, _color in tensor_components)
+        scale_max = max(0.18, max_tensor * 1.18)
+        svg.text(38, 560, "Tensor MMA incremental", 16, 700)
+        svg.text(38, 581, "Unit: pJ/FLOP; RF and iteration policy are method-sensitive.", 11, 400, COLORS["muted"])
+        for tick in [0.0, 0.05, 0.10, 0.15]:
+            x = tx + tw * tick / scale_max
+            svg.line(x, ty - 25, x, ty + 114, COLORS["grid"])
+            svg.text(x, ty + 137, f"{tick:.2f}", 10, 400, COLORS["muted"], "middle")
+        for idx, (component, label, color) in enumerate(tensor_components):
+            row = by_component[component]
+            y = ty + idx * 30
+            median = fnum(row.get("median"))
+            ci_low = fnum(row.get("ci_low"), median)
+            ci_high = fnum(row.get("ci_high"), median)
+            bar_w = tw * median / scale_max
+            low_x = tx + tw * ci_low / scale_max
+            high_x = tx + tw * ci_high / scale_max
+            svg.text(38, y + 14, label, 11, 700 if "targeted" in component else 400)
+            svg.rect(tx, y, bar_w, th, color)
+            svg.line(low_x, y + th / 2, high_x, y + th / 2, COLORS["text"], 1.0)
+            svg.line(low_x, y + 3, low_x, y + th - 3, COLORS["text"], 1.0)
+            svg.line(high_x, y + 3, high_x, y + th - 3, COLORS["text"], 1.0)
+            svg.text(tx + tw + 24, y + 14, f"{median:.3f}", 11, 700)
+        svg.text(tx + tw / 2, ty + 160, "pJ/FLOP", 12, 700, COLORS["muted"], "middle")
+
+    svg.text(
+        38,
+        778,
+        "Interpretation: use the primary bars for the main report; auxiliary ranges show method sensitivity. DRAM is a streaming sanity path, not physical DRAM device energy.",
+        12,
+        400,
+        COLORS["muted"],
+    )
     svg.save(OUT_DIR / "final_component_coefficients.svg")
 
 
