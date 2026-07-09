@@ -1,0 +1,190 @@
+component,check,status,expected,actual,interpretation
+Tensor MMA incremental,required_component_present,pass,row present,present,strict summary includes the required component
+Tensor MMA incremental,unit,pass,pJ/FLOP,pJ/FLOP,strict summary row must satisfy the final power/API reporting policy
+Tensor MMA incremental,reliability_status,pass,accepted,accepted,strict summary row must satisfy the final power/API reporting policy
+Tensor MMA incremental,energy_source,pass,nvml_total_energy,nvml_total_energy,strict summary row must satisfy the final power/API reporting policy
+Tensor MMA incremental,energy_integration_method,pass,total_energy_mj_delta,total_energy_mj_delta,strict summary row must satisfy the final power/API reporting policy
+Tensor MMA incremental,measurement_scope,pass,gpu_device_total_energy_counter,gpu_device_total_energy_counter,strict summary row must satisfy the final power/API reporting policy
+Tensor MMA incremental,power_semantics,pass,one_sec_average,one_sec_average,strict summary row must satisfy the final power/API reporting policy
+Tensor MMA incremental,run_class,pass,strict_explicit_measurement_scope or strict_explicit_measurement_scope_fresh_ncu,strict_explicit_measurement_scope_fresh_ncu,strict summary row must use an accepted measurement-scope run class
+Tensor MMA incremental,positive_median,pass,median > 0,0.129216,negative or zero median indicates weak-signal/control drift
+Tensor MMA incremental,valid_rows,pass,valid_detail_rows >= 6 and rows_used == valid_detail_rows,"rows_used=6, valid_detail_rows=6",strict representative rows need enough valid matched-control samples
+Tensor MMA incremental,invalid_rows,pass,invalid_detail_rows == 0,0,accepted strict representatives must not hide invalid matched-control rows
+Tensor MMA incremental,ncu_accepted_rows,pass,ncu_accepted_rows > 0,8,component path must have accepted NCU validation evidence
+Tensor MMA incremental,matched_summary_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_matched_control_summary_20260708.csv,strict summary must point to inspectable evidence artifacts
+Tensor MMA incremental,matched_detail_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_matched_control_detail_20260708.csv,strict summary must point to inspectable evidence artifacts
+Tensor MMA incremental,power_api_audit_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_power_api_audit_20260708.csv,strict summary must point to inspectable evidence artifacts
+Tensor MMA incremental,reliability_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.csv,strict summary must point to inspectable evidence artifacts
+Tensor MMA incremental,ncu_acceptance_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_acceptance_20260708.csv,strict summary must point to inspectable evidence artifacts
+Tensor MMA incremental,ncu_summary_artifact_exists,pass,path exists,results/ncu/rtx3090_strict_scope_fresh_ncu_tensor_b16_20260708/ncu_cache_validation_summary.csv,strict summary must point to inspectable evidence artifacts
+Tensor MMA incremental,power_state_audit_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_tensor_rf8_rf16_power_state_audit_20260708.csv;results/summary/rtx3090_strict_scope_shared_lr8_focus_power_state_audit_20260708.csv;results/summary/rtx3090_strict_scope_l1_lr4_focus_power_state_audit_20260708.csv;results/summary/rtx3090_strict_scope_l2_lr4_lr8_focus_power_state_audit_20260708.csv,strict summary must point to inspectable evidence artifacts
+Tensor MMA incremental,artifact_matches_reliability_status,pass,summary and artifact both accepted,"summary=accepted, artifact=accepted",curated strict summary must agree with reliability audit output
+Tensor MMA incremental,artifact_matches_unit,pass,summary and artifact both pJ/FLOP,"summary=pJ/FLOP, artifact=pJ/FLOP",curated strict summary must agree with reliability audit output
+Tensor MMA incremental,artifact_matches_energy_source,pass,summary and artifact both nvml_total_energy,"summary=nvml_total_energy, artifact=nvml_total_energy",curated strict summary must agree with reliability audit output
+Tensor MMA incremental,artifact_matches_energy_integration_method,pass,summary and artifact both total_energy_mj_delta,"summary=total_energy_mj_delta, artifact=total_energy_mj_delta",curated strict summary must agree with reliability audit output
+Tensor MMA incremental,artifact_matches_measurement_scope,pass,summary and artifact both gpu_device_total_energy_counter,"summary=gpu_device_total_energy_counter, artifact=gpu_device_total_energy_counter",curated strict summary must agree with reliability audit output
+Tensor MMA incremental,artifact_matches_power_semantics,pass,summary and artifact both one_sec_average,"summary=one_sec_average, artifact=one_sec_average",curated strict summary must agree with reliability audit output
+Tensor MMA incremental,artifact_matches_median,pass,0.129215538161,0.129215538161,reported median must be copied from the accepted reliability artifact
+Tensor MMA incremental,artifact_matches_rows,pass,6,6,row counts in strict summary must agree with reliability audit
+Tensor MMA incremental,artifact_matches_valid_detail_rows,pass,6,6,row counts in strict summary must agree with reliability audit
+Tensor MMA incremental,artifact_matches_invalid_detail_rows,pass,0,0,row counts in strict summary must agree with reliability audit
+Tensor MMA incremental,artifact_matches_ncu_denominator_rows,pass,0,0,row counts in strict summary must agree with reliability audit
+Tensor MMA incremental,detail_artifact_exists,pass,matched-control detail path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_matched_control_detail_20260708.csv,strict summary has inspectable matched-control detail rows
+Tensor MMA incremental,detail_valid_row_count_matches_summary,pass,6,6,strict summary valid row count must match matched-control detail
+Tensor MMA incremental,detail_invalid_row_count_matches_summary,pass,0,0,strict summary invalid row count must match matched-control detail
+Tensor MMA incremental,detail_measurement_scope,pass,all numerator/control scopes are gpu_device_total_energy_counter,bad_rows=0,matched-control detail rows must use the strict GPU/device energy scope
+Tensor MMA incremental,detail_energy_source_and_integration,pass,all numerator/control rows use nvml_total_energy + total_energy_mj_delta,bad_rows=0,matched-control detail rows must use the final energy numerator policy
+Tensor MMA incremental,detail_power_semantics,pass,all numerator/control rows have one_sec_average,bad_rows=0,matched-control detail rows must match the target profile power semantics
+Tensor MMA incremental,detail_power_state_no_reject,pass,no numerator/control power-state reject rows,"caution:6,ok:6",power-state caution is traceability metadata; reject rows must not back strict representatives
+Tensor MMA incremental,power_state_artifact_covers_detail_run_ids,pass,power-state audit artifacts cover every numerator/control run_id in detail,artifacts=4;covered_run_ids=72,strict package must trace each accepted matched-control row back to row-level power-state quality evidence
+Tensor MMA incremental,detail_source_files_exist,pass,all raw source files exist,missing_rows=0,matched-control detail must remain traceable to raw energy CSVs
+Tensor MMA incremental,detail_median_matches_summary,pass,0.129215538161,0.129215538161,strict median must match the median of valid matched-control detail rows
+Tensor MMA incremental,power_api_audit_final_rows,pass,"all power API audit rows are final_candidate with total-energy delta, GPU/device scope, and expected semantics",rows=72,"strict package must keep the power measurement matrix gate traceable, not just the final copied coefficients"
+Tensor MMA incremental,ncu_summary_counter_schema,pass,NCU summary artifact has hit-rate/access/byte/stall columns and component-relevant ok mode rows,"rows=9, modes=7","reported coefficients must remain traceable to NCU cache hit rate, access count, byte traffic, Tensor instruction, and stall evidence"
+Tensor MMA incremental,ncu_summary_coordinate_alignment,pass,"component-relevant NCU ok rows match strict detail coordinates: mode,W_SM_KiB,blocks_per_SM,active_SM,reuse_factor,load_repeat,store_repeat",expected=4;matched=4,"mode-level NCU validation is insufficient if the sidecar was collected with different occupancy, working-set, active-SM, or factor settings"
+Tensor MMA incremental,ncu_evidence_summary_fields,pass,"strict summary row exposes same-coordinate NCU evidence rows, treatment metric rows, component-relevant counter summaries, and ncu_actual_exact denominator source for memory pJ/bit components","coordinate_rows=4,metric_rows=2,modes=reg_mma,reg_operand_only",a passing artifact path is not enough; the report table itself must surface the NCU hit/access/byte/stall evidence used to interpret each coefficient
+Shared scalar path,required_component_present,pass,row present,present,strict summary includes the required component
+Shared scalar path,unit,pass,pJ/bit,pJ/bit,strict summary row must satisfy the final power/API reporting policy
+Shared scalar path,reliability_status,pass,accepted,accepted,strict summary row must satisfy the final power/API reporting policy
+Shared scalar path,energy_source,pass,nvml_total_energy,nvml_total_energy,strict summary row must satisfy the final power/API reporting policy
+Shared scalar path,energy_integration_method,pass,total_energy_mj_delta,total_energy_mj_delta,strict summary row must satisfy the final power/API reporting policy
+Shared scalar path,measurement_scope,pass,gpu_device_total_energy_counter,gpu_device_total_energy_counter,strict summary row must satisfy the final power/API reporting policy
+Shared scalar path,power_semantics,pass,one_sec_average,one_sec_average,strict summary row must satisfy the final power/API reporting policy
+Shared scalar path,run_class,pass,strict_explicit_measurement_scope or strict_explicit_measurement_scope_fresh_ncu,strict_explicit_measurement_scope_fresh_ncu,strict summary row must use an accepted measurement-scope run class
+Shared scalar path,positive_median,pass,median > 0,0.17059,negative or zero median indicates weak-signal/control drift
+Shared scalar path,valid_rows,pass,valid_detail_rows >= 6 and rows_used == valid_detail_rows,"rows_used=6, valid_detail_rows=6",strict representative rows need enough valid matched-control samples
+Shared scalar path,invalid_rows,pass,invalid_detail_rows == 0,0,accepted strict representatives must not hide invalid matched-control rows
+Shared scalar path,ncu_denominator_rows,pass,ncu_denominator_rows > 0,6,memory pJ/bit rows must use NCU actual traffic denominators
+Shared scalar path,ncu_accepted_rows,pass,ncu_accepted_rows > 0,3,component path must have accepted NCU validation evidence
+Shared scalar path,matched_summary_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_matched_control_summary_20260708.csv,strict summary must point to inspectable evidence artifacts
+Shared scalar path,matched_detail_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_matched_control_detail_20260708.csv,strict summary must point to inspectable evidence artifacts
+Shared scalar path,power_api_audit_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_power_api_audit_20260708.csv,strict summary must point to inspectable evidence artifacts
+Shared scalar path,reliability_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.csv,strict summary must point to inspectable evidence artifacts
+Shared scalar path,ncu_acceptance_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_acceptance_20260708.csv,strict summary must point to inspectable evidence artifacts
+Shared scalar path,ncu_summary_artifact_exists,pass,path exists,results/ncu/rtx3090_strict_scope_fresh_ncu_20260708/ncu_cache_validation_summary.csv,strict summary must point to inspectable evidence artifacts
+Shared scalar path,power_state_audit_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_tensor_rf8_rf16_power_state_audit_20260708.csv;results/summary/rtx3090_strict_scope_shared_lr8_focus_power_state_audit_20260708.csv;results/summary/rtx3090_strict_scope_l1_lr4_focus_power_state_audit_20260708.csv;results/summary/rtx3090_strict_scope_l2_lr4_lr8_focus_power_state_audit_20260708.csv,strict summary must point to inspectable evidence artifacts
+Shared scalar path,artifact_matches_reliability_status,pass,summary and artifact both accepted,"summary=accepted, artifact=accepted",curated strict summary must agree with reliability audit output
+Shared scalar path,artifact_matches_unit,pass,summary and artifact both pJ/bit,"summary=pJ/bit, artifact=pJ/bit",curated strict summary must agree with reliability audit output
+Shared scalar path,artifact_matches_energy_source,pass,summary and artifact both nvml_total_energy,"summary=nvml_total_energy, artifact=nvml_total_energy",curated strict summary must agree with reliability audit output
+Shared scalar path,artifact_matches_energy_integration_method,pass,summary and artifact both total_energy_mj_delta,"summary=total_energy_mj_delta, artifact=total_energy_mj_delta",curated strict summary must agree with reliability audit output
+Shared scalar path,artifact_matches_measurement_scope,pass,summary and artifact both gpu_device_total_energy_counter,"summary=gpu_device_total_energy_counter, artifact=gpu_device_total_energy_counter",curated strict summary must agree with reliability audit output
+Shared scalar path,artifact_matches_power_semantics,pass,summary and artifact both one_sec_average,"summary=one_sec_average, artifact=one_sec_average",curated strict summary must agree with reliability audit output
+Shared scalar path,artifact_matches_median,pass,0.170589502631,0.170589502631,reported median must be copied from the accepted reliability artifact
+Shared scalar path,artifact_matches_rows,pass,6,6,row counts in strict summary must agree with reliability audit
+Shared scalar path,artifact_matches_valid_detail_rows,pass,6,6,row counts in strict summary must agree with reliability audit
+Shared scalar path,artifact_matches_invalid_detail_rows,pass,0,0,row counts in strict summary must agree with reliability audit
+Shared scalar path,artifact_matches_ncu_denominator_rows,pass,6,6,row counts in strict summary must agree with reliability audit
+Shared scalar path,detail_artifact_exists,pass,matched-control detail path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_matched_control_detail_20260708.csv,strict summary has inspectable matched-control detail rows
+Shared scalar path,detail_valid_row_count_matches_summary,pass,6,6,strict summary valid row count must match matched-control detail
+Shared scalar path,detail_invalid_row_count_matches_summary,pass,0,0,strict summary invalid row count must match matched-control detail
+Shared scalar path,detail_measurement_scope,pass,all numerator/control scopes are gpu_device_total_energy_counter,bad_rows=0,matched-control detail rows must use the strict GPU/device energy scope
+Shared scalar path,detail_energy_source_and_integration,pass,all numerator/control rows use nvml_total_energy + total_energy_mj_delta,bad_rows=0,matched-control detail rows must use the final energy numerator policy
+Shared scalar path,detail_power_semantics,pass,all numerator/control rows have one_sec_average,bad_rows=0,matched-control detail rows must match the target profile power semantics
+Shared scalar path,detail_power_state_no_reject,pass,no numerator/control power-state reject rows,ok:12,power-state caution is traceability metadata; reject rows must not back strict representatives
+Shared scalar path,power_state_artifact_covers_detail_run_ids,pass,power-state audit artifacts cover every numerator/control run_id in detail,artifacts=4;covered_run_ids=72,strict package must trace each accepted matched-control row back to row-level power-state quality evidence
+Shared scalar path,detail_source_files_exist,pass,all raw source files exist,missing_rows=0,matched-control detail must remain traceable to raw energy CSVs
+Shared scalar path,detail_ncu_denominator_exact,pass,all memory detail rows use ncu_actual_exact with positive NCU bytes,bad_rows=0,memory pJ/bit denominators must come from exact NCU traffic matches
+Shared scalar path,detail_median_matches_summary,pass,0.170589502631,0.170589502631,strict median must match the median of valid matched-control detail rows
+Shared scalar path,power_api_audit_final_rows,pass,"all power API audit rows are final_candidate with total-energy delta, GPU/device scope, and expected semantics",rows=72,"strict package must keep the power measurement matrix gate traceable, not just the final copied coefficients"
+Shared scalar path,ncu_summary_counter_schema,pass,NCU summary artifact has hit-rate/access/byte/stall columns and component-relevant ok mode rows,"rows=13, modes=7","reported coefficients must remain traceable to NCU cache hit rate, access count, byte traffic, Tensor instruction, and stall evidence"
+Shared scalar path,ncu_summary_coordinate_alignment,pass,"component-relevant NCU ok rows match strict detail coordinates: mode,W_SM_KiB,blocks_per_SM,active_SM,reuse_factor,load_repeat,store_repeat",expected=1;matched=1;extra_ncu_coords=shared_scalar_load_only:64:16:82:1:4:1,"mode-level NCU validation is insufficient if the sidecar was collected with different occupancy, working-set, active-SM, or factor settings"
+Shared scalar path,ncu_evidence_summary_fields,pass,"strict summary row exposes same-coordinate NCU evidence rows, treatment metric rows, component-relevant counter summaries, and ncu_actual_exact denominator source for memory pJ/bit components","coordinate_rows=1,metric_rows=1,modes=shared_scalar_load_only",a passing artifact path is not enough; the report table itself must surface the NCU hit/access/byte/stall evidence used to interpret each coefficient
+Global L1 hit path,required_component_present,pass,row present,present,strict summary includes the required component
+Global L1 hit path,unit,pass,pJ/bit,pJ/bit,strict summary row must satisfy the final power/API reporting policy
+Global L1 hit path,reliability_status,pass,accepted,accepted,strict summary row must satisfy the final power/API reporting policy
+Global L1 hit path,energy_source,pass,nvml_total_energy,nvml_total_energy,strict summary row must satisfy the final power/API reporting policy
+Global L1 hit path,energy_integration_method,pass,total_energy_mj_delta,total_energy_mj_delta,strict summary row must satisfy the final power/API reporting policy
+Global L1 hit path,measurement_scope,pass,gpu_device_total_energy_counter,gpu_device_total_energy_counter,strict summary row must satisfy the final power/API reporting policy
+Global L1 hit path,power_semantics,pass,one_sec_average,one_sec_average,strict summary row must satisfy the final power/API reporting policy
+Global L1 hit path,run_class,pass,strict_explicit_measurement_scope or strict_explicit_measurement_scope_fresh_ncu,strict_explicit_measurement_scope_fresh_ncu,strict summary row must use an accepted measurement-scope run class
+Global L1 hit path,positive_median,pass,median > 0,0.173483,negative or zero median indicates weak-signal/control drift
+Global L1 hit path,valid_rows,pass,valid_detail_rows >= 6 and rows_used == valid_detail_rows,"rows_used=6, valid_detail_rows=6",strict representative rows need enough valid matched-control samples
+Global L1 hit path,invalid_rows,pass,invalid_detail_rows == 0,0,accepted strict representatives must not hide invalid matched-control rows
+Global L1 hit path,ncu_denominator_rows,pass,ncu_denominator_rows > 0,6,memory pJ/bit rows must use NCU actual traffic denominators
+Global L1 hit path,ncu_accepted_rows,pass,ncu_accepted_rows > 0,3,component path must have accepted NCU validation evidence
+Global L1 hit path,matched_summary_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_matched_control_summary_20260708.csv,strict summary must point to inspectable evidence artifacts
+Global L1 hit path,matched_detail_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_matched_control_detail_20260708.csv,strict summary must point to inspectable evidence artifacts
+Global L1 hit path,power_api_audit_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_power_api_audit_20260708.csv,strict summary must point to inspectable evidence artifacts
+Global L1 hit path,reliability_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.csv,strict summary must point to inspectable evidence artifacts
+Global L1 hit path,ncu_acceptance_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_acceptance_20260708.csv,strict summary must point to inspectable evidence artifacts
+Global L1 hit path,ncu_summary_artifact_exists,pass,path exists,results/ncu/rtx3090_strict_scope_fresh_ncu_20260708/ncu_cache_validation_summary.csv,strict summary must point to inspectable evidence artifacts
+Global L1 hit path,power_state_audit_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_tensor_rf8_rf16_power_state_audit_20260708.csv;results/summary/rtx3090_strict_scope_shared_lr8_focus_power_state_audit_20260708.csv;results/summary/rtx3090_strict_scope_l1_lr4_focus_power_state_audit_20260708.csv;results/summary/rtx3090_strict_scope_l2_lr4_lr8_focus_power_state_audit_20260708.csv,strict summary must point to inspectable evidence artifacts
+Global L1 hit path,artifact_matches_reliability_status,pass,summary and artifact both accepted,"summary=accepted, artifact=accepted",curated strict summary must agree with reliability audit output
+Global L1 hit path,artifact_matches_unit,pass,summary and artifact both pJ/bit,"summary=pJ/bit, artifact=pJ/bit",curated strict summary must agree with reliability audit output
+Global L1 hit path,artifact_matches_energy_source,pass,summary and artifact both nvml_total_energy,"summary=nvml_total_energy, artifact=nvml_total_energy",curated strict summary must agree with reliability audit output
+Global L1 hit path,artifact_matches_energy_integration_method,pass,summary and artifact both total_energy_mj_delta,"summary=total_energy_mj_delta, artifact=total_energy_mj_delta",curated strict summary must agree with reliability audit output
+Global L1 hit path,artifact_matches_measurement_scope,pass,summary and artifact both gpu_device_total_energy_counter,"summary=gpu_device_total_energy_counter, artifact=gpu_device_total_energy_counter",curated strict summary must agree with reliability audit output
+Global L1 hit path,artifact_matches_power_semantics,pass,summary and artifact both one_sec_average,"summary=one_sec_average, artifact=one_sec_average",curated strict summary must agree with reliability audit output
+Global L1 hit path,artifact_matches_median,pass,0.17348298164,0.17348298164,reported median must be copied from the accepted reliability artifact
+Global L1 hit path,artifact_matches_rows,pass,6,6,row counts in strict summary must agree with reliability audit
+Global L1 hit path,artifact_matches_valid_detail_rows,pass,6,6,row counts in strict summary must agree with reliability audit
+Global L1 hit path,artifact_matches_invalid_detail_rows,pass,0,0,row counts in strict summary must agree with reliability audit
+Global L1 hit path,artifact_matches_ncu_denominator_rows,pass,6,6,row counts in strict summary must agree with reliability audit
+Global L1 hit path,detail_artifact_exists,pass,matched-control detail path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_matched_control_detail_20260708.csv,strict summary has inspectable matched-control detail rows
+Global L1 hit path,detail_valid_row_count_matches_summary,pass,6,6,strict summary valid row count must match matched-control detail
+Global L1 hit path,detail_invalid_row_count_matches_summary,pass,0,0,strict summary invalid row count must match matched-control detail
+Global L1 hit path,detail_measurement_scope,pass,all numerator/control scopes are gpu_device_total_energy_counter,bad_rows=0,matched-control detail rows must use the strict GPU/device energy scope
+Global L1 hit path,detail_energy_source_and_integration,pass,all numerator/control rows use nvml_total_energy + total_energy_mj_delta,bad_rows=0,matched-control detail rows must use the final energy numerator policy
+Global L1 hit path,detail_power_semantics,pass,all numerator/control rows have one_sec_average,bad_rows=0,matched-control detail rows must match the target profile power semantics
+Global L1 hit path,detail_power_state_no_reject,pass,no numerator/control power-state reject rows,ok:12,power-state caution is traceability metadata; reject rows must not back strict representatives
+Global L1 hit path,power_state_artifact_covers_detail_run_ids,pass,power-state audit artifacts cover every numerator/control run_id in detail,artifacts=4;covered_run_ids=72,strict package must trace each accepted matched-control row back to row-level power-state quality evidence
+Global L1 hit path,detail_source_files_exist,pass,all raw source files exist,missing_rows=0,matched-control detail must remain traceable to raw energy CSVs
+Global L1 hit path,detail_ncu_denominator_exact,pass,all memory detail rows use ncu_actual_exact with positive NCU bytes,bad_rows=0,memory pJ/bit denominators must come from exact NCU traffic matches
+Global L1 hit path,detail_median_matches_summary,pass,0.17348298164,0.17348298164,strict median must match the median of valid matched-control detail rows
+Global L1 hit path,power_api_audit_final_rows,pass,"all power API audit rows are final_candidate with total-energy delta, GPU/device scope, and expected semantics",rows=72,"strict package must keep the power measurement matrix gate traceable, not just the final copied coefficients"
+Global L1 hit path,ncu_summary_counter_schema,pass,NCU summary artifact has hit-rate/access/byte/stall columns and component-relevant ok mode rows,"rows=13, modes=7","reported coefficients must remain traceable to NCU cache hit rate, access count, byte traffic, Tensor instruction, and stall evidence"
+Global L1 hit path,ncu_summary_coordinate_alignment,pass,"component-relevant NCU ok rows match strict detail coordinates: mode,W_SM_KiB,blocks_per_SM,active_SM,reuse_factor,load_repeat,store_repeat",expected=1;matched=1;extra_ncu_coords=global_l1_load_only:16:16:82:1:8:1,"mode-level NCU validation is insufficient if the sidecar was collected with different occupancy, working-set, active-SM, or factor settings"
+Global L1 hit path,ncu_evidence_summary_fields,pass,"strict summary row exposes same-coordinate NCU evidence rows, treatment metric rows, component-relevant counter summaries, and ncu_actual_exact denominator source for memory pJ/bit components","coordinate_rows=1,metric_rows=1,modes=global_l1_load_only",a passing artifact path is not enough; the report table itself must surface the NCU hit/access/byte/stall evidence used to interpret each coefficient
+L2 CG hit path,required_component_present,pass,row present,present,strict summary includes the required component
+L2 CG hit path,unit,pass,pJ/bit,pJ/bit,strict summary row must satisfy the final power/API reporting policy
+L2 CG hit path,reliability_status,pass,accepted,accepted,strict summary row must satisfy the final power/API reporting policy
+L2 CG hit path,energy_source,pass,nvml_total_energy,nvml_total_energy,strict summary row must satisfy the final power/API reporting policy
+L2 CG hit path,energy_integration_method,pass,total_energy_mj_delta,total_energy_mj_delta,strict summary row must satisfy the final power/API reporting policy
+L2 CG hit path,measurement_scope,pass,gpu_device_total_energy_counter,gpu_device_total_energy_counter,strict summary row must satisfy the final power/API reporting policy
+L2 CG hit path,power_semantics,pass,one_sec_average,one_sec_average,strict summary row must satisfy the final power/API reporting policy
+L2 CG hit path,run_class,pass,strict_explicit_measurement_scope or strict_explicit_measurement_scope_fresh_ncu,strict_explicit_measurement_scope_fresh_ncu,strict summary row must use an accepted measurement-scope run class
+L2 CG hit path,positive_median,pass,median > 0,1.13107,negative or zero median indicates weak-signal/control drift
+L2 CG hit path,valid_rows,pass,valid_detail_rows >= 6 and rows_used == valid_detail_rows,"rows_used=6, valid_detail_rows=6",strict representative rows need enough valid matched-control samples
+L2 CG hit path,invalid_rows,pass,invalid_detail_rows == 0,0,accepted strict representatives must not hide invalid matched-control rows
+L2 CG hit path,ncu_denominator_rows,pass,ncu_denominator_rows > 0,6,memory pJ/bit rows must use NCU actual traffic denominators
+L2 CG hit path,ncu_accepted_rows,pass,ncu_accepted_rows > 0,3,component path must have accepted NCU validation evidence
+L2 CG hit path,matched_summary_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_matched_control_summary_20260708.csv,strict summary must point to inspectable evidence artifacts
+L2 CG hit path,matched_detail_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_matched_control_detail_20260708.csv,strict summary must point to inspectable evidence artifacts
+L2 CG hit path,power_api_audit_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_power_api_audit_20260708.csv,strict summary must point to inspectable evidence artifacts
+L2 CG hit path,reliability_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.csv,strict summary must point to inspectable evidence artifacts
+L2 CG hit path,ncu_acceptance_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_acceptance_20260708.csv,strict summary must point to inspectable evidence artifacts
+L2 CG hit path,ncu_summary_artifact_exists,pass,path exists,results/ncu/rtx3090_strict_scope_fresh_ncu_20260708/ncu_cache_validation_summary.csv,strict summary must point to inspectable evidence artifacts
+L2 CG hit path,power_state_audit_artifact_exists,pass,path exists,results/summary/rtx3090_strict_scope_tensor_rf8_rf16_power_state_audit_20260708.csv;results/summary/rtx3090_strict_scope_shared_lr8_focus_power_state_audit_20260708.csv;results/summary/rtx3090_strict_scope_l1_lr4_focus_power_state_audit_20260708.csv;results/summary/rtx3090_strict_scope_l2_lr4_lr8_focus_power_state_audit_20260708.csv,strict summary must point to inspectable evidence artifacts
+L2 CG hit path,artifact_matches_reliability_status,pass,summary and artifact both accepted,"summary=accepted, artifact=accepted",curated strict summary must agree with reliability audit output
+L2 CG hit path,artifact_matches_unit,pass,summary and artifact both pJ/bit,"summary=pJ/bit, artifact=pJ/bit",curated strict summary must agree with reliability audit output
+L2 CG hit path,artifact_matches_energy_source,pass,summary and artifact both nvml_total_energy,"summary=nvml_total_energy, artifact=nvml_total_energy",curated strict summary must agree with reliability audit output
+L2 CG hit path,artifact_matches_energy_integration_method,pass,summary and artifact both total_energy_mj_delta,"summary=total_energy_mj_delta, artifact=total_energy_mj_delta",curated strict summary must agree with reliability audit output
+L2 CG hit path,artifact_matches_measurement_scope,pass,summary and artifact both gpu_device_total_energy_counter,"summary=gpu_device_total_energy_counter, artifact=gpu_device_total_energy_counter",curated strict summary must agree with reliability audit output
+L2 CG hit path,artifact_matches_power_semantics,pass,summary and artifact both one_sec_average,"summary=one_sec_average, artifact=one_sec_average",curated strict summary must agree with reliability audit output
+L2 CG hit path,artifact_matches_median,pass,1.13107277508,1.13107277508,reported median must be copied from the accepted reliability artifact
+L2 CG hit path,artifact_matches_rows,pass,6,6,row counts in strict summary must agree with reliability audit
+L2 CG hit path,artifact_matches_valid_detail_rows,pass,6,6,row counts in strict summary must agree with reliability audit
+L2 CG hit path,artifact_matches_invalid_detail_rows,pass,0,0,row counts in strict summary must agree with reliability audit
+L2 CG hit path,artifact_matches_ncu_denominator_rows,pass,6,6,row counts in strict summary must agree with reliability audit
+L2 CG hit path,detail_artifact_exists,pass,matched-control detail path exists,results/summary/rtx3090_strict_scope_fresh_ncu_combined_matched_control_detail_20260708.csv,strict summary has inspectable matched-control detail rows
+L2 CG hit path,detail_valid_row_count_matches_summary,pass,6,6,strict summary valid row count must match matched-control detail
+L2 CG hit path,detail_invalid_row_count_matches_summary,pass,0,0,strict summary invalid row count must match matched-control detail
+L2 CG hit path,detail_measurement_scope,pass,all numerator/control scopes are gpu_device_total_energy_counter,bad_rows=0,matched-control detail rows must use the strict GPU/device energy scope
+L2 CG hit path,detail_energy_source_and_integration,pass,all numerator/control rows use nvml_total_energy + total_energy_mj_delta,bad_rows=0,matched-control detail rows must use the final energy numerator policy
+L2 CG hit path,detail_power_semantics,pass,all numerator/control rows have one_sec_average,bad_rows=0,matched-control detail rows must match the target profile power semantics
+L2 CG hit path,detail_power_state_no_reject,pass,no numerator/control power-state reject rows,"caution:6,ok:6",power-state caution is traceability metadata; reject rows must not back strict representatives
+L2 CG hit path,power_state_artifact_covers_detail_run_ids,pass,power-state audit artifacts cover every numerator/control run_id in detail,artifacts=4;covered_run_ids=72,strict package must trace each accepted matched-control row back to row-level power-state quality evidence
+L2 CG hit path,detail_source_files_exist,pass,all raw source files exist,missing_rows=0,matched-control detail must remain traceable to raw energy CSVs
+L2 CG hit path,detail_ncu_denominator_exact,pass,all memory detail rows use ncu_actual_exact with positive NCU bytes,bad_rows=0,memory pJ/bit denominators must come from exact NCU traffic matches
+L2 CG hit path,detail_median_matches_summary,pass,1.13107277508,1.13107277508,strict median must match the median of valid matched-control detail rows
+L2 CG hit path,power_api_audit_final_rows,pass,"all power API audit rows are final_candidate with total-energy delta, GPU/device scope, and expected semantics",rows=72,"strict package must keep the power measurement matrix gate traceable, not just the final copied coefficients"
+L2 CG hit path,ncu_summary_counter_schema,pass,NCU summary artifact has hit-rate/access/byte/stall columns and component-relevant ok mode rows,"rows=13, modes=7","reported coefficients must remain traceable to NCU cache hit rate, access count, byte traffic, Tensor instruction, and stall evidence"
+L2 CG hit path,ncu_summary_coordinate_alignment,pass,"component-relevant NCU ok rows match strict detail coordinates: mode,W_SM_KiB,blocks_per_SM,active_SM,reuse_factor,load_repeat,store_repeat",expected=2;matched=2,"mode-level NCU validation is insufficient if the sidecar was collected with different occupancy, working-set, active-SM, or factor settings"
+L2 CG hit path,ncu_evidence_summary_fields,pass,"strict summary row exposes same-coordinate NCU evidence rows, treatment metric rows, component-relevant counter summaries, and ncu_actual_exact denominator source for memory pJ/bit components","coordinate_rows=2,metric_rows=2,modes=l2_cg_load_only",a passing artifact path is not enough; the report table itself must surface the NCU hit/access/byte/stall evidence used to interpret each coefficient
+hierarchy,l2_greater_than_shared,pass,L2 median > Shared median,"L2=1.13107, Shared=0.17059",strict results should preserve the broad hierarchy order
+hierarchy,l2_greater_than_l1,pass,L2 median > L1 median,"L2=1.13107, L1=0.173483",strict results should preserve the broad hierarchy order
+hierarchy,shared_l1_same_order,pass,"max(shared,L1)/min(shared,L1) <= 2",1.01696,shared scalar and global L1 are different paths but should be same-order
+Tensor MMA incremental,hard_plausibility_range,pass,0.001 <= median <= 10 pJ/FLOP,median=0.129216 pJ/FLOP,"broad order-of-magnitude gate for effective coefficients; failure usually means unit, NCU denominator, power source, or path attribution must be rechecked before reporting"
+Shared scalar path,hard_plausibility_range,pass,0.001 <= median <= 10 pJ/bit,median=0.17059 pJ/bit,"broad order-of-magnitude gate for effective coefficients; failure usually means unit, NCU denominator, power source, or path attribution must be rechecked before reporting"
+Global L1 hit path,hard_plausibility_range,pass,0.001 <= median <= 10 pJ/bit,median=0.173483 pJ/bit,"broad order-of-magnitude gate for effective coefficients; failure usually means unit, NCU denominator, power source, or path attribution must be rechecked before reporting"
+L2 CG hit path,hard_plausibility_range,pass,0.01 <= median <= 30 pJ/bit,median=1.13107 pJ/bit,"broad order-of-magnitude gate for effective coefficients; failure usually means unit, NCU denominator, power source, or path attribution must be rechecked before reporting"

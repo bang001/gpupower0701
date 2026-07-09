@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="540" viewBox="0 0 1120 540">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="40" y="48" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#1f2933">RTX 3090 strict measurement-scope coefficients</text>
+<text x="40" y="78" font-family="Arial, sans-serif" font-size="14" fill="#4b5563">NVML total-energy delta + NCU path validation; effective board-level microbenchmark coefficients, not pure silicon-level energy</text>
+<rect x="40" y="98" width="1040" height="78" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="62" y="120" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#111827">Tensor MMA incremental</text>
+<text x="62" y="143" font-family="Arial, sans-serif" font-size="12" fill="#4b5563">reg_mma - reg_operand_only</text>
+<text x="62" y="161" font-family="Arial, sans-serif" font-size="11" fill="#6b7280">strict accepted Tensor RF8/RF16 run</text>
+<rect x="450" y="109" width="135" height="18" rx="3" fill="#93c5fd"/>
+<text x="600" y="123" font-family="Arial, sans-serif" font-size="11" fill="#4b5563">separate pJ/FLOP scale</text>
+<text x="840" y="120" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#111827">0.129</text>
+<text x="910" y="120" font-family="Arial, sans-serif" font-size="13" fill="#4b5563">pJ/FLOP</text>
+<text x="840" y="144" font-family="Arial, sans-serif" font-size="12" fill="#4b5563">CI 0.0841495-0.137373; rows 6</text>
+<rect x="1000" y="103" width="64" height="24" rx="4" fill="#2f6f4e"/>
+<text x="1032" y="119" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#ffffff">accepted</text>
+<rect x="40" y="190" width="1040" height="78" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="62" y="212" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#111827">Shared scalar path</text>
+<text x="62" y="235" font-family="Arial, sans-serif" font-size="12" fill="#4b5563">shared_scalar_load_only - clocked_empty</text>
+<text x="62" y="253" font-family="Arial, sans-serif" font-size="11" fill="#6b7280">LR8-only follow-up supersedes LR4/LR8 mixed strict row; LR4/LR8 calibrated median 0.161 ...</text>
+<rect x="450" y="201" width="370" height="18" rx="3" fill="#e5e7eb"/>
+<rect x="450" y="201" width="55.8" height="18" rx="3" fill="#3b82f6"/>
+<text x="840" y="212" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#111827">0.171</text>
+<text x="910" y="212" font-family="Arial, sans-serif" font-size="13" fill="#4b5563">pJ/bit</text>
+<text x="840" y="236" font-family="Arial, sans-serif" font-size="12" fill="#4b5563">CI 0.121988-0.202983; rows 6</text>
+<rect x="1000" y="195" width="64" height="24" rx="4" fill="#2f6f4e"/>
+<text x="1032" y="211" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#ffffff">accepted</text>
+<rect x="40" y="282" width="1040" height="78" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="62" y="304" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#111827">Global L1 hit path</text>
+<text x="62" y="327" font-family="Arial, sans-serif" font-size="12" fill="#4b5563">global_l1_load_only - clocked_empty</text>
+<text x="62" y="345" font-family="Arial, sans-serif" font-size="11" fill="#6b7280">LR4-only follow-up isolates accepted L1-hit path after LR8 weak-signal rows</text>
+<rect x="450" y="293" width="370" height="18" rx="3" fill="#e5e7eb"/>
+<rect x="450" y="293" width="56.8" height="18" rx="3" fill="#3b82f6"/>
+<text x="840" y="304" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#111827">0.173</text>
+<text x="910" y="304" font-family="Arial, sans-serif" font-size="13" fill="#4b5563">pJ/bit</text>
+<text x="840" y="328" font-family="Arial, sans-serif" font-size="12" fill="#4b5563">CI 0.153333-0.194437; rows 6</text>
+<rect x="1000" y="287" width="64" height="24" rx="4" fill="#2f6f4e"/>
+<text x="1032" y="303" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#ffffff">accepted</text>
+<rect x="40" y="374" width="1040" height="78" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="62" y="396" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#111827">L2 CG hit path</text>
+<text x="62" y="419" font-family="Arial, sans-serif" font-size="12" fill="#4b5563">l2_cg_load_only - clocked_empty</text>
+<text x="62" y="437" font-family="Arial, sans-serif" font-size="11" fill="#6b7280">strict accepted L2 CG hit run</text>
+<rect x="450" y="385" width="370" height="18" rx="3" fill="#e5e7eb"/>
+<rect x="450" y="385" width="370.0" height="18" rx="3" fill="#3b82f6"/>
+<text x="840" y="396" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#111827">1.130</text>
+<text x="910" y="396" font-family="Arial, sans-serif" font-size="13" fill="#4b5563">pJ/bit</text>
+<text x="840" y="420" font-family="Arial, sans-serif" font-size="12" fill="#4b5563">CI 0.860355-1.35497; rows 6</text>
+<rect x="1000" y="379" width="64" height="24" rx="4" fill="#2f6f4e"/>
+<text x="1032" y="395" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#ffffff">accepted</text>
+<text x="40" y="510" font-family="Arial, sans-serif" font-size="12" fill="#4b5563">Scope: gpu_device_total_energy_counter. RTX 3090 GetPowerUsage fallback is one_sec_average, but fallback power is not used as numerator here.</text>
+</svg>

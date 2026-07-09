@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="640" viewBox="0 0 1120 640">
+<title>RTX 3090 strict component coefficient summary</title>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="38.0" y="38.0" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#18181B" text-anchor="start">RTX 3090 strict component coefficients</text>
+<text x="38.0" y="62.0" font-family="Arial, sans-serif" font-size="13" font-weight="400" fill="#52525B" text-anchor="start">Accepted strict-scope rows only. Tensor uses pJ/FLOP; memory paths use pJ/bit, so the two panels are not directly comparable.</text>
+<text x="38.0" y="122.0" font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="#18181B" text-anchor="start">Tensor path</text>
+<text x="38.0" y="145.0" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#52525B" text-anchor="start">reg_mma - reg_operand_only</text>
+<text x="38.0" y="165.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">W_SM=2048 KiB; blocks/SM=16; active_SM=82; RF=8,16; median_elapsed=21.796 s</text>
+<line x1="205.0" y1="106.0" x2="205.0" y2="184.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="205.0" y="202.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">0.00</text>
+<line x1="350.0" y1="106.0" x2="350.0" y2="184.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="350.0" y="202.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">0.05</text>
+<line x1="494.9" y1="106.0" x2="494.9" y2="184.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="494.9" y="202.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">0.10</text>
+<line x1="639.9" y1="106.0" x2="639.9" y2="184.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="639.9" y="202.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">0.15</text>
+<rect x="205.0" y="132.0" width="374.7" height="22.0" fill="#5B5FC7"/>
+<line x1="449.0" y1="143.0" x2="603.3" y2="143.0" stroke="#18181B" stroke-width="1.2"/>
+<line x1="449.0" y1="137.0" x2="449.0" y2="149.0" stroke="#18181B" stroke-width="1.2"/>
+<line x1="603.3" y1="137.0" x2="603.3" y2="149.0" stroke="#18181B" stroke-width="1.2"/>
+<text x="589.7" y="148.0" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#18181B" text-anchor="start">0.129 pJ/FLOP</text>
+<text x="440.0" y="226.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#52525B" text-anchor="middle">Tensor Core operation denominator</text>
+<text x="720.0" y="126.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#52525B" text-anchor="start">rows: 6</text>
+<text x="720.0" y="146.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#52525B" text-anchor="start">NCU rows: 8</text>
+<text x="720.0" y="166.0" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#52525B" text-anchor="start">NCU: HMMA present, L1 bytes zero</text>
+<text x="38.0" y="268.0" font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="#18181B" text-anchor="start">Memory paths</text>
+<text x="38.0" y="290.0" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#52525B" text-anchor="start">All memory denominators are same-coordinate NCU actual bytes where available.</text>
+<line x1="250.0" y1="271.0" x2="250.0" y2="511.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="250.0" y="539.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">0.00</text>
+<line x1="350.4" y1="271.0" x2="350.4" y2="511.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="350.4" y="539.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">0.25</text>
+<line x1="450.9" y1="271.0" x2="450.9" y2="511.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="450.9" y="539.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">0.50</text>
+<line x1="551.3" y1="271.0" x2="551.3" y2="511.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="551.3" y="539.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">0.75</text>
+<line x1="651.7" y1="271.0" x2="651.7" y2="511.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="651.7" y="539.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">1.00</text>
+<line x1="752.1" y1="271.0" x2="752.1" y2="511.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="752.1" y="539.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">1.25</text>
+<text x="555.0" y="565.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#52525B" text-anchor="middle">pJ/bit</text>
+<text x="38.0" y="311.0" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#18181B" text-anchor="start">Shared scalar</text>
+<text x="38.0" y="330.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">shared_scalar_load_only - clocked_empty</text>
+<text x="38.0" y="348.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">W_SM=64 KiB; blocks/SM=16; active_SM=82; LR=8; median_elapsed=34.682 s</text>
+<rect x="250.0" y="300.0" width="68.5" height="22.0" fill="#D97706"/>
+<line x1="299.0" y1="311.0" x2="331.5" y2="311.0" stroke="#18181B" stroke-width="1.2"/>
+<line x1="299.0" y1="305.0" x2="299.0" y2="317.0" stroke="#18181B" stroke-width="1.2"/>
+<line x1="331.5" y1="305.0" x2="331.5" y2="317.0" stroke="#18181B" stroke-width="1.2"/>
+<text x="328.5" y="317.0" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#18181B" text-anchor="start">0.171 pJ/bit</text>
+<text x="890.0" y="317.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#52525B" text-anchor="start">accepted / medium</text>
+<text x="890.0" y="337.0" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#52525B" text-anchor="start">NCU rows 3</text>
+<text x="38.0" y="389.0" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#18181B" text-anchor="start">Global L1 hit</text>
+<text x="38.0" y="408.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">global_l1_load_only - clocked_empty</text>
+<text x="38.0" y="426.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">W_SM=16 KiB; blocks/SM=16; active_SM=82; LR=4; median_elapsed=33.958 s</text>
+<rect x="250.0" y="378.0" width="69.7" height="22.0" fill="#0F766E"/>
+<line x1="311.6" y1="389.0" x2="328.1" y2="389.0" stroke="#18181B" stroke-width="1.2"/>
+<line x1="311.6" y1="383.0" x2="311.6" y2="395.0" stroke="#18181B" stroke-width="1.2"/>
+<line x1="328.1" y1="383.0" x2="328.1" y2="395.0" stroke="#18181B" stroke-width="1.2"/>
+<text x="329.7" y="395.0" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#18181B" text-anchor="start">0.173 pJ/bit</text>
+<text x="890.0" y="395.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#52525B" text-anchor="start">accepted / medium</text>
+<text x="890.0" y="415.0" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#52525B" text-anchor="start">NCU rows 3</text>
+<text x="38.0" y="467.0" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#18181B" text-anchor="start">L2 CG hit</text>
+<text x="38.0" y="486.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">l2_cg_load_only - clocked_empty</text>
+<text x="38.0" y="504.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">W_SM=64 KiB; blocks/SM=16; active_SM=82; LR=4,8; median_elapsed=33.791 s</text>
+<rect x="250.0" y="456.0" width="454.4" height="22.0" fill="#2563EB"/>
+<line x1="595.9" y1="467.0" x2="794.6" y2="467.0" stroke="#18181B" stroke-width="1.2"/>
+<line x1="595.9" y1="461.0" x2="595.9" y2="473.0" stroke="#18181B" stroke-width="1.2"/>
+<line x1="794.6" y1="461.0" x2="794.6" y2="473.0" stroke="#18181B" stroke-width="1.2"/>
+<text x="714.4" y="473.0" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#18181B" text-anchor="start">1.131 pJ/bit</text>
+<text x="890.0" y="473.0" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#52525B" text-anchor="start">accepted / medium</text>
+<text x="890.0" y="493.0" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#52525B" text-anchor="start">NCU rows 3</text>
+<text x="38.0" y="604.0" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#52525B" text-anchor="start">Interpretation: these are effective board-level microbenchmark coefficients, not pure silicon-level Tensor/L1/L2 circuit energy.</text>
+</svg>
