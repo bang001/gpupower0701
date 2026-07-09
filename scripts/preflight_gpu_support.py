@@ -11,6 +11,19 @@ from pathlib import Path
 from typing import Any
 
 
+POWER_DETAIL_KEYWORDS = (
+    "power readings",
+    "module power",
+    "gpu memory power",
+    "power draw",
+    "power limit",
+    "base power",
+    "ceiling power",
+    "power smoothing",
+    "current tmp",
+)
+
+
 PROFILES: dict[str, dict[str, Any]] = {
     "v100": {
         "aliases": ["v100", "tesla v100"],
@@ -92,6 +105,21 @@ def split_csv_line(line: str) -> list[str]:
     return [item.strip() for item in line.split(",")]
 
 
+def query_gpu_fields(gpu: int, fields: list[str]) -> tuple[int, dict[str, str], str]:
+    rc, out = run(
+        [
+            "nvidia-smi",
+            f"--id={gpu}",
+            f"--query-gpu={','.join(fields)}",
+            "--format=csv,noheader,nounits",
+        ]
+    )
+    if rc != 0:
+        return rc, {}, out
+    values = split_csv_line(out.splitlines()[0])
+    return rc, dict(zip(fields, values)), ""
+
+
 def detect_profile(name: str, compute_cap: str) -> str | None:
     cc = compute_cap.strip()
     for profile, info in PROFILES.items():
@@ -105,7 +133,7 @@ def detect_profile(name: str, compute_cap: str) -> str | None:
 
 
 def query_gpu(gpu: int) -> dict[str, str]:
-    fields = [
+    base_fields = [
         "index",
         "name",
         "uuid",
@@ -115,19 +143,74 @@ def query_gpu(gpu: int) -> dict[str, str]:
         "power.limit",
         "clocks.sm",
         "clocks.mem",
+        "temperature.gpu",
+        "ecc.mode.current",
     ]
-    rc, out = run(
-        [
-            "nvidia-smi",
-            f"--id={gpu}",
-            f"--query-gpu={','.join(fields)}",
-            "--format=csv,noheader,nounits",
-        ]
-    )
+    extended_fields = [
+        "index",
+        "name",
+        "uuid",
+        "driver_version",
+        "compute_cap",
+        "power.draw",
+        "power.draw.average",
+        "power.draw.instant",
+        "power.limit",
+        "clocks.sm",
+        "clocks.mem",
+        "temperature.gpu",
+        "ecc.mode.current",
+    ]
+
+    fields = extended_fields
+    rc, result, error = query_gpu_fields(gpu, fields)
     if rc != 0:
-        return {"query_error": out}
-    values = split_csv_line(out.splitlines()[0])
-    return dict(zip(fields, values))
+        fields = base_fields
+        rc, result, error = query_gpu_fields(gpu, fields)
+    if rc != 0:
+        return {"query_error": error}
+    result["power_query_fields"] = "extended" if fields == extended_fields else "base"
+    return result
+
+
+def query_power_scope(gpu: int) -> dict[str, str]:
+    """Collect non-fatal nvidia-smi power-scope metadata for reports.
+
+    The component coefficient numerator is still the harness NVML energy CSV.
+    This preflight output only records whether the platform exposes GPU,
+    module, and memory power scopes that must not be mixed later.
+    """
+
+    result: dict[str, str] = {}
+
+    module_fields = [
+        "module.power.draw.average",
+        "module.power.draw.instant",
+        "module.power.limit",
+        "module.enforced.power.limit",
+    ]
+    rc, values, error = query_gpu_fields(gpu, module_fields)
+    result["module_power_query_rc"] = str(rc)
+    if rc == 0:
+        for key, value in values.items():
+            result[key] = value
+    else:
+        result["module_power_query_status"] = "unsupported_or_unavailable"
+        result["module_power_query_error"] = error[:500]
+
+    rc, out = run(["nvidia-smi", "-i", str(gpu), "-q", "-d", "POWER"])
+    result["power_detail_query_rc"] = str(rc)
+    if rc == 0:
+        excerpt: list[str] = []
+        for line in out.splitlines():
+            stripped = line.strip()
+            lowered = stripped.lower()
+            if any(keyword in lowered for keyword in POWER_DETAIL_KEYWORDS):
+                excerpt.append(stripped)
+        result["power_detail_excerpt"] = "\n".join(excerpt[:80])
+    else:
+        result["power_detail_query_error"] = out[:500]
+    return result
 
 
 def query_ncu(ncu: str, chip: str) -> dict[str, str]:
@@ -161,14 +244,14 @@ def query_ncu(ncu: str, chip: str) -> dict[str, str]:
     return result
 
 
-def dry_run_binary(binary: str, profile: str, active_sm: int) -> tuple[int, str]:
+def dry_run_binary(binary: str, gpu: int, profile: str, active_sm: int) -> tuple[int, str]:
     return run(
         [
             binary,
             "--gpu-list",
-            "0",
+            str(gpu),
             "--mode",
-            "shared_mma",
+            "shared_scalar_load_only",
             "--w-sm-kib",
             "64",
             "--blocks-per-sm",
@@ -182,11 +265,150 @@ def dry_run_binary(binary: str, profile: str, active_sm: int) -> tuple[int, str]
     )
 
 
+def strict_gate_errors(
+    *,
+    requested_profile: str,
+    detected_profile: str | None,
+    gpu_info: dict[str, str],
+    ncu_info: dict[str, str],
+    dry_run: tuple[int, str],
+) -> list[str]:
+    errors: list[str] = []
+    if requested_profile == "auto":
+        if "query_error" in gpu_info:
+            errors.append("gpu_query_failed")
+        if not detected_profile:
+            errors.append("detected_profile_unknown")
+    else:
+        if "query_error" in gpu_info:
+            errors.append("gpu_query_failed")
+        elif not detected_profile:
+            errors.append("detected_profile_unknown")
+        elif detected_profile != requested_profile:
+            errors.append(
+                f"profile_mismatch_requested_{requested_profile}_detected_{detected_profile}"
+            )
+
+    if ncu_info.get("chip_supported") != "true":
+        errors.append(f"ncu_chip_not_supported_{ncu_info.get('chip_supported', 'missing')}")
+    if ncu_info.get("query_metrics_ok") != "true":
+        errors.append(f"ncu_query_metrics_not_ok_{ncu_info.get('query_metrics_rc', 'missing')}")
+    if dry_run[0] != 0:
+        errors.append(f"binary_dry_run_failed_rc_{dry_run[0]}")
+    return errors
+
+
+def assert_selftest(condition: bool, name: str, detail: str = "") -> None:
+    if not condition:
+        suffix = f": {detail}" if detail else ""
+        raise AssertionError(f"{name} failed{suffix}")
+
+
+def run_self_test() -> None:
+    good_ncu = {
+        "chip_supported": "true",
+        "query_metrics_ok": "true",
+        "query_metrics_rc": "0",
+    }
+    good_gpu = {"name": "NVIDIA A100", "compute_cap": "8.0"}
+    no_errors = strict_gate_errors(
+        requested_profile="a100",
+        detected_profile="a100",
+        gpu_info=good_gpu,
+        ncu_info=good_ncu,
+        dry_run=(0, "dry_run=true"),
+    )
+    assert_selftest(not no_errors, "strict_good_profile", ";".join(no_errors))
+
+    mismatch = strict_gate_errors(
+        requested_profile="a100",
+        detected_profile="rtx3090",
+        gpu_info={"name": "NVIDIA GeForce RTX 3090", "compute_cap": "8.6"},
+        ncu_info=good_ncu,
+        dry_run=(0, "dry_run=true"),
+    )
+    assert_selftest(
+        "profile_mismatch_requested_a100_detected_rtx3090" in mismatch,
+        "strict_profile_mismatch",
+        ";".join(mismatch),
+    )
+
+    auto_unknown = strict_gate_errors(
+        requested_profile="auto",
+        detected_profile=None,
+        gpu_info={"name": "Unknown GPU", "compute_cap": "9.9"},
+        ncu_info=good_ncu,
+        dry_run=(0, "dry_run=true"),
+    )
+    assert_selftest(
+        "detected_profile_unknown" in auto_unknown,
+        "strict_auto_unknown_profile",
+        ";".join(auto_unknown),
+    )
+
+    ncu_bad = strict_gate_errors(
+        requested_profile="v100",
+        detected_profile="v100",
+        gpu_info={"name": "Tesla V100", "compute_cap": "7.0"},
+        ncu_info={
+            "chip_supported": "false",
+            "query_metrics_ok": "false",
+            "query_metrics_rc": "1",
+        },
+        dry_run=(0, "dry_run=true"),
+    )
+    assert_selftest(
+        "ncu_chip_not_supported_false" in ncu_bad
+        and "ncu_query_metrics_not_ok_1" in ncu_bad,
+        "strict_ncu_failure",
+        ";".join(ncu_bad),
+    )
+
+    dry_bad = strict_gate_errors(
+        requested_profile="h100",
+        detected_profile="h100",
+        gpu_info={"name": "NVIDIA H100", "compute_cap": "9.0"},
+        ncu_info=good_ncu,
+        dry_run=(2, "invalid combination"),
+    )
+    assert_selftest(
+        "binary_dry_run_failed_rc_2" in dry_bad,
+        "strict_dry_run_failure",
+        ";".join(dry_bad),
+    )
+
+    report = markdown_report(
+        gpu=0,
+        target_profile="a100",
+        detected_profile="rtx3090",
+        strict=True,
+        strict_errors=mismatch,
+        dry_run_active_sm=108,
+        gpu_info={"name": "NVIDIA GeForce RTX 3090", "compute_cap": "8.6"},
+        power_scope={},
+        profile=PROFILES["a100"],
+        ncu_info=good_ncu,
+        dry_run=(0, "dry_run=true"),
+    )
+    assert_selftest(
+        "- `strict`: true" in report
+        and "- `overall`: fail" in report
+        and "profile_mismatch_requested_a100_detected_rtx3090" in report,
+        "strict_markdown_verdict",
+    )
+
+    print("preflight strict gate self-test passed")
+
+
 def markdown_report(
     gpu: int,
     target_profile: str,
     detected_profile: str | None,
+    strict: bool,
+    strict_errors: list[str],
+    dry_run_active_sm: int,
     gpu_info: dict[str, str],
+    power_scope: dict[str, str],
     profile: dict[str, Any],
     ncu_info: dict[str, str],
     dry_run: tuple[int, str],
@@ -199,6 +421,28 @@ def markdown_report(
     lines.append(f"- Requested profile: `{target_profile}`")
     lines.append(f"- Detected profile: `{detected_profile or 'unknown'}`")
     lines.append("")
+    lines.append("## Preflight Verdict")
+    lines.append("")
+    profile_errors = [
+        error
+        for error in strict_errors
+        if error.startswith("gpu_query")
+        or error.startswith("detected_profile")
+        or error.startswith("profile_mismatch")
+    ]
+    ncu_errors = [error for error in strict_errors if error.startswith("ncu_")]
+    dry_errors = [error for error in strict_errors if error.startswith("binary_dry_run")]
+    lines.append(f"- `strict`: {str(strict).lower()}")
+    lines.append(f"- `profile_gate`: {'pass' if not profile_errors else 'fail'}")
+    lines.append(f"- `ncu_gate`: {'pass' if not ncu_errors else 'fail'}")
+    lines.append(f"- `dry_run_gate`: {'pass' if not dry_errors else 'fail'}")
+    lines.append(
+        f"- `overall`: {'pass' if not strict_errors else 'fail' if strict else 'warning'}"
+    )
+    lines.append(
+        f"- `errors`: {'none' if not strict_errors else ';'.join(strict_errors)}"
+    )
+    lines.append("")
     lines.append("## GPU")
     lines.append("")
     for key in [
@@ -208,13 +452,47 @@ def markdown_report(
         "driver_version",
         "compute_cap",
         "power.draw",
+        "power.draw.average",
+        "power.draw.instant",
         "power.limit",
         "clocks.sm",
         "clocks.mem",
+        "temperature.gpu",
+        "ecc.mode.current",
+        "power_query_fields",
         "query_error",
     ]:
         if key in gpu_info:
             lines.append(f"- `{key}`: {gpu_info[key]}")
+    lines.append("")
+    lines.append("## Power Scope")
+    lines.append("")
+    lines.append(
+        "The final component-energy numerator must come from the harness raw "
+        "CSV, preferably `nvml_total_energy`. The fields below are preflight "
+        "metadata for distinguishing GPU/device, module, and memory power "
+        "scopes; do not mix module or memory power into component coefficients."
+    )
+    lines.append("")
+    for key in [
+        "module_power_query_rc",
+        "module.power.draw.average",
+        "module.power.draw.instant",
+        "module.power.limit",
+        "module.enforced.power.limit",
+        "module_power_query_status",
+        "module_power_query_error",
+        "power_detail_query_rc",
+        "power_detail_query_error",
+    ]:
+        if key in power_scope:
+            value = power_scope[key].replace("\n", " ")
+            lines.append(f"- `{key}`: {value}")
+    if power_scope.get("power_detail_excerpt"):
+        lines.append("")
+        lines.append("```text")
+        lines.append(power_scope["power_detail_excerpt"])
+        lines.append("```")
     lines.append("")
     lines.append("## Selected Harness Profile")
     lines.append("")
@@ -232,6 +510,8 @@ def markdown_report(
         "ncu_policy",
     ]:
         lines.append(f"- `{key}`: {profile[key]}")
+    lines.append(f"- `dry_run_gpu`: {gpu}")
+    lines.append(f"- `dry_run_active_sm`: {dry_run_active_sm}")
     lines.append("")
     lines.append("## Nsight Compute")
     lines.append("")
@@ -256,7 +536,6 @@ def markdown_report(
     lines.append("```text")
     lines.append(dry_run[1])
     lines.append("```")
-    lines.append("")
     return "\n".join(lines)
 
 
@@ -266,8 +545,35 @@ def main() -> int:
     parser.add_argument("--target-profile", default="auto", choices=["auto", *sorted(PROFILES)])
     parser.add_argument("--binary", default="./build/a100_fp16_energy_v2")
     parser.add_argument("--ncu", default="ncu")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Exit nonzero if the requested profile does not match the detected GPU, "
+            "NCU chip/metric support is unavailable, or binary dry-run fails."
+        ),
+    )
+    parser.add_argument(
+        "--active-sm",
+        type=int,
+        default=0,
+        help=(
+            "Active SM count used by the binary dry-run. Defaults to the full "
+            "profile count; pass the runtime/preflight value for MIG or "
+            "partitioned nodes."
+        ),
+    )
     parser.add_argument("--out", default="")
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Run built-in strict preflight gate regression checks and exit.",
+    )
     args = parser.parse_args()
+
+    if args.self_test:
+        run_self_test()
+        return 0
 
     gpu_info = query_gpu(args.gpu)
     detected = None
@@ -280,10 +586,29 @@ def main() -> int:
             "could not select a supported profile; pass --target-profile explicitly"
         )
     profile = PROFILES[selected]
+    dry_run_active_sm = args.active_sm or profile["full_sm"]
+    power_scope = query_power_scope(args.gpu)
     ncu_info = query_ncu(args.ncu, profile["ncu_chip"])
-    dry = dry_run_binary(args.binary, selected, profile["full_sm"])
+    dry = dry_run_binary(args.binary, args.gpu, selected, dry_run_active_sm)
+    strict_errors = strict_gate_errors(
+        requested_profile=args.target_profile,
+        detected_profile=detected,
+        gpu_info=gpu_info,
+        ncu_info=ncu_info,
+        dry_run=dry,
+    )
     report = markdown_report(
-        args.gpu, args.target_profile, detected, gpu_info, profile, ncu_info, dry
+        args.gpu,
+        args.target_profile,
+        detected,
+        args.strict,
+        strict_errors,
+        dry_run_active_sm,
+        gpu_info,
+        power_scope,
+        profile,
+        ncu_info,
+        dry,
     )
 
     if args.out:
@@ -293,6 +618,9 @@ def main() -> int:
         print(f"wrote {out}")
     else:
         print(report)
+    if args.strict and strict_errors:
+        print("strict preflight failed: " + ";".join(strict_errors))
+        return dry[0] if dry[0] != 0 else 2
     return 0 if dry[0] == 0 else dry[0]
 
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Run duration-calibrated component regression sweeps.
 
-Unlike run_component_pairs.py, this runner does not reuse a reference ITER
-across modes. Each command omits --iters so the benchmark binary calibrates
+Unlike the archived legacy pair runner, this runner does not reuse a reference
+ITER across modes. Each command omits --iters so the benchmark binary calibrates
 that mode toward the requested --seconds. The output is intended for
-elapsed-aware regression, not simple paired differences.
+elapsed-aware finalplan sweeps, not simple paired differences.
 """
 
 from __future__ import annotations
@@ -186,6 +186,7 @@ def main() -> int:
                 "measurement_policy",
                 "command",
             ],
+            lineterminator="\n",
         )
         writer.writeheader()
 

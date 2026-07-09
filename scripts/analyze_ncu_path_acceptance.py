@@ -38,6 +38,29 @@ def expected_shared_bytes(row: dict[str, str]) -> float:
     return active_sm * blocks * iters * load_repeat * 1024.0
 
 
+def expected_register_ops(row: dict[str, str]) -> float:
+    active_sm = f(row, "active_SM")
+    blocks = f(row, "blocks_per_SM")
+    iters = f(row, "ITER")
+    reuse = f(row, "reuse_factor", 1.0)
+    return active_sm * blocks * iters * reuse
+
+
+def memory_reason_if_high(
+    *,
+    value: float,
+    absolute_max: float,
+    ratio_denominator: float,
+    ratio_max: float,
+    reason: str,
+) -> str | None:
+    if value <= absolute_max:
+        return None
+    if ratio_denominator > 0.0 and ratio(value, ratio_denominator) <= ratio_max:
+        return None
+    return reason
+
+
 def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
     mode = row.get("mode", "")
     ncu_status = row.get("status", "")
@@ -121,23 +144,40 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
         component = "tensor_increment_candidate"
         if tensor_hmma <= 0.0:
             reasons.append("missing_tensor_hmma")
-        if l1_bytes > args.tensor_memory_bytes_max:
-            reasons.append("l1_traffic_too_high_for_tensor")
-        if l2_bytes > args.tensor_memory_bytes_max:
-            reasons.append("l2_traffic_too_high_for_tensor")
-        if dram_bytes > args.tensor_memory_bytes_max:
-            reasons.append("dram_traffic_too_high_for_tensor")
+        for value, reason in [
+            (l1_bytes, "l1_traffic_too_high_for_tensor"),
+            (l2_bytes, "l2_traffic_too_high_for_tensor"),
+            (dram_bytes, "dram_traffic_too_high_for_tensor"),
+        ]:
+            maybe_reason = memory_reason_if_high(
+                value=value,
+                absolute_max=args.tensor_memory_bytes_max,
+                ratio_denominator=tensor_hmma,
+                ratio_max=args.tensor_memory_bytes_per_hmma_max,
+                reason=reason,
+            )
+            if maybe_reason:
+                reasons.append(maybe_reason)
 
     elif mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}:
         component = "register_control_candidate"
+        expected_ops = expected_register_ops(row)
         if tensor_hmma > 0.0:
             reasons.append("tensor_hmma_present_in_control")
-        if l1_bytes > args.register_memory_bytes_max:
-            reasons.append("l1_traffic_too_high_for_register_control")
-        if l2_bytes > args.register_memory_bytes_max:
-            reasons.append("l2_traffic_too_high_for_register_control")
-        if dram_bytes > args.register_memory_bytes_max:
-            reasons.append("dram_traffic_too_high_for_register_control")
+        for value, reason in [
+            (l1_bytes, "l1_traffic_too_high_for_register_control"),
+            (l2_bytes, "l2_traffic_too_high_for_register_control"),
+            (dram_bytes, "dram_traffic_too_high_for_register_control"),
+        ]:
+            maybe_reason = memory_reason_if_high(
+                value=value,
+                absolute_max=args.register_memory_bytes_max,
+                ratio_denominator=expected_ops,
+                ratio_max=args.register_memory_bytes_per_op_max,
+                reason=reason,
+            )
+            if maybe_reason:
+                reasons.append(maybe_reason)
 
     elif mode == "dram_cg_load_only":
         component = "dram_sanity_path"
@@ -178,6 +218,28 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
             ),
             "l2_to_l1_bytes": f"{ratio(l2_bytes, l1_bytes):.6g}" if l1_bytes > 0.0 else "",
             "dram_to_l2_bytes": f"{ratio(dram_bytes, l2_bytes):.6g}" if l2_bytes > 0.0 else "",
+            "tensor_l2_bytes_per_hmma": (
+                f"{ratio(l2_bytes, tensor_hmma):.6g}"
+                if mode == "reg_mma" and tensor_hmma > 0.0
+                else ""
+            ),
+            "tensor_dram_bytes_per_hmma": (
+                f"{ratio(dram_bytes, tensor_hmma):.6g}"
+                if mode == "reg_mma" and tensor_hmma > 0.0
+                else ""
+            ),
+            "register_l2_bytes_per_op": (
+                f"{ratio(l2_bytes, expected_register_ops(row)):.6g}"
+                if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
+                and expected_register_ops(row) > 0.0
+                else ""
+            ),
+            "register_dram_bytes_per_op": (
+                f"{ratio(dram_bytes, expected_register_ops(row)):.6g}"
+                if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
+                and expected_register_ops(row) > 0.0
+                else ""
+            ),
         }
     )
     return out
@@ -234,6 +296,8 @@ def main() -> int:
     parser.add_argument("--shared-bank-conflict-ratio-max", type=float, default=0.05)
     parser.add_argument("--tensor-memory-bytes-max", type=float, default=1.0e8)
     parser.add_argument("--register-memory-bytes-max", type=float, default=1.0e8)
+    parser.add_argument("--tensor-memory-bytes-per-hmma-max", type=float, default=1.0)
+    parser.add_argument("--register-memory-bytes-per-op-max", type=float, default=1.0)
     parser.add_argument("--dram-l1-hit-max-pct", type=float, default=1.0)
     parser.add_argument("--dram-l2-hit-max-pct", type=float, default=5.0)
     parser.add_argument("--dram-l2-ratio-min", type=float, default=0.5)

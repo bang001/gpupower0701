@@ -1,6 +1,6 @@
 # A100 노드 실험 실행 가이드
 
-작성일: 2026-07-02
+작성일: 2026-07-08
 
 ## 목적
 
@@ -24,6 +24,19 @@
 
 주의: 실제 A100 SKU, MIG 설정, 클러스터 정책에 따라 보이는 SM 수가 달라질 수 있다. 실행 전 preflight 결과의 runtime SM 수를 확인한다. `combined L1/shared profile`은 SM 내부 통합 capacity이고, `shared allocation profile`은 shared-memory 실험 feasibility에 쓰는 CUDA shared capacity다.
 
+Power 측정은 [power_measurement_api_matrix_ko.md](power_measurement_api_matrix_ko.md)를 따른다. A100/GA100은 `GetPowerUsage`를 instantaneous로 기록하지만, 최종 energy numerator는 가능하면 `nvmlDeviceGetTotalEnergyConsumption` mJ counter 차분을 우선한다. `energy_source=legacy_get_power_usage_integral`이면 최종 coefficient가 아니라 provisional/fallback 결과로 표시한다.
+
+A100 결과를 채택할 때는 아래 gate를 적용한다.
+
+| 항목 | 채택 기준 |
+|---|---|
+| final numerator | `nvml_total_energy_supported=true`, `energy_source=nvml_total_energy` |
+| integration method | `total_energy_mj_delta` |
+| fallback | `GetPowerUsage` instant endpoint 적분은 provisional만 허용 |
+| profile semantics | `nvml_power_usage_semantics=instant` |
+| measurement scope | `measurement_scope=gpu_device_total_energy_counter` |
+| partition | MIG/full GPU 여부와 runtime active SM 수를 보고서에 기록 |
+
 ## 1. 저장소 준비
 
 ```bash
@@ -40,7 +53,8 @@ git pull
 
 ```bash
 nvidia-smi -L
-nvidia-smi --query-gpu=index,name,uuid,driver_version,compute_cap,power.draw,power.limit,clocks.sm,clocks.mem,temperature.gpu,ecc.mode.current --format=csv
+nvidia-smi --query-gpu=index,name,uuid,driver_version,compute_cap,power.draw,power.draw.average,power.draw.instant,power.limit,clocks.sm,clocks.mem,temperature.gpu,ecc.mode.current --format=csv
+nvidia-smi -q -d POWER,CLOCK,TEMPERATURE
 ```
 
 가능하면 persistence mode를 켠다.
@@ -60,7 +74,9 @@ preflight script:
 ```bash
 python3 scripts/preflight_gpu_support.py \
   --gpu 0 \
-  --target-profile auto \
+  --target-profile a100 \
+  --strict \
+  --active-sm 108 \
   --ncu "$(command -v ncu)" \
   --out results/summary/a100_gpu0_preflight.md
 ```
@@ -72,6 +88,8 @@ preflight에서 확인할 항목:
 | detected profile | `a100` |
 | compute capability | `8.0` |
 | selected CUDA arch | `80` |
+| dry-run GPU | `dry_run_gpu: 0` 또는 preflight `--gpu`와 같은 index |
+| dry-run active SM | `dry_run_active_sm: 108`, MIG이면 runtime SM 수 |
 | NCU chip | `ga100` |
 | NCU query metrics | `query_metrics_ok: true` |
 | binary dry run | `return_code: 0` |
@@ -128,7 +146,8 @@ cmake --build build-a100 -j
 | `target_shared_KiB_per_SM` | `164` |
 | `mode_allowed` | `true` 또는 의도한 skip reason |
 
-`--target-profile auto`도 한 번 확인한다.
+탐색 단계에서는 `--target-profile auto`도 한 번 확인할 수 있지만, final package에
+넣는 preflight는 `--target-profile a100 --strict`로 실행한다.
 
 ```bash
 ./build-a100/a100_fp16_energy_v2 \
@@ -263,45 +282,18 @@ python3 scripts/run_sweep.py \
   --matrix-csv results/raw/a100_sanity_sweep_$(date +%Y%m%d)_matrix.csv
 ```
 
-### Component pair 실행
+### Legacy component pair 실행
 
-component-like coefficient를 계산할 때는 mode별 raw sweep만 쓰지 말고 pair runner를 별도로 실행한다. 이 runner는 각 좌표에서 reference mode를 calibration하고 같은 `ITER`를 control mode에 재사용한다.
+기존 `run_component_pairs.py` / `analyze_component_pairs.py` 방식은 현재 primary 경로가 아니다. 이 방식은 elapsed mismatch와 instruction-mix 차이가 커서 final component coefficient로 쓰기 어렵다.
 
-```bash
-python3 scripts/run_component_pairs.py \
-  --binary ./build-a100/a100_fp16_energy_v2 \
-  --execute \
-  --target-profile a100 \
-  --gpu-ids 0 \
-  --groups register,shared,l2,dram,store \
-  --w-sm-kib-values 32,128,512,8192 \
-  --blocks-per-sm-values 1,8,16,32 \
-  --active-sm-values 108 \
-  --reuse-factors 1,2,4,8 \
-  --seconds 10 \
-  --repeats 5 \
-  --output results/raw/a100_component_pairs_$(date +%Y%m%d).csv \
-  --matrix-csv results/raw/a100_component_pairs_$(date +%Y%m%d)_matrix.csv
+관련 코드는 혼동 방지를 위해 archive로 이동했다.
+
+```text
+archive/legacy_20260707/scripts/run_component_pairs.py
+archive/legacy_20260707/scripts/analyze_component_pairs.py
 ```
 
-분석:
-
-```bash
-python3 scripts/analyze_component_pairs.py \
-  results/raw/a100_component_pairs_$(date +%Y%m%d).csv \
-  --out-csv results/summary/a100_component_pair_summary_$(date +%Y%m%d).csv \
-  --out-md results/summary/a100_component_pair_summary_$(date +%Y%m%d).md
-```
-
-중요한 register/tensor 해석:
-
-| pair | 해석 | 단위 |
-|---|---|---|
-| `reg_operand_only - empty` | no-MMA register-fragment/control baseline | pJ/reg-op |
-| `reg_mma - reg_operand_only` | effective Tensor Core MMA incremental cost 후보 | pJ/FLOP |
-| `reg_mma - empty` | 기존 effective Tensor Engine + register path baseline | pJ/FLOP |
-
-`reg_operand_only`는 pure register energy가 아니라 sampled fragment consume과 compiler 최적화 방지 경로가 포함된 matched control이다.
+A100 component coefficient 후보는 이 문서 11장의 acceptance-first finalplan flow를 우선 사용한다.
 
 ## 7. NCU validation
 
@@ -401,7 +393,7 @@ python3 scripts/plot_results.py \
 
 ## 11. 2026-07-06 Component finalplan 업데이트
 
-기존 `run_component_pairs.py` 방식은 보조 진단으로 남긴다. Tensor/Register/L1/Shared/L2/DRAM component coefficient 후보를 만들 때는 다음 acceptance-first flow를 우선한다.
+기존 `run_component_pairs.py` 방식은 legacy archive로 이동했다. Tensor/Register/L1/Shared/L2/DRAM component coefficient 후보를 만들 때는 다음 acceptance-first flow를 우선한다.
 
 | 단계 | script | 목적 |
 |---|---|---|
