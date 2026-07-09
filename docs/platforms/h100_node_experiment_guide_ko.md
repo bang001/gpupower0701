@@ -1,6 +1,6 @@
 # H100 노드 실험 실행 가이드
 
-작성일: 2026-07-06
+작성일: 2026-07-08
 
 ## 목적
 
@@ -29,6 +29,18 @@
 - preflight에서 runtime SM 수가 132가 아니면 `--active-sm`을 runtime 값으로 바꾼다.
 - 현재 harness profile의 50 MiB L2는 기본 가이드 값이다. SKU별 L2가 다르면 결과 보고서에 runtime/profile 차이를 명시한다.
 - `combined L1/shared profile`은 SM 내부 통합 capacity이고, `shared allocation profile`은 shared-memory 실험 feasibility에 쓰는 CUDA shared capacity다.
+- Power 측정은 [power_measurement_api_matrix_ko.md](power_measurement_api_matrix_ko.md)를 따른다. H100/GH100에서는 `GetPowerUsage`를 one-second average로 기록하고, Hopper datacenter 제품에서 보일 수 있는 module power와 GPU power를 같은 coefficient 표에 섞지 않는다. 최종 energy numerator는 가능하면 `nvmlDeviceGetTotalEnergyConsumption` mJ counter 차분을 우선한다.
+
+H100 결과를 채택할 때는 아래 gate를 적용한다.
+
+| 항목 | 채택 기준 |
+|---|---|
+| final numerator | `nvml_total_energy_supported=true`, `energy_source=nvml_total_energy` |
+| integration method | `total_energy_mj_delta` |
+| fallback | `GetPowerUsage` one-second average endpoint 적분은 provisional만 허용 |
+| profile semantics | `nvml_power_usage_semantics=one_sec_average` |
+| measurement scope | `measurement_scope=gpu_device_total_energy_counter` |
+| power scope | GPU/device power, module power, GPU memory power를 같은 coefficient numerator에 섞지 않음 |
 
 ## 1. 저장소 준비
 
@@ -44,8 +56,9 @@ git pull
 
 ```bash
 nvidia-smi -L
-nvidia-smi --query-gpu=index,name,uuid,driver_version,compute_cap,power.draw,power.limit,clocks.sm,clocks.mem,temperature.gpu,ecc.mode.current --format=csv
-nvidia-smi -q | grep -i -E "Product Name|MIG|Compute Mode|FB Memory|BAR1|Power Limit"
+nvidia-smi --query-gpu=index,name,uuid,driver_version,compute_cap,power.draw,power.draw.average,power.draw.instant,power.limit,clocks.sm,clocks.mem,temperature.gpu,ecc.mode.current --format=csv
+nvidia-smi -q -d POWER,CLOCK,TEMPERATURE
+nvidia-smi -q | grep -i -E "Product Name|MIG|Compute Mode|FB Memory|BAR1|Power Limit|Module Power|GPU Power"
 ```
 
 가능하면 persistence mode를 켠다.
@@ -59,10 +72,16 @@ preflight script:
 ```bash
 python3 scripts/preflight_gpu_support.py \
   --gpu 0 \
-  --target-profile auto \
+  --target-profile h100 \
+  --strict \
+  --active-sm 132 \
   --ncu "$(command -v ncu)" \
   --out results/summary/h100_gpu0_preflight.md
 ```
+
+runtime SM 수가 132가 아니면 위 `--active-sm`을 preflight에서 확인한 값으로 바꾸고,
+이후 generated command plan과 package audit의 `--expected-active-sm`도 같은 값으로
+맞춘다.
 
 확인 항목:
 
@@ -71,6 +90,8 @@ python3 scripts/preflight_gpu_support.py \
 | detected profile | `h100` |
 | compute capability | `9.0` |
 | selected CUDA arch | `90` |
+| dry-run GPU | `dry_run_gpu: 0` 또는 preflight `--gpu`와 같은 index |
+| dry-run active SM | `dry_run_active_sm: 132`, SKU/partition이면 runtime SM 수 |
 | NCU chip | `gh100` |
 | binary dry run | `return_code: 0` |
 
@@ -81,7 +102,7 @@ cmake -S . -B build-h100 \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CUDA_ARCHITECTURES=90
 
-cmake --build build-h100 -j
+cmake --build build-h100 --clean-first -j
 ```
 
 CUDA toolkit 경로를 명시해야 하는 환경:
@@ -93,10 +114,13 @@ cmake -S . -B build-h100 \
   -DCUDAToolkit_ROOT=/path/to/cuda \
   -DCMAKE_CUDA_ARCHITECTURES=90
 
-cmake --build build-h100 -j
+cmake --build build-h100 --clean-first -j
 ```
 
 빌드 로그에서 ptxas register count와 spill을 확인한다. 주요 kernel에서 spill이 발생하면 component coefficient 후보에서 제외하거나 별도 위험으로 표시한다.
+`git pull` 후 `src/`, `include/`, `CMakeLists.txt`가 바뀐 경우에는 반드시 clean rebuild를 한다.
+특히 final run raw CSV는 C++ harness의 CSV header에 `measurement_scope` 컬럼이 있는
+바이너리로 생성되어야 한다.
 
 ## 4. Dry-run sanity
 
@@ -176,8 +200,29 @@ L2 capacity path:
 | `profile_name` | `h100` |
 | `compute_capability` | `9.0` |
 | `energy_source` | `nvml_total_energy` 우선 |
+| `measurement_scope` | `gpu_device_total_energy_counter` |
 | `nvml_power_usage_semantics` | `one_sec_average` |
 | `smid_histogram_ok` | active row에서 `true` |
+
+schema smoke audit:
+
+```bash
+python3 scripts/audit_power_api_measurements.py \
+  results/raw/h100_smoke_reg_mma.csv \
+  --target-profile h100 \
+  --out-csv results/summary/h100_smoke_power_api_audit.csv \
+  --out-md results/summary/h100_smoke_power_api_audit.md \
+  --fail-on-reject \
+  --fail-on-provisional \
+  --require-explicit-measurement-scope
+```
+
+이 단계에서 모든 row가 `missing_column:measurement_scope` 또는
+`missing_explicit_measurement_scope`로 reject되면, H100 power scope 문제가 아니라
+stale binary/schema 문제다. 현재 source를 pull한 뒤 `cmake --build build-h100
+--clean-first -j`로 다시 빌드하고, 기존 `results/raw/h100_component_finalplan_*.csv`는
+archive로 옮긴 뒤 재실행한다. 구버전 CSV에 새 row를 append하면 power API audit이
+전체 reject될 수 있다.
 
 ## 6. Component finalplan 실행
 
@@ -233,10 +278,13 @@ L1_W_SM_KIB=16 \
 SHARED_W_SM_KIB=128 \
 L2_W_SM_KIB=256 \
 DRAM_W_SM_KIB_OVERRIDE=8192 \
-REUSE_FACTOR=4 \
-LOAD_REPEAT=4 \
-OUTDIR=results/ncu/h100_component_finalplan_ncu_lr4_$(date +%Y%m%d) \
-RAW_OUT=results/raw/h100_component_finalplan_ncu_lr4_$(date +%Y%m%d).csv \
+REUSE_FACTOR=1 \
+LOAD_REPEAT=1 \
+TENSOR_REUSE_FACTORS=1,2,4,8,16 \
+MEMORY_LOAD_REPEATS=1,2,4,8,16 \
+DRAM_LOAD_REPEATS=1,4,16 \
+OUTDIR=results/ncu/h100_component_finalplan_ncu_factor_$(date +%Y%m%d) \
+RAW_OUT=results/raw/h100_component_finalplan_ncu_factor_$(date +%Y%m%d).csv \
 bash scripts/run_ncu_validation.sh
 ```
 
@@ -244,11 +292,13 @@ Acceptance:
 
 ```bash
 python3 scripts/analyze_ncu_path_acceptance.py \
-  results/ncu/h100_component_finalplan_ncu_lr4_$(date +%Y%m%d)/ncu_cache_validation_summary.csv \
+  results/ncu/h100_component_finalplan_ncu_factor_$(date +%Y%m%d)/ncu_cache_validation_summary.csv \
   --out-csv results/summary/h100_component_finalplan_ncu_acceptance_$(date +%Y%m%d).csv \
   --out-md results/summary/h100_component_finalplan_ncu_acceptance_$(date +%Y%m%d).md \
   --tensor-memory-bytes-max 4e8 \
-  --register-memory-bytes-max 4e8
+  --register-memory-bytes-max 4e8 \
+  --tensor-memory-bytes-per-hmma-max 1.0 \
+  --register-memory-bytes-per-op-max 1.0
 ```
 
 ## 8. 결과 해석
@@ -267,7 +317,7 @@ Reported coefficients are board-level effective microbenchmark coefficients.
 |---|---|
 | architecture | GPU, CC, runtime SMs, L1/shared (KiB), L2 (MiB), memory type |
 | sweep | mode, W_SM (KiB), blocks/SM, active_SM (SM), seconds (s), repeats |
-| NCU | L1 hit (%), L2 hit (%), shared bytes (B), L1/L2/DRAM bytes (B), stall_long_scoreboard (%) |
+| NCU | L1 hit (%), L2 hit (%), L1/L2/DRAM access counts, shared bytes (B), L1/L2/DRAM bytes (B), stall_long_scoreboard (%) |
 | coefficients | component, median, min, max, unit, rows used, invalid rows, status |
 | rejected rows | mode, reason, decision |
 
