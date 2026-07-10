@@ -38,6 +38,7 @@ PROFILES: dict[str, dict[str, Any]] = {
         "tensor_threshold": "2e8",
         "register_threshold": "2e8",
         "memory_energy_load_repeats": "4,8,16",
+        "min_device_memory_mib": 0,
         "power_semantics": "one_sec_average",
         "note": "RTX 3090 / GA102 path. Use total-energy rows for final coefficients; GetPowerUsage fallback has one-second-average semantics.",
     },
@@ -54,6 +55,7 @@ PROFILES: dict[str, dict[str, Any]] = {
         "tensor_threshold": "2e8",
         "register_threshold": "2e8",
         "memory_energy_load_repeats": "4,8,16",
+        "min_device_memory_mib": 30000,
         "power_semantics": "instant",
         "note": "Volta path. Use an NCU toolchain whose --list-chips includes gv100.",
     },
@@ -70,6 +72,7 @@ PROFILES: dict[str, dict[str, Any]] = {
         "tensor_threshold": "3e8",
         "register_threshold": "3e8",
         "memory_energy_load_repeats": "4,8,16",
+        "min_device_memory_mib": 0,
         "power_semantics": "instant",
         "note": "GA100 40 MiB L2 path. Final L2 coefficient uses ld.global.cg with a 6.75 MiB first-point working set; l2_load_only is diagnostic-only and excluded from the strict path.",
     },
@@ -86,6 +89,7 @@ PROFILES: dict[str, dict[str, Any]] = {
         "tensor_threshold": "4e8",
         "register_threshold": "4e8",
         "memory_energy_load_repeats": "4,8,16",
+        "min_device_memory_mib": 0,
         "power_semantics": "one_sec_average",
         "note": "Current kernel uses WMMA compatibility path, not Hopper WGMMA/TMA. Final L2 coefficient uses ld.global.cg; l2_load_only remains diagnostic-only.",
     },
@@ -311,6 +315,14 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--target-profile",
                 q(args.target_profile),
                 "--strict",
+                *(
+                    [
+                        "--min-device-memory-mib",
+                        q(str(args.min_device_memory_mib)),
+                    ]
+                    if args.min_device_memory_mib > 0
+                    else []
+                ),
                 "--active-sm",
                 q(str(active_sm)),
                 "--binary",
@@ -805,6 +817,15 @@ def write_markdown(args: argparse.Namespace, profile: dict[str, Any], path: Path
     blocks = args.blocks_per_sm_values or profile["blocks"]
     out_sh = args.out_sh
     build_dir = str(Path(args.binary).parent)
+    memory_gate_note = ""
+    if args.target_profile == "v100" and args.min_device_memory_mib > 0:
+        memory_gate_note = f"""
+For the V100 reference package, `{args.min_device_memory_mib:,} MiB` is a strict lower bound for a
+32 GB HBM2 device visible to the process. This distinguishes the intended 32 GB
+SKU from a 16 GB board or a smaller vGPU partition; it does not change the
+L1/shared/L2 hierarchy coordinates. Override this threshold only when running a
+separately labelled non-32 GB V100 experiment.
+"""
     text = f"""# {args.target_profile.upper()} Component Finalplan Command Plan
 
 Generated: {dt.date.today().isoformat()}
@@ -816,6 +837,7 @@ Generated: {dt.date.today().isoformat()}
 | active_SM (SMs) | `{active_sm}` |
 | blocks/SM | `{blocks}` |
 | expected power semantics | `{profile['power_semantics']}` |
+| minimum visible device memory (MiB) | `{args.min_device_memory_mib}` |
 | seconds (s) | `{args.seconds}` |
 | repeats | `{args.repeats}` |
 | binary | `{args.binary}` |
@@ -826,6 +848,8 @@ Generated: {dt.date.today().isoformat()}
 ## Platform Note
 
 {profile['note']}
+
+{memory_gate_note}
 
 ## Build Requirement
 
@@ -1040,6 +1064,15 @@ def main() -> int:
     parser.add_argument("--ncu", default="ncu")
     parser.add_argument("--gpu-ids", default="0")
     parser.add_argument("--active-sm", type=int, default=0)
+    parser.add_argument(
+        "--min-device-memory-mib",
+        type=int,
+        default=-1,
+        help=(
+            "Visible-memory lower bound passed to strict preflight. Defaults to "
+            "the profile package value; pass 0 to disable for a separately labelled SKU."
+        ),
+    )
     parser.add_argument("--blocks-per-sm-values", default="")
     parser.add_argument("--seconds", type=float, default=10.0)
     parser.add_argument("--repeats", type=int, default=5)
@@ -1049,6 +1082,8 @@ def main() -> int:
     args = parser.parse_args()
 
     profile = PROFILES[args.target_profile]
+    if args.min_device_memory_mib < 0:
+        args.min_device_memory_mib = int(profile.get("min_device_memory_mib", 0))
     if not args.binary:
         args.binary = DEFAULT_BINARY_BY_PROFILE[args.target_profile]
     if not args.out_sh:

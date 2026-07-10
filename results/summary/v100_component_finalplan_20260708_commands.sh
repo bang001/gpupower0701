@@ -19,7 +19,7 @@ fi
 echo "Using NCU command: ${NCU_COMMAND}"
 
 # 1. Preflight
-python3 scripts/preflight_gpu_support.py --gpu 0 --target-profile v100 --strict --active-sm 80 --binary ./build-v100/a100_fp16_energy_v2 --ncu "${NCU_COMMAND}" --out results/summary/v100_component_finalplan_20260708_preflight.md
+python3 scripts/preflight_gpu_support.py --gpu 0 --target-profile v100 --strict --min-device-memory-mib 30000 --active-sm 80 --binary ./build-v100/a100_fp16_energy_v2 --ncu "${NCU_COMMAND}" --out results/summary/v100_component_finalplan_20260708_preflight.md
 
 # 2. Power API policy self-test. Fail early if the gate is broken.
 python3 scripts/audit_power_api_measurements.py --self-test

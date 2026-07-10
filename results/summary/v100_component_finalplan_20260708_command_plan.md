@@ -9,6 +9,7 @@ Generated: 2026-07-10
 | active_SM (SMs) | `80` |
 | blocks/SM | `16,32` |
 | expected power semantics | `instant` |
+| minimum visible device memory (MiB) | `30000` |
 | seconds (s) | `10.0` |
 | repeats | `5` |
 | binary | `./build-v100/a100_fp16_energy_v2` |
@@ -19,6 +20,14 @@ Generated: 2026-07-10
 ## Platform Note
 
 Volta path. Use an NCU toolchain whose --list-chips includes gv100.
+
+
+For the V100 reference package, `30,000 MiB` is a strict lower bound for a
+32 GB HBM2 device visible to the process. This distinguishes the intended 32 GB
+SKU from a 16 GB board or a smaller vGPU partition; it does not change the
+L1/shared/L2 hierarchy coordinates. Override this threshold only when running a
+separately labelled non-32 GB V100 experiment.
+
 
 ## Build Requirement
 
