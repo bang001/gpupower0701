@@ -112,7 +112,7 @@ void print_usage(const char* argv0) {
       << "Usage: " << argv0 << " --gpu-list 0[,1,2] --mode MODE [options]\n\n"
       << "Required/primary options:\n"
       << "  --gpu-list <list|none>       CUDA/NVML ids for active GPUs\n"
-      << "  --mode idle|empty|clocked_empty|reg_fragment_only|reg_operand_only|reg_mma|reg_pressure|addr_only|global_l1_load_only|shared_scalar_load_only|shared_load_only|shared_mma|l2_load_only|l2_cg_load_only|l2_mma|dram_load_only|dram_cg_load_only|dram_mma|store_only|store_path\n"
+      << "  --mode idle|empty|clocked_empty|reg_fragment_only|reg_operand_only|reg_mma|reg_pressure|addr_only|global_addr_only|global_l1_load_only|shared_scalar_load_only|shared_load_only|shared_mma|l2_load_only|l2_cg_load_only|l2_mma|dram_load_only|dram_cg_load_only|dram_mma|store_only|store_path\n"
       << "  --w-sm-kib <int>             1..131072 power-of-two KiB sweep point\n"
       << "  --blocks-per-sm <int>        power-of-two up to target resident block limit\n"
       << "  --active-sm <int>            default target full SM count\n"
@@ -291,16 +291,18 @@ bool is_dram_operand_mode(Mode mode) {
 }
 
 bool is_global_operand_mode(Mode mode) {
-  return is_l1_operand_mode(mode) || is_l2_operand_mode(mode) ||
+  return mode == Mode::global_addr_only || is_l1_operand_mode(mode) ||
+         is_l2_operand_mode(mode) ||
          is_dram_operand_mode(mode);
 }
 
 bool is_address_control_mode(Mode mode) {
-  return mode == Mode::addr_only;
+  return mode == Mode::addr_only || mode == Mode::global_addr_only;
 }
 
 bool has_operand_loads(Mode mode) {
-  return is_shared_operand_mode(mode) || is_global_operand_mode(mode);
+  return is_shared_operand_mode(mode) || is_l1_operand_mode(mode) ||
+         is_l2_operand_mode(mode) || is_dram_operand_mode(mode);
 }
 
 bool has_final_matrix_store(Mode mode) {
@@ -320,6 +322,7 @@ std::string mode_family(Mode mode) {
   if (mode == Mode::idle) return "idle";
   if (mode == Mode::empty || mode == Mode::clocked_empty) return "control";
   if (mode == Mode::addr_only) return "address_control";
+  if (mode == Mode::global_addr_only) return "global_address_control";
   if (mode == Mode::reg_fragment_only || mode == Mode::reg_operand_only ||
       mode == Mode::reg_mma || mode == Mode::reg_pressure) {
     return "register_tensor";
@@ -797,9 +800,9 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
     } else if (is_dram_operand_mode(opts.mode)) {
       row.expected_dram_bytes = expected_operand_bytes;
     }
-    if (is_address_control_mode(opts.mode)) {
-      row.expected_addr_ops = active_blocks * iters * opts.load_repeat;
-    }
+  if (is_address_control_mode(opts.mode)) {
+    row.expected_addr_ops = active_blocks * iters * opts.load_repeat;
+  }
 
     if (has_final_matrix_store(opts.mode)) {
       row.expected_store_bytes = active_blocks * 256ull * sizeof(float);
@@ -808,6 +811,7 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
           active_blocks * iters * opts.store_repeat * sizeof(float);
     } else if (opts.mode == Mode::empty || opts.mode == Mode::clocked_empty ||
                opts.mode == Mode::addr_only ||
+               opts.mode == Mode::global_addr_only ||
                opts.mode == Mode::shared_scalar_load_only) {
       row.expected_store_bytes = active_blocks * sizeof(float);
     }

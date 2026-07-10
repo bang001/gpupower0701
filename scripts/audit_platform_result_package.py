@@ -306,15 +306,13 @@ NCU_REQUIRED_MODES = {
     "reg_operand_only",
     "reg_mma",
     "shared_scalar_load_only",
+    "global_addr_only",
     "global_l1_load_only",
     "l2_cg_load_only",
     "dram_cg_load_only",
 }
 
-PROFILE_EXTRA_NCU_REQUIRED_MODES = {
-    "a100": {"l2_load_only"},
-    "h100": {"l2_load_only"},
-}
+PROFILE_EXTRA_NCU_REQUIRED_MODES: dict[str, set[str]] = {}
 
 NCU_MIN_FACTOR_POINTS = 3
 
@@ -323,7 +321,6 @@ NCU_REUSE_SWEEP_MODES = {"reg_operand_only", "reg_mma"}
 NCU_LOAD_REPEAT_SWEEP_MODES = {
     "shared_scalar_load_only",
     "global_l1_load_only",
-    "l2_load_only",
     "l2_cg_load_only",
     "dram_cg_load_only",
 }
@@ -332,7 +329,6 @@ NCU_POSITIVE_BY_MODE = {
     "shared_scalar_load_only": ("shared_accesses", "shared_bytes", "shared_inst"),
     "shared_load_only": ("shared_accesses", "shared_bytes", "shared_inst"),
     "global_l1_load_only": ("l1_accesses", "l1_bytes"),
-    "l2_load_only": ("l2_accesses", "l2_bytes"),
     "l2_cg_load_only": ("l2_accesses", "l2_bytes"),
     "dram_cg_load_only": ("dram_accesses", "dram_bytes"),
     "dram_load_only": ("dram_accesses", "dram_bytes"),
@@ -342,12 +338,17 @@ NCU_POSITIVE_BY_MODE = {
 NCU_L1_HIT_MIN_PCT = 95.0
 NCU_L1_L2_RATIO_MAX = 0.01
 NCU_L1_DRAM_RATIO_MAX = 0.01
-NCU_L2_L1_HIT_MAX_PCT = 1.0
+NCU_L2_L1_BYTES_RATIO_MAX = 0.01
 NCU_L2_HIT_MIN_PCT = 95.0
 NCU_L2_DRAM_RATIO_MAX = 0.02
 NCU_SHARED_GLOBAL_RATIO_MAX = 0.02
 NCU_DRAM_L1_HIT_MAX_PCT = 1.0
 NCU_DRAM_L2_HIT_MAX_PCT = 5.0
+NCU_DRAM_L2_EXPECTED_MULTIPLIER = 2.0
+NCU_DRAM_L2_EXPECTED_SLACK_PCT = 2.0
+NCU_CONTROL_HMMA_PER_BLOCK_MAX = 1.0
+NCU_CONTROL_HMMA_PER_REG_OP_MAX = 1.0e-5
+NCU_GLOBAL_ADDRESS_CONTROL_DRAM_RATIO_MAX = 1.0e-4
 NCU_DRAM_L2_RATIO_MIN = 0.5
 NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX = 1.0
 NCU_REGISTER_MEMORY_BYTES_PER_OP_MAX = 1.0
@@ -787,7 +788,9 @@ def audit_power_state(repo: Path, rows: list[dict[str, str]], path: Path) -> Non
     )
 
 
-def audit_ncu_acceptance(repo: Path, rows: list[dict[str, str]], path: Path) -> None:
+def audit_ncu_acceptance(
+    repo: Path, rows: list[dict[str, str]], path: Path, *, profile: str
+) -> None:
     full = rel(repo, path)
     if not full.exists():
         return
@@ -825,7 +828,7 @@ def audit_ncu_acceptance(repo: Path, rows: list[dict[str, str]], path: Path) -> 
             problems.append(
                 f"{row.get('mode')}:{candidate}:reason={row.get('acceptance_reason')}"
             )
-        if not ncu_path_sanity_pass(row):
+        if not ncu_path_sanity_pass(row, profile=profile):
             problems.append(f"{row.get('mode')}:{candidate}:path_evidence_failed")
     if not csv_rows:
         problems.append("empty_ncu_acceptance")
@@ -866,7 +869,28 @@ def ncu_expected_ops(row: dict[str, str]) -> float:
     return active_sm * blocks * iters * reuse
 
 
-def ncu_path_sanity_pass(row: dict[str, str]) -> bool:
+def ncu_expected_input_bytes(row: dict[str, str]) -> float:
+    return (
+        ncu_value(row, "active_SM")
+        * ncu_value(row, "blocks_per_SM")
+        * ncu_value(row, "ITER")
+        * ncu_value(row, "load_repeat", 1.0)
+        * 1024.0
+    )
+
+
+def ncu_expected_l2_residency_hit_pct(row: dict[str, str], profile: str) -> float:
+    metadata = PROFILE_METADATA.get(profile, {})
+    l2_mib = float(metadata.get("l2_mib", 0.0))
+    working_set_mib = (
+        ncu_value(row, "active_SM") * ncu_value(row, "W_SM_KiB") / 1024.0
+    )
+    if l2_mib <= 0.0 or working_set_mib <= 0.0:
+        return 0.0
+    return min(100.0, 100.0 * l2_mib / working_set_mib)
+
+
+def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
     mode = row.get("mode", "")
     if row.get("status") != "ok" or row.get("missing_metrics", "").strip():
         return False
@@ -888,11 +912,17 @@ def ncu_path_sanity_pass(row: dict[str, str]) -> bool:
             and ncu_ratio(l2_bytes, l1_bytes) <= NCU_L1_L2_RATIO_MAX
             and ncu_ratio(dram_bytes, l1_bytes) <= NCU_L1_DRAM_RATIO_MAX
         )
-    if mode in {"l2_load_only", "l2_cg_load_only"}:
+    if mode == "global_addr_only":
         return (
-            l1_hit <= NCU_L2_L1_HIT_MAX_PCT
-            and l2_hit >= NCU_L2_HIT_MIN_PCT
+            l1_bytes == 0.0
+            and ncu_ratio(dram_bytes, ncu_expected_input_bytes(row))
+            <= NCU_GLOBAL_ADDRESS_CONTROL_DRAM_RATIO_MAX
+        )
+    if mode == "l2_cg_load_only":
+        return (
+            l2_hit >= NCU_L2_HIT_MIN_PCT
             and l2_bytes > 0.0
+            and ncu_ratio(l1_bytes, l2_bytes) <= NCU_L2_L1_BYTES_RATIO_MAX
             and ncu_ratio(dram_bytes, l2_bytes) <= NCU_L2_DRAM_RATIO_MAX
         )
     if mode in {"shared_scalar_load_only", "shared_load_only"}:
@@ -906,9 +936,15 @@ def ncu_path_sanity_pass(row: dict[str, str]) -> bool:
             and ncu_ratio(dram_bytes, denominator) <= NCU_SHARED_GLOBAL_RATIO_MAX
         )
     if mode == "dram_cg_load_only":
+        l2_limit = max(
+            NCU_DRAM_L2_HIT_MAX_PCT,
+            ncu_expected_l2_residency_hit_pct(row, profile)
+            * NCU_DRAM_L2_EXPECTED_MULTIPLIER
+            + NCU_DRAM_L2_EXPECTED_SLACK_PCT,
+        )
         return (
             l1_hit <= NCU_DRAM_L1_HIT_MAX_PCT
-            and l2_hit <= NCU_DRAM_L2_HIT_MAX_PCT
+            and l2_hit <= l2_limit
             and dram_bytes > 0.0
             and ncu_ratio(dram_bytes, l2_bytes) >= NCU_DRAM_L2_RATIO_MIN
         )
@@ -921,9 +957,17 @@ def ncu_path_sanity_pass(row: dict[str, str]) -> bool:
             <= NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX
         )
     if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}:
-        if tensor_hmma > 0.0:
-            return False
         expected_ops = ncu_expected_ops(row)
+        fixed_epilogue_limit = (
+            ncu_value(row, "active_SM")
+            * ncu_value(row, "blocks_per_SM")
+            * NCU_CONTROL_HMMA_PER_BLOCK_MAX
+        )
+        if (
+            tensor_hmma > fixed_epilogue_limit
+            and ncu_ratio(tensor_hmma, expected_ops) > NCU_CONTROL_HMMA_PER_REG_OP_MAX
+        ):
+            return False
         if expected_ops <= 0.0:
             return True
         return (
@@ -991,7 +1035,11 @@ def audit_ncu_summary_quality(
         "dram_cg_load_only",
     } | PROFILE_EXTRA_NCU_REQUIRED_MODES.get(profile, set())
     for mode in sorted(path_sanity_modes & modes_present):
-        if not any(ncu_path_sanity_pass(row) for row in csv_rows if row.get("mode") == mode):
+        if not any(
+            ncu_path_sanity_pass(row, profile=profile)
+            for row in csv_rows
+            if row.get("mode") == mode
+        ):
             problems.append(f"{mode}:no_path_sanity_pass")
 
     for idx, row in enumerate(csv_rows, start=2):
@@ -1426,7 +1474,9 @@ def audit_package(
         profile=profile,
         expected_active_sm=expected_active_sm,
     )
-    audit_ncu_acceptance(repo, rows, paths["ncu_acceptance"])  # type: ignore[arg-type]
+    audit_ncu_acceptance(
+        repo, rows, paths["ncu_acceptance"], profile=args.target_profile
+    )  # type: ignore[arg-type]
     audit_matched_summary(
         repo, rows, paths["matched_summary"], expected_semantics=semantics  # type: ignore[arg-type]
     )

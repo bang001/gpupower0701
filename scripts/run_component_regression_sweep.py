@@ -35,6 +35,7 @@ DEFAULT_MODES = [
     "reg_operand_only",
     "reg_mma",
     "global_l1_load_only",
+    "global_addr_only",
     "shared_scalar_load_only",
     "shared_load_only",
     "shared_mma",

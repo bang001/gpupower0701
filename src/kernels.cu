@@ -205,12 +205,10 @@ __global__ void reg_operand_only_kernel(std::uint64_t iters, float* output,
 
   fragment<matrix_a, 16, 16, 16, half, row_major> a;
   fragment<matrix_b, 16, 16, 16, half, col_major> b;
-  fragment<accumulator, 16, 16, 16, float> c;
 
   const float block_scale = 1.0f + static_cast<float>(blockIdx.x & 7) * 0.03125f;
   nvcuda::wmma::fill_fragment(a, __float2half_rn(0.125f * block_scale));
   nvcuda::wmma::fill_fragment(b, __float2half_rn(0.0625f * block_scale));
-  nvcuda::wmma::fill_fragment(c, 0.0f);
 
   float checksum = 0.0f;
   for (std::uint64_t i = 0; i < iters; ++i) {
@@ -224,9 +222,10 @@ __global__ void reg_operand_only_kernel(std::uint64_t iters, float* output,
     }
   }
 
-  nvcuda::wmma::fill_fragment(c, checksum);
   if (output) {
-    store_matrix_sync(output + blockIdx.x * 256, c, 16, mem_row_major);
+    // Keep the register-fragment control observable without a WMMA store
+    // epilogue, which can otherwise emit a fixed HMMA-like instruction.
+    output[blockIdx.x * 256] = checksum;
   }
 }
 
@@ -495,6 +494,53 @@ __device__ __forceinline__ std::uint32_t load_global_cg_u32(
   return value;
 }
 
+__device__ __forceinline__ std::uint32_t load_global_ca_u32(
+    const std::uint32_t* ptr) {
+  std::uint32_t value;
+  asm volatile("ld.global.ca.u32 %0, [%1];" : "=r"(value) : "l"(ptr));
+  return value;
+}
+
+__global__ void global_ca_load_only_kernel(const half* input,
+                                           std::uint64_t w_block_bytes,
+                                           std::uint64_t tiles_per_block,
+                                           std::uint64_t iters,
+                                           std::uint64_t load_repeat,
+                                           float* output,
+                                           int* smid_by_block,
+                                           int* rank_by_block, int* sm_counts,
+                                           int sm_count_capacity) {
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+
+  const std::uint64_t block_half_offset =
+      (static_cast<std::uint64_t>(blockIdx.x) * w_block_bytes) / sizeof(half);
+  const half* block_base = input + block_half_offset;
+  std::uint32_t checksum =
+      static_cast<std::uint32_t>(threadIdx.x + 1) * 2654435761u;
+
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    for (std::uint64_t r = 0; r < load_repeat; ++r) {
+      const std::uint64_t load_index = (i * load_repeat) + r;
+      const std::uint64_t tile =
+          select_tile(load_index, tiles_per_block,
+                      static_cast<std::uint64_t>(blockIdx.x), 0);
+      const half* base = block_base + tile * 512ull;
+      const auto* words = reinterpret_cast<const std::uint32_t*>(base);
+#pragma unroll
+      for (int k = 0; k < 8; ++k) {
+        const int word_index = static_cast<int>(threadIdx.x) + k * kWarpSize;
+        checksum ^= load_global_ca_u32(words + word_index);
+        checksum = checksum * 1664525u + 1013904223u;
+      }
+    }
+  }
+
+  if (threadIdx.x == 0 && output) {
+    output[blockIdx.x * 256] =
+        static_cast<float>(checksum & 0x00ffffffu);
+  }
+}
+
 __global__ void global_cg_load_only_kernel(const half* input,
                                            std::uint64_t w_block_bytes,
                                            std::uint64_t tiles_per_block,
@@ -535,45 +581,6 @@ __global__ void global_cg_load_only_kernel(const half* input,
   }
 }
 
-__global__ void global_l1_load_only_kernel(const half* input,
-                                           std::uint64_t w_block_bytes,
-                                           std::uint64_t tiles_per_block,
-                                           std::uint64_t iters,
-                                           std::uint64_t load_repeat,
-                                           float* output,
-                                           int* smid_by_block,
-                                           int* rank_by_block, int* sm_counts,
-                                           int sm_count_capacity) {
-  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
-
-  fragment<matrix_a, 16, 16, 16, half, row_major> a;
-  fragment<matrix_b, 16, 16, 16, half, col_major> b;
-  fragment<accumulator, 16, 16, 16, float> c;
-  float checksum = 0.0f;
-
-  const std::uint64_t block_half_offset =
-      (static_cast<std::uint64_t>(blockIdx.x) * w_block_bytes) / sizeof(half);
-  const half* block_base = input + block_half_offset;
-
-  for (std::uint64_t i = 0; i < iters; ++i) {
-    for (std::uint64_t r = 0; r < load_repeat; ++r) {
-      const std::uint64_t load_index = (i * load_repeat) + r;
-      const std::uint64_t tile =
-          select_tile(load_index, tiles_per_block,
-                      static_cast<std::uint64_t>(blockIdx.x), 0);
-      const half* base = block_base + tile * 512ull;
-      load_matrix_sync(a, base, 16);
-      load_matrix_sync(b, base + 256, 16);
-      checksum += checksum_fragment(a) + checksum_fragment(b);
-    }
-  }
-
-  nvcuda::wmma::fill_fragment(c, checksum);
-  if (output) {
-    store_matrix_sync(output + blockIdx.x * 256, c, 16, mem_row_major);
-  }
-}
-
 __global__ void global_addr_only_kernel(std::uint64_t w_block_bytes,
                                         std::uint64_t tiles_per_block,
                                         std::uint64_t iters,
@@ -606,6 +613,47 @@ __global__ void global_addr_only_kernel(std::uint64_t w_block_bytes,
   if (threadIdx.x == 0 && output) {
     output[blockIdx.x * 256] =
         static_cast<float>(checksum & 0xffffffull);
+  }
+}
+
+// Address/control counterpart for scalar global load paths. It executes the
+// same block/tile/index arithmetic and checksum shape as global_cg_load_only,
+// but consumes addresses rather than issuing global-memory loads.
+__global__ void global_scalar_addr_only_kernel(
+    const half* input, std::uint64_t w_block_bytes,
+    std::uint64_t tiles_per_block, std::uint64_t iters,
+    std::uint64_t load_repeat, int streaming, float* output,
+    int* smid_by_block, int* rank_by_block, int* sm_counts,
+    int sm_count_capacity) {
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+
+  const std::uint64_t block_half_offset =
+      (static_cast<std::uint64_t>(blockIdx.x) * w_block_bytes) / sizeof(half);
+  const half* block_base = input + block_half_offset;
+  std::uint32_t checksum =
+      static_cast<std::uint32_t>(threadIdx.x + 1) * 2654435761u;
+
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    for (std::uint64_t r = 0; r < load_repeat; ++r) {
+      const std::uint64_t load_index = (i * load_repeat) + r;
+      const std::uint64_t tile =
+          select_tile(load_index, tiles_per_block,
+                      static_cast<std::uint64_t>(blockIdx.x), streaming);
+      const half* base = block_base + tile * 512ull;
+      const auto* words = reinterpret_cast<const std::uint32_t*>(base);
+#pragma unroll
+      for (int k = 0; k < 8; ++k) {
+        const int word_index = static_cast<int>(threadIdx.x) + k * kWarpSize;
+        const auto address = reinterpret_cast<std::uintptr_t>(words + word_index);
+        checksum ^= static_cast<std::uint32_t>(address >> 2);
+        checksum = checksum * 1664525u + 1013904223u;
+      }
+    }
+  }
+
+  if (threadIdx.x == 0 && output) {
+    output[blockIdx.x * 256] =
+        static_cast<float>(checksum & 0x00ffffffu);
   }
 }
 
@@ -755,8 +803,14 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
           cfg.streaming, cfg.output, cfg.smid_by_block, cfg.rank_by_block,
           cfg.sm_counts, cfg.sm_count_capacity);
       break;
+    case Mode::global_addr_only:
+      global_scalar_addr_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
+          cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
+          cfg.load_repeat, cfg.streaming, cfg.output, cfg.smid_by_block,
+          cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+      break;
     case Mode::global_l1_load_only:
-      global_l1_load_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
+      global_ca_load_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
           cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
           cfg.load_repeat, cfg.output, cfg.smid_by_block, cfg.rank_by_block,
           cfg.sm_counts, cfg.sm_count_capacity);

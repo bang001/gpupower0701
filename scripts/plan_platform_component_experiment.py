@@ -32,11 +32,12 @@ PROFILES: dict[str, dict[str, Any]] = {
         "shared_w": "32,64",
         "l1_w": "8,16",
         "l2_w": "64",
-        "l2_modes": "clocked_empty,l2_cg_load_only",
+        "l2_modes": "global_addr_only,l2_cg_load_only",
         "dram_w": "8192",
         "ncu_chip": "ga102",
         "tensor_threshold": "2e8",
         "register_threshold": "2e8",
+        "memory_energy_load_repeats": "4,8,16",
         "power_semantics": "one_sec_average",
         "note": "RTX 3090 / GA102 path. Use total-energy rows for final coefficients; GetPowerUsage fallback has one-second-average semantics.",
     },
@@ -47,11 +48,12 @@ PROFILES: dict[str, dict[str, Any]] = {
         "shared_w": "32,64",
         "l1_w": "8,16",
         "l2_w": "64",
-        "l2_modes": "clocked_empty,l2_cg_load_only",
+        "l2_modes": "global_addr_only,l2_cg_load_only",
         "dram_w": "8192",
         "ncu_chip": "gv100",
         "tensor_threshold": "2e8",
         "register_threshold": "2e8",
+        "memory_energy_load_repeats": "4,8,16",
         "power_semantics": "instant",
         "note": "Volta path. Use an NCU toolchain whose --list-chips includes gv100.",
     },
@@ -61,14 +63,15 @@ PROFILES: dict[str, dict[str, Any]] = {
         "blocks": "16,32",
         "shared_w": "64,128",
         "l1_w": "16,32",
-        "l2_w": "256",
-        "l2_modes": "clocked_empty,l2_load_only,l2_cg_load_only",
+        "l2_w": "64,128",
+        "l2_modes": "global_addr_only,l2_cg_load_only",
         "dram_w": "8192",
         "ncu_chip": "ga100",
         "tensor_threshold": "3e8",
         "register_threshold": "3e8",
+        "memory_energy_load_repeats": "4,8,16",
         "power_semantics": "instant",
-        "note": "A100 can test capacity L2 and CG L2 side by side.",
+        "note": "GA100 40 MiB L2 path. Final L2 coefficient uses ld.global.cg with a 6.75 MiB first-point working set; l2_load_only is diagnostic-only and excluded from the strict path.",
     },
     "h100": {
         "cuda_arch": "90",
@@ -76,14 +79,15 @@ PROFILES: dict[str, dict[str, Any]] = {
         "blocks": "16,32",
         "shared_w": "64,128",
         "l1_w": "16,32",
-        "l2_w": "256",
-        "l2_modes": "clocked_empty,l2_load_only,l2_cg_load_only",
+        "l2_w": "64,128",
+        "l2_modes": "global_addr_only,l2_cg_load_only",
         "dram_w": "8192",
         "ncu_chip": "gh100",
         "tensor_threshold": "4e8",
         "register_threshold": "4e8",
+        "memory_energy_load_repeats": "4,8,16",
         "power_semantics": "one_sec_average",
-        "note": "Current kernel uses WMMA compatibility path, not Hopper WGMMA/TMA.",
+        "note": "Current kernel uses WMMA compatibility path, not Hopper WGMMA/TMA. Final L2 coefficient uses ld.global.cg; l2_load_only remains diagnostic-only.",
     },
 }
 
@@ -165,7 +169,10 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     blocks = args.blocks_per_sm_values or profile["blocks"]
     binary = args.binary
     ncu = args.ncu
-    include_l2_capacity_ncu = "1" if "l2_load_only" in profile["l2_modes"] else "0"
+    # l2_load_only follows the normal global-load policy and therefore cannot
+    # prove an L2-only path. Keep it out of strict packages; only CG loads are
+    # eligible L2-path evidence.
+    include_l2_capacity_ncu = "0"
 
     raw_prefix = f"results/raw/{args.target_profile}_component_finalplan_{tag}"
     summary_prefix = f"results/summary/{args.target_profile}_component_finalplan_{tag}"
@@ -281,6 +288,19 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         f"# {profile['note']}",
         "mkdir -p results/raw results/summary results/ncu",
         "",
+        "# NCU wrapper. If NCU fails with ERR_NVGPUCTRPERM, rerun this script with:",
+        "#   NCU_USE_SUDO=1 bash \"$0\"",
+        f"NCU_BIN_DEFAULT={q(ncu)}",
+        "NCU_BIN=\"${NCU_BIN:-${NCU_BIN_DEFAULT}}\"",
+        "NCU_USE_SUDO=\"${NCU_USE_SUDO:-0}\"",
+        "NCU_SUDO=\"${NCU_SUDO:-sudo -E}\"",
+        "if [[ \"${NCU_USE_SUDO}\" == \"1\" ]]; then",
+        "  NCU_COMMAND=\"${NCU_SUDO} ${NCU_BIN}\"",
+        "else",
+        "  NCU_COMMAND=\"${NCU_BIN}\"",
+        "fi",
+        "echo \"Using NCU command: ${NCU_COMMAND}\"",
+        "",
         "# 1. Preflight",
         line(
             [
@@ -296,7 +316,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--binary",
                 q(binary),
                 "--ncu",
-                q(ncu),
+                "\"${NCU_COMMAND}\"",
                 "--out",
                 q(f"{summary_prefix}_preflight.md"),
             ]
@@ -402,7 +422,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             w_values=profile["shared_w"],
             blocks=blocks,
             reuse_factors="1",
-            load_repeats="1,2,4,8,16",
+            load_repeats=profile["memory_energy_load_repeats"],
             output=energy_csvs[1],
             matrix=matrix_csvs[1],
         ),
@@ -413,11 +433,11 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             active_sm=active_sm,
             seconds=args.seconds,
             repeats=args.repeats,
-            modes="clocked_empty,global_l1_load_only",
+            modes="global_addr_only,global_l1_load_only",
             w_values=profile["l1_w"],
             blocks=blocks,
             reuse_factors="1",
-            load_repeats="1,2,4,8,16",
+            load_repeats=profile["memory_energy_load_repeats"],
             output=energy_csvs[2],
             matrix=matrix_csvs[2],
         ),
@@ -432,7 +452,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             w_values=profile["l2_w"],
             blocks=blocks,
             reuse_factors="1",
-            load_repeats="1,2,4,8,16",
+            load_repeats=profile["memory_energy_load_repeats"],
             output=energy_csvs[3],
             matrix=matrix_csvs[3],
         ),
@@ -443,11 +463,11 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             active_sm=active_sm,
             seconds=args.seconds,
             repeats=args.repeats,
-            modes="clocked_empty,dram_cg_load_only",
+            modes="global_addr_only,dram_cg_load_only",
             w_values=profile["dram_w"],
             blocks=blocks,
             reuse_factors="1",
-            load_repeats="1,4,16",
+            load_repeats=profile["memory_energy_load_repeats"],
             output=energy_csvs[4],
             matrix=matrix_csvs[4],
         ),
@@ -487,7 +507,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         line(
             [
                 f"NCU_EXPLICIT_METRICS_ONLY=1",
-                f"NCU={q(ncu)}",
+                "NCU=\"${NCU_COMMAND}\"",
                 f"BIN={q(binary)}",
                 f"OUTDIR={q(ncu_dir)}",
                 f"RAW_OUT={q(ncu_raw)}",
@@ -508,7 +528,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "LOAD_REPEAT=1",
                 "TENSOR_REUSE_FACTORS=1,2,4,8,16",
                 "MEMORY_LOAD_REPEATS=1,2,4,8,16",
-                "DRAM_LOAD_REPEATS=1,4,16",
+                "DRAM_LOAD_REPEATS=1,4,8,16",
                 "bash",
                 "scripts/run_ncu_validation.sh",
             ]
@@ -520,6 +540,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "python3",
                 "scripts/analyze_ncu_path_acceptance.py",
                 q(ncu_summary),
+                "--target-profile",
+                q(args.target_profile),
                 "--out-csv",
                 q(acceptance_csv),
                 "--out-md",
@@ -572,6 +594,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         ),
         "",
         "# 11. Component reliability audit.",
+        "set +e",
         line(
             [
                 "python3",
@@ -593,6 +616,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--fail-on-reject",
             ]
         ),
+        "RELIABILITY_AUDIT_RC=$?",
+        "set -e",
         "",
         "# 12. Matched-control instability/root-cause audit.",
         line(
@@ -608,6 +633,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         ),
         "",
         "# 13. Build strict component summary package from accepted evidence.",
+        "set +e",
         line(
             [
                 "python3",
@@ -638,8 +664,11 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 q(strict_summary_md),
             ]
         ),
+        "STRICT_BUILD_RC=$?",
+        "set -e",
         "",
         "# 14. Audit strict component summary against reliability/detail artifacts.",
+        "set +e",
         line(
             [
                 "python3",
@@ -655,6 +684,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--fail-on-fail",
             ]
         ),
+        "STRICT_AUDIT_RC=$?",
+        "set -e",
         "",
         "# 15. Write the expected result manifest for copy-back and gap triage.",
         line(
@@ -721,7 +752,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "python3",
                 "scripts/audit_component_goal_readiness.py",
                 "--ncu",
-                q(ncu),
+                "\"${NCU_COMMAND}\"",
                 "--out-csv",
                 q(goal_readiness_csv),
                 "--out-md",
@@ -754,9 +785,13 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         f"echo '  {power_audit_md}'",
         f"echo '  {matched_md}'",
         f"echo '  {acceptance_md}'",
-        "if [[ \"${PACKAGE_AUDIT_RC}\" -ne 0 ]]; then",
-        "  echo 'Package audit failed. Inspect the package audit and gap report above.'",
-        "  exit \"${PACKAGE_AUDIT_RC}\"",
+        "FINAL_RC=${PACKAGE_AUDIT_RC}",
+        "if [[ \"${FINAL_RC}\" -eq 0 && \"${RELIABILITY_AUDIT_RC}\" -ne 0 ]]; then FINAL_RC=${RELIABILITY_AUDIT_RC}; fi",
+        "if [[ \"${FINAL_RC}\" -eq 0 && \"${STRICT_BUILD_RC}\" -ne 0 ]]; then FINAL_RC=${STRICT_BUILD_RC}; fi",
+        "if [[ \"${FINAL_RC}\" -eq 0 && \"${STRICT_AUDIT_RC}\" -ne 0 ]]; then FINAL_RC=${STRICT_AUDIT_RC}; fi",
+        "if [[ \"${FINAL_RC}\" -ne 0 ]]; then",
+        "  echo 'Strict evidence package is incomplete. Inspect the package audit and gap report above.'",
+        "  exit \"${FINAL_RC}\"",
         "fi",
     ]
 
@@ -785,6 +820,7 @@ Generated: {dt.date.today().isoformat()}
 | repeats | `{args.repeats}` |
 | binary | `{args.binary}` |
 | NCU | `{args.ncu}` |
+| NCU sudo fallback | `NCU_USE_SUDO=1 bash {out_sh}` |
 | generated shell | `{out_sh}` |
 
 ## Platform Note
@@ -812,10 +848,10 @@ binary whose CSV header includes `measurement_scope`.
 | component/path | modes | W_SM (KiB) | factor |
 |---|---|---:|---|
 | Tensor | `reg_operand_only,reg_mma` | 2048 | reuse 1,2,4,8,16 |
-| Shared scalar | `clocked_empty,shared_scalar_load_only` | {profile['shared_w']} | load_repeat 1,2,4,8,16 |
-| Global L1 | `clocked_empty,global_l1_load_only` | {profile['l1_w']} | load_repeat 1,2,4,8,16 |
-| L2 | `{profile['l2_modes']}` | {profile['l2_w']} | load_repeat 1,2,4,8,16 |
-| DRAM sanity | `clocked_empty,dram_cg_load_only` | {profile['dram_w']} | load_repeat 1,4,16 |
+| Shared scalar | `clocked_empty,shared_scalar_load_only` | {profile['shared_w']} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
+| Global L1 | `global_addr_only,global_l1_load_only` | {profile['l1_w']} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
+| L2 | `{profile['l2_modes']}` | {profile['l2_w']} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
+| DRAM sanity | `global_addr_only,dram_cg_load_only` | {profile['dram_w']} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU checks 1,4,8,16 |
 
 ## Architecture-Specific NCU Evidence
 
@@ -831,12 +867,13 @@ both cache-hit direction and traffic magnitude:
 | byte magnitude | `shared_bytes`, `l1_bytes`, `l2_bytes`, `dram_bytes` | bytes, preferred denominator for memory pJ/byte or pJ/bit |
 | stall context | `stall_long_scoreboard_pct` | percent-like NCU stall signal |
 
-V100 uses `NCU_CHIP=gv100` and primarily trusts `l2_cg_load_only` for L2 path
-validation. A100 uses `NCU_CHIP=ga100` and compares capacity `l2_load_only`
-against `l2_cg_load_only` because GA100 has a much larger 40 MiB L2. H100 uses
-`NCU_CHIP=gh100`; the current kernels are WMMA compatibility kernels, so the
-NCU evidence validates the executed compatibility path, not Hopper-native
-WGMMA/TMA/FP8 paths.
+V100 uses `NCU_CHIP=gv100` and uses `l2_cg_load_only` as the L2 final path.
+A100 uses `NCU_CHIP=ga100`; its final L2 point is intentionally below the 40 MiB
+L2 capacity and uses `ld.global.cg` to bypass global L1. `l2_load_only` follows
+the normal global-load policy, can hit L1, and is therefore diagnostic-only rather
+than strict L2 evidence. H100 uses `NCU_CHIP=gh100`; the current kernels are WMMA
+compatibility kernels, so the NCU evidence validates the executed compatibility
+path, not Hopper-native WGMMA/TMA/FP8 paths.
 
 ## How To Run
 
@@ -844,14 +881,36 @@ WGMMA/TMA/FP8 paths.
 bash {out_sh}
 ```
 
-The generated NCU sidecar profiles primary finalplan modes across the same
-`reuse_factor` and `load_repeat` lists used by the energy sweep. This allows
-`analyze_matched_control_energy.py` to prefer `ncu_actual_exact` denominators
-instead of falling back to representative same-working-set scaling. For
-A100/H100 it also enables `INCLUDE_L2_CAPACITY_NCU=1` to compare `l2_load_only`
-against `l2_cg_load_only`. Legacy diagnostic modes such as `shared_mma`,
-`l2_mma`, and `dram_mma` are not profiled unless `INCLUDE_DIAGNOSTIC_NCU=1` is
-set manually.
+If Nsight Compute fails with `ERR_NVGPUCTRPERM`, the account does not have GPU
+performance-counter permission. The preferred fix is administrator-side access
+to non-admin GPU performance counters. For a temporary target-node run, rerun
+only the NCU wrapper path through sudo:
+
+```bash
+NCU_USE_SUDO=1 bash {out_sh}
+```
+
+If `sudo` does not preserve the CUDA/Nsight Compute environment, make the NCU
+binary explicit and preserve the environment:
+
+```bash
+NCU_BIN="$(command -v ncu)" NCU_USE_SUDO=1 NCU_SUDO="sudo -E" bash {out_sh}
+```
+
+The generated shell keeps NVML energy sweeps detached from NCU. The sudo
+fallback is only for the NCU sidecar/preflight/goal-readiness commands; failed
+NCU evidence must not be replaced with unvalidated denominators in final
+component coefficients.
+
+The generated NCU sidecar profiles primary finalplan modes at every energy
+`reuse_factor`/`load_repeat` coordinate and includes 1,2 as lower-signal
+diagnostic points. This lets `analyze_matched_control_energy.py` prefer
+`ncu_actual_exact` denominators instead of representative same-working-set
+scaling. The global-memory pairs use `global_addr_only` as a matched address
+control; NCU verifies global-load L1 bytes are zero and treats SMID atomic L2
+sectors as control bookkeeping rather than input traffic. Legacy diagnostic
+modes such as `l2_load_only`, `shared_mma`, `l2_mma`, and `dram_mma` are not
+profiled unless `INCLUDE_DIAGNOSTIC_NCU=1` is set manually.
 
 For a quick profiler preflight only, override the sidecar lists manually, for
 example `TENSOR_REUSE_FACTORS=4 MEMORY_LOAD_REPEATS=4 DRAM_LOAD_REPEATS=4`.
@@ -920,8 +979,9 @@ accepted cache rows must also show path-relevant access/byte magnitude. The NCU
 summary must include
 `clocked_empty`, `reg_operand_only`, `reg_mma`, `shared_scalar_load_only`,
 `global_l1_load_only`, `l2_cg_load_only`, and `dram_cg_load_only` coverage.
-A100/H100 packages must also include `l2_load_only` coverage. Tensor pair NCU
-rows need at least three `reuse_factor` points, and memory-path rows need at
+A100/H100 packages use `l2_cg_load_only` as the strict L2 path; `l2_load_only`
+is diagnostic-only and is not required. Tensor pair NCU rows need at least three
+`reuse_factor` points, and memory-path rows need at
 least three `load_repeat` points.
 The package audit requires the strict summary audit CSV to contain
 `hard_plausibility_range`, `l2_greater_than_shared`, `l2_greater_than_l1`, and

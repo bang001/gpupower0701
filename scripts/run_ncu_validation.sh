@@ -3,6 +3,12 @@ set -euo pipefail
 
 NCU="${NCU:-/home/bang001/miniforge3/envs/ssc21env/bin/ncu}"
 read -r -a NCU_CMD <<< "${NCU}"
+NCU_USE_SUDO="${NCU_USE_SUDO:-0}"
+NCU_SUDO="${NCU_SUDO:-sudo -E}"
+if [[ "${NCU_USE_SUDO}" == "1" ]]; then
+  read -r -a NCU_SUDO_CMD <<< "${NCU_SUDO}"
+  NCU_CMD=("${NCU_SUDO_CMD[@]}" "${NCU_CMD[@]}")
+fi
 BIN="${BIN:-./build/a100_fp16_energy_v2}"
 OUTDIR="${OUTDIR:-results/ncu/rtx3090_validation_20260701}"
 RAW_OUT="${RAW_OUT:-results/raw/ncu_validation_sidecar_20260701.csv}"
@@ -56,6 +62,40 @@ CASE_MANIFEST="${CASE_MANIFEST:-${OUTDIR}/ncu_validation_cases.csv}"
 
 mkdir -p "${OUTDIR}" "$(dirname "${RAW_OUT}")"
 printf "label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,report\n" > "${CASE_MANIFEST}"
+
+print_ncu_permission_hint() {
+  cat >&2 <<'EOF'
+
+Nsight Compute failed with ERR_NVGPUCTRPERM.
+The user account does not have GPU performance-counter permission.
+
+Preferred fix:
+  Ask the node administrator to allow non-admin GPU performance counters.
+
+Temporary sudo fallback for this script:
+  NCU_USE_SUDO=1 NCU="$(command -v ncu)" ... bash scripts/run_ncu_validation.sh
+
+For generated platform packages:
+  NCU_USE_SUDO=1 bash results/summary/<profile>_component_finalplan_<tag>_commands.sh
+
+Keep NCU sidecar runs separate from NVML energy sweeps. Do not replace failed
+NCU evidence with unvalidated denominators in final component coefficients.
+EOF
+}
+
+run_ncu_profile() {
+  local label="$1"
+  shift
+  local log="${OUTDIR}/${label}_ncu_stderr.log"
+  set +e
+  "${NCU_CMD[@]}" "$@" 2> >(tee "${log}" >&2)
+  local rc=$?
+  set -e
+  if [[ "${rc}" -ne 0 ]] && grep -q "ERR_NVGPUCTRPERM" "${log}" 2>/dev/null; then
+    print_ncu_permission_hint
+  fi
+  return "${rc}"
+}
 
 csv_to_array() {
   local var_name="$1"
@@ -114,7 +154,7 @@ run_case() {
     return 0
   fi
 
-  "${NCU_CMD[@]}" \
+  run_ncu_profile "${label}" \
     "${COMMON_SECTIONS[@]}" \
     "${EXPLICIT_METRIC_ARGS[@]}" \
     --target-processes application-only \
@@ -160,14 +200,17 @@ done
 
 for load_repeat in "${MEMORY_LOAD_REPEAT_LIST[@]}"; do
   run_case "shared_scalar_load_only_W${SHARED_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "shared_scalar_load_only_kernel" "shared_scalar_load_only" "${SHARED_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
-  run_case "global_l1_load_only_W${L1_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_l1_load_only_kernel" "global_l1_load_only" "${L1_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+  run_case "global_addr_only_l1_W${L1_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${L1_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+  run_case "global_l1_load_only_W${L1_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_ca_load_only_kernel" "global_l1_load_only" "${L1_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
   if [[ "${INCLUDE_L2_CAPACITY_NCU}" == "1" ]]; then
     run_case "l2_load_only_W${L2_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_load_only_kernel" "l2_load_only" "${L2_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
   fi
+  run_case "global_addr_only_l2_W${L2_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${L2_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
   run_case "l2_cg_load_only_W${L2_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_cg_load_only_kernel" "l2_cg_load_only" "${L2_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
 done
 
 for load_repeat in "${DRAM_LOAD_REPEAT_LIST[@]}"; do
+  run_case "global_addr_only_dram_W${DRAM_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${DRAM_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
   run_case "dram_cg_load_only_W${DRAM_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_cg_load_only_kernel" "dram_cg_load_only" "${DRAM_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
 done
 

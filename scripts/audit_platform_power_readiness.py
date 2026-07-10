@@ -151,7 +151,7 @@ PLAN_MD_TERMS = [
     "audit_platform_result_package.py",
     "L1/L2 hit rates",
     "L1/L2/DRAM access counts",
-    "l2_load_only` coverage",
+    "l2_cg_load_only` as the strict L2 path",
     "reuse_factor` points",
     "load_repeat` points",
     "hard_plausibility_range",
@@ -496,7 +496,10 @@ def audit_profiles(repo: Path) -> list[dict[str, str]]:
                     actual="ok" if ok else f"missing:{missing}",
                     evidence="plan_platform_component_experiment generated markdown",
                 )
-                expected_l2_capacity = "1" if profile in {"a100", "h100"} else "0"
+                # Normal global loads can hit L1 on every target profile. The
+                # strict plan therefore uses CG L2 evidence and keeps capacity
+                # loads out of the NCU sidecar regardless of L2 size.
+                expected_l2_capacity = "0"
                 actual_l2_capacity = (
                     "1"
                     if "INCLUDE_L2_CAPACITY_NCU=1" in shell_text
@@ -510,7 +513,7 @@ def audit_profiles(repo: Path) -> list[dict[str, str]]:
                     check="generated_l2_capacity_policy",
                     expected=expected_l2_capacity,
                     actual=actual_l2_capacity,
-                    evidence="A100/H100 compare l2_load_only with l2_cg_load_only",
+                    evidence="strict L2 policy: l2_cg_load_only; l2_load_only diagnostic-only",
                 )
 
     return rows

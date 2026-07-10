@@ -48,14 +48,14 @@ COMPONENTS = [
     {
         "component_key": "global_l1_hit_path",
         "component": "Global L1 hit path",
-        "mode_pair": "global_l1_load_only - clocked_empty",
+        "mode_pair": "global_l1_load_only - global_addr_only",
         "unit": "pJ/bit",
         "ncu_candidates": ["global_l1_hit_path"],
     },
     {
         "component_key": "l2_hit_cg_path",
         "component": "L2 CG hit path",
-        "mode_pair": "l2_cg_load_only - clocked_empty",
+        "mode_pair": "l2_cg_load_only - global_addr_only",
         "unit": "pJ/bit",
         "ncu_candidates": ["l2_hit_path"],
     },
