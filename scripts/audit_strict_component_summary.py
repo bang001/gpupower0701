@@ -1123,6 +1123,21 @@ def audit(
     expected_power_semantics: str,
     min_valid_rows: int,
 ) -> list[dict[str, str]]:
+    if not Path(summary_csv).exists():
+        return [
+            {
+                "component": "strict_summary_package",
+                "check": "summary_artifact_exists",
+                "status": "fail",
+                "expected": "strict component summary CSV exists",
+                "actual": summary_csv,
+                "interpretation": (
+                    "strict summary build did not produce an artifact; inspect the "
+                    "reliability and NCU acceptance reports before treating any "
+                    "component coefficient as final"
+                ),
+            }
+        ]
     rows = read_csv(summary_csv)
     rows_by_component = {row.get("component", ""): row for row in rows}
     checks: list[dict[str, str]] = []

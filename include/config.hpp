@@ -201,6 +201,7 @@ enum class Mode {
   reg_mma,
   reg_pressure,
   addr_only,
+  global_addr_only,
   global_l1_load_only,
   shared_scalar_load_only,
   shared_load_only,
@@ -233,6 +234,8 @@ inline std::string to_string(Mode mode) {
       return "reg_pressure";
     case Mode::addr_only:
       return "addr_only";
+    case Mode::global_addr_only:
+      return "global_addr_only";
     case Mode::global_l1_load_only:
       return "global_l1_load_only";
     case Mode::shared_scalar_load_only:
@@ -270,6 +273,7 @@ inline Mode mode_from_string(const std::string& value) {
   if (value == "reg_mma") return Mode::reg_mma;
   if (value == "reg_pressure") return Mode::reg_pressure;
   if (value == "addr_only") return Mode::addr_only;
+  if (value == "global_addr_only") return Mode::global_addr_only;
   if (value == "global_l1_load_only") return Mode::global_l1_load_only;
   if (value == "shared_scalar_load_only") return Mode::shared_scalar_load_only;
   if (value == "shared_load_only") return Mode::shared_load_only;
@@ -390,6 +394,7 @@ inline bool mode_allowed_for_feasibility(Mode mode, const Feasibility& f,
     return false;
   }
   const bool memory_backed =
+      mode == Mode::global_addr_only ||
       mode == Mode::global_l1_load_only ||
       mode == Mode::shared_scalar_load_only ||
       mode == Mode::shared_load_only || mode == Mode::shared_mma ||

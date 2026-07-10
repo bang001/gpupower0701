@@ -81,6 +81,7 @@ MODES = [
     "reg_operand_only",
     "reg_mma",
     "addr_only",
+    "global_addr_only",
     "global_l1_load_only",
     "shared_scalar_load_only",
     "shared_load_only",

@@ -15,6 +15,14 @@ from pathlib import Path
 from statistics import median
 
 
+PROFILE_L2_MIB = {
+    "v100": 6.0,
+    "rtx3090": 6.0,
+    "a100": 40.0,
+    "h100": 50.0,
+}
+
+
 def f(row: dict[str, str], key: str, default: float = 0.0) -> float:
     value = row.get(key, "")
     if value == "":
@@ -44,6 +52,27 @@ def expected_register_ops(row: dict[str, str]) -> float:
     iters = f(row, "ITER")
     reuse = f(row, "reuse_factor", 1.0)
     return active_sm * blocks * iters * reuse
+
+
+def launched_blocks(row: dict[str, str]) -> float:
+    return f(row, "active_SM") * f(row, "blocks_per_SM")
+
+
+def expected_l2_residency_hit_pct(
+    row: dict[str, str], target_profile: str
+) -> float:
+    """Return the cache-capacity upper-bound context for a DRAM stream.
+
+    A streaming working set larger than L2 can still retain a small fraction of
+    lines in L2. Treating every hit above a fixed 5% as a failure is wrong on
+    large-L2 GPUs such as GA100 and GH100.
+    """
+
+    l2_mib = PROFILE_L2_MIB.get(target_profile, 0.0)
+    working_set_mib = f(row, "active_SM") * f(row, "W_SM_KiB") / 1024.0
+    if l2_mib <= 0.0 or working_set_mib <= 0.0:
+        return 0.0
+    return min(100.0, 100.0 * l2_mib / working_set_mib)
 
 
 def memory_reason_if_high(
@@ -83,6 +112,12 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
     tensor_hmma = f(row, "tensor_hmma_inst")
     spill_read = f(row, "spill_local_read_inst")
     spill_write = f(row, "spill_local_write_inst")
+    control_hmma_class = ""
+    control_hmma_per_block = 0.0
+    control_hmma_per_reg_op = 0.0
+    dram_expected_l2_hit_pct = 0.0
+    dram_l2_hit_limit_pct = args.dram_l2_hit_max_pct
+    address_control_dram_ratio = 0.0
 
     if spill_read > 0.0 or spill_write > 0.0:
         reasons.append("local_spill_traffic_present")
@@ -100,23 +135,18 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
 
     elif mode == "l2_cg_load_only":
         component = "l2_hit_path"
-        if l1_hit > args.l2_l1_hit_max_pct:
-            reasons.append("l1_hit_too_high_for_l2")
         if l2_hit < args.l2_hit_min_pct:
             reasons.append("l2_hit_below_threshold")
         if l2_bytes <= 0.0:
             reasons.append("missing_l2_bytes")
+        if ratio(l1_bytes, l2_bytes) > args.l2_l1_bytes_ratio_max:
+            reasons.append("l1_traffic_too_high_for_l2_cg")
         if ratio(dram_bytes, l2_bytes) > args.l2_dram_ratio_max:
             reasons.append("dram_traffic_too_high_for_l2")
 
     elif mode == "l2_load_only":
-        component = "l2_capacity_candidate"
-        if l1_hit > args.l2_l1_hit_max_pct:
-            reasons.append("l1_hit_too_high_for_l2")
-        if l2_hit < args.l2_hit_min_pct:
-            reasons.append("l2_hit_below_threshold")
-        if ratio(dram_bytes, l2_bytes) > args.l2_dram_ratio_max:
-            reasons.append("dram_traffic_too_high_for_l2")
+        component = "l2_capacity_diagnostic"
+        reasons.append("l2_load_only_is_not_l2_bypass_path")
 
     elif mode in {"shared_scalar_load_only", "shared_load_only"}:
         component = "shared_memory_path"
@@ -140,6 +170,18 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
         if shared_inst <= 0.0:
             reasons.append("missing_shared_instruction_count")
 
+    elif mode == "global_addr_only":
+        component = "global_address_control"
+        # This control must retain index arithmetic but issue no global input
+        # loads. SMID verification uses global atomics, which can appear as
+        # L2 sectors; only global-load bytes and DRAM scale are meaningful here.
+        if l1_bytes > 0.0:
+            reasons.append("global_load_traffic_present_in_address_control")
+        expected_input_bytes = expected_shared_bytes(row)
+        address_control_dram_ratio = ratio(dram_bytes, expected_input_bytes)
+        if address_control_dram_ratio > args.global_address_control_dram_ratio_max:
+            reasons.append("dram_traffic_too_high_for_address_control")
+
     elif mode == "reg_mma":
         component = "tensor_increment_candidate"
         if tensor_hmma <= 0.0:
@@ -162,8 +204,20 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
     elif mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}:
         component = "register_control_candidate"
         expected_ops = expected_register_ops(row)
+        control_hmma_per_block = ratio(tensor_hmma, launched_blocks(row))
+        control_hmma_per_reg_op = ratio(tensor_hmma, expected_ops)
         if tensor_hmma > 0.0:
-            reasons.append("tensor_hmma_present_in_control")
+            fixed_epilogue_limit = (
+                launched_blocks(row) * args.control_hmma_per_block_max
+            )
+            if (
+                tensor_hmma > fixed_epilogue_limit
+                and control_hmma_per_reg_op > args.control_hmma_per_reg_op_max
+            ):
+                reasons.append("tensor_hmma_workload_proportional_in_control")
+                control_hmma_class = "workload_proportional_reject"
+            else:
+                control_hmma_class = "fixed_epilogue_allowed"
         for value, reason in [
             (l1_bytes, "l1_traffic_too_high_for_register_control"),
             (l2_bytes, "l2_traffic_too_high_for_register_control"),
@@ -183,7 +237,15 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
         component = "dram_sanity_path"
         if l1_hit > args.dram_l1_hit_max_pct:
             reasons.append("l1_hit_too_high_for_dram")
-        if l2_hit > args.dram_l2_hit_max_pct:
+        dram_expected_l2_hit_pct = expected_l2_residency_hit_pct(
+            row, args.target_profile
+        )
+        dram_l2_hit_limit_pct = max(
+            args.dram_l2_hit_max_pct,
+            dram_expected_l2_hit_pct * args.dram_l2_expected_multiplier
+            + args.dram_l2_expected_slack_pct,
+        )
+        if l2_hit > dram_l2_hit_limit_pct:
             reasons.append("l2_hit_too_high_for_dram")
         if dram_bytes <= 0.0:
             reasons.append("missing_dram_bytes")
@@ -240,6 +302,28 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
                 and expected_register_ops(row) > 0.0
                 else ""
             ),
+            "tensor_control_hmma_class": control_hmma_class,
+            "tensor_control_hmma_per_block": (
+                f"{control_hmma_per_block:.6g}"
+                if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
+                else ""
+            ),
+            "tensor_control_hmma_per_reg_op": (
+                f"{control_hmma_per_reg_op:.6g}"
+                if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
+                else ""
+            ),
+            "dram_expected_l2_hit_pct": (
+                f"{dram_expected_l2_hit_pct:.6g}" if mode == "dram_cg_load_only" else ""
+            ),
+            "dram_l2_hit_limit_pct": (
+                f"{dram_l2_hit_limit_pct:.6g}" if mode == "dram_cg_load_only" else ""
+            ),
+            "global_address_control_dram_to_expected": (
+                f"{address_control_dram_ratio:.6g}"
+                if mode == "global_addr_only"
+                else ""
+            ),
         }
     )
     return out
@@ -266,28 +350,52 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
             )
 
         out.write("\n")
-        out.write("| mode | component | acceptance | reason | L1 hit (%) | L2 hit (%) | shared bytes | L1 bytes | L2 bytes | DRAM bytes | long SB (%) |\n")
-        out.write("|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|\n")
+        out.write(
+            "| mode | component | acceptance | reason | L1 hit (%) | L2 hit (%) | "
+            "L1 accesses | L2 accesses | DRAM accesses | shared bytes | "
+            "L1 bytes | L2 bytes | DRAM bytes | long SB (%) |\n"
+        )
+        out.write("|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
         for row in rows:
+            l1_accesses = row.get("l1_accesses", "")
+            if l1_accesses and row.get("l1_access_unit"):
+                l1_accesses = f"{l1_accesses} {row['l1_access_unit']}"
+            l2_accesses = row.get("l2_accesses", "")
+            if l2_accesses and row.get("l2_access_unit"):
+                l2_accesses = f"{l2_accesses} {row['l2_access_unit']}"
+            dram_accesses = row.get("dram_accesses", "")
+            if dram_accesses and row.get("dram_access_unit"):
+                dram_accesses = f"{dram_accesses} {row['dram_access_unit']}"
             out.write(
                 f"| {row.get('mode','')} | {row['component_candidate']} | "
                 f"{row['acceptance']} | {row['acceptance_reason']} | "
                 f"{row.get('l1_hit_rate_pct','')} | {row.get('l2_hit_rate_pct','')} | "
+                f"{l1_accesses} | {l2_accesses} | {dram_accesses} | "
                 f"{row.get('shared_bytes','')} | {row.get('l1_bytes','')} | "
                 f"{row.get('l2_bytes','')} | {row.get('dram_bytes','')} | "
                 f"{row.get('stall_long_scoreboard_pct','')} |\n"
             )
+        out.write("\n")
+        out.write(
+            "Cache-path evidence rule: accepted memory-path rows must expose hit-rate "
+            "evidence and at least the path-relevant byte/access counters. L1 accesses "
+            "use request counters when available and otherwise fall back to sectors; "
+            "L2 and DRAM accesses are sector counters. The byte columns are used as "
+            "the preferred denominator for pJ/bit or pJ/byte attribution.\n"
+        )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("ncu_summary_csv")
+    parser.add_argument("--target-profile", choices=sorted(PROFILE_L2_MIB), default="")
     parser.add_argument("--out-csv", required=True)
     parser.add_argument("--out-md", required=True)
     parser.add_argument("--l1-hit-min-pct", type=float, default=95.0)
     parser.add_argument("--l1-l2-ratio-max", type=float, default=0.01)
     parser.add_argument("--l1-dram-ratio-max", type=float, default=0.01)
     parser.add_argument("--l2-l1-hit-max-pct", type=float, default=1.0)
+    parser.add_argument("--l2-l1-bytes-ratio-max", type=float, default=0.01)
     parser.add_argument("--l2-hit-min-pct", type=float, default=95.0)
     parser.add_argument("--l2-dram-ratio-max", type=float, default=0.02)
     parser.add_argument("--shared-expected-ratio-min", type=float, default=0.5)
@@ -298,9 +406,16 @@ def main() -> int:
     parser.add_argument("--register-memory-bytes-max", type=float, default=1.0e8)
     parser.add_argument("--tensor-memory-bytes-per-hmma-max", type=float, default=1.0)
     parser.add_argument("--register-memory-bytes-per-op-max", type=float, default=1.0)
+    parser.add_argument("--control-hmma-per-block-max", type=float, default=1.0)
+    parser.add_argument("--control-hmma-per-reg-op-max", type=float, default=1.0e-5)
     parser.add_argument("--dram-l1-hit-max-pct", type=float, default=1.0)
     parser.add_argument("--dram-l2-hit-max-pct", type=float, default=5.0)
+    parser.add_argument("--dram-l2-expected-multiplier", type=float, default=2.0)
+    parser.add_argument("--dram-l2-expected-slack-pct", type=float, default=2.0)
     parser.add_argument("--dram-l2-ratio-min", type=float, default=0.5)
+    parser.add_argument(
+        "--global-address-control-dram-ratio-max", type=float, default=1.0e-4
+    )
     args = parser.parse_args()
 
     with Path(args.ncu_summary_csv).open(newline="") as f:

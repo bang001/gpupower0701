@@ -38,6 +38,7 @@ PROFILES: dict[str, dict[str, Any]] = {
         "ncu_chip": "gv100",
         "ncu_policy": "Use an Nsight Compute toolchain whose --list-chips includes gv100; 2024.3/2025.1 are examples, while current release highlights announce dropped Volta support.",
         "power_usage_semantics": "instant",
+        "reference_memory": "32 GB HBM2 reference package; pass --min-device-memory-mib 0 for a separately reported 16 GB SKU.",
     },
     "rtx3090": {
         "aliases": ["rtx 3090", "geforce rtx 3090", "3090"],
@@ -139,6 +140,7 @@ def query_gpu(gpu: int) -> dict[str, str]:
         "uuid",
         "driver_version",
         "compute_cap",
+        "memory.total",
         "power.draw",
         "power.limit",
         "clocks.sm",
@@ -152,6 +154,7 @@ def query_gpu(gpu: int) -> dict[str, str]:
         "uuid",
         "driver_version",
         "compute_cap",
+        "memory.total",
         "power.draw",
         "power.draw.average",
         "power.draw.instant",
@@ -272,6 +275,7 @@ def strict_gate_errors(
     gpu_info: dict[str, str],
     ncu_info: dict[str, str],
     dry_run: tuple[int, str],
+    min_device_memory_mib: int = 0,
 ) -> list[str]:
     errors: list[str] = []
     if requested_profile == "auto":
@@ -295,6 +299,17 @@ def strict_gate_errors(
         errors.append(f"ncu_query_metrics_not_ok_{ncu_info.get('query_metrics_rc', 'missing')}")
     if dry_run[0] != 0:
         errors.append(f"binary_dry_run_failed_rc_{dry_run[0]}")
+    if min_device_memory_mib > 0:
+        try:
+            observed_memory_mib = float(gpu_info.get("memory.total", ""))
+        except ValueError:
+            errors.append("gpu_memory_total_unavailable")
+        else:
+            if observed_memory_mib < min_device_memory_mib:
+                errors.append(
+                    "gpu_memory_total_below_min_"
+                    f"{min_device_memory_mib}_mib_observed_{observed_memory_mib:g}_mib"
+                )
     return errors
 
 
@@ -310,13 +325,18 @@ def run_self_test() -> None:
         "query_metrics_ok": "true",
         "query_metrics_rc": "0",
     }
-    good_gpu = {"name": "NVIDIA A100", "compute_cap": "8.0"}
+    good_gpu = {
+        "name": "NVIDIA A100",
+        "compute_cap": "8.0",
+        "memory.total": "40960",
+    }
     no_errors = strict_gate_errors(
         requested_profile="a100",
         detected_profile="a100",
         gpu_info=good_gpu,
         ncu_info=good_ncu,
         dry_run=(0, "dry_run=true"),
+        min_device_memory_mib=30000,
     )
     assert_selftest(not no_errors, "strict_good_profile", ";".join(no_errors))
 
@@ -377,6 +397,24 @@ def run_self_test() -> None:
         ";".join(dry_bad),
     )
 
+    v100_16gb = strict_gate_errors(
+        requested_profile="v100",
+        detected_profile="v100",
+        gpu_info={
+            "name": "Tesla V100",
+            "compute_cap": "7.0",
+            "memory.total": "16160",
+        },
+        ncu_info=good_ncu,
+        dry_run=(0, "dry_run=true"),
+        min_device_memory_mib=30000,
+    )
+    assert_selftest(
+        any(error.startswith("gpu_memory_total_below_min_30000_mib") for error in v100_16gb),
+        "strict_v100_32gb_memory_gate",
+        ";".join(v100_16gb),
+    )
+
     report = markdown_report(
         gpu=0,
         target_profile="a100",
@@ -389,6 +427,7 @@ def run_self_test() -> None:
         profile=PROFILES["a100"],
         ncu_info=good_ncu,
         dry_run=(0, "dry_run=true"),
+        min_device_memory_mib=0,
     )
     assert_selftest(
         "- `strict`: true" in report
@@ -412,6 +451,7 @@ def markdown_report(
     profile: dict[str, Any],
     ncu_info: dict[str, str],
     dry_run: tuple[int, str],
+    min_device_memory_mib: int,
 ) -> str:
     lines: list[str] = []
     lines.append("# GPU Support Preflight")
@@ -430,10 +470,12 @@ def markdown_report(
         or error.startswith("detected_profile")
         or error.startswith("profile_mismatch")
     ]
+    memory_errors = [error for error in strict_errors if error.startswith("gpu_memory")]
     ncu_errors = [error for error in strict_errors if error.startswith("ncu_")]
     dry_errors = [error for error in strict_errors if error.startswith("binary_dry_run")]
     lines.append(f"- `strict`: {str(strict).lower()}")
     lines.append(f"- `profile_gate`: {'pass' if not profile_errors else 'fail'}")
+    lines.append(f"- `device_memory_gate`: {'pass' if not memory_errors else 'fail'}")
     lines.append(f"- `ncu_gate`: {'pass' if not ncu_errors else 'fail'}")
     lines.append(f"- `dry_run_gate`: {'pass' if not dry_errors else 'fail'}")
     lines.append(
@@ -451,6 +493,7 @@ def markdown_report(
         "uuid",
         "driver_version",
         "compute_cap",
+        "memory.total",
         "power.draw",
         "power.draw.average",
         "power.draw.instant",
@@ -508,10 +551,12 @@ def markdown_report(
         "ncu_chip",
         "power_usage_semantics",
         "ncu_policy",
+        "reference_memory",
     ]:
-        lines.append(f"- `{key}`: {profile[key]}")
+        lines.append(f"- `{key}`: {profile.get(key, 'not_applicable')}")
     lines.append(f"- `dry_run_gpu`: {gpu}")
     lines.append(f"- `dry_run_active_sm`: {dry_run_active_sm}")
+    lines.append(f"- `min_device_memory_mib`: {min_device_memory_mib}")
     lines.append("")
     lines.append("## Nsight Compute")
     lines.append("")
@@ -545,6 +590,15 @@ def main() -> int:
     parser.add_argument("--target-profile", default="auto", choices=["auto", *sorted(PROFILES)])
     parser.add_argument("--binary", default="./build/a100_fp16_energy_v2")
     parser.add_argument("--ncu", default="ncu")
+    parser.add_argument(
+        "--min-device-memory-mib",
+        type=int,
+        default=0,
+        help=(
+            "Require this much visible device memory in strict preflight. "
+            "Use 30000 for the V100 32 GB reference package; use 0 for no SKU-capacity gate."
+        ),
+    )
     parser.add_argument(
         "--strict",
         action="store_true",
@@ -596,6 +650,7 @@ def main() -> int:
         gpu_info=gpu_info,
         ncu_info=ncu_info,
         dry_run=dry,
+        min_device_memory_mib=args.min_device_memory_mib,
     )
     report = markdown_report(
         args.gpu,
@@ -609,6 +664,7 @@ def main() -> int:
         profile,
         ncu_info,
         dry,
+        args.min_device_memory_mib,
     )
 
     if args.out:

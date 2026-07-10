@@ -1,6 +1,6 @@
 # V100 Component Finalplan Command Plan
 
-Generated: 2026-07-09
+Generated: 2026-07-10
 
 | item | value |
 |---|---|
@@ -9,15 +9,25 @@ Generated: 2026-07-09
 | active_SM (SMs) | `80` |
 | blocks/SM | `16,32` |
 | expected power semantics | `instant` |
+| minimum visible device memory (MiB) | `30000` |
 | seconds (s) | `10.0` |
 | repeats | `5` |
 | binary | `./build-v100/a100_fp16_energy_v2` |
 | NCU | `ncu` |
+| NCU sudo fallback | `NCU_USE_SUDO=1 bash results/summary/v100_component_finalplan_20260708_commands.sh` |
 | generated shell | `results/summary/v100_component_finalplan_20260708_commands.sh` |
 
 ## Platform Note
 
 Volta path. Use an NCU toolchain whose --list-chips includes gv100.
+
+
+For the V100 reference package, `30,000 MiB` is a strict lower bound for a
+32 GB HBM2 device visible to the process. This distinguishes the intended 32 GB
+SKU from a 16 GB board or a smaller vGPU partition; it does not change the
+L1/shared/L2 hierarchy coordinates. Override this threshold only when running a
+separately labelled non-32 GB V100 experiment.
+
 
 ## Build Requirement
 
@@ -40,10 +50,10 @@ binary whose CSV header includes `measurement_scope`.
 | component/path | modes | W_SM (KiB) | factor |
 |---|---|---:|---|
 | Tensor | `reg_operand_only,reg_mma` | 2048 | reuse 1,2,4,8,16 |
-| Shared scalar | `clocked_empty,shared_scalar_load_only` | 32,64 | load_repeat 1,2,4,8,16 |
-| Global L1 | `clocked_empty,global_l1_load_only` | 8,16 | load_repeat 1,2,4,8,16 |
-| L2 | `clocked_empty,l2_cg_load_only` | 64 | load_repeat 1,2,4,8,16 |
-| DRAM sanity | `clocked_empty,dram_cg_load_only` | 8192 | load_repeat 1,4,16 |
+| Shared scalar | `clocked_empty,shared_scalar_load_only` | 32,64 | energy load_repeat 4,8,16; NCU also checks 1,2 |
+| Global L1 | `global_addr_only,global_l1_load_only` | 8,16 | energy load_repeat 4,8,16; NCU also checks 1,2 |
+| L2 | `global_addr_only,l2_cg_load_only` | 64 | energy load_repeat 4,8,16; NCU also checks 1,2 |
+| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | energy load_repeat 4,8,16; NCU checks 1,4,8,16 |
 
 ## Architecture-Specific NCU Evidence
 
@@ -59,12 +69,13 @@ both cache-hit direction and traffic magnitude:
 | byte magnitude | `shared_bytes`, `l1_bytes`, `l2_bytes`, `dram_bytes` | bytes, preferred denominator for memory pJ/byte or pJ/bit |
 | stall context | `stall_long_scoreboard_pct` | percent-like NCU stall signal |
 
-V100 uses `NCU_CHIP=gv100` and primarily trusts `l2_cg_load_only` for L2 path
-validation. A100 uses `NCU_CHIP=ga100` and compares capacity `l2_load_only`
-against `l2_cg_load_only` because GA100 has a much larger 40 MiB L2. H100 uses
-`NCU_CHIP=gh100`; the current kernels are WMMA compatibility kernels, so the
-NCU evidence validates the executed compatibility path, not Hopper-native
-WGMMA/TMA/FP8 paths.
+V100 uses `NCU_CHIP=gv100` and uses `l2_cg_load_only` as the L2 final path.
+A100 uses `NCU_CHIP=ga100`; its final L2 point is intentionally below the 40 MiB
+L2 capacity and uses `ld.global.cg` to bypass global L1. `l2_load_only` follows
+the normal global-load policy, can hit L1, and is therefore diagnostic-only rather
+than strict L2 evidence. H100 uses `NCU_CHIP=gh100`; the current kernels are WMMA
+compatibility kernels, so the NCU evidence validates the executed compatibility
+path, not Hopper-native WGMMA/TMA/FP8 paths.
 
 ## How To Run
 
@@ -72,14 +83,36 @@ WGMMA/TMA/FP8 paths.
 bash results/summary/v100_component_finalplan_20260708_commands.sh
 ```
 
-The generated NCU sidecar profiles primary finalplan modes across the same
-`reuse_factor` and `load_repeat` lists used by the energy sweep. This allows
-`analyze_matched_control_energy.py` to prefer `ncu_actual_exact` denominators
-instead of falling back to representative same-working-set scaling. For
-A100/H100 it also enables `INCLUDE_L2_CAPACITY_NCU=1` to compare `l2_load_only`
-against `l2_cg_load_only`. Legacy diagnostic modes such as `shared_mma`,
-`l2_mma`, and `dram_mma` are not profiled unless `INCLUDE_DIAGNOSTIC_NCU=1` is
-set manually.
+If Nsight Compute fails with `ERR_NVGPUCTRPERM`, the account does not have GPU
+performance-counter permission. The preferred fix is administrator-side access
+to non-admin GPU performance counters. For a temporary target-node run, rerun
+only the NCU wrapper path through sudo:
+
+```bash
+NCU_USE_SUDO=1 bash results/summary/v100_component_finalplan_20260708_commands.sh
+```
+
+If `sudo` does not preserve the CUDA/Nsight Compute environment, make the NCU
+binary explicit and preserve the environment:
+
+```bash
+NCU_BIN="$(command -v ncu)" NCU_USE_SUDO=1 NCU_SUDO="sudo -E" bash results/summary/v100_component_finalplan_20260708_commands.sh
+```
+
+The generated shell keeps NVML energy sweeps detached from NCU. The sudo
+fallback is only for the NCU sidecar/preflight/goal-readiness commands; failed
+NCU evidence must not be replaced with unvalidated denominators in final
+component coefficients.
+
+The generated NCU sidecar profiles primary finalplan modes at every energy
+`reuse_factor`/`load_repeat` coordinate and includes 1,2 as lower-signal
+diagnostic points. This lets `analyze_matched_control_energy.py` prefer
+`ncu_actual_exact` denominators instead of representative same-working-set
+scaling. The global-memory pairs use `global_addr_only` as a matched address
+control; NCU verifies global-load L1 bytes are zero and treats SMID atomic L2
+sectors as control bookkeeping rather than input traffic. Legacy diagnostic
+modes such as `l2_load_only`, `shared_mma`, `l2_mma`, and `dram_mma` are not
+profiled unless `INCLUDE_DIAGNOSTIC_NCU=1` is set manually.
 
 For a quick profiler preflight only, override the sidecar lists manually, for
 example `TENSOR_REUSE_FACTORS=4 MEMORY_LOAD_REPEATS=4 DRAM_LOAD_REPEATS=4`.
@@ -148,8 +181,9 @@ accepted cache rows must also show path-relevant access/byte magnitude. The NCU
 summary must include
 `clocked_empty`, `reg_operand_only`, `reg_mma`, `shared_scalar_load_only`,
 `global_l1_load_only`, `l2_cg_load_only`, and `dram_cg_load_only` coverage.
-A100/H100 packages must also include `l2_load_only` coverage. Tensor pair NCU
-rows need at least three `reuse_factor` points, and memory-path rows need at
+A100/H100 packages use `l2_cg_load_only` as the strict L2 path; `l2_load_only`
+is diagnostic-only and is not required. Tensor pair NCU rows need at least three
+`reuse_factor` points, and memory-path rows need at
 least three `load_repeat` points.
 The package audit requires the strict summary audit CSV to contain
 `hard_plausibility_range`, `l2_greater_than_shared`, `l2_greater_than_l1`, and

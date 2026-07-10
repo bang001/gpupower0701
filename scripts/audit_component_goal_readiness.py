@@ -125,7 +125,7 @@ COMMAND_PLAN_TERMS = [
     "board-level effective coefficients",
     "L1/L2 hit rates",
     "L1/L2/DRAM access counts",
-    "l2_load_only` coverage",
+    "global-memory pairs use `global_addr_only`",
     "reuse_factor` points",
     "load_repeat` points",
     "hard_plausibility_range",
@@ -213,12 +213,15 @@ NCU_ACCEPTANCE_REQUIRED_COLUMNS = {
 NCU_L1_HIT_MIN_PCT = 95.0
 NCU_L1_L2_RATIO_MAX = 0.01
 NCU_L1_DRAM_RATIO_MAX = 0.01
-NCU_L2_L1_HIT_MAX_PCT = 1.0
+NCU_L2_L1_BYTES_RATIO_MAX = 0.01
 NCU_L2_HIT_MIN_PCT = 95.0
 NCU_L2_DRAM_RATIO_MAX = 0.02
 NCU_SHARED_GLOBAL_RATIO_MAX = 0.02
 NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX = 1.0
 NCU_REGISTER_MEMORY_BYTES_PER_OP_MAX = 1.0
+NCU_CONTROL_HMMA_PER_BLOCK_MAX = 1.0
+NCU_CONTROL_HMMA_PER_REG_OP_MAX = 1.0e-5
+PROFILE_L2_MIB = {"rtx3090": 6.0, "v100": 6.0, "a100": 40.0, "h100": 50.0}
 
 SUMMARY_REQUIRED_COLUMNS = {
     "component",
@@ -568,7 +571,15 @@ def ncu_expected_ops(row: dict[str, str]) -> float:
     return active_sm * blocks * iters * reuse
 
 
-def ncu_path_sanity_pass(row: dict[str, str]) -> bool:
+def ncu_expected_l2_residency_hit_pct(row: dict[str, str], profile: str) -> float:
+    working_set_mib = ncu_value(row, "active_SM") * ncu_value(row, "W_SM_KiB") / 1024.0
+    l2_mib = PROFILE_L2_MIB.get(profile, 0.0)
+    if working_set_mib <= 0.0 or l2_mib <= 0.0:
+        return 0.0
+    return min(100.0, 100.0 * l2_mib / working_set_mib)
+
+
+def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
     mode = row.get("mode", "")
     if row.get("status") != "ok" or row.get("missing_metrics", "").strip():
         return False
@@ -590,11 +601,11 @@ def ncu_path_sanity_pass(row: dict[str, str]) -> bool:
             and ncu_ratio(l2_bytes, l1_bytes) <= NCU_L1_L2_RATIO_MAX
             and ncu_ratio(dram_bytes, l1_bytes) <= NCU_L1_DRAM_RATIO_MAX
         )
-    if mode in {"l2_load_only", "l2_cg_load_only"}:
+    if mode == "l2_cg_load_only":
         return (
-            l1_hit <= NCU_L2_L1_HIT_MAX_PCT
-            and l2_hit >= NCU_L2_HIT_MIN_PCT
+            l2_hit >= NCU_L2_HIT_MIN_PCT
             and l2_bytes > 0.0
+            and ncu_ratio(l1_bytes, l2_bytes) <= NCU_L2_L1_BYTES_RATIO_MAX
             and ncu_ratio(dram_bytes, l2_bytes) <= NCU_L2_DRAM_RATIO_MAX
         )
     if mode in {"shared_scalar_load_only", "shared_load_only"}:
@@ -616,9 +627,17 @@ def ncu_path_sanity_pass(row: dict[str, str]) -> bool:
             <= NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX
         )
     if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}:
-        if tensor_hmma > 0.0:
-            return False
         expected_ops = ncu_expected_ops(row)
+        fixed_epilogue_limit = (
+            ncu_value(row, "active_SM")
+            * ncu_value(row, "blocks_per_SM")
+            * NCU_CONTROL_HMMA_PER_BLOCK_MAX
+        )
+        if (
+            tensor_hmma > fixed_epilogue_limit
+            and ncu_ratio(tensor_hmma, expected_ops) > NCU_CONTROL_HMMA_PER_REG_OP_MAX
+        ):
+            return False
         if expected_ops <= 0.0:
             return True
         return (
@@ -857,7 +876,7 @@ def validate_ncu_acceptance_artifacts(
                             f"{artifact}:{mode}:{candidate}:reason="
                             f"{row.get('acceptance_reason')}"
                         )
-                    if not ncu_path_sanity_pass(row):
+                    if not ncu_path_sanity_pass(row, profile=profile):
                         problems.append(
                             f"{artifact}:{mode}:{candidate}:path_evidence_failed"
                         )
