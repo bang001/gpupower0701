@@ -1,0 +1,7 @@
+component,accepted_rows,estimate_pj_per_bit,estimate_pj_per_byte,min_pj_per_bit,max_pj_per_bit,method
+global_l1_path,6,3.8976699999999997,31.181359999999998,3.2623,4.5693,net_E_J / NCU_actual_path_bits
+l2_hit_path,6,79.9532,639.6256,29.1052,129.7,net_E_J / NCU_actual_path_bits
+dram_streaming_path,6,32.3968,259.1744,31.3504,33.7881,net_E_J / NCU_actual_path_bits
+shared_path_traffic_verified,12,nan,nan,nan,nan,traffic_verified_only_no_ncu_shared_byte_denominator
+l2_minus_l1_path_delta,,76.05552999999999,608.4442399999999,,,diagnostic_delta_not_pure_component
+dram_minus_l2_path_delta,,-47.5564,-380.4512,,,diagnostic_delta_not_pure_component

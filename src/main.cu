@@ -1003,7 +1003,7 @@ int main(int argc, char** argv) {
 
     if (opts.dry_run) {
       a100fp16::print_dry_run(opts, f, allowed, mode_reason);
-      return 0;
+      return allowed ? 0 : 2;
     }
 
     if (!allowed) {

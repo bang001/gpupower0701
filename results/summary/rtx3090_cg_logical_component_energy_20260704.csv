@@ -1,0 +1,12 @@
+estimate_kind,component,estimate,unit,rows,load_repeat_values,r2,rmse_J,intercept_J,median_direct_pj_per_bit,mad_direct_pj_per_bit,denominator_min_bits,denominator_max_bits,median_l1_hit_pct,median_l2_hit_pct,median_long_scoreboard_pct,status,notes
+register_scalar_control,scalar_register_pressure,140.56263178484446,pJ/reg-update,10,,nan,nan,nan,nan,2.55965348244753,nan,nan,nan,nan,nan,diagnostic_only,reg_pressure-empty; not pure register-file pJ/bit
+tensor_register_pair,wmma_tensor_register_increment,0.38376336222669843,pJ/FLOP,17,,nan,nan,nan,nan,0.2082803905220621,nan,nan,nan,nan,nan,diagnostic_only,"reg_mma-reg_operand_only; effective Tensor+register, not pure Tensor Core"
+path_slope,shared_l1_path,5.833917292406971,pJ/bit,14,"1,2,4,8,16",0.9976581857295989,8.393506507368594,-6.979227724536969,5.734366347045433,0.43819744108014014,5373952000000.0,85983232000000.0,27.7134,53.9369,0.000145,ok,
+path_slope,global_l1_path,3.0904882276536885,pJ/bit,15,"1,2,4,8,16",0.9955969617494991,12.050403624214301,-3.870826666580541,3.0854540880660406,0.22496801055322457,10747920000000.0,171966400000000.0,99.9992,55.4988,19.2038,ok,
+path_slope,l2_hit_path,11.568348423614722,pJ/bit,15,"1,2,4,8,16",0.9991814227017369,9.717168570298195,-10.19857688562746,11.322513029085654,0.27224963530242796,5387560000000.0,86076800000000.0,2e-06,99.9406,988.773,ok,
+path_slope,dram_streaming_path,31.580842930662637,pJ/bit,15,"1,2,4,8,16",0.9995911105609279,18.766925627802994,-4.292948910788937,31.748832466397786,0.353176450487787,5404120000000.0,86184800000000.0,2e-06,0.155437,1865.97,ok,
+hierarchical_residual,l2_increment_residual,8.481065400895993,pJ/bit,15,"1,2,4,8,16",0.9984792030981194,9.713532858664543,-10.188608436692107,nan,nan,5387560000000.0,86076800000000.0,2e-06,99.9406,988.773,ok,
+hierarchical_residual,dram_increment_residual,20.011693124209362,pJ/bit,15,"1,2,4,8,16",0.9989825315498556,18.764760431001584,-4.278820683255162,nan,nan,5404120000000.0,86184800000000.0,2e-06,0.155437,1865.97,ok,
+nnls_mode_intercept,global_l1_component_nnls,3.0832058135484477,pJ/bit,45,,0.9995801445062544,14.054859294387665,nan,nan,nan,nan,nan,nan,nan,nan,ok,active_set_iterations=4
+nnls_mode_intercept,l2_increment_nnls,8.469916400659228,pJ/bit,45,,0.9995801445062544,14.054859294387665,nan,nan,nan,nan,nan,nan,nan,nan,ok,active_set_iterations=4
+nnls_mode_intercept,dram_increment_nnls,20.030091306668954,pJ/bit,45,,0.9995801445062544,14.054859294387665,nan,nan,nan,nan,nan,nan,nan,nan,ok,active_set_iterations=4

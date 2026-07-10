@@ -1,85 +1,112 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620">
-<title>NCU hit-rate validation</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="1540" height="700" viewBox="0 0 1540 700">
+<title>NCU hit-rate/access/byte validation</title>
 <rect width="100%" height="100%" fill="#FFFFFF"/>
 <text x="38.0" y="38.0" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#18181B" text-anchor="start">NCU hit-rate validation</text>
-<text x="38.0" y="62.0" font-family="Arial, sans-serif" font-size="13" font-weight="400" fill="#52525B" text-anchor="start">Representative LR=4 counters. Accepted paths are used for final coefficients; rejected paths are shown as controls.</text>
-<line x1="260.0" y1="83.0" x2="260.0" y2="525.0" stroke="#D4D4D8" stroke-width="1.0"/>
-<text x="260.0" y="74.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">0%</text>
-<line x1="410.0" y1="83.0" x2="410.0" y2="525.0" stroke="#D4D4D8" stroke-width="1.0"/>
-<text x="410.0" y="74.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">25%</text>
-<line x1="560.0" y1="83.0" x2="560.0" y2="525.0" stroke="#D4D4D8" stroke-width="1.0"/>
-<text x="560.0" y="74.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">50%</text>
-<line x1="710.0" y1="83.0" x2="710.0" y2="525.0" stroke="#D4D4D8" stroke-width="1.0"/>
-<text x="710.0" y="74.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">75%</text>
-<line x1="860.0" y1="83.0" x2="860.0" y2="525.0" stroke="#D4D4D8" stroke-width="1.0"/>
-<text x="860.0" y="74.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">100%</text>
-<text x="38.0" y="124.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">Tensor treatment</text>
-<text x="38.0" y="142.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#0F766E" text-anchor="start">accepted</text>
-<rect x="260.0" y="111.0" width="218.5" height="14.0" fill="#0F766E"/>
-<rect x="260.0" y="133.0" width="245.0" height="14.0" fill="#2563EB"/>
-<text x="484.5" y="123.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">L1 36.4%</text>
-<text x="511.0" y="145.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#2563EB" text-anchor="start">L2 40.8%</text>
-<text x="930.0" y="124.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 8.1e+07 B</text>
-<text x="930.0" y="142.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 0.0128%</text>
-<text x="38.0" y="178.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">Tensor control</text>
-<text x="38.0" y="196.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#0F766E" text-anchor="start">accepted</text>
-<rect x="260.0" y="165.0" width="188.4" height="14.0" fill="#0F766E"/>
-<rect x="260.0" y="187.0" width="361.1" height="14.0" fill="#2563EB"/>
-<text x="454.4" y="177.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">L1 31.4%</text>
-<text x="627.1" y="199.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#2563EB" text-anchor="start">L2 60.2%</text>
-<text x="930.0" y="178.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 7.74e+07 B</text>
-<text x="930.0" y="196.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 0.0101%</text>
-<text x="38.0" y="232.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">Shared scalar</text>
-<text x="38.0" y="250.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#0F766E" text-anchor="start">accepted</text>
-<rect x="260.0" y="219.0" width="125.6" height="14.0" fill="#0F766E"/>
-<rect x="260.0" y="241.0" width="415.9" height="14.0" fill="#2563EB"/>
-<text x="391.6" y="231.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">L1 20.9%</text>
-<text x="681.9" y="253.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#2563EB" text-anchor="start">L2 69.3%</text>
-<text x="930.0" y="232.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 1.72e+08 B</text>
-<text x="930.0" y="250.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 0.00208%</text>
-<text x="38.0" y="286.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">Global L1</text>
-<text x="38.0" y="304.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#0F766E" text-anchor="start">accepted</text>
-<rect x="260.0" y="273.0" width="600.0" height="14.0" fill="#0F766E"/>
-<rect x="260.0" y="295.0" width="349.1" height="14.0" fill="#2563EB"/>
-<text x="852.0" y="285.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="end">L1 100%</text>
-<text x="615.1" y="307.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#2563EB" text-anchor="start">L2 58.2%</text>
-<text x="930.0" y="286.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 2.19e+08 B</text>
-<text x="930.0" y="304.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 17.4%</text>
-<text x="38.0" y="340.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">L2 CG</text>
-<text x="38.0" y="358.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#0F766E" text-anchor="start">accepted</text>
-<rect x="260.0" y="327.0" width="0.0" height="14.0" fill="#0F766E"/>
-<rect x="260.0" y="349.0" width="599.6" height="14.0" fill="#2563EB"/>
-<text x="266.0" y="339.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">L1 6e-06%</text>
-<text x="851.6" y="361.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="end">L2 99.9%</text>
-<text x="930.0" y="340.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 4.83e+08 B</text>
-<text x="930.0" y="358.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 867%</text>
-<text x="38.0" y="394.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">DRAM CG</text>
-<text x="38.0" y="412.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#0F766E" text-anchor="start">accepted</text>
-<rect x="260.0" y="381.0" width="0.0" height="14.0" fill="#0F766E"/>
-<rect x="260.0" y="403.0" width="0.9" height="14.0" fill="#2563EB"/>
-<text x="266.0" y="393.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">L1 6e-06%</text>
-<text x="266.9" y="415.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#2563EB" text-anchor="start">L2 0.156%</text>
-<text x="930.0" y="394.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 5.39e+11 B</text>
-<text x="930.0" y="412.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 1.77e+03%</text>
-<text x="38.0" y="448.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#71717A" text-anchor="start">L2 capacity reject</text>
-<text x="38.0" y="466.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#71717A" text-anchor="start">rejected: l1_hit_too_high_for_l2</text>
-<rect x="260.0" y="435.0" width="530.2" height="14.0" fill="#0F766E"/>
-<rect x="260.0" y="457.0" width="598.8" height="14.0" fill="#2563EB"/>
-<text x="782.2" y="447.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="end">L1 88.4%</text>
-<text x="850.8" y="469.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="end">L2 99.8%</text>
-<text x="930.0" y="448.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 2.95e+08 B</text>
-<text x="930.0" y="466.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 70.7%</text>
-<text x="38.0" y="502.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#71717A" text-anchor="start">Shared reject</text>
-<text x="38.0" y="520.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#71717A" text-anchor="start">rejected: shared_bank_conflicts_high</text>
-<rect x="260.0" y="489.0" width="161.1" height="14.0" fill="#0F766E"/>
-<rect x="260.0" y="511.0" width="345.6" height="14.0" fill="#2563EB"/>
-<text x="427.1" y="501.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">L1 26.8%</text>
-<text x="611.6" y="523.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#2563EB" text-anchor="start">L2 57.6%</text>
-<text x="930.0" y="502.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 3.2e+08 B</text>
-<text x="930.0" y="520.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 0.000554%</text>
-<rect x="842.0" y="82.0" width="15.0" height="9.0" fill="#0F766E"/>
-<text x="863.0" y="91.0" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#18181B" text-anchor="start">L1 hit rate</text>
-<rect x="930.0" y="82.0" width="15.0" height="9.0" fill="#2563EB"/>
-<text x="951.0" y="91.0" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#18181B" text-anchor="start">L2 hit rate</text>
-<text x="38.0" y="588.0" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#52525B" text-anchor="start">Key validation: global L1 has ~100% L1 hit; L2 CG bypasses L1 and has ~99.94% L2 hit; DRAM CG has near-zero L2 hit.</text>
+<text x="38.0" y="62.0" font-family="Arial, sans-serif" font-size="13" font-weight="400" fill="#52525B" text-anchor="start">Representative RF/LR=4 counters. Hit rate is shown with access counts and byte traffic so caching/path evidence is visible.</text>
+<line x1="250.0" y1="96.0" x2="250.0" y2="634.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="250.0" y="87.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">0%</text>
+<line x1="357.5" y1="96.0" x2="357.5" y2="634.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="357.5" y="87.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">25%</text>
+<line x1="465.0" y1="96.0" x2="465.0" y2="634.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="465.0" y="87.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">50%</text>
+<line x1="572.5" y1="96.0" x2="572.5" y2="634.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="572.5" y="87.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">75%</text>
+<line x1="680.0" y1="96.0" x2="680.0" y2="634.0" stroke="#D4D4D8" stroke-width="1.0"/>
+<text x="680.0" y="87.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="middle">100%</text>
+<text x="720.0" y="88.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">Access evidence</text>
+<text x="1028.0" y="88.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">Byte evidence</text>
+<text x="1368.0" y="88.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">Stall/status</text>
+<text x="38.0" y="137.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">Tensor treatment</text>
+<text x="38.0" y="155.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#0F766E" text-anchor="start">accepted</text>
+<rect x="250.0" y="124.0" width="150.3" height="14.0" fill="#0F766E"/>
+<rect x="250.0" y="146.0" width="333.6" height="14.0" fill="#2563EB"/>
+<text x="406.3" y="136.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">L1 35%</text>
+<text x="589.6" y="158.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#2563EB" text-anchor="start">L2 77.6%</text>
+<text x="720.0" y="136.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 0 sect; L2 0 sect; D 2M sect</text>
+<text x="1028.0" y="136.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 0B; L2 80.3MB</text>
+<text x="1028.0" y="156.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 63.9MB</text>
+<text x="1368.0" y="136.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 0.01%</text>
+<text x="1368.0" y="156.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">accepted</text>
+<text x="38.0" y="203.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">Tensor control</text>
+<text x="38.0" y="221.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#0F766E" text-anchor="start">accepted</text>
+<rect x="250.0" y="190.0" width="134.1" height="14.0" fill="#0F766E"/>
+<rect x="250.0" y="212.0" width="111.9" height="14.0" fill="#2563EB"/>
+<text x="390.1" y="202.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">L1 31.2%</text>
+<text x="367.9" y="224.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#2563EB" text-anchor="start">L2 26%</text>
+<text x="720.0" y="202.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 0 sect; L2 903K sect; D 3.19M sect</text>
+<text x="1028.0" y="202.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 0B; L2 188MB</text>
+<text x="1028.0" y="222.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 148MB</text>
+<text x="1368.0" y="202.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 0.00972%</text>
+<text x="1368.0" y="222.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">accepted</text>
+<text x="38.0" y="269.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">Shared scalar</text>
+<text x="38.0" y="287.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#0F766E" text-anchor="start">accepted</text>
+<rect x="250.0" y="256.0" width="90.6" height="14.0" fill="#0F766E"/>
+<rect x="250.0" y="278.0" width="180.9" height="14.0" fill="#2563EB"/>
+<text x="346.6" y="268.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">L1 21.1%</text>
+<text x="436.9" y="290.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#2563EB" text-anchor="start">L2 42.1%</text>
+<text x="720.0" y="268.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 0 sect; L2 4.15M sect; D 5.73M sect</text>
+<text x="1028.0" y="268.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">Shared 537GB</text>
+<text x="1028.0" y="288.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1/L2/D 0B/406MB/303MB</text>
+<text x="1368.0" y="268.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 0.00211%</text>
+<text x="1368.0" y="288.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">accepted</text>
+<text x="38.0" y="335.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">Global L1</text>
+<text x="38.0" y="353.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#0F766E" text-anchor="start">accepted</text>
+<rect x="250.0" y="322.0" width="430.0" height="14.0" fill="#0F766E"/>
+<rect x="250.0" y="344.0" width="288.1" height="14.0" fill="#2563EB"/>
+<text x="672.0" y="334.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="end">L1 100%</text>
+<text x="544.1" y="356.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#2563EB" text-anchor="start">L2 67%</text>
+<text x="720.0" y="334.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 33.6G sect; L2 5.66M sect; D 7.2M sect</text>
+<text x="1028.0" y="334.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 1.07TB; L2 593MB</text>
+<text x="1028.0" y="354.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 453MB</text>
+<text x="1368.0" y="334.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 17.4%</text>
+<text x="1368.0" y="354.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">accepted</text>
+<text x="38.0" y="401.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">L2 CG</text>
+<text x="38.0" y="419.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#0F766E" text-anchor="start">accepted</text>
+<rect x="250.0" y="388.0" width="0.0" height="14.0" fill="#0F766E"/>
+<rect x="250.0" y="410.0" width="429.6" height="14.0" fill="#2563EB"/>
+<text x="256.0" y="400.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">L1 6e-06%</text>
+<text x="671.6" y="422.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="end">L2 99.9%</text>
+<text x="720.0" y="400.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 16.8G sect; L2 16.8G sect; D 11.9M sect</text>
+<text x="1028.0" y="400.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 537GB; L2 538GB</text>
+<text x="1028.0" y="420.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 541MB</text>
+<text x="1368.0" y="400.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 867%</text>
+<text x="1368.0" y="420.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">accepted</text>
+<text x="38.0" y="467.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">DRAM CG</text>
+<text x="38.0" y="485.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#0F766E" text-anchor="start">accepted</text>
+<rect x="250.0" y="454.0" width="0.0" height="14.0" fill="#0F766E"/>
+<rect x="250.0" y="476.0" width="0.4" height="14.0" fill="#2563EB"/>
+<text x="256.0" y="466.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">L1 6e-06%</text>
+<text x="256.4" y="488.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#2563EB" text-anchor="start">L2 0.104%</text>
+<text x="720.0" y="466.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 16.8G sect; L2 16.8G sect; D 16.8G sect</text>
+<text x="1028.0" y="466.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 537GB; L2 539GB</text>
+<text x="1028.0" y="486.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 539GB</text>
+<text x="1368.0" y="466.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 1.75e+03%</text>
+<text x="1368.0" y="486.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">accepted</text>
+<text x="38.0" y="533.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#71717A" text-anchor="start">L2 capacity reject</text>
+<text x="38.0" y="551.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#71717A" text-anchor="start">rejected: l1_hit_too_high_for_l2</text>
+<rect x="250.0" y="520.0" width="380.0" height="14.0" fill="#0F766E"/>
+<rect x="250.0" y="542.0" width="429.1" height="14.0" fill="#2563EB"/>
+<text x="622.0" y="532.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="end">L1 88.4%</text>
+<text x="671.1" y="554.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="end">L2 99.8%</text>
+<text x="720.0" y="532.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 33.6G sect; L2 3.91G sect; D 6.16M sect</text>
+<text x="1028.0" y="532.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 1.07TB; L2 125GB</text>
+<text x="1028.0" y="552.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">DRAM 295MB</text>
+<text x="1368.0" y="532.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 70.7%</text>
+<text x="1368.0" y="552.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#71717A" text-anchor="start">rejected</text>
+<text x="38.0" y="599.0" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#71717A" text-anchor="start">Shared reject</text>
+<text x="38.0" y="617.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#71717A" text-anchor="start">rejected: shared_bank_conflicts_high</text>
+<rect x="250.0" y="586.0" width="115.5" height="14.0" fill="#0F766E"/>
+<rect x="250.0" y="608.0" width="247.7" height="14.0" fill="#2563EB"/>
+<text x="371.5" y="598.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#0F766E" text-anchor="start">L1 26.8%</text>
+<text x="503.7" y="620.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#2563EB" text-anchor="start">L2 57.6%</text>
+<text x="720.0" y="598.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1 0 sect; L2 5.16M sect; D 5.75M sect</text>
+<text x="1028.0" y="598.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">Shared 537GB</text>
+<text x="1028.0" y="618.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">L1/L2/D 0B/456MB/320MB</text>
+<text x="1368.0" y="598.0" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#52525B" text-anchor="start">long SB 0.000554%</text>
+<text x="1368.0" y="618.0" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#71717A" text-anchor="start">rejected</text>
+<rect x="742.0" y="91.0" width="15.0" height="9.0" fill="#0F766E"/>
+<text x="763.0" y="100.0" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#18181B" text-anchor="start">L1 hit rate</text>
+<rect x="835.0" y="91.0" width="15.0" height="9.0" fill="#2563EB"/>
+<text x="856.0" y="100.0" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#18181B" text-anchor="start">L2 hit rate</text>
+<text x="38.0" y="668.0" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#52525B" text-anchor="start">Key validation: accepted rows must show hit-rate direction and path-relevant access/byte evidence. L1 uses request counters when available, otherwise sectors; L2/DRAM use sectors.</text>
 </svg>

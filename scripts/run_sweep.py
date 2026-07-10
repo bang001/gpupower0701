@@ -96,6 +96,20 @@ MODES = [
     "store_path",
 ]
 
+MEMORY_BACKED_MODES = {
+    "global_addr_only",
+    "global_l1_load_only",
+    "shared_scalar_load_only",
+    "shared_load_only",
+    "shared_mma",
+    "l2_load_only",
+    "l2_cg_load_only",
+    "l2_mma",
+    "dram_load_only",
+    "dram_cg_load_only",
+    "dram_mma",
+}
+
 
 def classify(w_sm_kib: int, blocks_per_sm: int, profile: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {
@@ -123,7 +137,10 @@ def classify(w_sm_kib: int, blocks_per_sm: int, profile: dict[str, Any]) -> dict
         out["valid"] = True
         out["below_logical_tile"] = True
         out["regime"] = "below_logical_tile"
-        out["reason"] = "W_SM_KiB < blocks_per_SM; only register/control/store modes are valid"
+        out["reason"] = (
+            "W_SM_KiB < blocks_per_SM; only register, non-memory control, "
+            "and store modes are valid"
+        )
         return out
 
     shared_resident = (
@@ -151,18 +168,7 @@ def classify(w_sm_kib: int, blocks_per_sm: int, profile: dict[str, Any]) -> dict
 def mode_allowed(mode: str, info: dict[str, Any]) -> bool:
     if not info["valid"]:
         return False
-    if info.get("below_logical_tile") and mode in {
-        "global_l1_load_only",
-        "shared_scalar_load_only",
-        "shared_load_only",
-        "shared_mma",
-        "l2_load_only",
-        "l2_cg_load_only",
-        "l2_mma",
-        "dram_load_only",
-        "dram_cg_load_only",
-        "dram_mma",
-    }:
+    if info.get("below_logical_tile") and mode in MEMORY_BACKED_MODES:
         return False
     if mode in {"shared_scalar_load_only", "shared_load_only", "shared_mma"}:
         return bool(info["shared_resident"])

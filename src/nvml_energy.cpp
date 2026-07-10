@@ -112,7 +112,7 @@ GpuEnergySample NvmlEnergy::sample(int gpu_id) const {
     notes << "energy_source=nvml_total_energy;";
   } else {
     notes << "energy_counter_unavailable=" << nvmlErrorString(status) << ";"
-          << "energy_source=power_trapezoid;";
+          << "energy_source=legacy_get_power_usage_integral;";
   }
 
   unsigned int value = 0;

@@ -1,0 +1,2 @@
+component,status,median,unit,rows,valid_detail_rows,invalid_detail_rows,ncu_denominator_rows,ncu_accepted_rows,confidence_class,energy_source,energy_integration_method,power_semantics,reasons,cautions
+global_l1_hit_path,accepted,0.1191477744,pJ/bit,7,7,0,7,3,medium,nvml_total_energy,total_energy_mj_delta,one_sec_average,,

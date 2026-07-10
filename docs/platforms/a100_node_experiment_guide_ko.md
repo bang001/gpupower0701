@@ -147,7 +147,7 @@ cmake --build build-a100 --clean-first -j
 | `max_blocks_per_SM` | `32` |
 | `target_l2_MiB` | `40` |
 | `target_shared_KiB_per_SM` | `164` |
-| `mode_allowed` | `true` 또는 의도한 skip reason |
+| `mode_allowed` | strict/실행 좌표는 반드시 `true`; `false`이면 dry-run 종료 코드 2로 중단 |
 
 탐색 단계에서는 `--target-profile auto`도 한 번 확인할 수 있지만, final package에
 넣는 preflight는 `--target-profile a100 --strict`로 실행한다.
@@ -348,7 +348,33 @@ bash scripts/run_ncu_validation.sh
 ERR_NVGPUCTRPERM
 ```
 
-이 경우 관리자가 performance counter 접근을 허용하거나 root/admin 권한으로 NCU를 실행해야 한다. NCU가 실패해도 NVML energy run 자체와 섞지 말고, 보고서에는 “NCU counter 검증 미완료”로 분리 기록한다.
+이 경우 관리자가 performance counter 접근을 허용하는 것이 가장 좋다. 노드 정책상 즉시
+변경이 어렵고 sudo 권한이 있으면 NCU sidecar만 sudo로 우회할 수 있다. Finalplan
+package 전체를 재실행할 때는 다음처럼 실행한다.
+
+```bash
+NCU_USE_SUDO=1 bash results/summary/a100_component_finalplan_20260708_commands.sh
+```
+
+수동 NCU validation만 다시 돌릴 때는 기존 명령에 `NCU_USE_SUDO=1`을 붙인다.
+
+```bash
+NCU_USE_SUDO=1 \
+NCU="$(command -v ncu)" \
+BIN=./build-a100/a100_fp16_energy_v2 \
+TARGET_PROFILE=a100 \
+ACTIVE_SM=108 \
+GPU=0 \
+OUTDIR=results/ncu/a100_validation_$(date +%Y%m%d) \
+RAW_OUT=results/raw/a100_ncu_validation_sidecar_$(date +%Y%m%d).csv \
+bash scripts/run_ncu_validation.sh
+```
+
+`sudo`가 CUDA/Nsight Compute 경로를 지우는 환경이면 generated package에는
+`NCU_BIN="$(command -v ncu)" NCU_SUDO="sudo -E"`를 같이 지정하고, 수동
+`run_ncu_validation.sh`에는 `NCU="$(command -v ncu)" NCU_SUDO="sudo -E"`를 같이
+지정한다. NCU가 실패해도 NVML energy run 자체와 섞지 말고, 보고서에는
+“NCU counter 검증 미완료”로 분리 기록한다.
 
 ## 8. Mode 설명
 
@@ -361,9 +387,12 @@ ERR_NVGPUCTRPERM
 | `reg_fragment_only` | WMMA fragment/register setup, MMA 없음 | fragment setup control |
 | `reg_operand_only` | `reg_mma`와 같은 `ITER * reuse_factor` loop에서 sampled register fragment 값을 소비, MMA 없음 | no-MMA register-fragment/control baseline |
 | `reg_mma` | register 값으로 WMMA fragment를 채우고 MMA 반복 | effective Tensor Engine + register |
+| `global_addr_only` | global memory pair와 같은 address/tile/repeat/checksum loop를 실행하되 input load는 하지 않음 | Global L1/L2/DRAM matched address control |
+| `global_l1_load_only` | `ld.global.ca` scalar global load 반복 | global L1-hit candidate path |
+| `l2_cg_load_only` | `ld.global.cg` scalar global load 반복 | global L1-bypassed L2-hit candidate path |
 | `shared_load_only` | shared memory operand staging 후 WMMA load, MMA 없음 | effective shared/L1 load control |
 | `shared_mma` | shared memory operand staging 후 WMMA load + MMA | effective shared/L1 path |
-| `l2_load_only` | L2 후보 global working set warm-up 후 load, MMA 없음 | effective L2-hit load control |
+| `l2_load_only` | normal global load 기반 capacity diagnostic, MMA 없음 | L1과 섞일 수 있어 strict L2 coefficient 제외 |
 | `l2_mma` | L2에 들어가는 global working set warm-up 후 load + MMA | effective L2-hit path |
 | `dram_load_only` | nominal L2보다 큰 global working set streaming load, MMA 없음 | effective DRAM streaming load control |
 | `dram_mma` | nominal L2보다 큰 global working set streaming load + MMA | effective DRAM streaming path |
@@ -450,18 +479,26 @@ A100 추천 finalplan 좌표:
 | Component | modes | W_SM (KiB) | blocks/SM | factor |
 |---|---|---:|---:|---|
 | Tensor | `reg_operand_only,reg_mma` | 2048 | 16,32 | reuse 1,2,4,8,16 |
-| Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | 16,32 | load_repeat 1,2,4,8,16 |
-| Global L1 | `clocked_empty,global_l1_load_only` | 16,32 | 16,32 | load_repeat 1,2,4,8,16 |
-| L2 capacity/CG | `clocked_empty,l2_load_only,l2_cg_load_only` | 256 | 16,32 | load_repeat 1,2,4,8,16 |
-| DRAM sanity | `clocked_empty,dram_cg_load_only` | 8192 | 16,32 | load_repeat 1,4,16 |
+| Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | valid W/B: 16/16, 32/16, 32/32 | energy load_repeat 4,8,16; strict NCU W16/B16, NCU factor 1,2,4,8,16 |
+| L2 CG | `global_addr_only,l2_cg_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 16,32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
-A100은 40 MiB L2가 있으므로 `W_SM=256 KiB`에서 capacity 기반 `l2_load_only`가 L2 후보가 될 수 있다. 하지만 최종 채택은 NCU 기준이다.
+`W16/B32`는 block당 0.5 KiB이므로 `global_addr_only`와
+`global_l1_load_only` 모두 matrix에서 `valid=false`로 남기고 실행하지 않는다. B32 L1
+diagnostic은 W32/B32에서만 수행한다. 표준 runner는 energy 수집 전에 unique valid 좌표를
+binary `--dry-run`으로 다시 검사하므로 Python/C++ feasibility가 어긋나면 첫 측정 전에
+명확한 좌표와 return code를 출력하고 중단한다.
+
+A100의 L2는 40 MiB이므로 `W_SM=256 KiB`와 active SM 108개는 전체 27 MiB로 L2 경계에 너무 가깝다. 이 설정은 L2 set/conflict와 background traffic에 따라 hit rate가 흔들릴 수 있다. strict L2 path는 먼저 `W_SM=64 KiB`(전체 6.75 MiB)에서 `ld.global.cg`를 사용해 global L1을 우회하고, NCU에서 L2 hit plateau를 확인한다. `l2_load_only`는 normal global load라 L1 hit와 섞일 수 있으므로 final L2 coefficient에는 사용하지 않는다.
 
 | NCU 기준 | 통과 조건 |
 |---|---:|
 | Global L1 | L1 hit >= 95%, L1 access/bytes 존재, L2/L1 bytes <= 1% |
-| L2 capacity | L1 hit <= 1%, L2 hit >= 95%, L2 access/bytes 존재, DRAM/L2 bytes <= 2% |
+| L2 CG | L2 hit >= 95%, L2 access/bytes 존재, L1 bytes/L2 bytes <= 1%, DRAM/L2 bytes <= 2% |
 | Shared scalar | shared access/bytes 존재, bank conflict 0 또는 매우 낮음 |
-| Tensor | HMMA > 0, spill/local 0 |
+| Tensor | treatment HMMA > 0, spill/local 0; control HMMA는 0이 원칙이며 legacy build의 block당 고정 1개 epilogue는 `HMMA / expected_reg_operand_ops <= 1e-5`일 때만 제한적으로 허용 |
+
+`global_addr_only`는 `global_l1_load_only`, `l2_cg_load_only`, `dram_cg_load_only`와 동일한 block/tile/index/repeat loop를 실행하지만 global input load는 수행하지 않는다. 따라서 memory pair의 차분은 단순 `clocked_empty` 대비보다 주소 계산과 loop 비용을 더 잘 제거한다. NCU sidecar에서는 global-load L1 byte가 0인지 확인한다. `--verify-smid=1` atomic bookkeeping 때문에 L2 sector가 소량 보일 수 있으므로 L2 sector 0을 요구하지 않는다.
 
 보고서에는 `board-level effective coefficient`, `not pure physical component energy`를 명시한다. A100의 HBM2 물리 pJ/bit 문헌값과 본 실험의 DRAM streaming pJ/bit는 같은 의미가 아니다.

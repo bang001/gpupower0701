@@ -36,7 +36,8 @@ PROFILES: dict[str, dict[str, Any]] = {
         "max_shared_per_block_kib": 96,
         "max_blocks_per_sm": 32,
         "ncu_chip": "gv100",
-        "ncu_policy": "Use an Nsight Compute toolchain whose --list-chips includes gv100; 2024.3/2025.1 are examples, while current release highlights announce dropped Volta support.",
+        "ncu_policy": "Nsight Compute 2024.3 is confirmed to support GV100. Always require --list-chips and --query-metrics --chips gv100 success because newer releases can remove Volta support.",
+        "cuda_toolchain_policy": "Use a compiler that lists compute_70. CUDA 12.x is the recommended V100 build line; CUDA 13 removed Volta offline compilation support.",
         "power_usage_semantics": "instant",
         "reference_memory": "32 GB HBM2 reference package; pass --min-device-memory-mib 0 for a separately reported 16 GB SKU.",
     },
@@ -247,6 +248,29 @@ def query_ncu(ncu: str, chip: str) -> dict[str, str]:
     return result
 
 
+def query_cuda_compiler(nvcc: str, cuda_arch: str) -> dict[str, str]:
+    """Check that the selected nvcc can emit code for the profile architecture."""
+
+    nvcc_cmd = shlex.split(nvcc)
+    target = f"compute_{cuda_arch}"
+    result: dict[str, str] = {"target": target}
+
+    rc, out = run(nvcc_cmd + ["--version"])
+    result["version_rc"] = str(rc)
+    result["version"] = out.replace("\n", " | ")[:1000]
+
+    rc, out = run(nvcc_cmd + ["--list-gpu-arch"])
+    result["list_gpu_arch_rc"] = str(rc)
+    result["target_supported"] = "unknown"
+    if rc == 0:
+        supported = {line.strip() for line in out.splitlines() if line.strip()}
+        result["target_supported"] = str(target in supported).lower()
+        result["supported_arches"] = ",".join(sorted(supported))
+    else:
+        result["list_gpu_arch_error"] = out[:1000]
+    return result
+
+
 def dry_run_binary(binary: str, gpu: int, profile: str, active_sm: int) -> tuple[int, str]:
     return run(
         [
@@ -274,6 +298,7 @@ def strict_gate_errors(
     detected_profile: str | None,
     gpu_info: dict[str, str],
     ncu_info: dict[str, str],
+    cuda_compiler_info: dict[str, str] | None,
     dry_run: tuple[int, str],
     min_device_memory_mib: int = 0,
 ) -> list[str]:
@@ -297,6 +322,15 @@ def strict_gate_errors(
         errors.append(f"ncu_chip_not_supported_{ncu_info.get('chip_supported', 'missing')}")
     if ncu_info.get("query_metrics_ok") != "true":
         errors.append(f"ncu_query_metrics_not_ok_{ncu_info.get('query_metrics_rc', 'missing')}")
+    if (
+        cuda_compiler_info is not None
+        and cuda_compiler_info.get("target_supported") != "true"
+    ):
+        errors.append(
+            "nvcc_target_not_supported_"
+            f"{cuda_compiler_info.get('target', 'unknown')}_"
+            f"{cuda_compiler_info.get('target_supported', 'missing')}"
+        )
     if dry_run[0] != 0:
         errors.append(f"binary_dry_run_failed_rc_{dry_run[0]}")
     if min_device_memory_mib > 0:
@@ -335,6 +369,7 @@ def run_self_test() -> None:
         detected_profile="a100",
         gpu_info=good_gpu,
         ncu_info=good_ncu,
+        cuda_compiler_info={"target": "compute_80", "target_supported": "true"},
         dry_run=(0, "dry_run=true"),
         min_device_memory_mib=30000,
     )
@@ -345,6 +380,7 @@ def run_self_test() -> None:
         detected_profile="rtx3090",
         gpu_info={"name": "NVIDIA GeForce RTX 3090", "compute_cap": "8.6"},
         ncu_info=good_ncu,
+        cuda_compiler_info=None,
         dry_run=(0, "dry_run=true"),
     )
     assert_selftest(
@@ -358,6 +394,7 @@ def run_self_test() -> None:
         detected_profile=None,
         gpu_info={"name": "Unknown GPU", "compute_cap": "9.9"},
         ncu_info=good_ncu,
+        cuda_compiler_info=None,
         dry_run=(0, "dry_run=true"),
     )
     assert_selftest(
@@ -375,6 +412,7 @@ def run_self_test() -> None:
             "query_metrics_ok": "false",
             "query_metrics_rc": "1",
         },
+        cuda_compiler_info=None,
         dry_run=(0, "dry_run=true"),
     )
     assert_selftest(
@@ -389,6 +427,7 @@ def run_self_test() -> None:
         detected_profile="h100",
         gpu_info={"name": "NVIDIA H100", "compute_cap": "9.0"},
         ncu_info=good_ncu,
+        cuda_compiler_info=None,
         dry_run=(2, "invalid combination"),
     )
     assert_selftest(
@@ -406,6 +445,7 @@ def run_self_test() -> None:
             "memory.total": "16160",
         },
         ncu_info=good_ncu,
+        cuda_compiler_info=None,
         dry_run=(0, "dry_run=true"),
         min_device_memory_mib=30000,
     )
@@ -413,6 +453,23 @@ def run_self_test() -> None:
         any(error.startswith("gpu_memory_total_below_min_30000_mib") for error in v100_16gb),
         "strict_v100_32gb_memory_gate",
         ";".join(v100_16gb),
+    )
+
+    v100_cuda13 = strict_gate_errors(
+        requested_profile="v100",
+        detected_profile="v100",
+        gpu_info={"name": "Tesla V100", "compute_cap": "7.0"},
+        ncu_info=good_ncu,
+        cuda_compiler_info={
+            "target": "compute_70",
+            "target_supported": "false",
+        },
+        dry_run=(0, "dry_run=true"),
+    )
+    assert_selftest(
+        "nvcc_target_not_supported_compute_70_false" in v100_cuda13,
+        "strict_v100_nvcc_arch_gate",
+        ";".join(v100_cuda13),
     )
 
     report = markdown_report(
@@ -426,6 +483,10 @@ def run_self_test() -> None:
         power_scope={},
         profile=PROFILES["a100"],
         ncu_info=good_ncu,
+        cuda_compiler_info={
+            "target": "compute_80",
+            "target_supported": "true",
+        },
         dry_run=(0, "dry_run=true"),
         min_device_memory_mib=0,
     )
@@ -450,6 +511,7 @@ def markdown_report(
     power_scope: dict[str, str],
     profile: dict[str, Any],
     ncu_info: dict[str, str],
+    cuda_compiler_info: dict[str, str],
     dry_run: tuple[int, str],
     min_device_memory_mib: int,
 ) -> str:
@@ -472,11 +534,13 @@ def markdown_report(
     ]
     memory_errors = [error for error in strict_errors if error.startswith("gpu_memory")]
     ncu_errors = [error for error in strict_errors if error.startswith("ncu_")]
+    compiler_errors = [error for error in strict_errors if error.startswith("nvcc_")]
     dry_errors = [error for error in strict_errors if error.startswith("binary_dry_run")]
     lines.append(f"- `strict`: {str(strict).lower()}")
     lines.append(f"- `profile_gate`: {'pass' if not profile_errors else 'fail'}")
     lines.append(f"- `device_memory_gate`: {'pass' if not memory_errors else 'fail'}")
     lines.append(f"- `ncu_gate`: {'pass' if not ncu_errors else 'fail'}")
+    lines.append(f"- `cuda_compiler_gate`: {'pass' if not compiler_errors else 'fail'}")
     lines.append(f"- `dry_run_gate`: {'pass' if not dry_errors else 'fail'}")
     lines.append(
         f"- `overall`: {'pass' if not strict_errors else 'fail' if strict else 'warning'}"
@@ -551,12 +615,27 @@ def markdown_report(
         "ncu_chip",
         "power_usage_semantics",
         "ncu_policy",
+        "cuda_toolchain_policy",
         "reference_memory",
     ]:
         lines.append(f"- `{key}`: {profile.get(key, 'not_applicable')}")
     lines.append(f"- `dry_run_gpu`: {gpu}")
     lines.append(f"- `dry_run_active_sm`: {dry_run_active_sm}")
     lines.append(f"- `min_device_memory_mib`: {min_device_memory_mib}")
+    lines.append("")
+    lines.append("## CUDA Compiler")
+    lines.append("")
+    for key in [
+        "target",
+        "target_supported",
+        "version_rc",
+        "version",
+        "list_gpu_arch_rc",
+        "supported_arches",
+        "list_gpu_arch_error",
+    ]:
+        if key in cuda_compiler_info:
+            lines.append(f"- `{key}`: {cuda_compiler_info[key]}")
     lines.append("")
     lines.append("## Nsight Compute")
     lines.append("")
@@ -591,6 +670,11 @@ def main() -> int:
     parser.add_argument("--binary", default="./build/a100_fp16_energy_v2")
     parser.add_argument("--ncu", default="ncu")
     parser.add_argument(
+        "--nvcc",
+        default="nvcc",
+        help="CUDA compiler command whose supported GPU architectures are checked.",
+    )
+    parser.add_argument(
         "--min-device-memory-mib",
         type=int,
         default=0,
@@ -604,7 +688,8 @@ def main() -> int:
         action="store_true",
         help=(
             "Exit nonzero if the requested profile does not match the detected GPU, "
-            "NCU chip/metric support is unavailable, or binary dry-run fails."
+            "CUDA compiler target or NCU chip/metric support is unavailable, "
+            "or binary dry-run fails."
         ),
     )
     parser.add_argument(
@@ -643,12 +728,14 @@ def main() -> int:
     dry_run_active_sm = args.active_sm or profile["full_sm"]
     power_scope = query_power_scope(args.gpu)
     ncu_info = query_ncu(args.ncu, profile["ncu_chip"])
+    cuda_compiler_info = query_cuda_compiler(args.nvcc, profile["cuda_arch"])
     dry = dry_run_binary(args.binary, args.gpu, selected, dry_run_active_sm)
     strict_errors = strict_gate_errors(
         requested_profile=args.target_profile,
         detected_profile=detected,
         gpu_info=gpu_info,
         ncu_info=ncu_info,
+        cuda_compiler_info=cuda_compiler_info,
         dry_run=dry,
         min_device_memory_mib=args.min_device_memory_mib,
     )
@@ -663,6 +750,7 @@ def main() -> int:
         power_scope,
         profile,
         ncu_info,
+        cuda_compiler_info,
         dry,
         args.min_device_memory_mib,
     )

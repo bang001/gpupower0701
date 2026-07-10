@@ -1,0 +1,6 @@
+component,status,median,unit,rows,valid_detail_rows,invalid_detail_rows,ncu_denominator_rows,ncu_accepted_rows,confidence_class,energy_source,energy_integration_method,power_semantics,reasons,cautions
+dram_cg_stream_path,accepted_sanity,3.54069776975,pJ/bit,9,9,0,9,3,medium-high,nvml_total_energy,total_energy_mj_delta,one_sec_average,,dram_sanity_path_not_physical_dram_energy
+global_l1_hit_path,accepted_with_caution,0.150450885901,pJ/bit,7,7,2,7,3,medium,nvml_total_energy,total_energy_mj_delta,one_sec_average,,invalid_detail_rows:2
+l2_hit_cg_path,accepted,1.1381074518,pJ/bit,9,9,0,9,3,medium,nvml_total_energy,total_energy_mj_delta,one_sec_average,,
+shared_l1_scalar_path,accepted_with_caution,0.151125742676,pJ/bit,6,6,3,6,3,medium,nvml_total_energy,total_energy_mj_delta,one_sec_average,,invalid_detail_rows:3
+tensor_mma_increment,accepted_low_stability,0.169744684821,pJ/FLOP,15,15,0,0,10,low,nvml_total_energy,total_energy_mj_delta,one_sec_average,,low_stability

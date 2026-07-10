@@ -1,0 +1,40 @@
+component,check,status,expected,actual,interpretation
+tensor_mma_increment_duration_targeted,primary_row_present,pass,row exists,present,required current reporting row exists
+tensor_mma_increment_duration_targeted,unit,pass,pJ/FLOP,pJ/FLOP,unit must prevent pJ/FLOP and pJ/bit from being mixed
+tensor_mma_increment_duration_targeted,positive_median_and_ci,pass,"median, ci_low, ci_high > 0","median=0.106658, ci_low=0.0834535, ci_high=0.133532","negative or zero intervals indicate weak-signal/control drift, not reportable coefficient"
+tensor_mma_increment_duration_targeted,loose_reference_order_range,pass,0.02 <= median <= 0.3,0.106658,broad order-of-magnitude screen only; not a literature fit or silicon-level bound
+tensor_mma_increment_duration_targeted,power_api_scope,pass,"final>0, provisional=0, reject=0, scope=gpu_device_total_energy_counter only","final=24, provisional=0, reject=0, scope=gpu_device_total_energy_counter=24",uses docs/platforms/power_measurement_api_matrix_ko.md final numerator policy
+tensor_mma_increment_duration_targeted,evidence_level,pass,accepted + strong_candidate,"reliability=accepted, evidence_level=strong_candidate","primary coefficient should have clean power, NCU, and reliability evidence"
+shared_l1_scalar_path,primary_row_present,pass,row exists,present,required current reporting row exists
+shared_l1_scalar_path,unit,pass,pJ/bit,pJ/bit,unit must prevent pJ/FLOP and pJ/bit from being mixed
+shared_l1_scalar_path,positive_median_and_ci,pass,"median, ci_low, ci_high > 0","median=0.148735, ci_low=0.124268, ci_high=0.179086","negative or zero intervals indicate weak-signal/control drift, not reportable coefficient"
+shared_l1_scalar_path,loose_reference_order_range,pass,0.02 <= median <= 0.5,0.148735,broad order-of-magnitude screen only; not a literature fit or silicon-level bound
+shared_l1_scalar_path,power_api_scope,pass,"final>0, provisional=0, reject=0, scope=gpu_device_total_energy_counter only","final=30, provisional=0, reject=0, scope=gpu_device_total_energy_counter=30",uses docs/platforms/power_measurement_api_matrix_ko.md final numerator policy
+shared_l1_scalar_path,evidence_level,pass,accepted or accepted_with_caution,"reliability=accepted, evidence_level=strong_candidate",Shared primary evidence is clean; remaining method sensitivity is audited separately
+global_l1_hit_path,primary_row_present,pass,row exists,present,required current reporting row exists
+global_l1_hit_path,unit,pass,pJ/bit,pJ/bit,unit must prevent pJ/FLOP and pJ/bit from being mixed
+global_l1_hit_path,positive_median_and_ci,pass,"median, ci_low, ci_high > 0","median=0.148476, ci_low=0.142944, ci_high=0.170161","negative or zero intervals indicate weak-signal/control drift, not reportable coefficient"
+global_l1_hit_path,loose_reference_order_range,pass,0.02 <= median <= 0.5,0.148476,broad order-of-magnitude screen only; not a literature fit or silicon-level bound
+global_l1_hit_path,power_api_scope,pass,"final>0, provisional=0, reject=0, scope=gpu_device_total_energy_counter only","final=36, provisional=0, reject=0, scope=gpu_device_total_energy_counter=36",uses docs/platforms/power_measurement_api_matrix_ko.md final numerator policy
+global_l1_hit_path,evidence_level,pass,accepted + strong_candidate,"reliability=accepted, evidence_level=strong_candidate","primary coefficient should have clean power, NCU, and reliability evidence"
+l2_hit_cg_path,primary_row_present,pass,row exists,present,required current reporting row exists
+l2_hit_cg_path,unit,pass,pJ/bit,pJ/bit,unit must prevent pJ/FLOP and pJ/bit from being mixed
+l2_hit_cg_path,positive_median_and_ci,pass,"median, ci_low, ci_high > 0","median=1.01656, ci_low=0.947333, ci_high=1.07112","negative or zero intervals indicate weak-signal/control drift, not reportable coefficient"
+l2_hit_cg_path,loose_reference_order_range,pass,0.2 <= median <= 5,1.01656,broad order-of-magnitude screen only; not a literature fit or silicon-level bound
+l2_hit_cg_path,power_api_scope,pass,"final>0, provisional=0, reject=0, scope=gpu_device_total_energy_counter only","final=36, provisional=0, reject=0, scope=gpu_device_total_energy_counter=36",uses docs/platforms/power_measurement_api_matrix_ko.md final numerator policy
+l2_hit_cg_path,evidence_level,pass,accepted + strong_candidate,"reliability=accepted, evidence_level=strong_candidate","primary coefficient should have clean power, NCU, and reliability evidence"
+dram_cg_stream_path,primary_row_present,pass,row exists,present,required current reporting row exists
+dram_cg_stream_path,unit,pass,pJ/bit,pJ/bit,unit must prevent pJ/FLOP and pJ/bit from being mixed
+dram_cg_stream_path,positive_median_and_ci,pass,"median, ci_low, ci_high > 0","median=3.5407, ci_low=2.963, ci_high=4.454","negative or zero intervals indicate weak-signal/control drift, not reportable coefficient"
+dram_cg_stream_path,loose_reference_order_range,pass,1 <= median <= 20,3.5407,broad order-of-magnitude screen only; not a literature fit or silicon-level bound
+dram_cg_stream_path,power_api_scope,pass,"final>0, provisional=0, reject=0, scope=gpu_device_total_energy_counter only","final=102, provisional=0, reject=0, scope=gpu_device_total_energy_counter=102",uses docs/platforms/power_measurement_api_matrix_ko.md final numerator policy
+dram_cg_stream_path,evidence_level,pass,accepted_sanity + sanity_only,"reliability=accepted_sanity, evidence_level=sanity_only","DRAM row is allowed only as hierarchy sanity, not physical DRAM/HBM energy"
+memory_hierarchy,l1_less_than_l2,pass,shared and global L1 effective pJ/bit < L2 effective pJ/bit,"shared=0.148735, global_l1=0.148476, l2=1.01656","if L1/shared exceeds L2, path attribution or denominator is suspect"
+memory_hierarchy,l2_less_than_dram_sanity,pass,L2 effective pJ/bit < DRAM streaming sanity pJ/bit,"l2=1.01656, dram_sanity=3.5407","DRAM sanity is not physical device energy, but should be above L2 for hierarchy sanity"
+memory_hierarchy,shared_vs_global_l1_same_order,pass,0.5 <= shared/global_l1 <= 2.0,1.00175,shared scalar and global L1 use different instruction/control paths but should be same-order
+tensor_mma_increment_duration_targeted,auxiliary_method_sensitivity,warning,auxiliary max/min <= 1.5 for single Tensor coefficient interpretation,"min=0.0766466, max=0.145635, ratio=1.90009","Tensor primary can be reported, but RF/control-policy spread means it must be described as an RF-dependent effective coefficient"
+shared_l1_scalar_path,auxiliary_method_sensitivity,warning,auxiliary max/min <= 2 for single Shared coefficient interpretation,"min=0.0635456, max=0.236323, ratio=3.71895","Shared primary can be reported, but LR/control-policy spread means it must be described as a method-sensitive effective path coefficient"
+global_l1_hit_path,auxiliary_method_sensitivity,pass,auxiliary max/min <= 2 for single Global L1 coefficient interpretation,"min=0.109042, max=0.156109, ratio=1.43164",Global L1 primary can be reported; auxiliary spread quantifies duration/load-repeat sensitivity rather than pure L1 bitcell energy
+l2_hit_cg_path,auxiliary_method_sensitivity,pass,auxiliary max/min <= 2 for single L2 coefficient interpretation,"min=0.95964, max=1.29764, ratio=1.35221",L2 primary can be reported; auxiliary spread quantifies ordering/stall sensitivity rather than pure L2 SRAM energy
+overall,final_reporting_language,warning,report as effective microbenchmark coefficients,not pure silicon-level energy,"even if all checks pass, report Tensor, Shared/L1, L1, L2 as workload-dependent effective coefficients with mode, factor, W_SM, blocks/SM, and units"
+overall,explicit_measurement_scope_coverage,warning,new finalplan raw rows carry explicit measurement_scope,"explicit-scope audit rows=894, final=1, reject=893, missing_explicit_scope=893",current 2026-07-08 RTX 3090 component rows mostly predate the explicit measurement_scope CSV column; their GPU/device scope was inferred from nvml_total_energy + total_energy_mj_delta. New cross-platform final runs must be rerun with explicit measurement_scope.

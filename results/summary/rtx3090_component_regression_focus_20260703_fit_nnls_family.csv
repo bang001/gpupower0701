@@ -1,0 +1,14 @@
+feature,source_column,coefficient_J_per_unit,estimate,unit,scale,constrained,unconstrained_estimate,nonzero_modes,warning
+intercept,,27.946429862316307,27.946429862316307,J,1.0,False,-430.3883819134269,,
+elapsed_s,elapsed_s,161.14622206636335,161.14622206636335,W,3.295875463,True,305.1168245529945,"dram_load_only,dram_mma,empty,l2_load_only,l2_mma,reg_mma,reg_operand_only,shared_load_only,shared_mma,store_only",
+FLOP,FLOP,5.529290987585374e-14,0.05529290987585374,pJ/FLOP,173682560335872.0,True,-0.029622136814628382,"dram_mma,l2_mma,reg_mma,shared_mma",unconstrained_negative
+reg_operand_ops,expected_reg_operand_ops,0.0,0.0,pJ/reg-op,29107877840.0,True,-18387.99848377793,"reg_mma,reg_operand_only",unconstrained_negative;zero_bound_or_not_identified
+shared_bytes_static,expected_shared_bytes,2.0409115575051585e-13,0.20409115575051584,pJ/byte,12879749414912.0,True,0.3348396245829465,"shared_load_only,shared_mma",static_byte
+l2_bytes_static,expected_l2_bytes,3.727366368500041e-12,3.727366368500041,pJ/byte,10058016866304.0,True,3.8771184582480935,"l2_load_only,l2_mma",static_byte
+dram_bytes_static,expected_dram_bytes,0.0,0.0,pJ/byte,2780650029056.0,True,-3.417873248834588,"dram_load_only,dram_mma",unconstrained_negative;zero_bound_or_not_identified;static_byte
+store_bytes_static,expected_store_bytes,1.4437861683612593e-08,14437.861683612593,pJ/byte,1343488.0,True,13453.45003191145,"dram_load_only,dram_mma,empty,l2_load_only,l2_mma,reg_mma,reg_operand_only,shared_load_only,shared_mma,store_only",static_byte
+baseline_family_register,mode_family,-241.38846968497728,-241.38846968497728,J,1.0,False,280.5497520005895,register,
+baseline_family_shared,mode_family,16.008239190729146,16.008239190729146,J,1.0,False,-1.4997173730428282,shared,
+baseline_family_l2,mode_family,-8.196267097329283,-8.196267097329283,J,1.0,False,-30.902078151733193,l2,
+baseline_family_dram,mode_family,146.56522169165703,146.56522169165703,J,1.0,False,142.18595129862376,dram,
+baseline_family_store,mode_family,-1784.5682906076056,-1784.5682906076056,J,1.0,False,-1683.8623117522536,store,

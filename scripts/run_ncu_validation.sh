@@ -19,26 +19,38 @@ case "${TARGET_PROFILE}" in
   v100)
     DEFAULT_ACTIVE_SM=80
     DRAM_W_SM_KIB=128
+    DEFAULT_NCU_CHIP=gv100
+    DEFAULT_FILTER_UNAVAILABLE_METRICS=1
     ;;
   rtx3090)
     DEFAULT_ACTIVE_SM=82
     DRAM_W_SM_KIB=128
+    DEFAULT_NCU_CHIP=ga102
+    DEFAULT_FILTER_UNAVAILABLE_METRICS=1
     ;;
   a100)
     DEFAULT_ACTIVE_SM=108
     DRAM_W_SM_KIB=512
+    DEFAULT_NCU_CHIP=ga100
+    DEFAULT_FILTER_UNAVAILABLE_METRICS=1
     ;;
   h100)
     DEFAULT_ACTIVE_SM=132
     DRAM_W_SM_KIB=512
+    DEFAULT_NCU_CHIP=gh100
+    DEFAULT_FILTER_UNAVAILABLE_METRICS=1
     ;;
   *)
     DEFAULT_ACTIVE_SM=82
     DRAM_W_SM_KIB=128
+    DEFAULT_NCU_CHIP=""
+    DEFAULT_FILTER_UNAVAILABLE_METRICS=0
     ;;
 esac
 
 ACTIVE_SM="${ACTIVE_SM:-${DEFAULT_ACTIVE_SM}}"
+NCU_CHIP="${NCU_CHIP:-${DEFAULT_NCU_CHIP}}"
+NCU_FILTER_UNAVAILABLE_METRICS="${NCU_FILTER_UNAVAILABLE_METRICS:-${DEFAULT_FILTER_UNAVAILABLE_METRICS}}"
 SHARED_W_SM_KIB="${SHARED_W_SM_KIB:-64}"
 L1_W_SM_KIB="${L1_W_SM_KIB:-16}"
 L2_W_SM_KIB="${L2_W_SM_KIB:-64}"
@@ -122,8 +134,50 @@ COMMON_SECTIONS=(
   --section WarpStateStats
   --section MemoryWorkloadAnalysis
 )
-DEFAULT_NCU_METRICS="l1tex__t_sector_hit_rate,l1tex__t_sectors_pipe_lsu_mem_global_op_ld,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_global_op_ld,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st,smsp__sass_data_bytes_mem_shared,smsp__sass_data_bytes_mem_shared_op_ld,smsp__sass_data_bytes_mem_shared_op_ldsm,smsp__sass_data_bytes_mem_shared_op_st,smsp__sass_inst_executed_op_shared,smsp__sass_inst_executed_op_shared_ld,smsp__sass_inst_executed_op_shared_st,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ld,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ldsm,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_st,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_ldsm,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_st,lts__t_sector_hit_rate,lts__t_sectors_srcunit_tex_op_read,lts__t_sectors_srcunit_tex_op_read_lookup_hit,lts__t_sectors_srcunit_tex_op_read_lookup_miss,lts__t_bytes,lts__t_bytes_equiv_l1sectormiss_pipe_lsu_mem_global_op_ld,dram__bytes,dram__bytes_read,dram__sectors,dram__sectors_read,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_wait_per_issue_active,smsp__average_warps_issue_stalled_not_selected_per_issue_active,sm__inst_executed_pipe_tensor_op_hmma,sass__inst_executed_register_spilling_mem_local_op_read,sass__inst_executed_register_spilling_mem_local_op_write"
+DEFAULT_NCU_METRICS="l1tex__t_sector_hit_rate,l1tex__t_sectors_pipe_lsu_mem_global_op_ld,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_global_op_ld,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st,smsp__sass_data_bytes_mem_shared,smsp__sass_data_bytes_mem_shared_op_ld,smsp__sass_data_bytes_mem_shared_op_ldsm,smsp__sass_data_bytes_mem_shared_op_st,smsp__sass_inst_executed_op_shared,smsp__sass_inst_executed_op_shared_ld,smsp__sass_inst_executed_op_shared_st,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ld,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ldsm,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_st,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_ldsm,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_st,lts__t_sector_hit_rate,lts__t_sectors_srcunit_tex_op_read,lts__t_sectors_srcunit_tex_op_read_lookup_hit,lts__t_sectors_srcunit_tex_op_read_lookup_miss,lts__t_bytes,lts__t_bytes_equiv_l1sectormiss_pipe_lsu_mem_global_op_ld,dram__bytes,dram__bytes_read,dram__sectors,dram__sectors_read,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_wait_per_issue_active,smsp__average_warps_issue_stalled_not_selected_per_issue_active,sm__warps_active.avg.pct_of_peak_sustained_active,launch__registers_per_thread,launch__shared_mem_per_block_static,launch__shared_mem_per_block_dynamic,sm__inst_executed_pipe_tensor_op_hmma,sass__inst_executed_register_spilling_mem_local_op_read,sass__inst_executed_register_spilling_mem_local_op_write"
 NCU_METRICS="${NCU_METRICS:-${DEFAULT_NCU_METRICS}}"
+
+filter_unavailable_ncu_metrics() {
+  local available_file="${OUTDIR}/ncu_available_metrics_${NCU_CHIP:-native}.txt"
+  local dropped_file="${OUTDIR}/ncu_dropped_metrics_${NCU_CHIP:-native}.txt"
+  local chip_args=()
+  local requested=()
+  local selected=()
+  local dropped=()
+
+  if [[ -n "${NCU_CHIP}" ]]; then
+    chip_args=(--chips "${NCU_CHIP}")
+  fi
+  if ! "${NCU_CMD[@]}" --query-metrics "${chip_args[@]}" > "${available_file}"; then
+    echo "failed to query NCU metrics for chip '${NCU_CHIP:-native}'" >&2
+    return 2
+  fi
+
+  csv_to_array requested "${NCU_METRICS}"
+  for metric in "${requested[@]}"; do
+    local metric_regex="${metric//./\\.}"
+    if grep -Eq "(^|[^[:alnum:]_])${metric_regex}([.]|[^[:alnum:]_]|$)" "${available_file}"; then
+      selected+=("${metric}")
+    else
+      dropped+=("${metric}")
+    fi
+  done
+
+  if [[ "${#selected[@]}" -eq 0 ]]; then
+    echo "none of the requested NCU metrics are available for '${NCU_CHIP:-native}'" >&2
+    return 2
+  fi
+  printf "%s\n" "${dropped[@]}" > "${dropped_file}"
+  NCU_METRICS="$(IFS=,; echo "${selected[*]}")"
+  echo "NCU metric availability: selected=${#selected[@]} dropped=${#dropped[@]} chip=${NCU_CHIP:-native}"
+  if [[ "${#dropped[@]}" -gt 0 ]]; then
+    echo "Dropped unavailable metrics are recorded in ${dropped_file}; path acceptance must still reject missing required evidence."
+  fi
+}
+
+if [[ "${DRY_RUN_NCU}" != "1" && "${NCU_FILTER_UNAVAILABLE_METRICS}" == "1" ]]; then
+  filter_unavailable_ncu_metrics
+fi
 if [[ "${NCU_EXPLICIT_METRICS_ONLY:-0}" == "1" ]]; then
   COMMON_SECTIONS=()
 fi

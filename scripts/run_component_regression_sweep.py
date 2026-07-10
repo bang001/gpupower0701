@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -111,6 +112,60 @@ def rotated(values: list[dict[str, Any]], offset: int) -> list[dict[str, Any]]:
     return values[offset:] + values[:offset]
 
 
+def run_self_test() -> None:
+    a100 = PROFILES["a100"]
+    below_tile = classify(16, 32, a100)
+    assert below_tile["below_logical_tile"]
+    assert not mode_allowed("global_addr_only", below_tile)
+    assert not mode_allowed("global_l1_load_only", below_tile)
+    assert mode_allowed("reg_operand_only", below_tile)
+
+    valid_tile = classify(32, 32, a100)
+    assert mode_allowed("global_addr_only", valid_tile)
+    assert mode_allowed("global_l1_load_only", valid_tile)
+    print("component regression sweep feasibility self-test passed")
+
+
+def binary_dry_run_preflight(commands: list[dict[str, Any]]) -> int:
+    """Check every unique mode/W/B/SM/GPU coordinate before measuring energy."""
+
+    seen: set[tuple[str, int, int, int, str]] = set()
+    unique: list[dict[str, Any]] = []
+    for item in commands:
+        key = (
+            str(item["mode"]),
+            int(item["W_SM_KiB"]),
+            int(item["blocks_per_SM"]),
+            int(item["active_SM"]),
+            str(item["gpu_list"]),
+        )
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+
+    print(f"binary dry-run preflight: {len(unique)} unique coordinates", flush=True)
+    for item in unique:
+        proc = subprocess.run(
+            [*item["cmd"], "--dry-run"],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        if proc.returncode != 0:
+            print(
+                "binary dry-run rejected a matrix row before energy collection: "
+                f"mode={item['mode']} W_SM_KiB={item['W_SM_KiB']} "
+                f"blocks_per_SM={item['blocks_per_SM']} active_SM={item['active_SM']} "
+                f"return_code={proc.returncode}",
+                file=sys.stderr,
+            )
+            if proc.stdout:
+                print(proc.stdout.rstrip(), file=sys.stderr)
+            return proc.returncode
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", default="./build/a100_fp16_energy_v2")
@@ -144,7 +199,16 @@ def main() -> int:
         action="store_true",
         help="Run commands. Without this flag only the matrix CSV is written.",
     )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Check that Python feasibility filtering matches binary memory-tile policy.",
+    )
     args = parser.parse_args()
+
+    if args.self_test:
+        run_self_test()
+        return 0
 
     profile = PROFILES[args.target_profile]
     gpu_ids = parse_int_list(args.gpu_ids, [0])
@@ -249,13 +313,33 @@ def main() -> int:
         print("dry run only; pass --execute to run the commands")
         return 0
 
+    if not commands:
+        print(
+            "no valid commands remain after feasibility filtering; inspect the matrix CSV",
+            file=sys.stderr,
+        )
+        return 2
+
+    preflight_rc = binary_dry_run_preflight(commands)
+    if preflight_rc != 0:
+        return preflight_rc
+
     index = 0
     total = len(commands) * args.repeats
     for repeat in range(args.repeats):
         for item in rotated(commands, repeat):
             index += 1
             print(f"[{index}/{total}] {' '.join(item['cmd'])}", flush=True)
-            subprocess.run(item["cmd"], check=True)
+            proc = subprocess.run(item["cmd"], check=False)
+            if proc.returncode != 0:
+                print(
+                    "energy command failed after binary dry-run preflight: "
+                    f"mode={item['mode']} W_SM_KiB={item['W_SM_KiB']} "
+                    f"blocks_per_SM={item['blocks_per_SM']} "
+                    f"return_code={proc.returncode}",
+                    file=sys.stderr,
+                )
+                return proc.returncode
 
     return 0
 

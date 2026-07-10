@@ -497,6 +497,7 @@ def audit_preflight(
         f"- Requested profile: `{profile}`",
         "- `strict`: true",
         "- `profile_gate`: pass",
+        "- `cuda_compiler_gate`: pass",
         "- `ncu_gate`: pass",
         "- `dry_run_gate`: pass",
         "- `overall`: pass",
@@ -504,6 +505,9 @@ def audit_preflight(
         "## GPU",
         "## Power Scope",
         "## Selected Harness Profile",
+        "## CUDA Compiler",
+        f"- `target`: compute_{metadata['compute_capability'].replace('.', '')}",
+        "- `target_supported`: true",
         "## Nsight Compute",
         "## Binary Dry Run",
         "do not mix module or memory power into component coefficients",
@@ -1475,7 +1479,7 @@ def audit_package(
         expected_active_sm=expected_active_sm,
     )
     audit_ncu_acceptance(
-        repo, rows, paths["ncu_acceptance"], profile=args.target_profile
+        repo, rows, paths["ncu_acceptance"], profile=profile
     )  # type: ignore[arg-type]
     audit_matched_summary(
         repo, rows, paths["matched_summary"], expected_semantics=semantics  # type: ignore[arg-type]

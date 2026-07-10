@@ -4,6 +4,12 @@ set -euo pipefail
 BIN="${BIN:-./build/a100_fp16_energy_v2}"
 NCU="${NCU:-ncu}"
 read -r -a NCU_CMD <<< "${NCU}"
+NCU_USE_SUDO="${NCU_USE_SUDO:-0}"
+NCU_SUDO="${NCU_SUDO:-sudo -E}"
+if [[ "${NCU_USE_SUDO}" == "1" ]]; then
+  read -r -a NCU_SUDO_CMD <<< "${NCU_SUDO}"
+  NCU_CMD=("${NCU_SUDO_CMD[@]}" "${NCU_CMD[@]}")
+fi
 GPU="${GPU:-0}"
 MODE="${MODE:-shared_mma}"
 W_SM_KIB="${W_SM_KIB:-128}"
@@ -19,6 +25,36 @@ LOAD_REPEAT="${LOAD_REPEAT:-1}"
 STORE_REPEAT="${STORE_REPEAT:-1}"
 SUMMARY_CSV="${SUMMARY_CSV:-}"
 SUMMARY_MD="${SUMMARY_MD:-}"
+
+print_ncu_permission_hint() {
+  cat >&2 <<'EOF'
+
+Nsight Compute failed with ERR_NVGPUCTRPERM.
+The user account does not have GPU performance-counter permission.
+
+Preferred fix:
+  Ask the node administrator to allow non-admin GPU performance counters.
+
+Temporary sudo fallback for this script:
+  NCU_USE_SUDO=1 NCU="$(command -v ncu)" ... bash scripts/run_ncu.sh
+
+Keep NCU sidecar runs separate from NVML energy sweeps. Do not replace failed
+NCU evidence with unvalidated denominators in final component coefficients.
+EOF
+}
+
+run_ncu_profile() {
+  local log="$1"
+  shift
+  set +e
+  "${NCU_CMD[@]}" "$@" 2> >(tee "${log}" >&2)
+  local rc=$?
+  set -e
+  if [[ "${rc}" -ne 0 ]] && grep -q "ERR_NVGPUCTRPERM" "${log}" 2>/dev/null; then
+    print_ncu_permission_hint
+  fi
+  return "${rc}"
+}
 
 if [[ "${1:-}" == "--query-metrics" ]]; then
   chip_args=()
@@ -42,7 +78,7 @@ REPORT="${OUTDIR}/ncu_${MODE}_W${W_SM_KIB}_B${BLOCKS_PER_SM}_SM${ACTIVE_SM}_GPU$
 echo "Writing Nsight Compute report to ${REPORT}.ncu-rep"
 echo "Metric names vary by NCU version; run '$0 --query-metrics' when a focused metric set is needed."
 
-"${NCU_CMD[@]}" \
+run_ncu_profile "${REPORT}_ncu_stderr.log" \
   --set full \
   --target-processes all \
   --replay-mode application \

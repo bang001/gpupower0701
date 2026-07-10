@@ -1,0 +1,3 @@
+component,factor,factor_value,valid_rows,total_rows,invalid_rows,invalid_diagnostics,unit,median,min,max,stdev,median_pJ_per_bit,min_pJ_per_bit,max_pJ_per_bit,delta_E_median_J,signal_fraction_median,denominator_median
+shared_l1_scalar_path,load_repeat,4,5,5,0,,pJ/byte,1.4326868276,0.875101318589,1.61644733293,0.307846441194,0.17908585345,0.109387664824,0.202055916617,130.887646753,0.029005994605,9.135817e+13
+shared_l1_scalar_path,load_repeat,8,5,5,0,,pJ/byte,1.13898933389,0.957506980035,1.31496815259,0.153926423551,0.142373666736,0.119688372504,0.164371019074,208.11157513,0.0237391620951,1.82716e+14

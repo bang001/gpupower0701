@@ -87,6 +87,8 @@ Before measurement, record or ask the user to record:
 
 ```bash
 python3 scripts/preflight_gpu_support.py --gpu 0 --target-profile auto --ncu /path/to/ncu --out results/summary/gpu_support_preflight.md
+# For final platform packages, prefer the generated shell or explicit strict preflight:
+python3 scripts/preflight_gpu_support.py --gpu 0 --target-profile a100 --strict --ncu /path/to/ncu --out results/summary/gpu_support_preflight.md
 nvidia-smi -L
 nvidia-smi --query-gpu=index,name,clocks.sm,clocks.mem,power.limit,temperature.gpu,ecc.mode.current --format=csv
 ```

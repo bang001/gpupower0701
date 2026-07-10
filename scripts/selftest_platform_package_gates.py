@@ -283,6 +283,7 @@ def write_preflight(
         "## Preflight Verdict",
         "- `strict`: true",
         "- `profile_gate`: pass",
+        "- `cuda_compiler_gate`: pass",
         "- `ncu_gate`: pass",
         "- `dry_run_gate`: pass",
         "- `overall`: pass",
@@ -302,6 +303,9 @@ def write_preflight(
         f"- `power_usage_semantics`: {semantics}",
         f"- `dry_run_gpu`: 0",
         f"- `dry_run_active_sm`: {PROFILE_ACTIVE_SM[profile]}",
+        "## CUDA Compiler",
+        f"- `target`: compute_{metadata['compute_capability'].replace('.', '')}",
+        "- `target_supported`: true",
         "## Nsight Compute",
         "- `version_rc`: 0",
         "- `list_chips_rc`: 0",
@@ -830,6 +834,10 @@ def base_ncu_row(
         "stall_long_scoreboard_pct": "0",
         "missing_metrics": "",
     }
+    if mode in {"reg_mma", "reg_operand_only"}:
+        row["W_SM_KiB"] = "2048"
+    if mode == "dram_cg_load_only":
+        row["W_SM_KiB"] = "8192"
     if mode == "reg_mma":
         row["tensor_hmma_inst"] = "100"
     elif mode == "shared_scalar_load_only":
@@ -866,6 +874,7 @@ def good_ncu_rows(module: Any, profile: str) -> list[dict[str, str]]:
         )
     memory_modes = [
         "shared_scalar_load_only",
+        "global_addr_only",
         "global_l1_load_only",
         "l2_cg_load_only",
         "dram_cg_load_only",
@@ -887,7 +896,7 @@ def write_ncu_summary(
     missing_column: str | None = None,
     zero_l2_bytes: bool = False,
     low_l1_hit: bool = False,
-    l2_high_l1_hit: bool = False,
+    l2_high_l1_traffic: bool = False,
     dram_high_l2_hit: bool = False,
     wrong_active_sm: bool = False,
 ) -> None:
@@ -904,10 +913,11 @@ def write_ncu_summary(
         for row in rows:
             if row["mode"] == "global_l1_load_only":
                 row["l1_hit_rate_pct"] = "10"
-    if l2_high_l1_hit:
+    if l2_high_l1_traffic:
         for row in rows:
             if row["mode"] == "l2_cg_load_only":
                 row["l1_hit_rate_pct"] = "50"
+                row["l1_bytes"] = row["l2_bytes"]
     if dram_high_l2_hit:
         for row in rows:
             if row["mode"] == "dram_cg_load_only":
@@ -1126,7 +1136,7 @@ def run_ncu_summary_case(
     missing_column: str | None = None,
     zero_l2_bytes: bool = False,
     low_l1_hit: bool = False,
-    l2_high_l1_hit: bool = False,
+    l2_high_l1_traffic: bool = False,
     dram_high_l2_hit: bool = False,
     wrong_active_sm: bool = False,
 ) -> None:
@@ -1142,7 +1152,7 @@ def run_ncu_summary_case(
             missing_column=missing_column,
             zero_l2_bytes=zero_l2_bytes,
             low_l1_hit=low_l1_hit,
-            l2_high_l1_hit=l2_high_l1_hit,
+            l2_high_l1_traffic=l2_high_l1_traffic,
             dram_high_l2_hit=dram_high_l2_hit,
             wrong_active_sm=wrong_active_sm,
         )
@@ -1523,6 +1533,14 @@ def main() -> int:
     )
     run_preflight_case(
         module,
+        name="bad_preflight_missing_cuda_compiler_gate",
+        profile="v100",
+        omit_term="cuda_compiler_gate",
+        expected_status="fail",
+        expected_text="- `cuda_compiler_gate`: pass",
+    )
+    run_preflight_case(
+        module,
         name="bad_preflight_not_strict",
         profile="a100",
         omit_term="- `strict`: true",
@@ -1744,9 +1762,9 @@ def main() -> int:
     )
     run_ncu_summary_case(
         module,
-        name="bad_ncu_l2_high_l1_hit_rate",
+        name="bad_ncu_l2_high_l1_traffic",
         profile="rtx3090",
-        l2_high_l1_hit=True,
+        l2_high_l1_traffic=True,
         expected_status="fail",
         expected_text="l2_cg_load_only:no_path_sanity_pass",
     )

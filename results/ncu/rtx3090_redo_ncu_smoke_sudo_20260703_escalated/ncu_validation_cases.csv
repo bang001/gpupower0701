@@ -1,0 +1,2 @@
+label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,report
+empty_W64_B16,empty_kernel,empty,64,16,82,1000000,1,1,1,results/ncu/rtx3090_redo_ncu_smoke_sudo_20260703_escalated/empty_W64_B16

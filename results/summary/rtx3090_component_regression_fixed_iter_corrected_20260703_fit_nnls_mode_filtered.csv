@@ -1,0 +1,14 @@
+feature,source_column,coefficient_J_per_unit,estimate,unit,scale,constrained,unconstrained_estimate,nonzero_modes,warning
+intercept,,-58.88211352692394,-58.88211352692394,J,1.0,False,-41.70047410715429,,
+elapsed_s,elapsed_s,0.0,0.0,W,1.2782034489999998,True,-1443.1008767521732,"dram_load_only,l2_load_only,reg_mma,reg_operand_only,shared_load_only,store_only",unconstrained_negative;zero_bound_or_not_identified
+FLOP,FLOP,0.0,0.0,pJ/FLOP,64487424000000.0,True,0.26594160805892375,reg_mma,zero_bound_or_not_identified;low_positive_variation
+reg_operand_ops,expected_reg_operand_ops,5.658209343103208e-09,5658.209343103208,pJ/reg-op,7872000000.0,True,165966.29795734576,"reg_mma,reg_operand_only",low_positive_variation
+shared_bytes_static,expected_shared_bytes,4.579365769466447e-11,45.79365769466447,pJ/byte,5373952000000.0,True,395.45180473373523,shared_load_only,static_byte
+l2_bytes_static,expected_l2_bytes,5.240762146351405e-11,52.40762146351405,pJ/byte,5373952000000.0,True,488.7686400601805,l2_load_only,static_byte
+dram_bytes_static,expected_dram_bytes,2.870919573754442e-10,287.0919573754442,pJ/byte,4030464000000.0,True,2072.6433925544566,dram_load_only,static_byte
+store_bytes_static,expected_store_bytes,2.5010104414838525e-09,2501.0104414838524,pJ/byte,1343488.0,True,42600.56147275775,"dram_load_only,l2_load_only,reg_mma,reg_operand_only,shared_load_only,store_only",static_byte
+baseline_mode_l2_load_only,mode,77.78254826487051,77.78254826487051,J,1.0,False,177.4498365772074,l2_load_only,
+baseline_mode_reg_mma,mode,74.1813042114588,74.1813042114588,J,1.0,False,75.97322023681511,reg_mma,
+baseline_mode_reg_operand_only,mode,72.73053858993418,72.73053858993418,J,1.0,False,73.22498403398208,reg_operand_only,
+baseline_mode_shared_load_only,mode,60.20891516218783,60.20891516218783,J,1.0,False,122.24283224108098,shared_load_only,
+baseline_mode_store_only,mode,63.779061592440854,63.779061592440854,J,1.0,False,72.93585163813165,store_only,

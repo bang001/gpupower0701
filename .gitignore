@@ -1,3 +1,7 @@
 build/
 __pycache__/
 *.py[cod]
+.ncu_home/
+results/ncu/**/*.ncu-rep
+results/ncu/**/*_raw_metrics.csv
+results/ncu/**/*_details.csv

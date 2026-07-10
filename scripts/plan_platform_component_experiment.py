@@ -29,12 +29,19 @@ PROFILES: dict[str, dict[str, Any]] = {
         "cuda_arch": "86",
         "active_sm": 82,
         "blocks": "8,16",
+        "ncu_blocks": 8,
         "shared_w": "32,64",
+        "shared_ncu_w": 64,
         "l1_w": "8,16",
+        "l1_ncu_w": 8,
         "l2_w": "64",
+        "l2_ncu_w": 64,
         "l2_modes": "global_addr_only,l2_cg_load_only",
         "dram_w": "8192",
+        "shared_capacity_kib": 100,
+        "l2_mib": 6,
         "ncu_chip": "ga102",
+        "filter_unavailable_ncu_metrics": 1,
         "tensor_threshold": "2e8",
         "register_threshold": "2e8",
         "memory_energy_load_repeats": "4,8,16",
@@ -45,30 +52,44 @@ PROFILES: dict[str, dict[str, Any]] = {
     "v100": {
         "cuda_arch": "70",
         "active_sm": 80,
-        "blocks": "16,32",
+        "blocks": "1,2,4,8,16,32",
+        "ncu_blocks": 32,
         "shared_w": "32,64",
-        "l1_w": "8,16",
-        "l2_w": "64",
+        "shared_ncu_w": 32,
+        "l1_w": "8,16,32",
+        "l1_ncu_w": 32,
+        "l2_w": "32,64",
+        "l2_ncu_w": 32,
         "l2_modes": "global_addr_only,l2_cg_load_only",
         "dram_w": "8192",
+        "shared_capacity_kib": 96,
+        "l2_mib": 6,
         "ncu_chip": "gv100",
+        "filter_unavailable_ncu_metrics": 1,
         "tensor_threshold": "2e8",
         "register_threshold": "2e8",
         "memory_energy_load_repeats": "4,8,16",
         "min_device_memory_mib": 30000,
         "power_semantics": "instant",
-        "note": "Volta path. Use an NCU toolchain whose --list-chips includes gv100.",
+        "note": "Volta path. Use nvcc with compute_70 support (CUDA 12.x recommended; CUDA 13 removed Volta offline compilation). Nsight Compute 2024.3 is confirmed for GV100; always require --list-chips and --query-metrics support for gv100 because newer releases can remove Volta.",
     },
     "a100": {
         "cuda_arch": "80",
         "active_sm": 108,
         "blocks": "16,32",
+        "ncu_blocks": 16,
         "shared_w": "64,128",
+        "shared_ncu_w": 128,
         "l1_w": "16,32",
+        "l1_ncu_w": 16,
         "l2_w": "64,128",
+        "l2_ncu_w": 64,
         "l2_modes": "global_addr_only,l2_cg_load_only",
         "dram_w": "8192",
+        "shared_capacity_kib": 164,
+        "l2_mib": 40,
         "ncu_chip": "ga100",
+        "filter_unavailable_ncu_metrics": 1,
         "tensor_threshold": "3e8",
         "register_threshold": "3e8",
         "memory_energy_load_repeats": "4,8,16",
@@ -80,12 +101,19 @@ PROFILES: dict[str, dict[str, Any]] = {
         "cuda_arch": "90",
         "active_sm": 132,
         "blocks": "16,32",
+        "ncu_blocks": 16,
         "shared_w": "64,128",
+        "shared_ncu_w": 128,
         "l1_w": "16,32",
+        "l1_ncu_w": 16,
         "l2_w": "64,128",
+        "l2_ncu_w": 64,
         "l2_modes": "global_addr_only,l2_cg_load_only",
         "dram_w": "8192",
+        "shared_capacity_kib": 228,
+        "l2_mib": 50,
         "ncu_chip": "gh100",
+        "filter_unavailable_ncu_metrics": 1,
         "tensor_threshold": "4e8",
         "register_threshold": "4e8",
         "memory_energy_load_repeats": "4,8,16",
@@ -106,6 +134,56 @@ DEFAULT_BINARY_BY_PROFILE = {
 
 def q(value: str | Path) -> str:
     return shlex.quote(str(value))
+
+
+def validate_ncu_coordinates(
+    profile_name: str,
+    profile: dict[str, Any],
+    *,
+    active_sm: int,
+    energy_blocks: str,
+    ncu_blocks: int,
+) -> None:
+    block_values = {int(value) for value in energy_blocks.split(",") if value}
+    if ncu_blocks not in block_values:
+        raise ValueError(
+            f"{profile_name}: strict NCU blocks/SM {ncu_blocks} is not in energy sweep {energy_blocks}"
+        )
+
+    coordinates = {
+        "shared": int(profile["shared_ncu_w"]),
+        "global_l1": int(profile["l1_ncu_w"]),
+        "l2": int(profile["l2_ncu_w"]),
+    }
+    for component, w_sm_kib in coordinates.items():
+        if w_sm_kib < ncu_blocks:
+            raise ValueError(
+                f"{profile_name}: {component} strict coordinate W_SM={w_sm_kib} KiB "
+                f"cannot provide the required 1 KiB tile to {ncu_blocks} blocks/SM"
+            )
+
+    shared_total_kib = coordinates["shared"] + ncu_blocks
+    if shared_total_kib > int(profile["shared_capacity_kib"]):
+        raise ValueError(
+            f"{profile_name}: shared strict coordinate requires {shared_total_kib} KiB/SM, "
+            f"above the {profile['shared_capacity_kib']} KiB profile capacity"
+        )
+
+    l2_mib = float(profile["l2_mib"])
+    for component in ("global_l1", "l2"):
+        full_working_set_mib = active_sm * coordinates[component] / 1024.0
+        if full_working_set_mib > l2_mib:
+            raise ValueError(
+                f"{profile_name}: {component} strict coordinate uses "
+                f"{full_working_set_mib:g} MiB, above nominal L2 {l2_mib:g} MiB"
+            )
+
+    dram_working_set_mib = active_sm * int(profile["dram_w"]) / 1024.0
+    if dram_working_set_mib <= l2_mib:
+        raise ValueError(
+            f"{profile_name}: DRAM sanity working set {dram_working_set_mib:g} MiB "
+            f"does not exceed nominal L2 {l2_mib:g} MiB"
+        )
 
 
 def line(parts: list[str]) -> str:
@@ -171,6 +249,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     tag = args.tag
     active_sm = args.active_sm or profile["active_sm"]
     blocks = args.blocks_per_sm_values or profile["blocks"]
+    ncu_blocks = args.ncu_blocks_per_sm
     binary = args.binary
     ncu = args.ncu
     # l2_load_only follows the normal global-load policy and therefore cannot
@@ -298,12 +377,14 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         "NCU_BIN=\"${NCU_BIN:-${NCU_BIN_DEFAULT}}\"",
         "NCU_USE_SUDO=\"${NCU_USE_SUDO:-0}\"",
         "NCU_SUDO=\"${NCU_SUDO:-sudo -E}\"",
+        "NVCC_COMMAND=\"${NVCC:-nvcc}\"",
         "if [[ \"${NCU_USE_SUDO}\" == \"1\" ]]; then",
         "  NCU_COMMAND=\"${NCU_SUDO} ${NCU_BIN}\"",
         "else",
         "  NCU_COMMAND=\"${NCU_BIN}\"",
         "fi",
         "echo \"Using NCU command: ${NCU_COMMAND}\"",
+        "echo \"Using CUDA compiler: ${NVCC_COMMAND}\"",
         "",
         "# 1. Preflight",
         line(
@@ -329,12 +410,15 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 q(binary),
                 "--ncu",
                 "\"${NCU_COMMAND}\"",
+                "--nvcc",
+                "\"${NVCC_COMMAND}\"",
                 "--out",
                 q(f"{summary_prefix}_preflight.md"),
             ]
         ),
         "",
-        "# 2. Power API policy self-test. Fail early if the gate is broken.",
+        "# 2. Pipeline policy self-tests. Fail early if a gate is broken.",
+        line(["python3", "scripts/run_component_regression_sweep.py", "--self-test"]),
         line(["python3", "scripts/audit_power_api_measurements.py", "--self-test"]),
         line(["python3", "scripts/build_strict_component_summary.py", "--self-test"]),
         line(["python3", "scripts/audit_strict_component_summary.py", "--self-test"]),
@@ -524,15 +608,17 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 f"OUTDIR={q(ncu_dir)}",
                 f"RAW_OUT={q(ncu_raw)}",
                 f"TARGET_PROFILE={q(args.target_profile)}",
+                f"NCU_CHIP={q(profile['ncu_chip'])}",
+                f"NCU_FILTER_UNAVAILABLE_METRICS={int(profile.get('filter_unavailable_ncu_metrics', 0))}",
                 f"GPU={q(args.gpu_ids.split(',')[0])}",
                 f"ACTIVE_SM={active_sm}",
-                f"BLOCKS_PER_SM={blocks.split(',')[0]}",
-                f"REG_BLOCKS_PER_SM={blocks.split(',')[0]}",
+                f"BLOCKS_PER_SM={ncu_blocks}",
+                f"REG_BLOCKS_PER_SM={ncu_blocks}",
                 "REG_PRESSURE_PAYLOAD_BYTES=256",
                 "REG_W_SM_KIB=2048",
-                f"L1_W_SM_KIB={profile['l1_w'].split(',')[0]}",
-                f"SHARED_W_SM_KIB={profile['shared_w'].split(',')[-1]}",
-                f"L2_W_SM_KIB={profile['l2_w'].split(',')[0]}",
+                f"L1_W_SM_KIB={profile['l1_ncu_w']}",
+                f"SHARED_W_SM_KIB={profile['shared_ncu_w']}",
+                f"L2_W_SM_KIB={profile['l2_ncu_w']}",
                 f"DRAM_W_SM_KIB_OVERRIDE={profile['dram_w']}",
                 f"INCLUDE_L2_CAPACITY_NCU={include_l2_capacity_ncu}",
                 "INCLUDE_DIAGNOSTIC_NCU=0",
@@ -815,17 +901,38 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
 def write_markdown(args: argparse.Namespace, profile: dict[str, Any], path: Path) -> None:
     active_sm = args.active_sm or profile["active_sm"]
     blocks = args.blocks_per_sm_values or profile["blocks"]
+    ncu_blocks = args.ncu_blocks_per_sm
     out_sh = args.out_sh
     build_dir = str(Path(args.binary).parent)
+    block_values = [int(value) for value in blocks.split(",") if value]
+    l1_w_values = [int(value) for value in profile["l1_w"].split(",") if value]
+    l1_valid_coordinates = [
+        f"W{w}/B{b}" for w in l1_w_values for b in block_values if w >= b
+    ]
+    l1_skipped_coordinates = [
+        f"W{w}/B{b}" for w in l1_w_values for b in block_values if w < b
+    ]
     memory_gate_note = ""
-    if args.target_profile == "v100" and args.min_device_memory_mib > 0:
-        memory_gate_note = f"""
+    build_commands = (
+        f"cmake -S . -B {build_dir} "
+        f"-DCMAKE_CUDA_ARCHITECTURES={profile['cuda_arch']}\n"
+        f"cmake --build {build_dir} --clean-first -j"
+    )
+    if args.target_profile == "v100":
+        if args.min_device_memory_mib > 0:
+            memory_gate_note = f"""
 For the V100 reference package, `{args.min_device_memory_mib:,} MiB` is a strict lower bound for a
 32 GB HBM2 device visible to the process. This distinguishes the intended 32 GB
 SKU from a 16 GB board or a smaller vGPU partition; it does not change the
 L1/shared/L2 hierarchy coordinates. Override this threshold only when running a
 separately labelled non-32 GB V100 experiment.
 """
+        build_commands = f"""NVCC="${{NVCC:-/path/to/cuda-12/bin/nvcc}}"
+"${{NVCC}}" --list-gpu-arch | grep -Fx compute_70
+cmake -S . -B {build_dir} \\
+  -DCMAKE_CUDA_COMPILER="${{NVCC}}" \\
+  -DCMAKE_CUDA_ARCHITECTURES={profile['cuda_arch']}
+cmake --build {build_dir} --clean-first -j"""
     text = f"""# {args.target_profile.upper()} Component Finalplan Command Plan
 
 Generated: {dt.date.today().isoformat()}
@@ -835,7 +942,8 @@ Generated: {dt.date.today().isoformat()}
 | target profile | `{args.target_profile}` |
 | CUDA arch | `sm_{profile['cuda_arch']}` |
 | active_SM (SMs) | `{active_sm}` |
-| blocks/SM | `{blocks}` |
+| energy sweep blocks/SM | `{blocks}` |
+| strict NCU blocks/SM | `{ncu_blocks}` |
 | expected power semantics | `{profile['power_semantics']}` |
 | minimum visible device memory (MiB) | `{args.min_device_memory_mib}` |
 | seconds (s) | `{args.seconds}` |
@@ -859,8 +967,7 @@ capability, but using a profile-specific build directory avoids wasting the
 target node allocation.
 
 ```bash
-cmake -S . -B {build_dir} -DCMAKE_CUDA_ARCHITECTURES={profile['cuda_arch']}
-cmake --build {build_dir} --clean-first -j
+{build_commands}
 ```
 
 Use a clean rebuild after every `git pull` that changes `src/`, `include/`, or
@@ -869,13 +976,21 @@ binary whose CSV header includes `measurement_scope`.
 
 ## Component Coordinates
 
-| component/path | modes | W_SM (KiB) | factor |
-|---|---|---:|---|
-| Tensor | `reg_operand_only,reg_mma` | 2048 | reuse 1,2,4,8,16 |
-| Shared scalar | `clocked_empty,shared_scalar_load_only` | {profile['shared_w']} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
-| Global L1 | `global_addr_only,global_l1_load_only` | {profile['l1_w']} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
-| L2 | `{profile['l2_modes']}` | {profile['l2_w']} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
-| DRAM sanity | `global_addr_only,dram_cg_load_only` | {profile['dram_w']} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU checks 1,4,8,16 |
+| component/path | modes | energy W_SM (KiB) | strict NCU W_SM/B | factor |
+|---|---|---:|---:|---|
+| Tensor | `reg_operand_only,reg_mma` | 2048 | 2048/{ncu_blocks} | reuse 1,2,4,8,16 |
+| Shared scalar | `clocked_empty,shared_scalar_load_only` | {profile['shared_w']} | {profile['shared_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
+| Global L1 | `global_addr_only,global_l1_load_only` | {profile['l1_w']} | {profile['l1_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
+| L2 | `{profile['l2_modes']}` | {profile['l2_w']} | {profile['l2_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
+| DRAM sanity | `global_addr_only,dram_cg_load_only` | {profile['dram_w']} | {profile['dram_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU checks 1,4,8,16 |
+
+The energy runner applies the same 1 KiB/block feasibility rule to treatment and
+matched control. Global L1 valid coordinates are
+`{','.join(l1_valid_coordinates)}`. Coordinates omitted before execution because
+`W_SM < blocks/SM` are `{','.join(l1_skipped_coordinates) or 'none'}`. The
+generated matrix retains rejected rows with `valid=false`, but no rejected row
+is sent to the binary. Before collecting energy, every unique valid coordinate
+is also checked with the binary's `--dry-run` mode.
 
 ## Architecture-Specific NCU Evidence
 
@@ -890,8 +1005,11 @@ both cache-hit direction and traffic magnitude:
 | access magnitude | `l1_accesses`, `l2_accesses`, `dram_accesses` | L1 requests when available, otherwise sectors; L2/DRAM sectors |
 | byte magnitude | `shared_bytes`, `l1_bytes`, `l2_bytes`, `dram_bytes` | bytes, preferred denominator for memory pJ/byte or pJ/bit |
 | stall context | `stall_long_scoreboard_pct` | percent-like NCU stall signal |
+| launch/resource context | `achieved_occupancy_pct`, `registers_per_thread`, `shared_mem_per_block_static`, `shared_mem_per_block_dynamic` | requested B value가 실제 residency로 이어졌는지 해석하는 보조 evidence |
 
 V100 uses `NCU_CHIP=gv100` and uses `l2_cg_load_only` as the L2 final path.
+Its energy sweep covers low-to-high requested block density, while the strict coefficient
+uses only rows with exact NCU evidence at the generated strict coordinate.
 A100 uses `NCU_CHIP=ga100`; its final L2 point is intentionally below the 40 MiB
 L2 capacity and uses `ld.global.cg` to bypass global L1. `l2_load_only` follows
 the normal global-load policy, can hit L1, and is therefore diagnostic-only rather
@@ -1065,6 +1183,15 @@ def main() -> int:
     parser.add_argument("--gpu-ids", default="0")
     parser.add_argument("--active-sm", type=int, default=0)
     parser.add_argument(
+        "--ncu-blocks-per-sm",
+        type=int,
+        default=0,
+        help=(
+            "blocks/SM used by the strict NCU sidecar. Defaults to the profile "
+            "coordinate and must also appear in --blocks-per-sm-values."
+        ),
+    )
+    parser.add_argument(
         "--min-device-memory-mib",
         type=int,
         default=-1,
@@ -1082,6 +1209,16 @@ def main() -> int:
     args = parser.parse_args()
 
     profile = PROFILES[args.target_profile]
+    blocks = args.blocks_per_sm_values or profile["blocks"]
+    if args.ncu_blocks_per_sm <= 0:
+        args.ncu_blocks_per_sm = int(profile["ncu_blocks"])
+    validate_ncu_coordinates(
+        args.target_profile,
+        profile,
+        active_sm=args.active_sm or int(profile["active_sm"]),
+        energy_blocks=blocks,
+        ncu_blocks=args.ncu_blocks_per_sm,
+    )
     if args.min_device_memory_mib < 0:
         args.min_device_memory_mib = int(profile.get("min_device_memory_mib", 0))
     if not args.binary:

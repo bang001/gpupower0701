@@ -107,7 +107,7 @@ flowchart LR
 | W_SM이 커질수록 shared/L2/DRAM regime이 갈림 | working set 크기로 memory hierarchy 후보를 만들 수 있음 | 후보일 뿐이며 NCU hit/access 검증 전에는 확정 불가 |
 | raw `dram_mma`가 훨씬 큼 | DRAM streaming 후보가 비싸다는 방향성 확인 | raw pJ/FLOP만으로 DRAM pJ/bit를 계산하면 안 됨 |
 
-![Sweep 1 blocks/SM trend](../assets/component_energy_method/sweep1_blocks_trend.svg)
+![Sweep 1 blocks/SM trend](../assets/component_energy_method/sweep1_blocks_trend.png)
 
 ## 4. 최종 실험에서 선택된 조건
 
@@ -205,14 +205,14 @@ register file access energy
 
 아래 그림은 최종 accepted candidate의 중앙값과 min-max 범위를 보여준다. 단위가 다르기 때문에 memory path는 pJ/bit, Tensor는 pJ/FLOP로 분리해서 읽어야 한다.
 
-![Final component coefficients](../assets/component_energy_method/final_component_coefficients.svg)
+![Final component coefficients](../assets/component_energy_method/final_component_coefficients.png)
 
 Tensor는 RF=8/16 targeted와 duration-scaling 결과를 현재 보고 anchor로 사용하지만,
 RF=1/2/4까지 포함한 broad sweep의 증분 추세도 별도 그림으로 남긴다. 이 그림은
 Tensor MMA reuse factor에 따른 board-level 차분 계수가 안정적으로 단조 변화한다고
 단정하기 위한 것이 아니라, RF 선택이 결과에 영향을 준다는 것을 확인하는 diagnostic이다.
 
-![Tensor reuse factor trend](../assets/component_energy_method/tensor_reuse_factor_trend.svg)
+![Tensor reuse factor trend](../assets/component_energy_method/tensor_reuse_factor_trend.png)
 
 이 그림은 x축을 `reuse factor`, y축을 `reg_mma - reg_operand_only`의 `pJ/FLOP`
 coefficient로 둔다. 진한 선은 RF별 median, 세로선은 min-max 반복 범위, 연한 점은
@@ -267,7 +267,7 @@ RF8/RF16 targeted 및 duration-scaling 결과다.
 
 아래 그림은 representative LR=4 NCU row에서 shared/L1/L2/DRAM bytes가 어느 계층에 집중되는지 보여준다. y축은 log scale이다.
 
-![NCU path validation bytes](../assets/component_energy_method/ncu_path_validation_bytes.svg)
+![NCU path validation bytes](../assets/component_energy_method/ncu_path_validation_bytes.png)
 
 NCU validation에서 봐야 할 지표:
 
@@ -308,7 +308,7 @@ board-level effective coefficient이다.
 | Tensor/register acceptance에 bytes/HMMA, bytes/register-op ratio를 함께 사용 | 구현 반영. GPU별 SM 수, reuse factor, cache traffic 차이를 더 공정하게 비교하기 위해서다. |
 | L1 control을 `clocked_empty`보다 더 matched한 address/control kernel로 개선 | L1 coefficient variance와 negative row를 줄이기 위해서다. |
 | Register 결과는 계속 `diagnostic only`로 유지 | 현재 방식으로는 pure register file pJ/access를 분리하기 어렵다. |
-| A100에서는 capacity 기반 `l2_load_only`와 `l2_cg_load_only`를 모두 검증 | A100은 L2가 40 MiB라 RTX 3090보다 capacity 기반 L2-hit 창을 만들 가능성이 높다. |
+| A100에서는 `l2_cg_load_only`를 strict L2 path로 검증하고 `l2_load_only`는 진단으로만 남김 | A100은 L2가 40 MiB여도 normal global load는 L1과 섞일 수 있으므로 capacity만으로 L2-only를 주장할 수 없다. |
 
 ## 10. 한 문장 요약
 

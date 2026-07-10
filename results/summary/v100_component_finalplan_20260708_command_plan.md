@@ -7,7 +7,8 @@ Generated: 2026-07-10
 | target profile | `v100` |
 | CUDA arch | `sm_70` |
 | active_SM (SMs) | `80` |
-| blocks/SM | `16,32` |
+| energy sweep blocks/SM | `1,2,4,8,16,32` |
+| strict NCU blocks/SM | `32` |
 | expected power semantics | `instant` |
 | minimum visible device memory (MiB) | `30000` |
 | seconds (s) | `10.0` |
@@ -19,7 +20,7 @@ Generated: 2026-07-10
 
 ## Platform Note
 
-Volta path. Use an NCU toolchain whose --list-chips includes gv100.
+Volta path. Use nvcc with compute_70 support (CUDA 12.x recommended; CUDA 13 removed Volta offline compilation). Nsight Compute 2024.3 is confirmed for GV100; always require --list-chips and --query-metrics support for gv100 because newer releases can remove Volta.
 
 
 For the V100 reference package, `30,000 MiB` is a strict lower bound for a
@@ -37,7 +38,11 @@ capability, but using a profile-specific build directory avoids wasting the
 target node allocation.
 
 ```bash
-cmake -S . -B build-v100 -DCMAKE_CUDA_ARCHITECTURES=70
+NVCC="${NVCC:-/path/to/cuda-12/bin/nvcc}"
+"${NVCC}" --list-gpu-arch | grep -Fx compute_70
+cmake -S . -B build-v100 \
+  -DCMAKE_CUDA_COMPILER="${NVCC}" \
+  -DCMAKE_CUDA_ARCHITECTURES=70
 cmake --build build-v100 --clean-first -j
 ```
 
@@ -47,13 +52,13 @@ binary whose CSV header includes `measurement_scope`.
 
 ## Component Coordinates
 
-| component/path | modes | W_SM (KiB) | factor |
-|---|---|---:|---|
-| Tensor | `reg_operand_only,reg_mma` | 2048 | reuse 1,2,4,8,16 |
-| Shared scalar | `clocked_empty,shared_scalar_load_only` | 32,64 | energy load_repeat 4,8,16; NCU also checks 1,2 |
-| Global L1 | `global_addr_only,global_l1_load_only` | 8,16 | energy load_repeat 4,8,16; NCU also checks 1,2 |
-| L2 | `global_addr_only,l2_cg_load_only` | 64 | energy load_repeat 4,8,16; NCU also checks 1,2 |
-| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | energy load_repeat 4,8,16; NCU checks 1,4,8,16 |
+| component/path | modes | energy W_SM (KiB) | strict NCU W_SM/B | factor |
+|---|---|---:|---:|---|
+| Tensor | `reg_operand_only,reg_mma` | 2048 | 2048/32 | reuse 1,2,4,8,16 |
+| Shared scalar | `clocked_empty,shared_scalar_load_only` | 32,64 | 32/32 | energy load_repeat 4,8,16; NCU also checks 1,2 |
+| Global L1 | `global_addr_only,global_l1_load_only` | 8,16,32 | 32/32 | energy load_repeat 4,8,16; NCU also checks 1,2 |
+| L2 | `global_addr_only,l2_cg_load_only` | 32,64 | 32/32 | energy load_repeat 4,8,16; NCU also checks 1,2 |
+| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 8192/32 | energy load_repeat 4,8,16; NCU checks 1,4,8,16 |
 
 ## Architecture-Specific NCU Evidence
 
@@ -68,8 +73,11 @@ both cache-hit direction and traffic magnitude:
 | access magnitude | `l1_accesses`, `l2_accesses`, `dram_accesses` | L1 requests when available, otherwise sectors; L2/DRAM sectors |
 | byte magnitude | `shared_bytes`, `l1_bytes`, `l2_bytes`, `dram_bytes` | bytes, preferred denominator for memory pJ/byte or pJ/bit |
 | stall context | `stall_long_scoreboard_pct` | percent-like NCU stall signal |
+| launch/resource context | `achieved_occupancy_pct`, `registers_per_thread`, `shared_mem_per_block_static`, `shared_mem_per_block_dynamic` | requested B value가 실제 residency로 이어졌는지 해석하는 보조 evidence |
 
 V100 uses `NCU_CHIP=gv100` and uses `l2_cg_load_only` as the L2 final path.
+Its energy sweep covers low-to-high requested block density, while the strict coefficient
+uses only rows with exact NCU evidence at the generated strict coordinate.
 A100 uses `NCU_CHIP=ga100`; its final L2 point is intentionally below the 40 MiB
 L2 capacity and uses `ld.global.cg` to bypass global L1. `l2_load_only` follows
 the normal global-load policy, can hit L1, and is therefore diagnostic-only rather

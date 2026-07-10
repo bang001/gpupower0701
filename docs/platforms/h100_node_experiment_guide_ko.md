@@ -249,10 +249,10 @@ bash results/summary/h100_component_finalplan_$(date +%Y%m%d)_commands.sh
 | Component | modes | W_SM (KiB) | blocks/SM | factor |
 |---|---|---:|---:|---|
 | Tensor | `reg_operand_only,reg_mma` | 2048 | 16,32 | reuse 1,2,4,8,16 |
-| Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | 16,32 | load_repeat 1,2,4,8,16 |
-| Global L1 | `clocked_empty,global_l1_load_only` | 16,32 | 16,32 | load_repeat 1,2,4,8,16 |
-| L2 | `clocked_empty,l2_load_only,l2_cg_load_only` | 256 | 16,32 | load_repeat 1,2,4,8,16 |
-| DRAM sanity | `clocked_empty,dram_cg_load_only` | 8192 | 16,32 | load_repeat 1,4,16 |
+| Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| L2 CG | `global_addr_only,l2_cg_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 16,32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
 ## 7. NCU validation
 
@@ -276,7 +276,7 @@ REG_BLOCKS_PER_SM=16 \
 REG_W_SM_KIB=2048 \
 L1_W_SM_KIB=16 \
 SHARED_W_SM_KIB=128 \
-L2_W_SM_KIB=256 \
+L2_W_SM_KIB=64 \
 DRAM_W_SM_KIB_OVERRIDE=8192 \
 REUSE_FACTOR=1 \
 LOAD_REPEAT=1 \
@@ -287,6 +287,52 @@ OUTDIR=results/ncu/h100_component_finalplan_ncu_factor_$(date +%Y%m%d) \
 RAW_OUT=results/raw/h100_component_finalplan_ncu_factor_$(date +%Y%m%d).csv \
 bash scripts/run_ncu_validation.sh
 ```
+
+권한 문제가 있으면 다음 오류가 날 수 있다.
+
+```text
+ERR_NVGPUCTRPERM
+```
+
+이 경우 관리자가 performance counter 접근을 허용하는 것이 가장 좋다. 노드 정책상 즉시
+변경이 어렵고 sudo 권한이 있으면 NCU sidecar만 sudo로 우회할 수 있다. Finalplan
+package 전체를 재실행할 때는 다음처럼 실행한다.
+
+```bash
+NCU_USE_SUDO=1 bash results/summary/h100_component_finalplan_20260708_commands.sh
+```
+
+수동 NCU validation만 다시 돌릴 때는 기존 명령에 `NCU_USE_SUDO=1`을 붙인다.
+
+```bash
+NCU_USE_SUDO=1 \
+NCU="$(command -v ncu)" \
+BIN=./build-h100/a100_fp16_energy_v2 \
+TARGET_PROFILE=h100 \
+ACTIVE_SM=132 \
+GPU=0 \
+BLOCKS_PER_SM=16 \
+REG_BLOCKS_PER_SM=16 \
+REG_W_SM_KIB=2048 \
+L1_W_SM_KIB=16 \
+SHARED_W_SM_KIB=128 \
+L2_W_SM_KIB=64 \
+DRAM_W_SM_KIB_OVERRIDE=8192 \
+REUSE_FACTOR=1 \
+LOAD_REPEAT=1 \
+TENSOR_REUSE_FACTORS=1,2,4,8,16 \
+MEMORY_LOAD_REPEATS=1,2,4,8,16 \
+DRAM_LOAD_REPEATS=1,4,16 \
+OUTDIR=results/ncu/h100_component_finalplan_ncu_factor_$(date +%Y%m%d) \
+RAW_OUT=results/raw/h100_component_finalplan_ncu_factor_$(date +%Y%m%d).csv \
+bash scripts/run_ncu_validation.sh
+```
+
+`sudo`가 CUDA/Nsight Compute 경로를 지우는 환경이면 generated package에는
+`NCU_BIN="$(command -v ncu)" NCU_SUDO="sudo -E"`를 같이 지정하고, 수동
+`run_ncu_validation.sh`에는 `NCU="$(command -v ncu)" NCU_SUDO="sudo -E"`를 같이
+지정한다. NCU가 실패해도 NVML energy run 자체와 섞지 말고, 보고서에는
+“NCU counter 검증 미완료”로 분리 기록한다.
 
 Acceptance:
 
@@ -327,7 +373,7 @@ Reported coefficients are board-level effective microbenchmark coefficients.
 |---|---|
 | preflight | `detected profile=h100`, CC 9.0, runtime SM 수 확인 |
 | build | `CMAKE_CUDA_ARCHITECTURES=90`, spill 확인 |
-| dry-run | `reg_mma`, `shared_scalar_load_only`, `l2_load_only` allowed 여부 |
+| dry-run | `reg_mma`, `shared_scalar_load_only`, `l2_cg_load_only` allowed 여부 |
 | smoke | `energy_source`, `smid_histogram_ok` 확인 |
 | finalplan | generated command script 검토 후 실행 |
 | NCU | `gh100` metrics 수집, acceptance report 생성 |

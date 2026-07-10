@@ -1,0 +1,9 @@
+component,estimate,unit,secondary_estimate,secondary_unit,method,rows_or_pairs,qa
+tensor_core_increment,0.21972905918386812,pJ/FLOP,,,matched reg_mma - reg_operand_only power-rate median,19,positive_pairs=16/19
+register_operand,8351.221544520693,pJ/logical-reg-op,1.0194362236963737,pJ/logical-operand-bit,reg_operand_only power-vs-op-rate slope,35,relative_rmse_pct=16.788
+shared_l1_increment,49.64053836732068,pJ/byte,6.205067295915085,pJ/bit,ordered shared<=L2<=DRAM power-rate model,99,relative_rmse_pct=15.426
+l2_increment_over_shared,10.784172613835949,pJ/byte,1.3480215767294936,pJ/bit,ordered shared<=L2<=DRAM power-rate model,99,relative_rmse_pct=15.426
+dram_increment_over_l2,169.4430361814945,pJ/byte,21.180379522686813,pJ/bit,ordered shared<=L2<=DRAM power-rate model,99,relative_rmse_pct=15.426
+shared_l1_cumulative_path,49.64053836732068,pJ/byte,6.205067295915085,pJ/bit,cumulative path from ordered model,99,
+l2_hit_cumulative_path,60.42471098115663,pJ/byte,7.553088872644579,pJ/bit,cumulative path from ordered model,99,
+dram_stream_cumulative_path,229.86774716265114,pJ/byte,28.733468395331393,pJ/bit,cumulative path from ordered model,99,

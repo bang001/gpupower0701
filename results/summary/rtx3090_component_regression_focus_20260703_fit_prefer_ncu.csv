@@ -1,0 +1,9 @@
+feature,source_column,coefficient_J_per_unit,estimate,unit,scale,warning
+intercept,,-309.95372783802395,-309.95372783802395,J,1.0,
+elapsed_s,elapsed_s,273.0777319568202,273.0777319568202,W,3.295875463,
+FLOP,FLOP,1.0463265386533301e-14,0.010463265386533301,pJ/FLOP,173682560335872.0,
+reg_operand_ops,expected_reg_operand_ops,-9.283408849126555e-09,-9283.408849126556,pJ/reg-op,29107877840.0,negative_coefficient
+shared_bytes_static_fallback,expected_shared_bytes,-4.754661016975038e-13,-0.4754661016975038,pJ/byte,12879749414912.0,negative_coefficient;static_byte
+l2_bytes_static_fallback,expected_l2_bytes,7.640984026676057e-13,0.7640984026676058,pJ/byte,10058016866304.0,static_byte
+dram_bytes_static_fallback,expected_dram_bytes,2.0683862555486138e-11,20.683862555486137,pJ/byte,2780650029056.0,static_byte
+store_bytes_static,expected_store_bytes,-9.805410959119408e-10,-980.5410959119408,pJ/byte,1343488.0,negative_coefficient;static_byte

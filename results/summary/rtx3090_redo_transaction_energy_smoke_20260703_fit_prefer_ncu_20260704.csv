@@ -1,0 +1,13 @@
+feature,source_column,coefficient_J_per_unit,estimate,unit,scale,constrained,unconstrained_estimate,nonzero_modes,warning
+intercept,,-283.03513008013726,-283.03513008013726,J,1.0,False,-436.6285237464135,,
+elapsed_s,elapsed_s,424.5969070415031,424.5969070415031,W,1.091911649,True,565.2112887044314,"addr_only,clocked_empty,dram_load_only,global_l1_load_only,l2_load_only,shared_load_only",
+shared_bytes_static_fallback,expected_shared_bytes,0.0,0.0,pJ/byte,3835506425856.0,True,-549.8334163314859,shared_load_only,unconstrained_negative;zero_bound_or_not_identified;static_byte;low_positive_variation
+l1_bytes_ncu,ncu_l1_bytes,2.780283098995685e-13,0.2780283098995685,pJ/byte,12404521578900.0,True,1.4310624535343266,"dram_load_only,global_l1_load_only,l2_load_only",
+l2_bytes_ncu,ncu_l2_bytes,0.0,0.0,pJ/byte,9421147472.6,True,-9.143404246764161,"addr_only,clocked_empty,dram_load_only,global_l1_load_only,l2_load_only,shared_load_only",unconstrained_negative;zero_bound_or_not_identified
+dram_bytes_ncu,ncu_dram_bytes,0.0,0.0,pJ/byte,6407540716.84,True,-1884.7806335439634,"addr_only,clocked_empty,dram_load_only,global_l1_load_only,l2_load_only,shared_load_only",unconstrained_negative;zero_bound_or_not_identified
+store_bytes_static,expected_store_bytes,0.0,0.0,pJ/byte,1343488.0,True,828286137.0672036,"addr_only,clocked_empty,dram_load_only,global_l1_load_only,l2_load_only,shared_load_only",zero_bound_or_not_identified;static_byte;low_positive_variation
+baseline_mode_clocked_empty,mode,-9.731588431859038,-9.731588431859038,J,1.0,False,-0.5501503317578901,clocked_empty,
+baseline_mode_dram_load_only,mode,35.334107217272276,35.334107217272276,J,1.0,False,2324.9886683786067,dram_load_only,
+baseline_mode_global_l1_load_only,mode,10.220486761700693,10.220486761700693,J,1.0,False,-1104.8583646594514,global_l1_load_only,
+baseline_mode_l2_load_only,mode,-5.264458448845567,-5.264458448845567,J,1.0,False,-1116.1050605861114,l2_load_only,
+baseline_mode_shared_load_only,mode,9.527761774419817,9.527761774419817,J,1.0,False,1013.128502541118,shared_load_only,

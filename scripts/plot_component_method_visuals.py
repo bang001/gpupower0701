@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import csv
 import math
+import shutil
+import subprocess
 from collections import defaultdict
 from pathlib import Path
 
@@ -947,17 +949,21 @@ def plot_finalplan_sweep_design_matrix() -> None:
 
 
 def plot_ncu_hit_rate_validation() -> None:
-    rows = read_csv("results/summary/rtx3090_finalplan_ncu_lr4_acceptance_tensor200m_20260705.csv")
-    modes = [
+    rows = read_csv("results/summary/rtx3090_finalplan_ncu_factor_stability_acceptance_20260708.csv")
+    legacy_rows = read_csv("results/summary/rtx3090_finalplan_ncu_lr4_acceptance_tensor200m_20260705.csv")
+    primary_modes = [
         "reg_mma",
         "reg_operand_only",
         "shared_scalar_load_only",
         "global_l1_load_only",
         "l2_cg_load_only",
         "dram_cg_load_only",
+    ]
+    rejected_modes = [
         "l2_load_only",
         "shared_load_only",
     ]
+    modes = primary_modes + rejected_modes
     labels = {
         "reg_mma": "Tensor treatment",
         "reg_operand_only": "Tensor control",
@@ -968,20 +974,75 @@ def plot_ncu_hit_rate_validation() -> None:
         "l2_load_only": "L2 capacity reject",
         "shared_load_only": "Shared reject",
     }
-    selected = {row["mode"]: row for row in rows if row["mode"] in modes}
 
-    svg = Svg(1200, 620, "NCU hit-rate validation")
+    def representative(row: dict[str, str]) -> bool:
+        mode = row.get("mode", "")
+        if mode in {"reg_mma", "reg_operand_only"}:
+            return row.get("reuse_factor") == "4"
+        return row.get("load_repeat") == "4"
+
+    selected: dict[str, dict[str, str]] = {}
+    for row in rows:
+        mode = row.get("mode", "")
+        if mode in primary_modes and representative(row):
+            selected[mode] = row
+    for row in legacy_rows:
+        mode = row.get("mode", "")
+        if mode in rejected_modes and mode not in selected:
+            selected[mode] = row
+
+    svg = Svg(1540, 700, "NCU hit-rate/access/byte validation")
     svg.text(38, 38, "NCU hit-rate validation", 22, 700)
-    svg.text(38, 62, "Representative LR=4 counters. Accepted paths are used for final coefficients; rejected paths are shown as controls.", 13, 400, COLORS["muted"])
+    svg.text(
+        38,
+        62,
+        "Representative RF/LR=4 counters. Hit rate is shown with access counts and byte traffic so caching/path evidence is visible.",
+        13,
+        400,
+        COLORS["muted"],
+    )
 
-    x0, y0, bar_w, row_h = 260, 105, 600, 54
+    x0, y0, bar_w, row_h = 250, 118, 430, 66
     for tick in [0, 25, 50, 75, 100]:
         x = x0 + bar_w * tick / 100
         svg.line(x, y0 - 22, x, y0 + row_h * len(modes) - 12, COLORS["grid"])
         svg.text(x, y0 - 31, f"{tick}%", 10, 400, COLORS["muted"], "middle")
 
+    svg.text(720, y0 - 30, "Access evidence", 12, 700)
+    svg.text(1028, y0 - 30, "Byte evidence", 12, 700)
+    svg.text(1368, y0 - 30, "Stall/status", 12, 700)
+
+    def access_text(row: dict[str, str]) -> str:
+        l1_unit = "req" if row.get("l1_access_unit") == "requests" else "sect"
+        l2_unit = "sect"
+        dram_unit = "sect"
+        return (
+            f"L1 {fmt_eng(fnum(row.get('l1_accesses')))} {l1_unit}; "
+            f"L2 {fmt_eng(fnum(row.get('l2_accesses')))} {l2_unit}; "
+            f"D {fmt_eng(fnum(row.get('dram_accesses')))} {dram_unit}"
+        )
+
+    def byte_text(row: dict[str, str]) -> tuple[str, str]:
+        shared = fnum(row.get("shared_bytes"))
+        if shared > 0:
+            first = f"Shared {fmt_eng(shared, 'B')}"
+            second = (
+                f"L1/L2/D {fmt_eng(fnum(row.get('l1_bytes')), 'B')}/"
+                f"{fmt_eng(fnum(row.get('l2_bytes')), 'B')}/"
+                f"{fmt_eng(fnum(row.get('dram_bytes')), 'B')}"
+            )
+            return first, second
+        first = (
+            f"L1 {fmt_eng(fnum(row.get('l1_bytes')), 'B')}; "
+            f"L2 {fmt_eng(fnum(row.get('l2_bytes')), 'B')}"
+        )
+        second = f"DRAM {fmt_eng(fnum(row.get('dram_bytes')), 'B')}"
+        return first, second
+
     for idx, mode in enumerate(modes):
-        row = selected[mode]
+        row = selected.get(mode)
+        if not row:
+            continue
         y = y0 + idx * row_h
         accepted = row["acceptance"] == "accepted"
         label_color = COLORS["text"] if accepted else COLORS["rejected"]
@@ -1008,23 +1069,153 @@ def plot_ncu_hit_rate_validation() -> None:
         svg.rect(x0, y + 28, bar_w * l2 / 100, 14, COLORS["l2"])
         svg.text(l1_text_x, y + 18, f"L1 {fnum(row['l1_hit_rate_pct']):.3g}%", 10, 700, l1_text_fill, l1_anchor)
         svg.text(l2_text_x, y + 40, f"L2 {fnum(row['l2_hit_rate_pct']):.3g}%", 10, 700, l2_text_fill, l2_anchor)
-        svg.text(930, y + 19, f"DRAM {fnum(row['dram_bytes']):.3g} B", 10, 400, COLORS["muted"])
+        svg.text(720, y + 18, access_text(row), 10, 400, COLORS["muted"])
+        bytes_first, bytes_second = byte_text(row)
+        svg.text(1028, y + 18, bytes_first, 10, 400, COLORS["muted"])
+        svg.text(1028, y + 38, bytes_second, 10, 400, COLORS["muted"])
         long_sb = row.get("stall_long_scoreboard_pct") or row.get("long_scoreboard_pct")
-        svg.text(930, y + 37, f"long SB {fnum(long_sb):.3g}%", 10, 400, COLORS["muted"])
+        svg.text(1368, y + 18, f"long SB {fnum(long_sb):.3g}%", 10, 400, COLORS["muted"])
+        svg.text(1368, y + 38, "accepted" if accepted else "rejected", 10, 700, COLORS["l1"] if accepted else COLORS["rejected"])
 
-    svg.rect(842, 82, 15, 9, COLORS["l1"])
-    svg.text(863, 91, "L1 hit rate", 11, 400)
-    svg.rect(930, 82, 15, 9, COLORS["l2"])
-    svg.text(951, 91, "L2 hit rate", 11, 400)
+    svg.rect(742, 91, 15, 9, COLORS["l1"])
+    svg.text(763, 100, "L1 hit rate", 11, 400)
+    svg.rect(835, 91, 15, 9, COLORS["l2"])
+    svg.text(856, 100, "L2 hit rate", 11, 400)
     svg.text(
         38,
-        588,
-        "Key validation: global L1 has ~100% L1 hit; L2 CG bypasses L1 and has ~99.94% L2 hit; DRAM CG has near-zero L2 hit.",
+        668,
+        "Key validation: accepted rows must show hit-rate direction and path-relevant access/byte evidence. L1 uses request counters when available, otherwise sectors; L2/DRAM use sectors.",
         12,
         400,
         COLORS["muted"],
     )
     svg.save(OUT_DIR / "ncu_hit_rate_validation.svg")
+
+
+def plot_ncu_live_evidence_fields() -> None:
+    path = ROOT / "results/summary/rtx3090_ncu_evidence_live_field_check_20260709.csv"
+    if not path.exists():
+        return
+    rows = read_csv(str(path.relative_to(ROOT)))
+    order = [
+        "reg_mma",
+        "reg_operand_only",
+        "shared_scalar_load_only",
+        "global_l1_load_only",
+        "l2_cg_load_only",
+        "dram_cg_load_only",
+    ]
+    by_mode = {row.get("mode", ""): row for row in rows}
+    selected = [by_mode[mode] for mode in order if mode in by_mode]
+    if not selected:
+        return
+
+    access_cols = [
+        ("l1_accesses", "L1", COLORS["l1"]),
+        ("l2_accesses", "L2", COLORS["l2"]),
+        ("dram_accesses", "DRAM", COLORS["dram"]),
+    ]
+    byte_cols = [
+        ("shared_bytes", "Shared", COLORS["shared"]),
+        ("l1_bytes", "L1", COLORS["l1"]),
+        ("l2_bytes", "L2", COLORS["l2"]),
+        ("dram_bytes", "DRAM", COLORS["dram"]),
+    ]
+
+    def log_width(value: float, max_value: float, width: float) -> float:
+        if value <= 0 or max_value <= 1:
+            return 0.0
+        return width * math.log10(value) / math.log10(max_value)
+
+    max_access = max(fnum(row.get(col)) for row in selected for col, _label, _color in access_cols)
+    max_bytes = max(fnum(row.get(col)) for row in selected for col, _label, _color in byte_cols)
+    max_stall = max(fnum(row.get("stall_long_scoreboard_pct")) for row in selected)
+
+    svg = Svg(1560, 690, "Live NCU evidence fields")
+    svg.text(38, 38, "Live NCU evidence fields", 22, 700)
+    svg.text(
+        38,
+        62,
+        "RTX 3090 live NCU run, 2026-07-09. Access counts, bytes, shared bytes, long scoreboard, and acceptance/status are shown together.",
+        13,
+        400,
+        COLORS["muted"],
+    )
+    svg.text(38, 86, "Bars use log scale because Tensor/control residual traffic and memory-path traffic differ by orders of magnitude.", 12, 400, COLORS["muted"])
+
+    y0, row_h = 132, 80
+    x_mode, x_status = 38, 220
+    x_access, w_access = 340, 360
+    x_bytes, w_bytes = 790, 430
+    x_stall, w_stall = 1300, 180
+
+    svg.text(x_mode, y0 - 24, "Mode", 12, 700)
+    svg.text(x_status, y0 - 24, "Status", 12, 700)
+    svg.text(x_access, y0 - 24, "L1/L2/DRAM access count", 12, 700)
+    svg.text(x_bytes, y0 - 24, "Shared/L1/L2/DRAM bytes", 12, 700)
+    svg.text(x_stall, y0 - 24, "Long scoreboard", 12, 700)
+
+    for idx, row in enumerate(selected):
+        y = y0 + idx * row_h
+        if idx % 2:
+            svg.rect(28, y - 20, 1498, row_h - 8, "#FAFAFA")
+        svg.line(30, y + row_h - 20, 1525, y + row_h - 20, "#E5E7EB")
+
+        mode = row.get("mode", "")
+        mode_label = mode.replace("_load_only", "").replace("_operand_only", "_operand").replace("_", " ")
+        svg.text(x_mode, y + 2, mode_label, 12, 700)
+        svg.text(x_mode, y + 20, "accepted component row", 10, 400, COLORS["muted"])
+
+        status = row.get("status", "")
+        acceptance = row.get("acceptance", "")
+        badge_color = COLORS["l1"] if status == "pass" and acceptance == "accepted" else COLORS["rejected"]
+        svg.rect(x_status, y - 10, 74, 22, badge_color)
+        svg.text(x_status + 37, y + 5, status or "n/a", 11, 700, "#FFFFFF", "middle")
+        svg.text(x_status, y + 27, acceptance, 10, 700, badge_color)
+
+        for bar_idx, (col, label, color) in enumerate(access_cols):
+            bar_y = y - 10 + bar_idx * 18
+            value = fnum(row.get(col))
+            svg.text(x_access - 8, bar_y + 9, label, 9, 700, color, "end")
+            svg.rect(x_access, bar_y, w_access, 8, "#F4F4F5")
+            svg.rect(x_access, bar_y, log_width(value, max_access, w_access), 8, color)
+            svg.text(x_access + w_access + 8, bar_y + 9, fmt_eng(value), 9, 400, COLORS["muted"])
+
+        for bar_idx, (col, label, color) in enumerate(byte_cols):
+            bar_y = y - 13 + bar_idx * 15
+            value = fnum(row.get(col))
+            svg.text(x_bytes - 8, bar_y + 8, label, 9, 700, color, "end")
+            svg.rect(x_bytes, bar_y, w_bytes, 7, "#F4F4F5")
+            svg.rect(x_bytes, bar_y, log_width(value, max_bytes, w_bytes), 7, color)
+            svg.text(x_bytes + w_bytes + 8, bar_y + 8, fmt_eng(value, "B"), 9, 400, COLORS["muted"])
+
+        stall = fnum(row.get("stall_long_scoreboard_pct"))
+        svg.rect(x_stall, y - 9, w_stall, 12, "#F4F4F5")
+        svg.rect(x_stall, y - 9, log_width(max(stall, 0.001), max(max_stall, 1.0), w_stall), 12, COLORS["rejected"])
+        svg.text(x_stall + w_stall + 8, y + 2, fmt_pct(stall), 10, 400, COLORS["muted"])
+        svg.text(x_stall, y + 24, row.get("reason", ""), 9, 400, COLORS["muted"])
+
+    lx, ly = 38, 640
+    legend = [
+        ("Shared", COLORS["shared"]),
+        ("L1", COLORS["l1"]),
+        ("L2", COLORS["l2"]),
+        ("DRAM", COLORS["dram"]),
+        ("status/pass", COLORS["l1"]),
+    ]
+    for idx, (label, color) in enumerate(legend):
+        x = lx + idx * 105
+        svg.rect(x, ly - 10, 16, 9, color)
+        svg.text(x + 22, ly - 2, label, 11, 400)
+    svg.text(
+        38,
+        672,
+        "This is an evidence visualization, not an energy coefficient plot. It confirms whether NCU filled the required path counters used by the report table.",
+        12,
+        400,
+        COLORS["muted"],
+    )
+    svg.save(OUT_DIR / "ncu_live_evidence_fields.svg")
 
 
 def plot_strict_scope_component_coefficients_summary() -> None:
@@ -1243,6 +1434,36 @@ def plot_strict_scope_ncu_evidence() -> None:
     svg.save(OUT_DIR / "rtx3090_strict_scope_ncu_evidence.svg")
 
 
+def render_png_copies() -> None:
+    renderer = shutil.which("magick")
+    if renderer:
+        command_kind = "magick"
+    else:
+        renderer = shutil.which("convert")
+        command_kind = "convert" if renderer else ""
+    if not renderer:
+        renderer = shutil.which("rsvg-convert")
+        command_kind = "rsvg-convert" if renderer else ""
+    if not renderer:
+        print("PNG copies skipped: no magick, convert, or rsvg-convert found")
+        return
+
+    rendered = 0
+    for svg_path in sorted(OUT_DIR.glob("*.svg")):
+        png_path = svg_path.with_suffix(".png")
+        if command_kind == "rsvg-convert":
+            cmd = [renderer, str(svg_path), "-o", str(png_path)]
+        else:
+            cmd = [renderer, str(svg_path), str(png_path)]
+        try:
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except subprocess.CalledProcessError as exc:
+            print(f"PNG copy skipped for {svg_path.name}: {exc}")
+            continue
+        rendered += 1
+    print(f"Wrote {rendered} PNG copies to {OUT_DIR}")
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     plot_component_coefficients()
@@ -1253,8 +1474,10 @@ def main() -> None:
     plot_tensor_reuse_factor_trend()
     plot_finalplan_sweep_design_matrix()
     plot_ncu_hit_rate_validation()
+    plot_ncu_live_evidence_fields()
     plot_strict_scope_component_coefficients_summary()
     plot_strict_scope_ncu_evidence()
+    render_png_copies()
     print(f"Wrote SVG assets to {OUT_DIR}")
 
 

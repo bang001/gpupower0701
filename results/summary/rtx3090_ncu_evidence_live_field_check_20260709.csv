@@ -1,0 +1,7 @@
+mode,acceptance,l1_hit_rate_pct,l2_hit_rate_pct,l1_accesses,l1_access_unit,l2_accesses,l2_access_unit,dram_accesses,dram_access_unit,shared_bytes,l1_bytes,l2_bytes,dram_bytes,stall_long_scoreboard_pct,status,reason
+dram_cg_load_only,accepted,7e-06,0.038381,1.67936e+10,sectors,1.67998e+10,sectors,1.6818e+10,sectors,0,5.37395e+11,5.38663e+11,5.3847e+11,1784.08,pass,all_required_evidence_present
+global_l1_load_only,accepted,99.9998,57.2715,3.35872e+10,sectors,41984,sectors,4.3892e+06,sectors,0,1.07479e+12,1.79393e+08,1.40454e+08,17.4343,pass,all_required_evidence_present
+l2_cg_load_only,accepted,7e-06,99.9066,1.67936e+10,sectors,1.67994e+10,sectors,1.40017e+07,sectors,0,5.37395e+11,5.38188e+11,7.19515e+08,864.97,pass,all_required_evidence_present
+reg_mma,accepted,36.2957,32.3856,0,sectors,431231,sectors,2.1648e+06,sectors,0,0,1.20292e+08,9.38189e+07,0.010564,pass,all_required_evidence_present
+reg_operand_only,accepted,31.7291,63.2529,0,sectors,427908,sectors,2.11342e+06,sectors,0,0,1.2116e+08,9.01961e+07,0.009671,pass,all_required_evidence_present
+shared_scalar_load_only,accepted,20.8079,15.0719,0,sectors,724793,sectors,3.04068e+06,sectors,5.37401e+11,0,1.55649e+08,1.19054e+08,0.001967,pass,all_required_evidence_present

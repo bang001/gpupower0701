@@ -1,0 +1,7 @@
+feature,source_column,coefficient_J_per_unit,estimate,unit,scale,constrained,unconstrained_estimate,nonzero_modes,warning
+intercept,,-77.56571903212807,-77.56571903212807,J,1.0,False,-41.47006490024812,,
+elapsed_s,elapsed_s,395.20463445277375,395.20463445277375,W,0.220305576,True,229.55943819818773,"addr_only,clocked_empty,global_l1_load_only",
+l1_bytes_static,expected_l1_bytes,0.0,0.0,pJ/byte,689947590656.0,True,-189.53251699782732,global_l1_load_only,unconstrained_negative;zero_bound_or_not_identified;static_byte;low_positive_variation
+store_bytes_static,expected_store_bytes,9.598664731911803e-06,9598664.731911803,pJ/byte,5248.0,True,107347548.60343888,"addr_only,clocked_empty,global_l1_load_only",static_byte;low_positive_variation
+baseline_mode_clocked_empty,mode,13.603707643681716,13.603707643681716,J,1.0,False,13.46683695063437,clocked_empty,
+baseline_mode_global_l1_load_only,mode,0.00022518314232427604,0.00022518314232427604,J,1.0,False,0.002174688161264624,global_l1_load_only,

@@ -541,6 +541,16 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     stall_not_selected_pct = metrics.first_names(
         ["smsp__average_warps_issue_stalled_not_selected_per_issue_active.pct"]
     )
+    achieved_occupancy_pct = metrics.first_names(
+        ["sm__warps_active.avg.pct_of_peak_sustained_active"]
+    )
+    registers_per_thread = metrics.first_names(["launch__registers_per_thread"])
+    shared_mem_per_block_static = metrics.first_names(
+        ["launch__shared_mem_per_block_static"]
+    )
+    shared_mem_per_block_dynamic = metrics.first_names(
+        ["launch__shared_mem_per_block_dynamic"]
+    )
 
     missing = []
     if l1_hit_rate is None:
@@ -573,6 +583,10 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         optional_missing.append("stall_wait_pct")
     if stall_not_selected_pct is None:
         optional_missing.append("stall_not_selected_pct")
+    if achieved_occupancy_pct is None:
+        optional_missing.append("achieved_occupancy_pct")
+    if registers_per_thread is None:
+        optional_missing.append("registers_per_thread")
 
     validation_notes = []
     for name, value in [
@@ -631,6 +645,10 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "stall_short_scoreboard_pct": fmt(stall_short_scoreboard_pct),
         "stall_wait_pct": fmt(stall_wait_pct),
         "stall_not_selected_pct": fmt(stall_not_selected_pct),
+        "achieved_occupancy_pct": fmt(achieved_occupancy_pct),
+        "registers_per_thread": fmt(registers_per_thread),
+        "shared_mem_per_block_static": fmt(shared_mem_per_block_static),
+        "shared_mem_per_block_dynamic": fmt(shared_mem_per_block_dynamic),
         "missing_metrics": ";".join(missing),
         "optional_missing_metrics": ";".join(optional_missing),
         "validation_notes": ";".join(validation_notes),
@@ -661,9 +679,10 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
             "L1 hit (%) | L2 hit (%) | L1 accesses | L2 accesses (sectors) | "
             "DRAM accesses (sectors) | Shared bytes | L1 bytes | L2 bytes | "
             "DRAM bytes | Tensor HMMA inst | Long SB stall (%) | Short SB stall (%) | "
-            "Wait stall (%) | Not selected stall (%) | status | notes |\n"
+            "Wait stall (%) | Not selected stall (%) | Achieved occupancy (%) | "
+            "Registers/thread | Static shared/block (bytes) | Dynamic shared/block (bytes) | status | notes |\n"
         )
-        f.write("|---|---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|\n")
+        f.write("|---|---|" + "---:|" * 3 + "---|" + "---:|" * 20 + "---|---|\n")
         for row in rows:
             l1_accesses = row["l1_accesses"]
             if l1_accesses and row["l1_access_unit"]:
@@ -685,6 +704,10 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
                 f"{row['stall_short_scoreboard_pct']} | "
                 f"{row['stall_wait_pct']} | "
                 f"{row['stall_not_selected_pct']} | "
+                f"{row['achieved_occupancy_pct']} | "
+                f"{row['registers_per_thread']} | "
+                f"{row['shared_mem_per_block_static']} | "
+                f"{row['shared_mem_per_block_dynamic']} | "
                 f"{row['status']} | {notes} |\n"
             )
         f.write("\n")
@@ -757,6 +780,10 @@ def main() -> int:
         "stall_short_scoreboard_pct",
         "stall_wait_pct",
         "stall_not_selected_pct",
+        "achieved_occupancy_pct",
+        "registers_per_thread",
+        "shared_mem_per_block_static",
+        "shared_mem_per_block_dynamic",
         "missing_metrics",
         "optional_missing_metrics",
         "validation_notes",

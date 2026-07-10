@@ -31,12 +31,20 @@ EXPECTED: dict[str, dict[str, Any]] = {
         "cuda_arch": "70",
         "active_sm": 80,
         "ncu_chip": "gv100",
+        "blocks": "1,2,4,8,16,32",
+        "ncu_blocks": 32,
+        "shared_ncu_w": 32,
+        "l1_ncu_w": 32,
+        "l2_ncu_w": 32,
+        "cuda_toolchain_term": "compute_70",
         "power_semantics": "instant",
         "default_binary": "./build-v100/a100_fp16_energy_v2",
         "guide": "docs/platforms/v100_node_experiment_guide_ko.md",
         "guide_terms": [
             "V100",
             "sm_70",
+            "compute_70",
+            "CUDA 12",
             "gv100",
             "instant",
             "power_measurement_api_matrix_ko.md",
@@ -101,6 +109,9 @@ PLAN_SHELL_TERMS = [
     "scripts/preflight_gpu_support.py",
     "--strict",
     "--active-sm",
+    "NVCC_COMMAND=\"${NVCC:-nvcc}\"",
+    "--nvcc \"${NVCC_COMMAND}\"",
+    "scripts/run_component_regression_sweep.py --self-test",
     "scripts/audit_power_api_measurements.py --self-test",
     "scripts/audit_power_api_measurements.py",
     "scripts/build_strict_component_summary.py --self-test",
@@ -350,6 +361,22 @@ def audit_profiles(repo: Path) -> list[dict[str, str]]:
                     actual=plan_profile.get("power_semantics"),
                     evidence="scripts/plan_platform_component_experiment.py",
                 )
+                for coordinate in (
+                    "blocks",
+                    "ncu_blocks",
+                    "shared_ncu_w",
+                    "l1_ncu_w",
+                    "l2_ncu_w",
+                ):
+                    if coordinate in expected:
+                        compare_value(
+                            rows,
+                            profile=profile,
+                            check=f"plan_{coordinate}",
+                            expected=expected[coordinate],
+                            actual=plan_profile.get(coordinate),
+                            evidence="scripts/plan_platform_component_experiment.py",
+                        )
             if preflight_profile:
                 compare_value(
                     rows,
@@ -359,6 +386,18 @@ def audit_profiles(repo: Path) -> list[dict[str, str]]:
                     actual=preflight_profile.get("cuda_arch"),
                     evidence="scripts/preflight_gpu_support.py",
                 )
+                if "cuda_toolchain_term" in expected:
+                    policy = str(preflight_profile.get("cuda_toolchain_policy", ""))
+                    term = str(expected["cuda_toolchain_term"])
+                    add_row(
+                        rows,
+                        profile=profile,
+                        check="preflight_cuda_toolchain_policy",
+                        status=status_for(term in policy),
+                        expected=f"contains:{term}",
+                        actual=policy,
+                        evidence="scripts/preflight_gpu_support.py",
+                    )
                 compare_value(
                     rows,
                     profile=profile,
@@ -423,6 +462,21 @@ def audit_profiles(repo: Path) -> list[dict[str, str]]:
                     f"--expected-power-semantics {expected['power_semantics']}",
                     f"TARGET_PROFILE={profile}",
                 ]
+                if profile == "v100":
+                    shell_terms.extend(
+                        [
+                            "--blocks-per-sm-values 1,2,4,8,16,32",
+                            "NCU_CHIP=gv100",
+                            "NCU_FILTER_UNAVAILABLE_METRICS=1",
+                            "BLOCKS_PER_SM=32",
+                            "REG_BLOCKS_PER_SM=32",
+                            "SHARED_W_SM_KIB=32",
+                            "L1_W_SM_KIB=32",
+                            "L2_W_SM_KIB=32",
+                            "NVCC_COMMAND=\"${NVCC:-nvcc}\"",
+                            "--nvcc \"${NVCC_COMMAND}\"",
+                        ]
+                    )
                 ok, missing = text_contains_all(shell_text, shell_terms)
                 add_row(
                     rows,

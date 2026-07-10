@@ -11,17 +11,20 @@ NCU_BIN_DEFAULT=ncu
 NCU_BIN="${NCU_BIN:-${NCU_BIN_DEFAULT}}"
 NCU_USE_SUDO="${NCU_USE_SUDO:-0}"
 NCU_SUDO="${NCU_SUDO:-sudo -E}"
+NVCC_COMMAND="${NVCC:-nvcc}"
 if [[ "${NCU_USE_SUDO}" == "1" ]]; then
   NCU_COMMAND="${NCU_SUDO} ${NCU_BIN}"
 else
   NCU_COMMAND="${NCU_BIN}"
 fi
 echo "Using NCU command: ${NCU_COMMAND}"
+echo "Using CUDA compiler: ${NVCC_COMMAND}"
 
 # 1. Preflight
-python3 scripts/preflight_gpu_support.py --gpu 0 --target-profile a100 --strict --active-sm 108 --binary ./build-a100/a100_fp16_energy_v2 --ncu "${NCU_COMMAND}" --out results/summary/a100_component_finalplan_20260708_preflight.md
+python3 scripts/preflight_gpu_support.py --gpu 0 --target-profile a100 --strict --active-sm 108 --binary ./build-a100/a100_fp16_energy_v2 --ncu "${NCU_COMMAND}" --nvcc "${NVCC_COMMAND}" --out results/summary/a100_component_finalplan_20260708_preflight.md
 
-# 2. Power API policy self-test. Fail early if the gate is broken.
+# 2. Pipeline policy self-tests. Fail early if a gate is broken.
+python3 scripts/run_component_regression_sweep.py --self-test
 python3 scripts/audit_power_api_measurements.py --self-test
 python3 scripts/build_strict_component_summary.py --self-test
 python3 scripts/audit_strict_component_summary.py --self-test
@@ -97,7 +100,7 @@ python3 scripts/audit_power_api_measurements.py results/raw/a100_component_final
 python3 scripts/audit_power_state_stability.py results/raw/a100_component_finalplan_20260708_tensor.csv results/raw/a100_component_finalplan_20260708_shared.csv results/raw/a100_component_finalplan_20260708_l1.csv results/raw/a100_component_finalplan_20260708_l2.csv results/raw/a100_component_finalplan_20260708_dram.csv --out-csv results/summary/a100_component_finalplan_20260708_power_state_audit.csv --out-md results/summary/a100_component_finalplan_20260708_power_state_audit.md
 
 # 8. NCU sidecar validation. These profiler runs are not energy rows.
-NCU_EXPLICIT_METRICS_ONLY=1 NCU="${NCU_COMMAND}" BIN=./build-a100/a100_fp16_energy_v2 OUTDIR=results/ncu/a100_component_finalplan_ncu_factor_20260708 RAW_OUT=results/raw/a100_component_finalplan_ncu_factor_20260708.csv TARGET_PROFILE=a100 GPU=0 ACTIVE_SM=108 BLOCKS_PER_SM=16 REG_BLOCKS_PER_SM=16 REG_PRESSURE_PAYLOAD_BYTES=256 REG_W_SM_KIB=2048 L1_W_SM_KIB=16 SHARED_W_SM_KIB=128 L2_W_SM_KIB=64 DRAM_W_SM_KIB_OVERRIDE=8192 INCLUDE_L2_CAPACITY_NCU=0 INCLUDE_DIAGNOSTIC_NCU=0 REUSE_FACTOR=1 LOAD_REPEAT=1 TENSOR_REUSE_FACTORS=1,2,4,8,16 MEMORY_LOAD_REPEATS=1,2,4,8,16 DRAM_LOAD_REPEATS=1,4,8,16 bash scripts/run_ncu_validation.sh
+NCU_EXPLICIT_METRICS_ONLY=1 NCU="${NCU_COMMAND}" BIN=./build-a100/a100_fp16_energy_v2 OUTDIR=results/ncu/a100_component_finalplan_ncu_factor_20260708 RAW_OUT=results/raw/a100_component_finalplan_ncu_factor_20260708.csv TARGET_PROFILE=a100 NCU_CHIP=ga100 NCU_FILTER_UNAVAILABLE_METRICS=1 GPU=0 ACTIVE_SM=108 BLOCKS_PER_SM=16 REG_BLOCKS_PER_SM=16 REG_PRESSURE_PAYLOAD_BYTES=256 REG_W_SM_KIB=2048 L1_W_SM_KIB=16 SHARED_W_SM_KIB=128 L2_W_SM_KIB=64 DRAM_W_SM_KIB_OVERRIDE=8192 INCLUDE_L2_CAPACITY_NCU=0 INCLUDE_DIAGNOSTIC_NCU=0 REUSE_FACTOR=1 LOAD_REPEAT=1 TENSOR_REUSE_FACTORS=1,2,4,8,16 MEMORY_LOAD_REPEATS=1,2,4,8,16 DRAM_LOAD_REPEATS=1,4,8,16 bash scripts/run_ncu_validation.sh
 
 # 9. Path acceptance.
 python3 scripts/analyze_ncu_path_acceptance.py results/ncu/a100_component_finalplan_ncu_factor_20260708/ncu_cache_validation_summary.csv --target-profile a100 --out-csv results/summary/a100_component_finalplan_20260708_ncu_acceptance.csv --out-md results/summary/a100_component_finalplan_20260708_ncu_acceptance.md --tensor-memory-bytes-max 3e8 --register-memory-bytes-max 3e8 --tensor-memory-bytes-per-hmma-max 1.0 --register-memory-bytes-per-op-max 1.0

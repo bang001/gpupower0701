@@ -1,0 +1,15 @@
+label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,report
+empty_W64_B16,empty_kernel,empty,64,16,82,1000000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/empty_W64_B16
+clocked_empty_W64_B16,clocked_empty_kernel,clocked_empty,64,16,82,1000000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/clocked_empty_W64_B16
+addr_only_W64_B16,global_addr_only_kernel,addr_only,64,16,82,100000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/addr_only_W64_B16
+reg_fragment_only_W2048_B4,reg_fragment_only_kernel,reg_fragment_only,2048,4,82,100000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/reg_fragment_only_W2048_B4
+reg_operand_only_W2048_B4,reg_operand_only_kernel,reg_operand_only,2048,4,82,100000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/reg_operand_only_W2048_B4
+reg_mma_W2048_B4,reg_mma_kernel,reg_mma,2048,4,82,100000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/reg_mma_W2048_B4
+shared_load_only_W64_B16,shared_load_only_kernel,shared_load_only,64,16,82,100000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/shared_load_only_W64_B16
+shared_mma_W64_B16,shared_mma_kernel,shared_mma,64,16,82,100000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/shared_mma_W64_B16
+global_l1_load_only_W16_B16,global_l1_load_only_kernel,global_l1_load_only,16,16,82,100000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/global_l1_load_only_W16_B16
+l2_load_only_W64_B16,global_load_only_kernel,l2_load_only,64,16,82,100000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/l2_load_only_W64_B16
+l2_mma_W64_B16,global_mma_kernel,l2_mma,64,16,82,100000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/l2_mma_W64_B16
+dram_load_only_W8192_B16,global_load_only_kernel,dram_load_only,8192,16,82,100000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/dram_load_only_W8192_B16
+dram_mma_W8192_B16,global_mma_kernel,dram_mma,8192,16,82,100000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/dram_mma_W8192_B16
+store_only_W64_B16,store_path_kernel,store_only,64,16,82,100000,1,1,1,results/ncu/rtx3090_redo_ncu_after_wsl_restart_20260704/store_only_W64_B16

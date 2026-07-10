@@ -1,5 +1,0 @@
-mode,W_SM_KiB,blocks_per_SM,regime,pJ_per_FLOP,net_E_J,elapsed_s,ITER,clock_sm_mhz,temp_C
-reg_mma,2048,4,dram_mixed_streaming,0.4639,38.9289,1.16407,31230842,1935,66
-shared_mma,8,1,shared_resident,0.43454,1.91139,1.07833,6548117,1935,66
-l2_mma,8,1,shared_resident,2.1778,9.73143,1.15266,6652047,1920,66
-dram_mma,128,16,dram_mixed_streaming,12.7323,228.233,1.18791,1667820,1905,74

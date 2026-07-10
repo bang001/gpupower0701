@@ -1,0 +1,2 @@
+component,status,median,unit,rows,valid_detail_rows,invalid_detail_rows,ncu_denominator_rows,ncu_accepted_rows,confidence_class,energy_source,energy_integration_method,power_semantics,reasons,cautions
+tensor_mma_increment,accepted,0.145635107428,pJ/FLOP,10,10,0,0,10,medium-high,nvml_total_energy,total_energy_mj_delta,one_sec_average,,

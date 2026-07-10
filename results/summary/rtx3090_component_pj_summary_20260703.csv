@@ -1,0 +1,19 @@
+component,estimator,W_SM_KiB,blocks_per_SM,reuse_factor,load_repeat,store_repeat,coefficient,unit,delta_E_J,denominator,rows,valid,note
+L2-hit load path,l2_load_only - empty,64,16,4,4,4,63.73640115689851,pJ/byte,1168.42743053647,18332183953408.0,3/3,True,effective L2-hit candidate operand load path
+L2 MMA incremental,l2_mma - l2_load_only,64,16,4,4,4,-3.4223895482300946,pJ/FLOP,-501.91899806699996,146657471627264.0,3/3,False,invalid when negative; load-only control is heavier
+Shared/L1 load path,shared_load_only - empty,64,16,4,4,4,54.75275648609268,pJ/byte,1171.45895073319,21395433324544.0,3/3,True,effective shared/L1 operand load path
+Shared MMA incremental,shared_mma - shared_load_only,64,16,4,4,4,-3.808652173476685,pJ/FLOP,-651.902109072,171163466596352.0,3/3,False,invalid when negative; load-only control is heavier
+reg_fragment_minus_empty,reg_fragment_minus_empty,64,16,4,4,4,115.15657268816,J,115.15657268816,0.0,3/3,True,
+Tensor+register path,reg_mma - empty,64,16,4,4,4,1.4015186788711638,pJ/FLOP,302.00285763915997,215482577715200.0,3/3,True,effective Tensor Core + register operand path
+Tensor incremental,reg_mma - reg_operand_only,64,16,4,4,4,0.3369477542307978,pJ/FLOP,72.606370637,215482577715200.0,3/3,True,MMA incremental after no-MMA register operand control
+Register operand control,reg_operand_only - empty,64,16,4,4,4,8720.965014653879,pJ/reg-op,229.39648700216,26304025600.0,3/3,True,no-MMA fragment/control baseline; denominator is logical reg-op proxy
+Global store path,store_only - empty,64,16,4,4,4,3821.903964517545,pJ/byte,447.38950585333,117059326976.0,3/3,True,effective global store path
+Store path incremental,store_path - store_only,64,16,4,4,4,-441.1083301682284,pJ/byte,-51.635844253000016,117059326976.0,3/3,False,invalid here; same store kernel/noise dominated
+DRAM streaming load path,dram_load_only - empty,8192,16,4,4,4,300.54562209315714,pJ/byte,2322.54739568668,7727769845760.0,3/3,True,effective DRAM streaming operand load path
+DRAM MMA incremental,dram_mma - dram_load_only,8192,16,4,4,4,-25.40561318375958,pJ/FLOP,-1570.629851796,61822158766080.0,3/3,False,invalid when negative; load-only control is heavier
+reg_fragment_minus_empty,reg_fragment_minus_empty,8192,16,4,4,4,134.53207702935,J,134.53207702935,0.0,3/3,True,
+Tensor+register path,reg_mma - empty,8192,16,4,4,4,1.3327334324846496,pJ/FLOP,295.18043918235,221484981157888.0,3/3,True,effective Tensor Core + register operand path
+Tensor incremental,reg_mma - reg_operand_only,8192,16,4,4,4,0.2797511676732188,pJ/FLOP,61.96068210100003,221484981157888.0,3/3,True,MMA incremental after no-MMA register operand control
+Register operand control,reg_operand_only - empty,8192,16,4,4,4,8626.030713335242,pJ/reg-op,233.21975708135,27036740864.0,3/3,True,no-MMA fragment/control baseline; denominator is logical reg-op proxy
+Global store path,store_only - empty,8192,16,4,4,4,3939.9254211034627,pJ/byte,453.34835749971,115065212928.0,3/3,True,effective global store path
+Store path incremental,store_path - store_only,8192,16,4,4,4,-431.4205460781816,pJ/byte,-49.641496996,115065212928.0,3/3,False,invalid here; same store kernel/noise dominated

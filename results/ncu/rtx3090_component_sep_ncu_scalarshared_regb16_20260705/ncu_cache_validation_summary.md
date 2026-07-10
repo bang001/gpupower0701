@@ -1,0 +1,23 @@
+# NCU Cache Validation Summary
+
+| label | mode | W_SM (KiB) | blocks/SM | Shared accesses | Shared bytes source | Shared bank conflicts | Shared inst | L1 hit (%) | L2 hit (%) | L1 accesses | L2 accesses (sectors) | DRAM accesses (sectors) | Shared bytes | L1 bytes | L2 bytes | DRAM bytes | Tensor HMMA inst | Long SB stall (%) | Short SB stall (%) | Wait stall (%) | Not selected stall (%) | status | notes |
+|---|---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
+| addr_only_W64_B16 | addr_only | 64 | 16 | 0 | sass | 0 | 0 | 20.8651 | 41.5404 | 0 sectors | 1.12676e+06 | 3.97888e+06 | 0 | 0 | 2.17685e+08 | 1.7967e+08 | 0 | 0.002826 | 95.809 | 308.066 | 62.2386 | ok |  |
+| clocked_empty_W64_B16 | clocked_empty | 64 | 16 | 0 | sass | 0 | 0 | 21.3605 | 66.2162 | 0 sectors | 5.69184e+06 | 9.85429e+06 | 0 | 0 | 9.19488e+08 | 6.33304e+08 | 0 | 0.001634 | 0.000312 | 245.714 | 100.038 | ok |  |
+| dram_cg_load_only_W8192_B16 | dram_cg_load_only | 8192 | 16 | 0 | sass | 0 | 0 | 6e-06 | 0.155812 | 1.67936e+10 sectors | 1.68055e+10 | 1.68308e+10 | 0 | 5.37395e+11 | 5.3945e+11 | 5.39153e+11 | 0 | 1776.47 | 74.101 | 236.129 | 10.8996 | ok |  |
+| dram_load_only_W8192_B16 | dram_load_only | 8192 | 16 | 0 | sass | 0 | 0 | 49.9997 | 0.161987 | 3.35872e+10 sectors | 1.68086e+10 | 1.68327e+10 | 0 | 1.07479e+12 | 5.39596e+11 | 5.39267e+11 | 0 | 1343.28 | 65.1523 | 152.852 | 19.6798 | ok |  |
+| dram_mma_W8192_B16 | dram_mma | 8192 | 16 | 0 | sass | 0 | 0 | 49.9999 | 0.219888 | 8.3968e+09 sectors | 4.20199e+09 | 4.21051e+09 | 0 | 2.68698e+11 | 1.35e+11 | 1.34902e+11 | 2.624e+08 | 109.748 | 115.367 | 258.458 | 56.338 | ok |  |
+| empty_W64_B16 | empty | 64 | 16 | 0 | sass | 0 | 0 | 20.8651 | 24.4927 | 0 sectors | 0 | 59512 | 0 | 0 | 2.56102e+06 | 1.9168e+06 | 0 | 0.150394 | 0.029977 | 366.646 | 99.9666 | ok |  |
+| global_l1_load_only_W16_B16 | global_l1_load_only | 16 | 16 | 0 | sass | 0 | 0 | 99.999 | 42.5934 | 3.35872e+10 sectors | 2.89067e+06 | 8.35381e+06 | 0 | 1.07479e+12 | 4.63504e+08 | 3.81465e+08 | 0 | 17.4261 | 52.7484 | 210.022 | 80.9222 | ok |  |
+| l2_cg_load_only_W64_B16 | l2_cg_load_only | 64 | 16 | 0 | sass | 0 | 0 | 7e-06 | 99.9092 | 1.67936e+10 sectors | 1.67979e+10 | 1.64102e+07 | 0 | 5.37395e+11 | 5.38165e+11 | 7.28161e+08 | 0 | 873.118 | 52.623 | 308.974 | 15.2592 | ok |  |
+| l2_load_only_W64_B16 | l2_load_only | 64 | 16 | 0 | sass | 0 | 0 | 88.3592 | 99.7131 | 3.35872e+10 sectors | 3.91233e+09 | 1.06559e+07 | 0 | 1.07479e+12 | 1.25616e+11 | 4.56407e+08 | 0 | 70.7483 | 50.4936 | 188.872 | 80.8569 | ok |  |
+| l2_mma_W64_B16 | l2_mma | 64 | 16 | 0 | sass | 0 | 0 | 99.9972 | 38.9853 | 8.3968e+09 sectors | 1.58177e+06 | 4.63446e+06 | 0 | 2.68698e+11 | 2.62948e+08 | 2.13472e+08 | 2.624e+08 | 0.037757 | 50.2157 | 325.983 | 59.7976 | ok |  |
+| reg_fragment_only_W2048_B16 | reg_fragment_only | 2048 | 16 | 0 | sass | 0 | 0 | 27.9268 | 61.6389 | 0 sectors | 948422 | 1.37386e+06 | 0 | 0 | 1.38467e+08 | 9.93357e+07 | 0 | 0.010625 | 259.132 | 22.8812 | 103.434 | ok |  |
+| reg_mma_W2048_B16 | reg_mma | 2048 | 16 | 0 | sass | 0 | 0 | 41.3088 | 15.4973 | 0 sectors | 375535 | 1.03805e+06 | 0 | 0 | 6.29894e+07 | 4.91094e+07 | 2.624e+08 | 0.022814 | 0.00647 | 293.128 | 22.7223 | ok |  |
+| reg_operand_only_W2048_B16 | reg_operand_only | 2048 | 16 | 0 | sass | 0 | 0 | 31.4547 | 59.8041 | 0 sectors | 621947 | 1.10439e+06 | 0 | 0 | 8.65324e+07 | 6.70696e+07 | 0 | 0.022787 | 671.208 | 327.265 | 4.97135 | ok |  |
+| shared_load_only_W64_B16 | shared_load_only | 64 | 16 | 8.39688e+09 | sass | 4.1984e+09 | 83968 | 26.8859 | 45.5553 | 0 sectors | 4.96403e+06 | 9.2812e+06 | 5.37401e+11 | 0 | 5.59901e+08 | 4.4881e+08 | 0 | 0.000515 | 89.782 | 194.145 | 79.9997 | ok |  |
+| shared_mma_W64_B16 | shared_mma | 64 | 16 | 2.09928e+09 | sass | 1.0496e+09 | 83968 | 43.3406 | 47.6434 | 0 sectors | 1.64708e+06 | 2.95955e+06 | 1.34354e+11 | 0 | 1.81481e+08 | 1.47239e+08 | 2.624e+08 | 0.001936 | 47.7312 | 350.525 | 49.5446 | ok |  |
+| shared_scalar_load_only_W64_B16 | shared_scalar_load_only | 64 | 16 | 4.19844e+09 | sass | 0 | 4.19844e+09 | 21.2652 | 55.2725 | 0 sectors | 3.05279e+06 | 5.74895e+06 | 5.37401e+11 | 0 | 3.53482e+08 | 2.75507e+08 | 0 | 0.002043 | 91.0431 | 307.006 | 51.0038 | ok |  |
+| store_only_W64_B16 | store_only | 64 | 16 | 0 | sass | 0 | 0 | 99.9898 | 99.556 | 0 sectors | 0 | 574432 | 0 | 0 | 4.22063e+09 | 1.98125e+07 | 0 | 0.023283 | 574.369 | 275.998 | 8.00158 | ok |  |
+
+Access count unit: L1 prefers request counters when available; otherwise it falls back to sectors. L2 and DRAM access counts are sector counters. One sector is treated as 32 bytes when byte counters are unavailable. SB means scoreboard.

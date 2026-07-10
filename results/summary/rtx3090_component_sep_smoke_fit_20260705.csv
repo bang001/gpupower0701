@@ -1,0 +1,17 @@
+feature,source_column,coefficient_J_per_unit,estimate,unit,scale,constrained,unconstrained_estimate,nonzero_modes,warning
+intercept,,-187.50986935003996,-187.50986935003996,J,1.0,False,-198.85090601911227,,
+elapsed_s,elapsed_s,352.49621743633264,352.49621743633264,W,1.0923297945,True,363.11156633517373,"clocked_empty,dram_cg_load_only,empty,global_l1_load_only,l2_cg_load_only,reg_mma,reg_operand_only,shared_load_only",
+FLOP,FLOP,2.351429860156791e-12,2.351429860156791,pJ/FLOP,73602071134208.0,True,10.874682847751023,reg_mma,
+reg_operand_ops,expected_reg_operand_ops,0.0,0.0,pJ/reg-op,9792358656.0,True,-70355.70395916137,"reg_mma,reg_operand_only",unconstrained_negative;zero_bound_or_not_identified
+shared_bytes_static,expected_shared_bytes,2.0847491802458798e-11,20.847491802458798,pJ/byte,4362879205376.0,True,20.680963375246552,shared_load_only,static_byte
+l1_bytes_static,expected_l1_bytes,2.0635688819290115e-11,20.635688819290117,pJ/byte,3739800371200.0,True,20.561579245794995,global_l1_load_only,static_byte
+l2_bytes_static,expected_l2_bytes,0.0,0.0,pJ/byte,2577024942080.0,True,-3.5985516369996486,l2_cg_load_only,unconstrained_negative;zero_bound_or_not_identified;static_byte
+dram_bytes_static,expected_dram_bytes,0.0,0.0,pJ/byte,963311796224.0,True,-423.77138916542964,dram_cg_load_only,unconstrained_negative;zero_bound_or_not_identified;static_byte;low_positive_variation
+store_bytes_static,expected_store_bytes,0.0,0.0,pJ/byte,1343488.0,True,39374943.23071109,"clocked_empty,empty,global_l1_load_only,reg_mma,reg_operand_only,shared_load_only",zero_bound_or_not_identified;static_byte;low_positive_variation
+baseline_mode_clocked_empty,mode,-8.984025086384355,-8.984025086384355,J,1.0,False,-9.327016295663125,clocked_empty,
+baseline_mode_dram_cg_load_only,mode,32.181665119233834,32.181665119233834,J,1.0,False,440.0549732234238,dram_cg_load_only,
+baseline_mode_global_l1_load_only,mode,-72.43559085240031,-72.43559085240031,J,1.0,False,-125.50427331955538,global_l1_load_only,
+baseline_mode_l2_cg_load_only,mode,5.663477374180841,5.663477374180841,J,1.0,False,14.378107147591518,l2_cg_load_only,
+baseline_mode_reg_mma,mode,-236.71660362151664,-236.71660362151664,J,1.0,False,-284.70192456120344,reg_mma,
+baseline_mode_reg_operand_only,mode,-88.85888880959426,-88.85888880959426,J,1.0,False,602.3492109923113,reg_operand_only,
+baseline_mode_shared_load_only,mode,-84.75288356845252,-84.75288356845252,J,1.0,False,-137.25130032634922,shared_load_only,

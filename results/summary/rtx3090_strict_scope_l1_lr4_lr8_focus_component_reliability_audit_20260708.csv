@@ -1,0 +1,2 @@
+component,status,median,unit,rows,valid_detail_rows,invalid_detail_rows,ncu_denominator_rows,ncu_accepted_rows,confidence_class,energy_source,energy_integration_method,measurement_scope,power_semantics,reasons,cautions
+global_l1_hit_path,accepted_low_stability,0.147311457312,pJ/bit,4,4,2,4,3,low,nvml_total_energy,total_energy_mj_delta,gpu_device_total_energy_counter,one_sec_average,,low_stability;invalid_detail_rows:2
