@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Generated for a100 on 2026-07-10.
-# GA100 40 MiB L2 path. Final L2 coefficient uses ld.global.cg with a 6.75 MiB first-point working set; l2_load_only is diagnostic-only and excluded from the strict path.
+# Generated for a100 on 2026-07-11.
+# GA100 40 MiB L2 path. Final L2 candidates sweep ld.global.cg at W_SM=16,32,64,128 KiB and require path-specific L1 hit bytes plus L2 read hit/miss evidence; l2_load_only is diagnostic-only.
 mkdir -p results/raw results/summary results/ncu
 
 # NCU wrapper. If NCU fails with ERR_NVGPUCTRPERM, rerun this script with:
@@ -25,9 +25,15 @@ python3 scripts/preflight_gpu_support.py --gpu 0 --target-profile a100 --strict 
 
 # 2. Pipeline policy self-tests. Fail early if a gate is broken.
 python3 scripts/run_component_regression_sweep.py --self-test
+python3 scripts/summarize_ncu_cache_metrics.py --self-test
+python3 scripts/analyze_ncu_path_acceptance.py --self-test
+python3 scripts/analyze_matched_control_energy.py --self-test
 python3 scripts/audit_power_api_measurements.py --self-test
+python3 scripts/audit_a100_tensor_l2_remediation.py --self-test
 python3 scripts/build_strict_component_summary.py --self-test
 python3 scripts/audit_strict_component_summary.py --self-test
+python3 scripts/write_platform_result_manifest.py --self-test
+python3 scripts/selftest_platform_package_gates.py
 
 # 3. Move stale generated outputs aside before writing new CSV schemas.
 RUN_STAMP=$(date +%Y%m%d_%H%M%S)
@@ -36,6 +42,7 @@ STALE_PATHS=(
   results/raw/a100_component_finalplan_20260708_schema_smoke.csv
   results/summary/a100_component_finalplan_20260708_schema_smoke_power_api_audit.csv
   results/summary/a100_component_finalplan_20260708_schema_smoke_power_api_audit.md
+  results/raw/a100_component_finalplan_20260708_tensor_pair_calibration.csv
   results/raw/a100_component_finalplan_20260708_tensor.csv
   results/raw/a100_component_finalplan_20260708_shared.csv
   results/raw/a100_component_finalplan_20260708_l1.csv
@@ -82,31 +89,33 @@ if [[ -e results/ncu/a100_component_finalplan_ncu_factor_20260708 ]]; then
   mv results/ncu/a100_component_finalplan_ncu_factor_20260708 "${STALE_DIR}/results/ncu/a100_component_finalplan_ncu_factor_20260708"
 fi
 
-# 4. One-row schema smoke test. This catches old binaries before the full sweep.
+# 4. Three-row schema/revision smoke test. Catch stale binaries before the full sweep.
 ./build-a100/a100_fp16_energy_v2 --gpu-list 0 --mode clocked_empty --w-sm-kib 1 --blocks-per-sm 1 --target-profile a100 --active-sm 1 --seconds 0.2 --iters 1 --repeats 1 --reuse-factor 1 --load-repeat 1 --store-repeat 1 --output results/raw/a100_component_finalplan_20260708_schema_smoke.csv --verify-smid 0
-python3 scripts/audit_power_api_measurements.py results/raw/a100_component_finalplan_20260708_schema_smoke.csv --target-profile a100 --out-csv results/summary/a100_component_finalplan_20260708_schema_smoke_power_api_audit.csv --out-md results/summary/a100_component_finalplan_20260708_schema_smoke_power_api_audit.md --fail-on-reject --fail-on-provisional --require-explicit-measurement-scope
+./build-a100/a100_fp16_energy_v2 --gpu-list 0 --mode reg_operand_only --w-sm-kib 2048 --blocks-per-sm 1 --target-profile a100 --active-sm 1 --seconds 0.2 --iters 1 --repeats 1 --reuse-factor 1 --load-repeat 1 --store-repeat 1 --output results/raw/a100_component_finalplan_20260708_schema_smoke.csv --verify-smid 0
+./build-a100/a100_fp16_energy_v2 --gpu-list 0 --mode l2_cg_load_only --w-sm-kib 16 --blocks-per-sm 1 --target-profile a100 --active-sm 1 --seconds 0.2 --iters 1 --repeats 1 --reuse-factor 1 --load-repeat 1 --store-repeat 1 --output results/raw/a100_component_finalplan_20260708_schema_smoke.csv --verify-smid 0
+python3 scripts/audit_power_api_measurements.py results/raw/a100_component_finalplan_20260708_schema_smoke.csv --target-profile a100 --out-csv results/summary/a100_component_finalplan_20260708_schema_smoke_power_api_audit.csv --out-md results/summary/a100_component_finalplan_20260708_schema_smoke_power_api_audit.md --fail-on-reject --fail-on-provisional --require-explicit-measurement-scope --require-mode-notes-marker reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1 --require-mode-notes-marker reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1 --require-mode-notes-marker l2_cg_load_only=global_warmup_policy=ld_global_cg --require-mode-notes-marker dram_cg_load_only=global_warmup_policy=ld_global_cg
 
 # 5. Energy sweeps. Keep NCU detached from these runs.
-python3 scripts/run_component_regression_sweep.py --execute --binary ./build-a100/a100_fp16_energy_v2 --target-profile a100 --gpu-ids 0 --max-active-gpus 1 --modes reg_operand_only,reg_mma --w-sm-kib-values 2048 --blocks-per-sm-values 16,32 --active-sm-values 108 --reuse-factors 1,2,4,8,16 --load-repeats 1 --store-repeats 1 --seconds 10.0 --repeats 5 --output results/raw/a100_component_finalplan_20260708_tensor.csv --matrix-csv results/raw/a100_component_finalplan_20260708_tensor_matrix.csv
+python3 scripts/run_component_regression_sweep.py --execute --binary ./build-a100/a100_fp16_energy_v2 --target-profile a100 --gpu-ids 0 --max-active-gpus 1 --modes reg_operand_only,reg_mma --w-sm-kib-values 2048 --blocks-per-sm-values 16,32 --active-sm-values 108 --reuse-factors 1,2,4,8,16 --load-repeats 1 --store-repeats 1 --seconds 10.0 --repeats 5 --output results/raw/a100_component_finalplan_20260708_tensor.csv --matrix-csv results/raw/a100_component_finalplan_20260708_tensor_matrix.csv --tensor-pair-lock-iters --tensor-pair-control-min-seconds 1.0 --pair-calibration-csv results/raw/a100_component_finalplan_20260708_tensor_pair_calibration.csv
 python3 scripts/run_component_regression_sweep.py --execute --binary ./build-a100/a100_fp16_energy_v2 --target-profile a100 --gpu-ids 0 --max-active-gpus 1 --modes clocked_empty,shared_scalar_load_only --w-sm-kib-values 64,128 --blocks-per-sm-values 16,32 --active-sm-values 108 --reuse-factors 1 --load-repeats 4,8,16 --store-repeats 1 --seconds 10.0 --repeats 5 --output results/raw/a100_component_finalplan_20260708_shared.csv --matrix-csv results/raw/a100_component_finalplan_20260708_shared_matrix.csv
 python3 scripts/run_component_regression_sweep.py --execute --binary ./build-a100/a100_fp16_energy_v2 --target-profile a100 --gpu-ids 0 --max-active-gpus 1 --modes global_addr_only,global_l1_load_only --w-sm-kib-values 16,32 --blocks-per-sm-values 16,32 --active-sm-values 108 --reuse-factors 1 --load-repeats 4,8,16 --store-repeats 1 --seconds 10.0 --repeats 5 --output results/raw/a100_component_finalplan_20260708_l1.csv --matrix-csv results/raw/a100_component_finalplan_20260708_l1_matrix.csv
-python3 scripts/run_component_regression_sweep.py --execute --binary ./build-a100/a100_fp16_energy_v2 --target-profile a100 --gpu-ids 0 --max-active-gpus 1 --modes global_addr_only,l2_cg_load_only --w-sm-kib-values 64,128 --blocks-per-sm-values 16,32 --active-sm-values 108 --reuse-factors 1 --load-repeats 4,8,16 --store-repeats 1 --seconds 10.0 --repeats 5 --output results/raw/a100_component_finalplan_20260708_l2.csv --matrix-csv results/raw/a100_component_finalplan_20260708_l2_matrix.csv
+python3 scripts/run_component_regression_sweep.py --execute --binary ./build-a100/a100_fp16_energy_v2 --target-profile a100 --gpu-ids 0 --max-active-gpus 1 --modes global_addr_only,l2_cg_load_only --w-sm-kib-values 16,32,64,128 --blocks-per-sm-values 16,32 --active-sm-values 108 --reuse-factors 1 --load-repeats 4,8,16 --store-repeats 1 --seconds 10.0 --repeats 5 --output results/raw/a100_component_finalplan_20260708_l2.csv --matrix-csv results/raw/a100_component_finalplan_20260708_l2_matrix.csv
 python3 scripts/run_component_regression_sweep.py --execute --binary ./build-a100/a100_fp16_energy_v2 --target-profile a100 --gpu-ids 0 --max-active-gpus 1 --modes global_addr_only,dram_cg_load_only --w-sm-kib-values 8192 --blocks-per-sm-values 16,32 --active-sm-values 108 --reuse-factors 1 --load-repeats 4,8,16 --store-repeats 1 --seconds 10.0 --repeats 5 --output results/raw/a100_component_finalplan_20260708_dram.csv --matrix-csv results/raw/a100_component_finalplan_20260708_dram_matrix.csv
 
 # 6. Power API audit before spending time on NCU.
-python3 scripts/audit_power_api_measurements.py results/raw/a100_component_finalplan_20260708_tensor.csv results/raw/a100_component_finalplan_20260708_shared.csv results/raw/a100_component_finalplan_20260708_l1.csv results/raw/a100_component_finalplan_20260708_l2.csv results/raw/a100_component_finalplan_20260708_dram.csv --target-profile a100 --out-csv results/summary/a100_component_finalplan_20260708_power_api_audit.csv --out-md results/summary/a100_component_finalplan_20260708_power_api_audit.md --fail-on-reject --fail-on-provisional --require-explicit-measurement-scope
+python3 scripts/audit_power_api_measurements.py results/raw/a100_component_finalplan_20260708_tensor.csv results/raw/a100_component_finalplan_20260708_shared.csv results/raw/a100_component_finalplan_20260708_l1.csv results/raw/a100_component_finalplan_20260708_l2.csv results/raw/a100_component_finalplan_20260708_dram.csv --target-profile a100 --out-csv results/summary/a100_component_finalplan_20260708_power_api_audit.csv --out-md results/summary/a100_component_finalplan_20260708_power_api_audit.md --fail-on-reject --fail-on-provisional --require-explicit-measurement-scope --require-mode-notes-marker reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1 --require-mode-notes-marker reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1 --require-mode-notes-marker l2_cg_load_only=global_warmup_policy=ld_global_cg --require-mode-notes-marker dram_cg_load_only=global_warmup_policy=ld_global_cg
 
 # 7. Power-state row-quality audit. This does not replace the power API gate.
 python3 scripts/audit_power_state_stability.py results/raw/a100_component_finalplan_20260708_tensor.csv results/raw/a100_component_finalplan_20260708_shared.csv results/raw/a100_component_finalplan_20260708_l1.csv results/raw/a100_component_finalplan_20260708_l2.csv results/raw/a100_component_finalplan_20260708_dram.csv --out-csv results/summary/a100_component_finalplan_20260708_power_state_audit.csv --out-md results/summary/a100_component_finalplan_20260708_power_state_audit.md
 
 # 8. NCU sidecar validation. These profiler runs are not energy rows.
-NCU_EXPLICIT_METRICS_ONLY=1 NCU="${NCU_COMMAND}" BIN=./build-a100/a100_fp16_energy_v2 OUTDIR=results/ncu/a100_component_finalplan_ncu_factor_20260708 RAW_OUT=results/raw/a100_component_finalplan_ncu_factor_20260708.csv TARGET_PROFILE=a100 NCU_CHIP=ga100 NCU_FILTER_UNAVAILABLE_METRICS=1 GPU=0 ACTIVE_SM=108 BLOCKS_PER_SM=16 REG_BLOCKS_PER_SM=16 REG_PRESSURE_PAYLOAD_BYTES=256 REG_W_SM_KIB=2048 L1_W_SM_KIB=16 SHARED_W_SM_KIB=128 L2_W_SM_KIB=64 DRAM_W_SM_KIB_OVERRIDE=8192 INCLUDE_L2_CAPACITY_NCU=0 INCLUDE_DIAGNOSTIC_NCU=0 REUSE_FACTOR=1 LOAD_REPEAT=1 TENSOR_REUSE_FACTORS=1,2,4,8,16 MEMORY_LOAD_REPEATS=1,2,4,8,16 DRAM_LOAD_REPEATS=1,4,8,16 bash scripts/run_ncu_validation.sh
+NCU_EXPLICIT_METRICS_ONLY=1 NCU="${NCU_COMMAND}" BIN=./build-a100/a100_fp16_energy_v2 OUTDIR=results/ncu/a100_component_finalplan_ncu_factor_20260708 RAW_OUT=results/raw/a100_component_finalplan_ncu_factor_20260708.csv TARGET_PROFILE=a100 NCU_CHIP=ga100 NCU_FILTER_UNAVAILABLE_METRICS=1 GPU=0 ACTIVE_SM=108 BLOCKS_PER_SM=16 REG_BLOCKS_PER_SM=16 REG_PRESSURE_PAYLOAD_BYTES=256 REG_W_SM_KIB=2048 L1_W_SM_KIB=16 SHARED_W_SM_KIB=128 L2_W_SM_KIB=16 L2_W_SM_KIB_VALUES=16,32,64,128 DRAM_W_SM_KIB_OVERRIDE=8192 INCLUDE_L2_CAPACITY_NCU=0 INCLUDE_DIAGNOSTIC_NCU=0 REUSE_FACTOR=1 LOAD_REPEAT=1 TENSOR_REUSE_FACTORS=1,2,4,8,16 MEMORY_LOAD_REPEATS=1,2,4,8,16 DRAM_LOAD_REPEATS=1,4,8,16 bash scripts/run_ncu_validation.sh
 
 # 9. Path acceptance.
 python3 scripts/analyze_ncu_path_acceptance.py results/ncu/a100_component_finalplan_ncu_factor_20260708/ncu_cache_validation_summary.csv --target-profile a100 --out-csv results/summary/a100_component_finalplan_20260708_ncu_acceptance.csv --out-md results/summary/a100_component_finalplan_20260708_ncu_acceptance.md --tensor-memory-bytes-max 3e8 --register-memory-bytes-max 3e8 --tensor-memory-bytes-per-hmma-max 1.0 --register-memory-bytes-per-op-max 1.0
 
 # 10. Matched-control analysis with NCU byte-denominator scaling.
-python3 scripts/analyze_matched_control_energy.py results/raw/a100_component_finalplan_20260708_tensor.csv results/raw/a100_component_finalplan_20260708_shared.csv results/raw/a100_component_finalplan_20260708_l1.csv results/raw/a100_component_finalplan_20260708_l2.csv results/raw/a100_component_finalplan_20260708_dram.csv --acceptance-csv results/summary/a100_component_finalplan_20260708_ncu_acceptance.csv --ncu-summary-csv results/ncu/a100_component_finalplan_ncu_factor_20260708/ncu_cache_validation_summary.csv --power-state-audit-csv results/summary/a100_component_finalplan_20260708_power_state_audit.csv --exclude-power-state-rejects --require-ncu-denominator --require-total-energy --expected-power-semantics instant --min-elapsed-s 8.0 --max-elapsed-ratio 1.35 --pairing nearest-control --min-delta-j 10.0 --min-delta-fraction 0.005 --out-summary-csv results/summary/a100_component_finalplan_20260708_matched_control_summary.csv --out-detail-csv results/summary/a100_component_finalplan_20260708_matched_control_detail.csv --out-md results/summary/a100_component_finalplan_20260708_matched_control_report.md
+python3 scripts/analyze_matched_control_energy.py results/raw/a100_component_finalplan_20260708_tensor.csv results/raw/a100_component_finalplan_20260708_shared.csv results/raw/a100_component_finalplan_20260708_l1.csv results/raw/a100_component_finalplan_20260708_l2.csv results/raw/a100_component_finalplan_20260708_dram.csv --acceptance-csv results/summary/a100_component_finalplan_20260708_ncu_acceptance.csv --ncu-summary-csv results/ncu/a100_component_finalplan_ncu_factor_20260708/ncu_cache_validation_summary.csv --power-state-audit-csv results/summary/a100_component_finalplan_20260708_power_state_audit.csv --exclude-power-state-rejects --require-ncu-denominator --require-total-energy --expected-power-semantics instant --min-elapsed-s 8.0 --tensor-control-min-elapsed-s 0.8 --max-elapsed-ratio 1.35 --pairing nearest-control --tensor-pair-policy matched-iters --min-delta-j 10.0 --min-delta-fraction 0.005 --out-summary-csv results/summary/a100_component_finalplan_20260708_matched_control_summary.csv --out-detail-csv results/summary/a100_component_finalplan_20260708_matched_control_detail.csv --out-md results/summary/a100_component_finalplan_20260708_matched_control_report.md
 
 # 11. Component reliability audit.
 set +e
@@ -125,7 +134,7 @@ set -e
 
 # 14. Audit strict component summary against reliability/detail artifacts.
 set +e
-python3 scripts/audit_strict_component_summary.py --summary-csv results/summary/a100_strict_scope_fresh_ncu_component_coefficients_20260708.csv --expected-power-semantics instant --out-csv results/summary/a100_strict_scope_fresh_ncu_component_summary_audit_20260708.csv --out-md results/summary/a100_strict_scope_fresh_ncu_component_summary_audit_20260708.md --fail-on-fail
+python3 scripts/audit_strict_component_summary.py --summary-csv results/summary/a100_strict_scope_fresh_ncu_component_coefficients_20260708.csv --expected-power-semantics instant --out-csv results/summary/a100_strict_scope_fresh_ncu_component_summary_audit_20260708.csv --out-md results/summary/a100_strict_scope_fresh_ncu_component_summary_audit_20260708.md --require-path-specific-cache-evidence --fail-on-fail
 STRICT_AUDIT_RC=$?
 set -e
 

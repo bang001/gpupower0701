@@ -54,6 +54,7 @@ struct Options {
   std::filesystem::path output = "results/raw/a100_fp16_energy_v2_raw.csv";
   bool verify_smid = true;
   bool dry_run = false;
+  bool calibrate_only = false;
 };
 
 struct DeviceState {
@@ -126,6 +127,7 @@ void print_usage(const char* argv0) {
       << "  --repeats <int>              default 5\n"
       << "  --output <csv>               default results/raw/a100_fp16_energy_v2_raw.csv\n"
       << "  --verify-smid 0|1            default 1\n"
+      << "  --calibrate-only             print treatment-calibrated ITER and exit\n"
       << "  --dry-run                    print feasibility and exit\n";
 }
 
@@ -183,6 +185,8 @@ Options parse_args(int argc, char** argv) {
       opts.output = need_value(arg);
     } else if (arg == "--verify-smid") {
       opts.verify_smid = std::stoi(need_value(arg)) != 0;
+    } else if (arg == "--calibrate-only") {
+      opts.calibrate_only = true;
     } else if (arg == "--dry-run") {
       opts.dry_run = true;
     } else {
@@ -307,11 +311,20 @@ bool has_operand_loads(Mode mode) {
 
 bool has_final_matrix_store(Mode mode) {
   return mode == Mode::reg_fragment_only || mode == Mode::reg_operand_only ||
-         mode == Mode::reg_mma || mode == Mode::global_l1_load_only ||
+         mode == Mode::reg_mma ||
          mode == Mode::shared_load_only ||
          mode == Mode::shared_mma || mode == Mode::l2_load_only ||
          mode == Mode::l2_mma || mode == Mode::dram_load_only ||
          mode == Mode::dram_mma;
+}
+
+bool has_single_scalar_store(Mode mode) {
+  return mode == Mode::empty || mode == Mode::clocked_empty ||
+         mode == Mode::reg_pressure ||
+         mode == Mode::addr_only || mode == Mode::global_addr_only ||
+         mode == Mode::global_l1_load_only ||
+         mode == Mode::shared_scalar_load_only ||
+         mode == Mode::l2_cg_load_only || mode == Mode::dram_cg_load_only;
 }
 
 bool is_store_loop_mode(Mode mode) {
@@ -555,10 +568,12 @@ void reset_smid_buffers(const Options& opts, DeviceState& state) {
 void warmup_global_inputs(const Options& opts,
                           std::vector<DeviceState>& states) {
   if (!is_global_operand_mode(opts.mode)) return;
+  const bool cache_global_only =
+      opts.mode == Mode::l2_cg_load_only || opts.mode == Mode::dram_cg_load_only;
   for (auto& state : states) {
     CUDA_CHECK(cudaSetDevice(state.gpu_id));
     CUDA_CHECK(launch_global_warmup(state.input, state.input_half_count,
-                                    state.output, state.stream));
+                                    state.output, cache_global_only, state.stream));
   }
   for (auto& state : states) {
     CUDA_CHECK(cudaSetDevice(state.gpu_id));
@@ -800,19 +815,17 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
     } else if (is_dram_operand_mode(opts.mode)) {
       row.expected_dram_bytes = expected_operand_bytes;
     }
-  if (is_address_control_mode(opts.mode)) {
-    row.expected_addr_ops = active_blocks * iters * opts.load_repeat;
-  }
+    if (is_address_control_mode(opts.mode)) {
+      row.expected_addr_ops = active_blocks * iters * opts.load_repeat;
+    }
 
     if (has_final_matrix_store(opts.mode)) {
       row.expected_store_bytes = active_blocks * 256ull * sizeof(float);
     } else if (is_store_loop_mode(opts.mode)) {
       row.expected_store_bytes =
-          active_blocks * iters * opts.store_repeat * sizeof(float);
-    } else if (opts.mode == Mode::empty || opts.mode == Mode::clocked_empty ||
-               opts.mode == Mode::addr_only ||
-               opts.mode == Mode::global_addr_only ||
-               opts.mode == Mode::shared_scalar_load_only) {
+          active_blocks * iters * opts.store_repeat *
+          static_cast<std::uint64_t>(kThreadsPerBlock) * sizeof(float);
+    } else if (has_single_scalar_store(opts.mode)) {
       row.expected_store_bytes = active_blocks * sizeof(float);
     }
   }
@@ -928,6 +941,11 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
 
     const std::uint64_t iters = calibrate_iters(opts, f, states);
     std::cerr << "ITER=" << iters << "\n";
+    if (opts.calibrate_only) {
+      std::cout << "CALIBRATED_ITERS=" << iters << "\n";
+      cleanup_all(states);
+      return 0;
+    }
 
     double idle_elapsed = 0.0;
     const auto idle_baseline = measure_idle_baseline(nvml, opts.seconds,
@@ -971,6 +989,18 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
             extra += state_it->notes;
             actual_sm_count = state_it->actual_sm;
           }
+        }
+        if (is_global_operand_mode(opts.mode)) {
+          const bool cache_global_only =
+              opts.mode == Mode::l2_cg_load_only ||
+              opts.mode == Mode::dram_cg_load_only;
+          extra += cache_global_only
+                       ? "global_warmup_policy=ld_global_cg;"
+                       : "global_warmup_policy=default_cached;";
+        }
+        if (is_register_operand_mode(opts.mode)) {
+          extra +=
+              "tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1;";
         }
         ResultRow row =
             make_row(opts, f, run_id, gpu, static_cast<int>(opts.gpu_list.size()),

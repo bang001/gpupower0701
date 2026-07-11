@@ -65,7 +65,7 @@ HARD_PLAUSIBILITY_RANGES = {
     "L2 CG hit path": (0.01, 30.0, "pJ/bit"),
 }
 
-NCU_SUMMARY_REQUIRED_COLUMNS = {
+NCU_SUMMARY_BASE_REQUIRED_COLUMNS = {
     "mode",
     "status",
     "W_SM_KiB",
@@ -85,6 +85,21 @@ NCU_SUMMARY_REQUIRED_COLUMNS = {
     "tensor_hmma_inst",
     "stall_long_scoreboard_pct",
 }
+
+NCU_SUMMARY_PATH_REQUIRED_COLUMNS = {
+    "l1_path_hit_rate_pct",
+    "l2_path_hit_rate_pct",
+    "l1_request_bytes",
+    "l1_hit_bytes",
+    "l1_miss_bytes",
+    "l2_read_bytes",
+    "l2_read_hit_sectors",
+    "l2_read_miss_sectors",
+}
+
+NCU_SUMMARY_REQUIRED_COLUMNS = (
+    NCU_SUMMARY_BASE_REQUIRED_COLUMNS | NCU_SUMMARY_PATH_REQUIRED_COLUMNS
+)
 
 NCU_SUMMARY_REQUIRED_MODES = {
     "Tensor MMA incremental": {"reg_mma", "reg_operand_only"},
@@ -116,7 +131,7 @@ NCU_METRIC_MODES = {
     "L2 CG hit path": {"l2_cg_load_only"},
 }
 
-STRICT_SUMMARY_NCU_EVIDENCE_COLUMNS = {
+STRICT_SUMMARY_BASE_NCU_EVIDENCE_COLUMNS = {
     "ncu_coordinate_rows",
     "ncu_metric_rows",
     "ncu_evidence_modes",
@@ -142,7 +157,26 @@ STRICT_SUMMARY_NCU_EVIDENCE_COLUMNS = {
     "ncu_stall_long_scoreboard_pct_min_med_max",
 }
 
-REQUIRED_SUMMARY_METRICS = {
+STRICT_SUMMARY_PATH_NCU_EVIDENCE_COLUMNS = {
+    "ncu_l1_path_hit_rate_pct_min_med_max",
+    "ncu_l2_path_hit_rate_pct_min_med_max",
+    "ncu_l1_request_bytes_min_med_max",
+    "ncu_l1_hit_bytes_min_med_max",
+    "ncu_l1_miss_bytes_min_med_max",
+    "ncu_l2_read_bytes_min_med_max",
+    "ncu_l2_read_hit_sectors_min_med_max",
+    "ncu_l2_read_miss_sectors_min_med_max",
+    "ncu_local_read_bytes_min_med_max",
+    "ncu_local_write_bytes_min_med_max",
+    "ncu_spill_zero_verified_min_med_max",
+}
+
+STRICT_SUMMARY_NCU_EVIDENCE_COLUMNS = (
+    STRICT_SUMMARY_BASE_NCU_EVIDENCE_COLUMNS
+    | STRICT_SUMMARY_PATH_NCU_EVIDENCE_COLUMNS
+)
+
+BASE_REQUIRED_SUMMARY_METRICS = {
     "Tensor MMA incremental": ["ncu_tensor_hmma_inst_min_med_max"],
     "Shared scalar path": ["ncu_shared_bytes_min_med_max"],
     "Global L1 hit path": [
@@ -152,6 +186,28 @@ REQUIRED_SUMMARY_METRICS = {
     "L2 CG hit path": [
         "ncu_l2_hit_rate_pct_min_med_max",
         "ncu_l2_bytes_min_med_max",
+    ],
+}
+
+PATH_REQUIRED_SUMMARY_METRICS = {
+    "Tensor MMA incremental": [
+        "ncu_tensor_hmma_inst_min_med_max",
+        "ncu_spill_zero_verified_min_med_max",
+    ],
+    "Shared scalar path": ["ncu_shared_bytes_min_med_max"],
+    "Global L1 hit path": [
+        "ncu_l1_path_hit_rate_pct_min_med_max",
+        "ncu_l1_request_bytes_min_med_max",
+        "ncu_l1_hit_bytes_min_med_max",
+    ],
+    "L2 CG hit path": [
+        "ncu_l1_path_hit_rate_pct_min_med_max",
+        "ncu_l1_request_bytes_min_med_max",
+        "ncu_l1_hit_bytes_min_med_max",
+        "ncu_l2_path_hit_rate_pct_min_med_max",
+        "ncu_l2_read_bytes_min_med_max",
+        "ncu_l2_read_hit_sectors_min_med_max",
+        "ncu_l2_read_miss_sectors_min_med_max",
     ],
 }
 
@@ -399,8 +455,16 @@ def check_basic_row(
         )
 
 
-def check_ncu_summary_artifact(checks: list[dict[str, str]], row: dict[str, str]) -> None:
+def check_ncu_summary_artifact(
+    checks: list[dict[str, str]],
+    row: dict[str, str],
+    *,
+    require_path_specific_cache_evidence: bool,
+) -> None:
     component = row.get("component", "")
+    required_columns = set(NCU_SUMMARY_BASE_REQUIRED_COLUMNS)
+    if require_path_specific_cache_evidence:
+        required_columns.update(NCU_SUMMARY_PATH_REQUIRED_COLUMNS)
     paths = split_artifact_paths(row.get("ncu_summary_artifact", ""))
     if not paths:
         add_check(
@@ -428,7 +492,7 @@ def check_ncu_summary_artifact(checks: list[dict[str, str]], row: dict[str, str]
         with Path(path).open(newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             fieldnames = set(reader.fieldnames or [])
-            missing_columns = sorted(NCU_SUMMARY_REQUIRED_COLUMNS - fieldnames)
+            missing_columns = sorted(required_columns - fieldnames)
             if missing_columns:
                 problems.append(f"{path}:missing_columns=" + ",".join(missing_columns))
                 continue
@@ -438,7 +502,7 @@ def check_ncu_summary_artifact(checks: list[dict[str, str]], row: dict[str, str]
                     continue
                 mode = ncu_row.get("mode", "")
                 modes_seen.add(mode)
-                for column in NCU_SUMMARY_REQUIRED_COLUMNS - {"mode", "status"}:
+                for column in required_columns - {"mode", "status"}:
                     value = as_float(ncu_row, column)
                     if not math.isfinite(value) or value < 0.0:
                         problems.append(f"{path}:{mode}:{column}={ncu_row.get(column, '')}")
@@ -571,11 +635,21 @@ def check_ncu_summary_coordinate_alignment(
     )
 
 
-def check_ncu_evidence_summary_fields(checks: list[dict[str, str]], row: dict[str, str]) -> None:
+def check_ncu_evidence_summary_fields(
+    checks: list[dict[str, str]],
+    row: dict[str, str],
+    *,
+    require_path_specific_cache_evidence: bool,
+) -> None:
     component = row.get("component", "")
     spec = EXPECTED_COMPONENTS.get(component, {})
+    required_columns = set(STRICT_SUMMARY_BASE_NCU_EVIDENCE_COLUMNS)
+    required_metrics = BASE_REQUIRED_SUMMARY_METRICS.get(component, [])
+    if require_path_specific_cache_evidence:
+        required_columns.update(STRICT_SUMMARY_PATH_NCU_EVIDENCE_COLUMNS)
+        required_metrics = PATH_REQUIRED_SUMMARY_METRICS.get(component, [])
     missing_columns = sorted(
-        column for column in STRICT_SUMMARY_NCU_EVIDENCE_COLUMNS if column not in row
+        column for column in required_columns if column not in row
     )
     problems: list[str] = []
     if missing_columns:
@@ -608,7 +682,6 @@ def check_ncu_evidence_summary_fields(checks: list[dict[str, str]], row: dict[st
         if missing_metric_modes:
             problems.append("missing_metric_modes=" + ",".join(missing_metric_modes))
 
-        required_metrics = REQUIRED_SUMMARY_METRICS.get(component, [])
         blank_metrics = [column for column in required_metrics if not row.get(column, "").strip()]
         if blank_metrics:
             problems.append("blank_metrics=" + ",".join(blank_metrics))
@@ -1122,6 +1195,7 @@ def audit(
     *,
     expected_power_semantics: str,
     min_valid_rows: int,
+    require_path_specific_cache_evidence: bool,
 ) -> list[dict[str, str]]:
     if not Path(summary_csv).exists():
         return [
@@ -1185,9 +1259,17 @@ def audit(
             row,
             expected_power_semantics=expected_power_semantics,
         )
-        check_ncu_summary_artifact(checks, row)
+        check_ncu_summary_artifact(
+            checks,
+            row,
+            require_path_specific_cache_evidence=require_path_specific_cache_evidence,
+        )
         check_ncu_summary_coordinate_alignment(checks, row)
-        check_ncu_evidence_summary_fields(checks, row)
+        check_ncu_evidence_summary_fields(
+            checks,
+            row,
+            require_path_specific_cache_evidence=require_path_specific_cache_evidence,
+        )
 
     unexpected = sorted(set(rows_by_component) - set(EXPECTED_COMPONENTS))
     for component in unexpected:
@@ -1314,6 +1396,7 @@ def run_self_test() -> None:
         detail = root / "matched_control_detail.csv"
         ncu_good = root / "ncu_good.csv"
         ncu_bad = root / "ncu_bad.csv"
+        ncu_legacy = root / "ncu_legacy.csv"
         detail_fields = [
             "component",
             "valid_component_estimate",
@@ -1357,6 +1440,23 @@ def run_self_test() -> None:
                 make_ncu_selftest_row(mode="reg_operand_only", blocks_per_sm="4"),
             ],
         )
+        legacy_fields = sorted(NCU_SUMMARY_BASE_REQUIRED_COLUMNS)
+        write_selftest_csv(
+            ncu_legacy,
+            legacy_fields,
+            [
+                {
+                    key: value
+                    for key, value in make_ncu_selftest_row(mode="reg_mma").items()
+                    if key in NCU_SUMMARY_BASE_REQUIRED_COLUMNS
+                },
+                {
+                    key: value
+                    for key, value in make_ncu_selftest_row(mode="reg_operand_only").items()
+                    if key in NCU_SUMMARY_BASE_REQUIRED_COLUMNS
+                },
+            ],
+        )
         row = {
             "component": "Tensor MMA incremental",
             "component_key": "tensor_mma_increment",
@@ -1380,6 +1480,67 @@ def run_self_test() -> None:
             raise AssertionError(f"expected coordinate fail, got {bad_checks}")
         if "missing=" not in bad_checks[0]["actual"]:
             raise AssertionError("expected missing strict coordinate evidence in failure output")
+
+        legacy_schema_checks: list[dict[str, str]] = []
+        check_ncu_summary_artifact(
+            legacy_schema_checks,
+            {**row, "ncu_summary_artifact": str(ncu_legacy)},
+            require_path_specific_cache_evidence=False,
+        )
+        if legacy_schema_checks[-1]["status"] != "pass":
+            raise AssertionError(
+                f"expected historical aggregate schema pass, got {legacy_schema_checks}"
+            )
+        strict_schema_checks: list[dict[str, str]] = []
+        check_ncu_summary_artifact(
+            strict_schema_checks,
+            {**row, "ncu_summary_artifact": str(ncu_legacy)},
+            require_path_specific_cache_evidence=True,
+        )
+        if strict_schema_checks[-1]["status"] != "fail":
+            raise AssertionError(
+                f"expected path-specific schema failure, got {strict_schema_checks}"
+            )
+
+        evidence_row = {
+            column: "1" for column in STRICT_SUMMARY_NCU_EVIDENCE_COLUMNS
+        }
+        evidence_row.update(
+            {
+                "component": "Tensor MMA incremental",
+                "ncu_coordinate_rows": "1",
+                "ncu_metric_rows": "1",
+                "ncu_evidence_modes": "reg_mma,reg_operand_only",
+                "ncu_metric_modes": "reg_mma",
+                "ncu_path_evidence": "selftest",
+                "ncu_counter_caveat": "selftest",
+            }
+        )
+        legacy_evidence_row = {
+            key: value
+            for key, value in evidence_row.items()
+            if key not in STRICT_SUMMARY_PATH_NCU_EVIDENCE_COLUMNS
+        }
+        legacy_evidence_checks: list[dict[str, str]] = []
+        check_ncu_evidence_summary_fields(
+            legacy_evidence_checks,
+            legacy_evidence_row,
+            require_path_specific_cache_evidence=False,
+        )
+        if legacy_evidence_checks[-1]["status"] != "pass":
+            raise AssertionError(
+                f"expected historical aggregate evidence pass, got {legacy_evidence_checks}"
+            )
+        strict_evidence_checks: list[dict[str, str]] = []
+        check_ncu_evidence_summary_fields(
+            strict_evidence_checks,
+            legacy_evidence_row,
+            require_path_specific_cache_evidence=True,
+        )
+        if strict_evidence_checks[-1]["status"] != "fail":
+            raise AssertionError(
+                f"expected path-specific evidence failure, got {strict_evidence_checks}"
+            )
     print("strict component summary audit self-test passed")
 
 
@@ -1398,6 +1559,15 @@ def main() -> int:
         default="one_sec_average",
     )
     parser.add_argument("--min-valid-rows", type=int, default=6)
+    parser.add_argument(
+        "--require-path-specific-cache-evidence",
+        action="store_true",
+        help=(
+            "Require L1 request/hit/miss and L2 read hit/miss counters in the "
+            "NCU artifact and strict summary. Generated A100/V100/H100 packages "
+            "must enable this; omission is retained only for historical summaries."
+        ),
+    )
     parser.add_argument("--out-csv")
     parser.add_argument("--out-md")
     parser.add_argument("--fail-on-fail", action="store_true")
@@ -1414,6 +1584,7 @@ def main() -> int:
         args.summary_csv,
         expected_power_semantics=args.expected_power_semantics,
         min_valid_rows=args.min_valid_rows,
+        require_path_specific_cache_evidence=args.require_path_specific_cache_evidence,
     )
     write_csv(args.out_csv, rows)
     write_md(args.out_md, rows, summary_csv=args.summary_csv)

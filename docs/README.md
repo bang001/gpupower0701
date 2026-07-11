@@ -20,7 +20,8 @@
 | 플랫폼 결과 intake dashboard | `results/summary/platform_component_intake_dashboard_20260708.md` |
 | A100/V100/H100 command package | `results/summary/a100_component_finalplan_20260708_command_plan.md`, `results/summary/v100_component_finalplan_20260708_command_plan.md`, `results/summary/h100_component_finalplan_20260708_command_plan.md` |
 | active/archive 경계 확인 | `docs/audits/repository_active_archive_audit_ko.md` |
-| A100 strict summary 및 L1 W16/B32 중단 리메디에이션 | `docs/audits/a100_strict_summary_failure_remediation_ko.md` |
+| A100 Tensor RF 음수, L2 counter 의미, L1 W16/B32 중단 리메디에이션 | `docs/audits/a100_strict_summary_failure_remediation_ko.md` |
+| A100 Tensor/L2 targeted 재실행 계획 | `results/summary/a100_tensor_l2_remediation_20260710_command_plan.md`, `results/summary/a100_tensor_l2_remediation_20260710_commands.sh` |
 | V100 32GB 구조/좌표 재검토 | `docs/audits/v100_32gb_platform_review_ko.md` |
 
 ## 실험 설정/방법 문서 위치
@@ -83,7 +84,7 @@
 | platforms | `docs/platforms/prompts/v100_experiment_prompt_ko.md` | 2026-07-07, updated 2026-07-10 | V100 작업 전달용 프롬프트와 CUDA/NCU 독립 gate |
 | audits | `docs/audits/component_energy_self_critique_ko.md` | 2026-07-06, updated 2026-07-08 | 잘못된 설계/해석과 수정 내역 |
 | audits | `docs/audits/literature_energy_values_audit_ko.md` | 2026-07-03 | 문헌 pJ/bit 값과 본 실험값의 해석 레벨 비교 |
-| audits | `docs/audits/a100_strict_summary_failure_remediation_ko.md` | 2026-07-10 | A100 strict summary 실패 원인, Global L1 coordinate filter, 재실행 조건 |
+| audits | `docs/audits/a100_strict_summary_failure_remediation_ko.md` | 2026-07-10 | A100 Tensor 동일 ITER pair-lock, path-specific L2 counter, Global L1 coordinate filter, 재실행 조건 |
 | audits | `docs/audits/v100_32gb_platform_review_ko.md` | 2026-07-10 | V100 32GB capacity, blocks sweep, strict NCU W/B 좌표 검토 |
 | audits | `docs/audits/repository_active_archive_audit_ko.md` | 2026-07-08 | active/archive 분리 근거 |
 | design | `docs/design/a100_fp16_energy_experiment_design_v2.md` | 2026-07-01 계열 | 초기 FP16 WMMA v2 상세설계 reference |

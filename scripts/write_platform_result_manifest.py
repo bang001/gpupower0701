@@ -39,6 +39,11 @@ ARTIFACT_PURPOSES = {
         "contains explicit total-energy rows, profile metadata, active SM, W_SM, blocks/SM",
         "raw_energy_profile_and_power",
     ),
+    "tensor_pair_calibration": (
+        "Tensor pair calibration manifest",
+        "proves reg_mma-calibrated ITER was applied identically to treatment and control",
+        "tensor_pair_calibration_policy",
+    ),
     "power_api": (
         "power API audit",
         "proves final rows use nvml_total_energy + total_energy_mj_delta + GPU/device scope",
@@ -204,8 +209,8 @@ def self_test(module: Any) -> None:
             raise AssertionError(
                 f"{profile}: manifest mismatch missing={missing} extra={extra}"
             )
-        if len(rows) != 18:
-            raise AssertionError(f"{profile}: expected 18 artifact rows, got {len(rows)}")
+        if len(rows) != 19:
+            raise AssertionError(f"{profile}: expected 19 artifact rows, got {len(rows)}")
         required_groups = {
             "raw energy CSVs",
             "power API audit",

@@ -1,6 +1,6 @@
 # A100 노드 실험 실행 가이드
 
-작성일: 2026-07-08
+작성일: 2026-07-08, updated 2026-07-11
 
 ## 목적
 
@@ -233,7 +233,9 @@ python3 scripts/audit_power_api_measurements.py \
   --out-md results/summary/a100_smoke_power_api_audit.md \
   --fail-on-reject \
   --fail-on-provisional \
-  --require-explicit-measurement-scope
+  --require-explicit-measurement-scope \
+  --require-mode-notes-marker \
+  reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1
 ```
 
 이 단계에서 모든 row가 `missing_column:measurement_scope` 또는
@@ -451,7 +453,7 @@ python3 scripts/plot_results.py \
 | 단계 | script | 목적 |
 |---|---|---|
 | command plan | `scripts/plan_platform_component_experiment.py` | A100용 표준 energy/NCU/analyze 명령 생성 |
-| energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 duration-calibrated energy row 수집 |
+| energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 memory mode는 duration-calibrated, Tensor pair는 treatment/control-floor dual calibration의 최대 ITER를 두 mode에 동일 적용해 energy row 수집 |
 | NCU sidecar | `scripts/run_ncu_validation.sh` | path hit/access/stall/spill 검증 |
 | path acceptance | `scripts/analyze_ncu_path_acceptance.py` | accepted component 후보만 선별 |
 | matched-control | `scripts/analyze_matched_control_energy.py` | NCU actual-byte denominator로 pJ/bit 계산 |
@@ -476,29 +478,77 @@ bash results/summary/a100_component_finalplan_$(date +%Y%m%d)_commands.sh
 
 A100 추천 finalplan 좌표:
 
+기존 실행에서 Tensor RF4 이상 음수/weak 또는 L2 CG path reject를 재현한 경우에는 full
+package를 반복하기 전에 다음 targeted remediation package를 실행한다.
+
+```bash
+NCU_USE_SUDO=1 bash results/summary/a100_tensor_l2_remediation_20260710_commands.sh
+```
+
+실행 조건과 pass 기준은
+[`a100_tensor_l2_remediation_20260710_command_plan.md`](../../results/summary/a100_tensor_l2_remediation_20260710_command_plan.md)에 정리되어 있다.
+전용 audit가 pass한 뒤에만 표준 finalplan을 다시 실행해 Shared/L1/DRAM과 합친다.
+
+RTX 3090/A100/V100의 전체 파라미터와 command 개수 비교는
+[cross-platform component experiment guide](cross_platform_component_experiment_guide_ko.md)의
+4.0-4.5절을 기준으로 한다. 현재 A100 표준 package는 유효 좌표 116개/1 repeat,
+`repeats=5` 적용 후 energy raw 580행, Tensor pair calibration 10 coordinates/20 commands, schema/revision smoke 3행,
+primary NCU 74 cases다.
+
 | Component | modes | W_SM (KiB) | blocks/SM | factor |
 |---|---|---:|---:|---|
 | Tensor | `reg_operand_only,reg_mma` | 2048 | 16,32 | reuse 1,2,4,8,16 |
 | Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
 | Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | valid W/B: 16/16, 32/16, 32/32 | energy load_repeat 4,8,16; strict NCU W16/B16, NCU factor 1,2,4,8,16 |
-| L2 CG | `global_addr_only,l2_cg_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| L2 CG | `global_addr_only,l2_cg_load_only` | 16,32,64,128 | valid W/B: 16/16, 32/16,32, 64/16,32, 128/16,32 | energy load_repeat 4,8,16; NCU는 네 W 모두에서 1,2,4,8,16 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 16,32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
-`W16/B32`는 block당 0.5 KiB이므로 `global_addr_only`와
-`global_l1_load_only` 모두 matrix에서 `valid=false`로 남기고 실행하지 않는다. B32 L1
-diagnostic은 W32/B32에서만 수행한다. 표준 runner는 energy 수집 전에 unique valid 좌표를
+Tensor는 각 `W/B/SM/RF` 좌표에서 `reg_mma`를 treatment 목표시간으로,
+`reg_operand_only`를 control 최소시간으로 각각 calibration하고 두 ITER 중 큰 값을
+두 mode에 똑같이 전달한다. 표준 10 s package의 control floor는 1 s이고, A100 targeted
+20 s package는 2 s다. 생성되는 `*_tensor_pair_calibration.csv`에는 두 candidate ITER,
+선택 정책, calibration command와 resolved ITER가 남는다.
+분석은 `--tensor-pair-policy matched-iters`를 사용해 elapsed-time power scaling 없이
+`net_E(reg_mma) - net_E(reg_operand_only)`를 직접 계산한다. 두 ITER가 다르거나 calibration
+manifest가 없는 새 package는 final Tensor evidence로 채택하지 않는다.
+두 kernel은 RF당 dependent register integer add 1개를 공통으로 실행한다.
+control의 기존 FP32 FMA/checksum/memory는 제거되었고, 공통 add는 direct
+energy 차분에서 상쇄된다.
+두 mode 모두 WMMA store를 쓰지 않고 per-thread 8개 scalar store로 같은 1,024
+bytes/block 주소 패턴을 사용한다. treatment는 accumulator fragment를 저장해 HMMA를
+보존하고 control은 sink 값을 저장하므로 control HMMA 오염을 피한다.
+raw Tensor row의 `notes`에는
+`tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1`이 있어야 한다.
+같은 ITER의 no-MMA control은 treatment보다 훨씬 빨리 끝나므로 dual calibration으로
+control duration floor를 먼저 보장한다. 표준 package analyzer는 calibration floor의 80%
+(1 s floor이면 0.8 s), targeted package는 2 s floor의 80%인 1.6 s를 요구한다. Control
+`net_E_J <= 0`이면 duration을 만족해도 energy counter/noise floor에서 식별되지 않은 것으로
+보고 reject한다.
+
+`W16/B32`는 block당 0.5 KiB이므로 Global L1과 L2 CG의
+`global_addr_only`/treatment 모두 matrix에서 `valid=false`로 남기고 실행하지 않는다.
+B32 L1 diagnostic은 W32/B32에서만 수행한다. 표준 runner는 energy 수집 전에 unique valid 좌표를
 binary `--dry-run`으로 다시 검사하므로 Python/C++ feasibility가 어긋나면 첫 측정 전에
 명확한 좌표와 return code를 출력하고 중단한다.
 
-A100의 L2는 40 MiB이므로 `W_SM=256 KiB`와 active SM 108개는 전체 27 MiB로 L2 경계에 너무 가깝다. 이 설정은 L2 set/conflict와 background traffic에 따라 hit rate가 흔들릴 수 있다. strict L2 path는 먼저 `W_SM=64 KiB`(전체 6.75 MiB)에서 `ld.global.cg`를 사용해 global L1을 우회하고, NCU에서 L2 hit plateau를 확인한다. `l2_load_only`는 normal global load라 L1 hit와 섞일 수 있으므로 final L2 coefficient에는 사용하지 않는다.
+A100의 L2는 40 MiB이므로 `W_SM=256 KiB`와 active SM 108개는 전체 27 MiB로 L2 경계에 너무 가깝다. 이 설정은 L2 set/conflict와 background traffic에 따라 hit rate가 흔들릴 수 있다. strict L2 path는 `W_SM=16,32,64,128 KiB`(전체 약 1.688, 3.375, 6.75, 13.5 MiB)를 모두 `ld.global.cg`로 실행하고, path-specific NCU counter에서 L1 hit가 거의 없으면서 L2 read hit가 95% 이상인 plateau만 선택한다. 시간 측정 전 warm-up도 `global_cg_warmup_kernel`의 `ld.global.cg.u32`로 수행해 normal-load warm-up이 L1을 먼저 채우는 경로를 제거한다. `l2_load_only`는 normal global load라 L1 hit와 섞일 수 있으므로 final L2 coefficient에는 사용하지 않는다.
+
+CG raw row의 `notes`에는 `global_warmup_policy=ld_global_cg`가 있어야 하며,
+없으면 stale binary로 보고 package audit에서 reject한다.
 
 | NCU 기준 | 통과 조건 |
 |---|---:|
-| Global L1 | L1 hit >= 95%, L1 access/bytes 존재, L2/L1 bytes <= 1% |
-| L2 CG | L2 hit >= 95%, L2 access/bytes 존재, L1 bytes/L2 bytes <= 1%, DRAM/L2 bytes <= 2% |
+| Global L1 | path-specific L1 hit >= 95%, L1 request bytes 존재, L2/L1 request bytes <= 1% |
+| L2 CG | path-specific L2 read hit >= 95%, L2 read bytes 존재, L1 path hit <= 1%, L1 hit/L1 request bytes <= 1%, DRAM/L2 read bytes <= 2% |
 | Shared scalar | shared access/bytes 존재, bank conflict 0 또는 매우 낮음 |
-| Tensor | treatment HMMA > 0, spill/local 0; control HMMA는 0이 원칙이며 legacy build의 block당 고정 1개 epilogue는 `HMMA / expected_reg_operand_ops <= 1e-5`일 때만 제한적으로 허용 |
+| Tensor | treatment HMMA > 0, control HMMA=0, spill/local 0, treatment-control ITER 동일. legacy epilogue 완화는 과거 결과 설명용이며 새 final run에는 사용하지 않음 |
 
-`global_addr_only`는 `global_l1_load_only`, `l2_cg_load_only`, `dram_cg_load_only`와 동일한 block/tile/index/repeat loop를 실행하지만 global input load는 수행하지 않는다. 따라서 memory pair의 차분은 단순 `clocked_empty` 대비보다 주소 계산과 loop 비용을 더 잘 제거한다. NCU sidecar에서는 global-load L1 byte가 0인지 확인한다. `--verify-smid=1` atomic bookkeeping 때문에 L2 sector가 소량 보일 수 있으므로 L2 sector 0을 요구하지 않는다.
+`global_addr_only`는 `global_l1_load_only`, `l2_cg_load_only`, `dram_cg_load_only`와 동일한 block/tile/index/repeat loop를 실행하지만 global input load는 수행하지 않는다. 따라서 memory pair의 차분은 단순 `clocked_empty` 대비보다 주소 계산과 loop 비용을 더 잘 제거한다. NCU sidecar에서는 global-load L1 request byte가 0인지 확인한다. `--verify-smid=1` atomic bookkeeping 때문에 L2 sector가 소량 보일 수 있으므로 L2 sector 0을 요구하지 않는다.
+
+`l2_cg_load_only`에서는 반대로 L1 request byte가 존재해야 한다. `.cg` global load도 요청은
+L1TEX를 통과하므로 `L1 request bytes / L2 read bytes`가 약 1인 것은 L1 cache hit 증거가
+아니다. 이 경로는 path-specific `L1 hit bytes/request bytes <=1%`와
+`L2 read hit >=95%`로 판정한다. aggregate L1/L2 hit rate는 함께 표기하되 hard gate로
+사용하지 않는다.
 
 보고서에는 `board-level effective coefficient`, `not pure physical component energy`를 명시한다. A100의 HBM2 물리 pJ/bit 문헌값과 본 실험의 DRAM streaming pJ/bit는 같은 의미가 아니다.

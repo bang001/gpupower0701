@@ -70,13 +70,22 @@ def audit_row(
     row_index: int,
     target_profile: str,
     require_explicit_measurement_scope: bool,
+    required_mode_notes_markers: dict[str, str] | None = None,
 ) -> dict[str, str]:
+    marker_rules = required_mode_notes_markers or {}
     required_columns = set(REQUIRED_COLUMNS)
     if require_explicit_measurement_scope:
         required_columns.add("measurement_scope")
+    if marker_rules:
+        required_columns.update({"mode", "notes"})
     missing = sorted(col for col in required_columns if col not in row)
     reasons: list[str] = [f"missing_column:{col}" for col in missing]
     notes: list[str] = []
+
+    mode = row.get("mode", "")
+    required_marker = marker_rules.get(mode, "")
+    if required_marker and required_marker not in row.get("notes", ""):
+        reasons.append(f"missing_mode_notes_marker:{mode}:{required_marker}")
 
     expected, expected_profile = expected_semantics(row, target_profile)
     actual_semantics = row.get("nvml_power_usage_semantics", "")
@@ -173,6 +182,7 @@ def read_rows(
     target_profile: str,
     *,
     require_explicit_measurement_scope: bool,
+    required_mode_notes_markers: dict[str, str] | None = None,
 ) -> list[dict[str, str]]:
     audited: list[dict[str, str]] = []
     for path_str in paths:
@@ -187,6 +197,7 @@ def read_rows(
                         row_index=idx,
                         target_profile=target_profile,
                         require_explicit_measurement_scope=require_explicit_measurement_scope,
+                        required_mode_notes_markers=required_mode_notes_markers,
                     )
                 )
     return audited
@@ -304,6 +315,12 @@ def write_markdown(path: str, rows: list[dict[str, str]], csv_path: str) -> None
             "or lacks required metadata.\n"
         )
         f.write(
+            "- When `--require-mode-notes-marker MODE=MARKER` is supplied, rows "
+            "for that mode must carry the exact implementation revision marker "
+            "in the raw `notes` column. This rejects stale binaries even when "
+            "their CSV schema is otherwise current.\n"
+        )
+        f.write(
             "- If every row is rejected with `missing_column:measurement_scope` "
             "or `raw_csv_schema_missing_measurement_scope_rebuild_harness`, the "
             "raw CSV was produced by an old benchmark binary or appended to an "
@@ -324,6 +341,8 @@ def write_markdown(path: str, rows: list[dict[str, str]], csv_path: str) -> None
 
 def selftest_row(**overrides: str) -> dict[str, str]:
     row = {
+        "mode": "clocked_empty",
+        "notes": "",
         "profile_name": "a100",
         "chip": "ga100",
         "energy_source": "nvml_total_energy",
@@ -473,6 +492,48 @@ def run_self_test() -> None:
         f"{auto_profile['status']} / {auto_profile['expected_power_semantics']}",
     )
 
+    marker_rules = {
+        "reg_operand_only": (
+            "tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1"
+        ),
+        "l2_cg_load_only": "global_warmup_policy=ld_global_cg",
+    }
+    good_marker = audit_row(
+        selftest_row(
+            mode="reg_operand_only",
+            notes=(
+                "tensor_pair_kernel_revision="
+                "matched_add_scalar_epilogue_v1;other=value"
+            ),
+        ),
+        input_file="selftest.csv",
+        row_index=2,
+        target_profile="a100",
+        require_explicit_measurement_scope=True,
+        required_mode_notes_markers=marker_rules,
+    )
+    assert_selftest(
+        good_marker["status"] == "final_candidate",
+        "current_tensor_revision_marker",
+        good_marker["reasons"],
+    )
+
+    stale_marker = audit_row(
+        selftest_row(mode="l2_cg_load_only", notes="global_warmup_policy=default_cached"),
+        input_file="selftest.csv",
+        row_index=2,
+        target_profile="a100",
+        require_explicit_measurement_scope=True,
+        required_mode_notes_markers=marker_rules,
+    )
+    assert_selftest(
+        stale_marker["status"] == "reject"
+        and "missing_mode_notes_marker:l2_cg_load_only:global_warmup_policy=ld_global_cg"
+        in stale_marker["reasons"],
+        "stale_cg_warmup_revision_marker",
+        stale_marker["reasons"],
+    )
+
     print("power API measurement audit self-test passed")
 
 
@@ -511,6 +572,16 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--require-mode-notes-marker",
+        action="append",
+        default=[],
+        metavar="MODE=MARKER",
+        help=(
+            "Require rows for MODE to contain MARKER in the raw notes column. "
+            "Repeat this option for multiple implementation revisions."
+        ),
+    )
+    parser.add_argument(
         "--self-test",
         action="store_true",
         help="Run built-in power API policy regression checks and exit.",
@@ -524,10 +595,25 @@ def main() -> int:
     if not args.csv_paths:
         parser.error("csv_paths are required unless --self-test is used")
 
+    required_mode_notes_markers: dict[str, str] = {}
+    for value in args.require_mode_notes_marker:
+        mode, separator, marker = value.partition("=")
+        if not separator or not mode or not marker:
+            parser.error(
+                "--require-mode-notes-marker must use non-empty MODE=MARKER"
+            )
+        previous = required_mode_notes_markers.get(mode)
+        if previous is not None and previous != marker:
+            parser.error(
+                f"conflicting notes markers supplied for mode {mode!r}"
+            )
+        required_mode_notes_markers[mode] = marker
+
     rows = read_rows(
         args.csv_paths,
         args.target_profile,
         require_explicit_measurement_scope=args.require_explicit_measurement_scope,
+        required_mode_notes_markers=required_mode_notes_markers,
     )
     write_csv(args.out_csv, rows)
     write_markdown(args.out_md, rows, args.out_csv)

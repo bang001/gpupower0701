@@ -77,14 +77,25 @@ COMMAND_SHELL_TERMS = [
     "--strict",
     "--active-sm",
     "scripts/audit_power_api_measurements.py --self-test",
+    "scripts/audit_a100_tensor_l2_remediation.py --self-test",
+    "scripts/write_platform_result_manifest.py --self-test",
+    "scripts/selftest_platform_package_gates.py",
     "scripts/audit_power_api_measurements.py",
     "--fail-on-reject",
     "--fail-on-provisional",
     "--require-explicit-measurement-scope",
+    "--require-mode-notes-marker",
+    "reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1",
+    "l2_cg_load_only=global_warmup_policy=ld_global_cg",
     "scripts/audit_power_state_stability.py",
     "scripts/run_ncu_validation.sh",
     "scripts/analyze_ncu_path_acceptance.py",
     "scripts/analyze_matched_control_energy.py",
+    "--tensor-pair-lock-iters",
+    "--tensor-pair-policy matched-iters",
+    "--tensor-control-min-elapsed-s 0.05",
+    "_tensor_pair_calibration.csv",
+    "L2_W_SM_KIB_VALUES=",
     "--power-state-audit-csv",
     "--exclude-power-state-rejects",
     "--require-ncu-denominator",
@@ -98,6 +109,7 @@ COMMAND_SHELL_TERMS = [
     "--power-state-audit-csv",
     "scripts/audit_strict_component_summary.py --self-test",
     "scripts/audit_strict_component_summary.py",
+    "--require-path-specific-cache-evidence",
     "scripts/audit_platform_result_package.py",
     "--expected-active-sm",
     "--fail-on-incomplete",
@@ -118,9 +130,19 @@ COMMAND_PLAN_TERMS = [
     "docs/platforms/power_measurement_api_matrix_ko.md",
     "audit_power_api_measurements.py --self-test",
     "build_strict_component_summary.py --self-test",
+    "write_platform_result_manifest.py --self-test",
+    "selftest_platform_package_gates.py",
+    "pair-locked ITER",
+    "complete control-treatment coordinate pairs",
+    "path-specific L1 hit",
+    "path-specific L2 read hit",
+    "tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1",
+    "global_warmup_policy=ld_global_cg",
+    "spill_evidence_source=local_memory_bytes_zero_inference",
     "ncu_actual_exact",
     "build_strict_component_summary.py",
     "audit_strict_component_summary.py",
+    "require-path-specific-cache-evidence",
     "audit_platform_result_package.py",
     "board-level effective coefficients",
     "L1/L2 hit rates",
@@ -192,7 +214,7 @@ REQUIRED_NCU_COMPONENT_CANDIDATES = {
     "l2_hit_path",
 }
 
-NCU_ACCEPTANCE_REQUIRED_COLUMNS = {
+NCU_ACCEPTANCE_BASE_REQUIRED_COLUMNS = {
     "mode",
     "status",
     "component_candidate",
@@ -210,10 +232,30 @@ NCU_ACCEPTANCE_REQUIRED_COLUMNS = {
     "stall_long_scoreboard_pct",
 }
 
+NCU_ACCEPTANCE_PATH_REQUIRED_COLUMNS = {
+    "l1_path_hit_rate_pct",
+    "l2_path_hit_rate_pct",
+    "l1_request_bytes",
+    "l1_hit_bytes",
+    "l1_miss_bytes",
+    "l2_read_bytes",
+    "l2_read_hit_sectors",
+    "l2_read_miss_sectors",
+    "local_read_bytes",
+    "local_write_bytes",
+    "spill_zero_verified",
+    "spill_evidence_source",
+}
+
+NCU_ACCEPTANCE_REQUIRED_COLUMNS = (
+    NCU_ACCEPTANCE_BASE_REQUIRED_COLUMNS | NCU_ACCEPTANCE_PATH_REQUIRED_COLUMNS
+)
+
 NCU_L1_HIT_MIN_PCT = 95.0
 NCU_L1_L2_RATIO_MAX = 0.01
 NCU_L1_DRAM_RATIO_MAX = 0.01
 NCU_L2_L1_BYTES_RATIO_MAX = 0.01
+NCU_L2_L1_HIT_MAX_PCT = 1.0
 NCU_L2_HIT_MIN_PCT = 95.0
 NCU_L2_DRAM_RATIO_MAX = 0.02
 NCU_SHARED_GLOBAL_RATIO_MAX = 0.02
@@ -223,7 +265,7 @@ NCU_CONTROL_HMMA_PER_BLOCK_MAX = 1.0
 NCU_CONTROL_HMMA_PER_REG_OP_MAX = 1.0e-5
 PROFILE_L2_MIB = {"rtx3090": 6.0, "v100": 6.0, "a100": 40.0, "h100": 50.0}
 
-SUMMARY_REQUIRED_COLUMNS = {
+SUMMARY_BASE_REQUIRED_COLUMNS = {
     "component",
     "median",
     "unit",
@@ -260,6 +302,22 @@ SUMMARY_REQUIRED_COLUMNS = {
     "ncu_stall_long_scoreboard_pct_min_med_max",
 }
 
+SUMMARY_PATH_REQUIRED_COLUMNS = {
+    "ncu_l1_path_hit_rate_pct_min_med_max",
+    "ncu_l2_path_hit_rate_pct_min_med_max",
+    "ncu_l1_request_bytes_min_med_max",
+    "ncu_l1_hit_bytes_min_med_max",
+    "ncu_l1_miss_bytes_min_med_max",
+    "ncu_l2_read_bytes_min_med_max",
+    "ncu_l2_read_hit_sectors_min_med_max",
+    "ncu_l2_read_miss_sectors_min_med_max",
+    "ncu_local_read_bytes_min_med_max",
+    "ncu_local_write_bytes_min_med_max",
+    "ncu_spill_zero_verified_min_med_max",
+}
+
+SUMMARY_REQUIRED_COLUMNS = SUMMARY_BASE_REQUIRED_COLUMNS | SUMMARY_PATH_REQUIRED_COLUMNS
+
 STRICT_SUMMARY_EVIDENCE_MODES = {
     "Tensor MMA incremental": {"reg_mma", "reg_operand_only"},
     "Shared scalar path": {"shared_scalar_load_only"},
@@ -274,7 +332,7 @@ STRICT_SUMMARY_METRIC_MODES = {
     "L2 CG hit path": {"l2_cg_load_only"},
 }
 
-STRICT_SUMMARY_REQUIRED_METRICS = {
+STRICT_SUMMARY_BASE_REQUIRED_METRICS = {
     "Tensor MMA incremental": {"ncu_tensor_hmma_inst_min_med_max"},
     "Shared scalar path": {"ncu_shared_bytes_min_med_max"},
     "Global L1 hit path": {
@@ -286,6 +344,30 @@ STRICT_SUMMARY_REQUIRED_METRICS = {
         "ncu_l2_hit_rate_pct_min_med_max",
         "ncu_l2_accesses_min_med_max",
         "ncu_l2_bytes_min_med_max",
+    },
+}
+
+STRICT_SUMMARY_PATH_REQUIRED_METRICS = {
+    "Tensor MMA incremental": {
+        "ncu_tensor_hmma_inst_min_med_max",
+        "ncu_spill_zero_verified_min_med_max",
+    },
+    "Shared scalar path": {"ncu_shared_bytes_min_med_max"},
+    "Global L1 hit path": {
+        "ncu_l1_path_hit_rate_pct_min_med_max",
+        "ncu_l1_accesses_min_med_max",
+        "ncu_l1_request_bytes_min_med_max",
+        "ncu_l1_hit_bytes_min_med_max",
+    },
+    "L2 CG hit path": {
+        "ncu_l1_path_hit_rate_pct_min_med_max",
+        "ncu_l1_request_bytes_min_med_max",
+        "ncu_l1_hit_bytes_min_med_max",
+        "ncu_l2_path_hit_rate_pct_min_med_max",
+        "ncu_l2_accesses_min_med_max",
+        "ncu_l2_read_bytes_min_med_max",
+        "ncu_l2_read_hit_sectors_min_med_max",
+        "ncu_l2_read_miss_sectors_min_med_max",
     },
 }
 
@@ -579,34 +661,90 @@ def ncu_expected_l2_residency_hit_pct(row: dict[str, str], profile: str) -> floa
     return min(100.0, 100.0 * l2_mib / working_set_mib)
 
 
-def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
+def ncu_path_sanity_pass(
+    row: dict[str, str],
+    *,
+    profile: str,
+    require_path_specific_cache_evidence: bool,
+) -> bool:
     mode = row.get("mode", "")
     if row.get("status") != "ok" or row.get("missing_metrics", "").strip():
         return False
 
-    l1_hit = ncu_value(row, "l1_hit_rate_pct", -1.0)
-    l2_hit = ncu_value(row, "l2_hit_rate_pct", -1.0)
+    has_path_specific_cache_evidence = all(
+        column in row for column in NCU_ACCEPTANCE_PATH_REQUIRED_COLUMNS
+    )
+    if require_path_specific_cache_evidence and not has_path_specific_cache_evidence:
+        return False
+
+    l1_hit = ncu_value(
+        row,
+        "l1_path_hit_rate_pct" if has_path_specific_cache_evidence else "l1_hit_rate_pct",
+        -1.0,
+    )
+    l2_hit = ncu_value(
+        row,
+        "l2_path_hit_rate_pct" if has_path_specific_cache_evidence else "l2_hit_rate_pct",
+        -1.0,
+    )
     l1_bytes = ncu_value(row, "l1_bytes")
+    l1_request_bytes = ncu_value(row, "l1_request_bytes")
+    l1_hit_bytes = ncu_value(row, "l1_hit_bytes")
     l2_bytes = ncu_value(row, "l2_bytes")
+    l2_read_bytes = ncu_value(row, "l2_read_bytes")
+    l2_traffic_bytes = l2_read_bytes if has_path_specific_cache_evidence else l2_bytes
     dram_bytes = ncu_value(row, "dram_bytes")
     shared_bytes = ncu_value(row, "shared_bytes")
     shared_accesses = ncu_value(row, "shared_accesses")
     shared_inst = ncu_value(row, "shared_inst")
     tensor_hmma = ncu_value(row, "tensor_hmma_inst")
+    local_read_bytes = ncu_value(row, "local_read_bytes")
+    local_write_bytes = ncu_value(row, "local_write_bytes")
+    spill_zero_verified = ncu_value(row, "spill_zero_verified", -1.0)
+
+    if has_path_specific_cache_evidence and (
+        local_read_bytes > 0.0
+        or local_write_bytes > 0.0
+        or spill_zero_verified != 1.0
+    ):
+        return False
 
     if mode == "global_l1_load_only":
+        if not has_path_specific_cache_evidence:
+            return (
+                l1_hit >= NCU_L1_HIT_MIN_PCT
+                and l1_bytes > 0.0
+                and ncu_ratio(l2_bytes, l1_bytes) <= NCU_L1_L2_RATIO_MAX
+                and ncu_ratio(dram_bytes, l1_bytes) <= NCU_L1_DRAM_RATIO_MAX
+            )
         return (
             l1_hit >= NCU_L1_HIT_MIN_PCT
-            and l1_bytes > 0.0
-            and ncu_ratio(l2_bytes, l1_bytes) <= NCU_L1_L2_RATIO_MAX
-            and ncu_ratio(dram_bytes, l1_bytes) <= NCU_L1_DRAM_RATIO_MAX
+            and l1_request_bytes > 0.0
+            and l1_hit_bytes > 0.0
+            and ncu_ratio(l2_read_bytes, l1_request_bytes) <= NCU_L1_L2_RATIO_MAX
+            and ncu_ratio(dram_bytes, l1_request_bytes) <= NCU_L1_DRAM_RATIO_MAX
         )
     if mode == "l2_cg_load_only":
+        if not has_path_specific_cache_evidence:
+            # Historical NCU exports did not distinguish request bytes from hit
+            # bytes. For .cg, L1 request bytes are expected, so the old aggregate
+            # L1/L2 byte ratio is not a valid bypass gate. Preserve only rows with
+            # near-zero aggregate L1 hit, high L2 hit, and little DRAM traffic.
+            return (
+                l2_hit >= NCU_L2_HIT_MIN_PCT
+                and l2_bytes > 0.0
+                and 0.0 <= l1_hit <= NCU_L2_L1_HIT_MAX_PCT
+                and ncu_ratio(dram_bytes, l2_bytes) <= NCU_L2_DRAM_RATIO_MAX
+            )
         return (
             l2_hit >= NCU_L2_HIT_MIN_PCT
-            and l2_bytes > 0.0
-            and ncu_ratio(l1_bytes, l2_bytes) <= NCU_L2_L1_BYTES_RATIO_MAX
-            and ncu_ratio(dram_bytes, l2_bytes) <= NCU_L2_DRAM_RATIO_MAX
+            and l2_read_bytes > 0.0
+            and l1_request_bytes > 0.0
+            and l1_hit >= 0.0
+            and l1_hit <= NCU_L2_L1_HIT_MAX_PCT
+            and ncu_ratio(l1_hit_bytes, l1_request_bytes)
+            <= NCU_L2_L1_BYTES_RATIO_MAX
+            and ncu_ratio(dram_bytes, l2_read_bytes) <= NCU_L2_DRAM_RATIO_MAX
         )
     if mode in {"shared_scalar_load_only", "shared_load_only"}:
         denominator = max(shared_bytes, 1.0)
@@ -615,14 +753,15 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
             and shared_bytes > 0.0
             and shared_inst > 0.0
             and ncu_ratio(l1_bytes, denominator) <= NCU_SHARED_GLOBAL_RATIO_MAX
-            and ncu_ratio(l2_bytes, denominator) <= NCU_SHARED_GLOBAL_RATIO_MAX
+            and ncu_ratio(l2_traffic_bytes, denominator) <= NCU_SHARED_GLOBAL_RATIO_MAX
             and ncu_ratio(dram_bytes, denominator) <= NCU_SHARED_GLOBAL_RATIO_MAX
         )
     if mode == "reg_mma":
         if tensor_hmma <= 0.0:
             return False
         return (
-            ncu_ratio(l2_bytes, tensor_hmma) <= NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX
+            ncu_ratio(l2_traffic_bytes, tensor_hmma)
+            <= NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX
             and ncu_ratio(dram_bytes, tensor_hmma)
             <= NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX
         )
@@ -641,7 +780,8 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
         if expected_ops <= 0.0:
             return True
         return (
-            ncu_ratio(l2_bytes, expected_ops) <= NCU_REGISTER_MEMORY_BYTES_PER_OP_MAX
+            ncu_ratio(l2_traffic_bytes, expected_ops)
+            <= NCU_REGISTER_MEMORY_BYTES_PER_OP_MAX
             and ncu_ratio(dram_bytes, expected_ops)
             <= NCU_REGISTER_MEMORY_BYTES_PER_OP_MAX
         )
@@ -651,13 +791,21 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
 
 
 def validate_component_summary(
-    summary_rows: list[dict[str, str]], *, expected_semantics: str
+    summary_rows: list[dict[str, str]],
+    *,
+    expected_semantics: str,
+    require_path_specific_cache_evidence: bool,
 ) -> tuple[bool, str]:
     if not summary_rows:
         return False, "empty_summary"
 
+    required_columns = set(SUMMARY_BASE_REQUIRED_COLUMNS)
+    required_metrics = STRICT_SUMMARY_BASE_REQUIRED_METRICS
+    if require_path_specific_cache_evidence:
+        required_columns.update(SUMMARY_PATH_REQUIRED_COLUMNS)
+        required_metrics = STRICT_SUMMARY_PATH_REQUIRED_METRICS
     missing_columns = sorted(
-        column for column in SUMMARY_REQUIRED_COLUMNS if column not in summary_rows[0]
+        column for column in required_columns if column not in summary_rows[0]
     )
     if missing_columns:
         return False, "missing_columns=" + ",".join(missing_columns)
@@ -743,7 +891,7 @@ def validate_component_summary(
         for evidence_column in ("ncu_evidence_coords", "ncu_path_evidence", "ncu_counter_caveat"):
             if not row.get(evidence_column, "").strip():
                 problems.append(f"{component}:{evidence_column}=blank")
-        for evidence_column in STRICT_SUMMARY_REQUIRED_METRICS.get(component, set()):
+        for evidence_column in required_metrics.get(component, set()):
             if not row.get(evidence_column, "").strip():
                 problems.append(f"{component}:{evidence_column}=blank")
         if expected_unit == "pJ/bit":
@@ -830,7 +978,11 @@ def validate_reliability_artifacts(
 
 
 def validate_ncu_acceptance_artifacts(
-    repo: Path, summary_rows: list[dict[str, str]], profile: str
+    repo: Path,
+    summary_rows: list[dict[str, str]],
+    profile: str,
+    *,
+    require_path_specific_cache_evidence: bool,
 ) -> tuple[bool, str, str]:
     artifacts = referenced_artifacts(repo, summary_rows, "ncu_acceptance_artifact")
     if not artifacts:
@@ -854,11 +1006,14 @@ def validate_ncu_acceptance_artifacts(
     accepted_candidates: set[str] = set()
     unexpected_rejects: list[str] = []
     problems: list[str] = []
+    required_columns = set(NCU_ACCEPTANCE_BASE_REQUIRED_COLUMNS)
+    if require_path_specific_cache_evidence:
+        required_columns.update(NCU_ACCEPTANCE_PATH_REQUIRED_COLUMNS)
     for artifact in artifacts:
         with artifact.open(newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             fieldnames = set(reader.fieldnames or [])
-            missing_columns = sorted(NCU_ACCEPTANCE_REQUIRED_COLUMNS - fieldnames)
+            missing_columns = sorted(required_columns - fieldnames)
             if missing_columns:
                 problems.append(
                     f"{artifact}:missing_columns=" + ",".join(missing_columns)
@@ -876,7 +1031,13 @@ def validate_ncu_acceptance_artifacts(
                             f"{artifact}:{mode}:{candidate}:reason="
                             f"{row.get('acceptance_reason')}"
                         )
-                    if not ncu_path_sanity_pass(row, profile=profile):
+                    if not ncu_path_sanity_pass(
+                        row,
+                        profile=profile,
+                        require_path_specific_cache_evidence=(
+                            require_path_specific_cache_evidence
+                        ),
+                    ):
                         problems.append(
                             f"{artifact}:{mode}:{candidate}:path_evidence_failed"
                         )
@@ -1119,12 +1280,24 @@ def selftest_ncu_row(
         "ITER": "1000",
         "reuse_factor": "1",
         "l1_hit_rate_pct": "0",
+        "l1_path_hit_rate_pct": "0",
         "l2_hit_rate_pct": "0",
+        "l2_path_hit_rate_pct": "0",
         "shared_accesses": "0",
         "shared_bytes": "0",
         "shared_inst": "0",
         "l1_bytes": "0",
+        "l1_request_bytes": "0",
+        "l1_hit_bytes": "0",
+        "l1_miss_bytes": "0",
         "l2_bytes": "0",
+        "l2_read_bytes": "0",
+        "l2_read_hit_sectors": "0",
+        "l2_read_miss_sectors": "0",
+        "local_read_bytes": "0",
+        "local_write_bytes": "0",
+        "spill_zero_verified": "1",
+        "spill_evidence_source": "local_memory_bytes_zero_inference",
         "dram_bytes": "0",
         "tensor_hmma_inst": "0",
         "stall_long_scoreboard_pct": "0",
@@ -1148,8 +1321,13 @@ def selftest_ncu_row(
         row.update(
             {
                 "l1_hit_rate_pct": "99.5",
+                "l1_path_hit_rate_pct": "99.5",
                 "l1_bytes": "100000",
+                "l1_request_bytes": "100000",
+                "l1_hit_bytes": "99500",
+                "l1_miss_bytes": "500",
                 "l2_bytes": "500",
+                "l2_read_bytes": "500",
                 "dram_bytes": "500",
             }
         )
@@ -1157,8 +1335,16 @@ def selftest_ncu_row(
         row.update(
             {
                 "l1_hit_rate_pct": "0.0",
+                "l1_path_hit_rate_pct": "0.0",
                 "l2_hit_rate_pct": "99.0",
+                "l2_path_hit_rate_pct": "99.0",
+                "l1_request_bytes": "100000",
+                "l1_hit_bytes": "0",
+                "l1_miss_bytes": "100000",
                 "l2_bytes": "100000",
+                "l2_read_bytes": "100000",
+                "l2_read_hit_sectors": "3093.75",
+                "l2_read_miss_sectors": "31.25",
                 "dram_bytes": "1000",
             }
         )
@@ -1296,15 +1482,50 @@ fi
         ncu_good = Path("results/summary/ncu_acceptance_good.csv")
         write_test_csv(repo / ncu_good, ncu_columns, selftest_ncu_rows())
         ok, detail, _ = validate_ncu_acceptance_artifacts(
-            repo, [{"ncu_acceptance_artifact": str(ncu_good)}], "rtx3090"
+            repo,
+            [{"ncu_acceptance_artifact": str(ncu_good)}],
+            "rtx3090",
+            require_path_specific_cache_evidence=True,
         )
         assert_selftest(ok, "ncu_acceptance_good", detail)
+
+        legacy_ncu_columns = sorted(
+            NCU_ACCEPTANCE_BASE_REQUIRED_COLUMNS
+            | {"missing_metrics", "active_SM", "blocks_per_SM", "ITER", "reuse_factor"}
+        )
+        legacy_ncu_rows = [
+            {column: row.get(column, "") for column in legacy_ncu_columns}
+            for row in selftest_ncu_rows()
+        ]
+        ncu_legacy = Path("results/summary/ncu_acceptance_legacy.csv")
+        write_test_csv(repo / ncu_legacy, legacy_ncu_columns, legacy_ncu_rows)
+        ok, detail, _ = validate_ncu_acceptance_artifacts(
+            repo,
+            [{"ncu_acceptance_artifact": str(ncu_legacy)}],
+            "rtx3090",
+            require_path_specific_cache_evidence=False,
+        )
+        assert_selftest(ok, "ncu_acceptance_legacy_historical", detail)
+        ok, detail, _ = validate_ncu_acceptance_artifacts(
+            repo,
+            [{"ncu_acceptance_artifact": str(ncu_legacy)}],
+            "a100",
+            require_path_specific_cache_evidence=True,
+        )
+        assert_selftest(
+            (not ok) and "missing_columns=" in detail,
+            "ncu_acceptance_legacy_rejected_for_new_package",
+            detail,
+        )
 
         ncu_missing = Path("results/summary/ncu_acceptance_missing_hit.csv")
         ncu_missing_columns = [c for c in ncu_columns if c != "l1_hit_rate_pct"]
         write_test_csv(repo / ncu_missing, ncu_missing_columns, selftest_ncu_rows())
         ok, detail, _ = validate_ncu_acceptance_artifacts(
-            repo, [{"ncu_acceptance_artifact": str(ncu_missing)}], "rtx3090"
+            repo,
+            [{"ncu_acceptance_artifact": str(ncu_missing)}],
+            "rtx3090",
+            require_path_specific_cache_evidence=True,
         )
         assert_selftest(
             (not ok) and "missing_columns=l1_hit_rate_pct" in detail,
@@ -1317,9 +1538,13 @@ fi
         for row in bad_rows:
             if row["component_candidate"] == "global_l1_hit_path":
                 row["l1_hit_rate_pct"] = "10"
+                row["l1_path_hit_rate_pct"] = "10"
         write_test_csv(repo / ncu_bad_path, ncu_columns, bad_rows)
         ok, detail, _ = validate_ncu_acceptance_artifacts(
-            repo, [{"ncu_acceptance_artifact": str(ncu_bad_path)}], "rtx3090"
+            repo,
+            [{"ncu_acceptance_artifact": str(ncu_bad_path)}],
+            "rtx3090",
+            require_path_specific_cache_evidence=True,
         )
         assert_selftest(
             (not ok) and "path_evidence_failed" in detail,
@@ -1334,7 +1559,10 @@ fi
                 row["acceptance_reason"] = "manual_override"
         write_test_csv(repo / ncu_bad_reason, ncu_columns, bad_reason_rows)
         ok, detail, _ = validate_ncu_acceptance_artifacts(
-            repo, [{"ncu_acceptance_artifact": str(ncu_bad_reason)}], "rtx3090"
+            repo,
+            [{"ncu_acceptance_artifact": str(ncu_bad_reason)}],
+            "rtx3090",
+            require_path_specific_cache_evidence=True,
         )
         assert_selftest(
             (not ok) and "reason=manual_override" in detail,
@@ -2234,7 +2462,12 @@ def audit_cross_platform_results(repo: Path, rows: list[dict[str, str]]) -> None
             evidence=str(summary),
             next_action="verify this summary with the strict/package audits before publication",
         )
-        ok, detail = validate_component_summary(summary_rows, expected_semantics=semantics)
+        require_path_specific_cache_evidence = profile != "rtx3090"
+        ok, detail = validate_component_summary(
+            summary_rows,
+            expected_semantics=semantics,
+            require_path_specific_cache_evidence=require_path_specific_cache_evidence,
+        )
         add(
             rows,
             area=profile,
@@ -2243,7 +2476,11 @@ def audit_cross_platform_results(repo: Path, rows: list[dict[str, str]]) -> None
             expected=(
                 "required components accepted with total-energy delta, "
                 "GPU/device scope, matching power semantics, same-coordinate NCU rows, "
-                "and path-relevant NCU evidence fields"
+                + (
+                    "and path-specific NCU evidence fields"
+                    if require_path_specific_cache_evidence
+                    else "and historical aggregate-compatible NCU evidence fields"
+                )
             ),
             actual=detail,
             evidence=str(summary),
@@ -2325,7 +2562,10 @@ def audit_cross_platform_results(repo: Path, rows: list[dict[str, str]]) -> None
         )
 
         ncu_ok, ncu_detail, ncu_evidence = validate_ncu_acceptance_artifacts(
-            repo, summary_rows, profile
+            repo,
+            summary_rows,
+            profile,
+            require_path_specific_cache_evidence=require_path_specific_cache_evidence,
         )
         add(
             rows,
@@ -2335,7 +2575,11 @@ def audit_cross_platform_results(repo: Path, rows: list[dict[str, str]]) -> None
             expected=(
                 "fresh NCU acceptance artifacts cover tensor/control/shared/L1/L2 "
                 "paths with pass reasons and counter evidence that satisfies "
-                "path-specific hit-rate and traffic-ratio thresholds"
+                + (
+                    "path-specific hit-rate and traffic-ratio thresholds"
+                    if require_path_specific_cache_evidence
+                    else "the historical aggregate-compatible path thresholds"
+                )
             ),
             actual=ncu_detail,
             evidence=ncu_evidence,

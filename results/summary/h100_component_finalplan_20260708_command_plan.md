@@ -1,16 +1,19 @@
 # H100 Component Finalplan Command Plan
 
-Generated: 2026-07-10
+Generated: 2026-07-11
 
 | item | value |
 |---|---|
 | target profile | `h100` |
 | CUDA arch | `sm_90` |
 | active_SM (SMs) | `132` |
-| blocks/SM | `16,32` |
+| energy sweep blocks/SM | `16,32` |
+| strict NCU blocks/SM | `16` |
 | expected power semantics | `one_sec_average` |
+| minimum visible device memory (MiB) | `0` |
 | seconds (s) | `10.0` |
 | repeats | `5` |
+| Tensor control calibration floor (s) | `1.0` |
 | binary | `./build-h100/a100_fp16_energy_v2` |
 | NCU | `ncu` |
 | NCU sudo fallback | `NCU_USE_SUDO=1 bash results/summary/h100_component_finalplan_20260708_commands.sh` |
@@ -19,6 +22,8 @@ Generated: 2026-07-10
 ## Platform Note
 
 Current kernel uses WMMA compatibility path, not Hopper WGMMA/TMA. Final L2 coefficient uses ld.global.cg; l2_load_only remains diagnostic-only.
+
+
 
 ## Build Requirement
 
@@ -38,35 +43,55 @@ binary whose CSV header includes `measurement_scope`.
 
 ## Component Coordinates
 
-| component/path | modes | W_SM (KiB) | factor |
-|---|---|---:|---|
-| Tensor | `reg_operand_only,reg_mma` | 2048 | reuse 1,2,4,8,16 |
-| Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | energy load_repeat 4,8,16; NCU also checks 1,2 |
-| Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | energy load_repeat 4,8,16; NCU also checks 1,2 |
-| L2 | `global_addr_only,l2_cg_load_only` | 64,128 | energy load_repeat 4,8,16; NCU also checks 1,2 |
-| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | energy load_repeat 4,8,16; NCU checks 1,4,8,16 |
+| component/path | modes | energy W_SM (KiB) | strict NCU W_SM/B | factor |
+|---|---|---:|---:|---|
+| Tensor | `reg_operand_only,reg_mma` | 2048 | 2048/16 | reuse 1,2,4,8,16; treatment/control-floor dual-calibrated pair-locked ITER |
+| Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | 128/16 | energy load_repeat 4,8,16; NCU also checks 1,2 |
+| Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | 16/16 | energy load_repeat 4,8,16; NCU also checks 1,2 |
+| L2 | `global_addr_only,l2_cg_load_only` | 64,128 | 64/16 | energy load_repeat 4,8,16; NCU also checks 1,2 |
+| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 8192/16 | energy load_repeat 4,8,16; NCU checks 1,4,8,16 |
+
+The energy runner applies the same 1 KiB/block feasibility rule to treatment and
+matched control. Global L1 valid coordinates are
+`W16/B16,W32/B16,W32/B32`. Coordinates omitted before execution because
+`W_SM < blocks/SM` are `W16/B32`. The
+generated matrix retains rejected rows with `valid=false`, but no rejected row
+is sent to the binary. Before collecting energy, every unique valid coordinate
+is also checked with the binary's `--dry-run` mode.
 
 ## Architecture-Specific NCU Evidence
 
-The generated package is not valid from hit rate alone. Every V100/A100/H100
+The generated package is not valid from hit rate alone. Every target-profile
 run must keep the architecture-specific NCU sidecar and acceptance report with
 both cache-hit direction and traffic magnitude:
 
 | evidence | required columns | unit / meaning |
 |---|---|---|
-| L1 hit direction | `l1_hit_rate_pct` | percent |
-| L2 hit direction | `l2_hit_rate_pct` | percent |
+| L1 hit direction | `l1_path_hit_rate_pct`, `l1_hit_bytes` | percent, bytes; global-load lookup hit/miss path |
+| L2 hit direction | `l2_path_hit_rate_pct`, `l2_read_hit_sectors`, `l2_read_miss_sectors` | percent, sectors; srcunit-TEX read path |
 | access magnitude | `l1_accesses`, `l2_accesses`, `dram_accesses` | L1 requests when available, otherwise sectors; L2/DRAM sectors |
-| byte magnitude | `shared_bytes`, `l1_bytes`, `l2_bytes`, `dram_bytes` | bytes, preferred denominator for memory pJ/byte or pJ/bit |
+| byte magnitude | `shared_bytes`, `l1_request_bytes`, `l1_hit_bytes`, `l2_read_bytes`, `dram_bytes` | bytes; L1 request bytes are not L1 hit bytes; L2 pJ/bit uses L2 read bytes |
+| spill/local traffic | `local_read_bytes`, `local_write_bytes`, `spill_local_read_inst`, `spill_local_write_inst`, `spill_evidence_source` | bytes/instructions; unsupported dedicated spill counters fall back to zero local-memory bytes only |
 | stall context | `stall_long_scoreboard_pct` | percent-like NCU stall signal |
+| launch/resource context | `achieved_occupancy_pct`, `registers_per_thread`, `shared_mem_per_block_static`, `shared_mem_per_block_dynamic` | requested B value가 실제 residency로 이어졌는지 해석하는 보조 evidence |
 
-V100 uses `NCU_CHIP=gv100` and uses `l2_cg_load_only` as the L2 final path.
-A100 uses `NCU_CHIP=ga100`; its final L2 point is intentionally below the 40 MiB
-L2 capacity and uses `ld.global.cg` to bypass global L1. `l2_load_only` follows
-the normal global-load policy, can hit L1, and is therefore diagnostic-only rather
-than strict L2 evidence. H100 uses `NCU_CHIP=gh100`; the current kernels are WMMA
-compatibility kernels, so the NCU evidence validates the executed compatibility
-path, not Hopper-native WGMMA/TMA/FP8 paths.
+H100 uses `NCU_CHIP=gh100` and `l2_cg_load_only` at
+W_SM=64,128 KiB for the L2 candidate sweep. The current kernels use
+the WMMA FP16 compatibility path, so this evidence does not validate Hopper-native
+WGMMA, TMA, or FP8 execution.
+
+CG measurement paths also use an `ld.global.cg` warm-up kernel so the harness
+does not pre-populate L1 with a normal cached-load warm-up.
+Some NCU metric catalogs, including the reviewed GA100 catalog, may omit the dedicated
+`sass__inst_executed_register_spilling_*` metrics. The sidecar also requests
+local-memory load/store bytes; because these kernels have no intentional local
+memory path, zero local bytes plus ptxas spill zero is recorded as
+`spill_zero_verified=1` with
+`spill_evidence_source=local_memory_bytes_zero_inference`. Architectures with
+dedicated spill instruction counters can also produce `spill_zero_verified=1`.
+Any positive local bytes or spill instructions reject the path.
+`l2_load_only` follows the normal global-load policy, can hit L1, and is therefore
+diagnostic-only rather than strict L2 evidence.
 
 ## How To Run
 
@@ -100,7 +125,7 @@ The generated NCU sidecar profiles primary finalplan modes at every energy
 diagnostic points. This lets `analyze_matched_control_energy.py` prefer
 `ncu_actual_exact` denominators instead of representative same-working-set
 scaling. The global-memory pairs use `global_addr_only` as a matched address
-control; NCU verifies global-load L1 bytes are zero and treats SMID atomic L2
+control; NCU verifies global-load L1 request bytes are zero and treats SMID atomic L2
 sectors as control bookkeeping rather than input traffic. Legacy diagnostic
 modes such as `l2_load_only`, `shared_mma`, `l2_mma`, and `dram_mma` are not
 profiled unless `INCLUDE_DIAGNOSTIC_NCU=1` is set manually.
@@ -110,15 +135,27 @@ example `TENSOR_REUSE_FACTORS=4 MEMORY_LOAD_REPEATS=4 DRAM_LOAD_REPEATS=4`.
 
 Before the energy sweeps, the generated shell moves stale generated artifacts
 for this profile/tag into `results/archive/..._stale_<timestamp>`. This avoids
-appending new rows to an old CSV schema. It then runs a one-row schema smoke
-test and audits that row with `--require-explicit-measurement-scope`. If the
-binary is stale and the CSV header lacks `measurement_scope`, the script stops
-there instead of producing thousands of unusable rows.
+appending new rows to an old CSV schema. It then runs a three-row schema and
+implementation-revision smoke test (`clocked_empty`, `reg_operand_only`, and
+`l2_cg_load_only`). The audit requires an explicit `measurement_scope` plus the
+exact Tensor pair and `.cg` warm-up revision markers in raw `notes`. If the
+binary is stale, the script stops there instead of producing hundreds or
+thousands of unusable rows.
 
-Before the schema smoke and energy sweeps, the generated shell runs
-`scripts/audit_power_api_measurements.py --self-test` and
-`scripts/build_strict_component_summary.py --self-test` and
-`scripts/audit_strict_component_summary.py --self-test` so the A100 semantics,
+Before the schema smoke and energy sweeps, the generated shell runs Tensor pair
+calibration, NCU path-counter, matched-control policy, power API, and strict
+summary self-tests. In particular,
+`scripts/run_component_regression_sweep.py --self-test`,
+`scripts/summarize_ncu_cache_metrics.py --self-test`,
+`scripts/analyze_ncu_path_acceptance.py --self-test`,
+`scripts/analyze_matched_control_energy.py --self-test`,
+`scripts/audit_power_api_measurements.py --self-test`, and
+`scripts/audit_a100_tensor_l2_remediation.py --self-test`,
+`scripts/build_strict_component_summary.py --self-test`,
+`scripts/audit_strict_component_summary.py --self-test`,
+`scripts/write_platform_result_manifest.py --self-test`, and
+`scripts/selftest_platform_package_gates.py` so Tensor pair-lock, A100 path-specific
+L2 semantics,
 fallback-numerator, explicit-scope, H100 module-scope, strict NCU artifact
 selection, and strict NCU coordinate-alignment checks fail early if the gates
 themselves regress. Before NCU, it then runs
@@ -143,6 +180,39 @@ Matched-control consumes the generated power-state audit CSV with
 `coefficient_eligible=false` are removed before treatment/control pairing. This
 keeps power-state drops from appearing as negative component coefficients.
 
+Tensor energy rows use `--tensor-pair-lock-iters` together with
+`--tensor-pair-control-min-seconds=1.0`. Each RF coordinate
+calibrates `reg_mma` for the treatment target and `reg_operand_only` for the
+control-duration floor, records both candidate ITER values, and runs both modes
+with their maximum. Matched-control
+analysis then uses `--tensor-pair-policy matched-iters` and directly subtracts
+the two idle-corrected net energies. An ITER mismatch is a hard-invalid Tensor
+detail row; the analysis no longer rescales a differently calibrated Tensor
+control by elapsed-time power.
+The runner rotates complete control-treatment coordinate pairs between repeats;
+it never rotates a flat list by one command and split a pair across repeat
+boundaries. The same atomic pair ordering applies to the generated Shared,
+Global L1, L2 CG, and DRAM CG treatment-control sweeps.
+Both Tensor kernels execute the same dependent register integer add once per
+RF iteration, so the liveness/control instruction cancels in the direct pair.
+The control no longer performs the former RF-proportional FP32 FMA/checksum or
+memory work. Both modes use the same per-thread eight-scalar-store epilogue
+instead of a WMMA store intrinsic. The treatment stores all accumulator
+fragment values to keep HMMA live; the control stores sink values with the same
+address pattern while keeping its HMMA count at zero.
+The raw Tensor rows must contain
+`tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1` in `notes`.
+CG rows must contain `global_warmup_policy=ld_global_cg`. The package audit
+rejects either missing marker so a stale binary with the same CSV schema cannot
+silently pass.
+Because the no-MMA control completes the same ITER much faster, dual calibration
+prevents it from falling below 1.0 s by construction. The
+analyzer still uses a separate `--tensor-control-min-elapsed-s=0.05` hard schema
+floor instead of the full treatment `--min-elapsed-s`; non-positive control net
+energy remains rejected. The package audit cross-checks both candidate ITERs,
+the max-resolution policy, the raw ITER,
+matched-detail basis, ITER ratio, and control elapsed time.
+
 It also runs `scripts/audit_matched_control_instability.py` to explain weak
 signal or negative matched-control rows and to suggest targeted follow-up runs.
 
@@ -156,6 +226,9 @@ and instability artifacts. The audit verifies that the packaged summary still
 matches the underlying evidence and the power measurement matrix. It also fails
 hierarchy/order mistakes such as L2 <= shared/global L1 and broad
 order-of-magnitude mistakes outside the strict plausibility ranges.
+Generated target-node packages invoke the audit with
+`--require-path-specific-cache-evidence`; aggregate-only historical cache
+counters cannot satisfy a new A100/V100/H100 result package.
 The package intake audit then checks the raw energy CSVs, power API audit,
 power-state audit, NCU acceptance, matched-control detail, reliability audit,
 strict summary, and strict summary audit as one profile/tag package before the
@@ -165,15 +238,16 @@ capacity) and the generated `active_SM` value. If a target node uses MIG,
 partitioning, or an SKU with fewer visible SMs, regenerate this plan with
 `--active-sm <runtime SM count>` after preflight and keep the same value in the
 package audit.
-The package audit also verifies that the NCU summary exposes L1/L2 hit rates,
-L1/L2/DRAM access counts, byte traffic, and long-scoreboard stall counters
+The package audit also verifies that the NCU summary exposes aggregate and
+path-specific L1/L2 hit rates, L1 request/hit/miss bytes, L2 read hit/miss
+sectors and bytes, L1/L2/DRAM access counts, DRAM traffic, and long-scoreboard stall counters
 before the result can be treated as final evidence. Hit rate alone is not enough:
 accepted cache rows must also show path-relevant access/byte magnitude. The NCU
 summary must include
 `clocked_empty`, `reg_operand_only`, `reg_mma`, `shared_scalar_load_only`,
 `global_l1_load_only`, `l2_cg_load_only`, and `dram_cg_load_only` coverage.
-A100/H100 packages use `l2_cg_load_only` as the strict L2 path; `l2_load_only`
-is diagnostic-only and is not required. Tensor pair NCU rows need at least three
+All generated platform packages use `l2_cg_load_only` as the strict L2 path;
+`l2_load_only` is diagnostic-only and is not required. Tensor pair NCU rows need at least three
 `reuse_factor` points, and memory-path rows need at
 least three `load_repeat` points.
 The package audit requires the strict summary audit CSV to contain

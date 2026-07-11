@@ -87,14 +87,25 @@ NCU_METRIC_MODES_BY_COMPONENT = {
 NCU_METRIC_COLUMNS = [
     "shared_bytes",
     "l1_hit_rate_pct",
+    "l1_path_hit_rate_pct",
     "l2_hit_rate_pct",
+    "l2_path_hit_rate_pct",
     "l1_accesses",
     "l2_accesses",
     "dram_accesses",
     "l1_bytes",
+    "l1_request_bytes",
+    "l1_hit_bytes",
+    "l1_miss_bytes",
     "l2_bytes",
+    "l2_read_bytes",
+    "l2_read_hit_sectors",
+    "l2_read_miss_sectors",
     "dram_bytes",
     "tensor_hmma_inst",
+    "local_read_bytes",
+    "local_write_bytes",
+    "spill_zero_verified",
     "spill_local_read_inst",
     "spill_local_write_inst",
     "stall_long_scoreboard_pct",
@@ -128,14 +139,25 @@ FIELDNAMES = [
     "ncu_denominator_bytes_representative_min_med_max",
     "ncu_shared_bytes_min_med_max",
     "ncu_l1_hit_rate_pct_min_med_max",
+    "ncu_l1_path_hit_rate_pct_min_med_max",
     "ncu_l2_hit_rate_pct_min_med_max",
+    "ncu_l2_path_hit_rate_pct_min_med_max",
     "ncu_l1_accesses_min_med_max",
     "ncu_l2_accesses_min_med_max",
     "ncu_dram_accesses_min_med_max",
     "ncu_l1_bytes_min_med_max",
+    "ncu_l1_request_bytes_min_med_max",
+    "ncu_l1_hit_bytes_min_med_max",
+    "ncu_l1_miss_bytes_min_med_max",
     "ncu_l2_bytes_min_med_max",
+    "ncu_l2_read_bytes_min_med_max",
+    "ncu_l2_read_hit_sectors_min_med_max",
+    "ncu_l2_read_miss_sectors_min_med_max",
     "ncu_dram_bytes_min_med_max",
     "ncu_tensor_hmma_inst_min_med_max",
+    "ncu_local_read_bytes_min_med_max",
+    "ncu_local_write_bytes_min_med_max",
+    "ncu_spill_zero_verified_min_med_max",
     "ncu_spill_local_read_inst_min_med_max",
     "ncu_spill_local_write_inst_min_med_max",
     "ncu_stall_long_scoreboard_pct_min_med_max",
@@ -436,6 +458,11 @@ def path_evidence_text(component_key: str, summary: dict[str, str]) -> str:
             f"{summary_value(summary, 'ncu_tensor_hmma_inst_min_med_max')}; "
             "L1_bytes="
             f"{summary_value(summary, 'ncu_l1_bytes_min_med_max')}; "
+            "local_read/write_bytes="
+            f"{summary_value(summary, 'ncu_local_read_bytes_min_med_max')}/"
+            f"{summary_value(summary, 'ncu_local_write_bytes_min_med_max')}; "
+            "spill_zero_verified="
+            f"{summary_value(summary, 'ncu_spill_zero_verified_min_med_max')}; "
             "spill_read/write="
             f"{summary_value(summary, 'ncu_spill_local_read_inst_min_med_max')}/"
             f"{summary_value(summary, 'ncu_spill_local_write_inst_min_med_max')}"
@@ -451,25 +478,30 @@ def path_evidence_text(component_key: str, summary: dict[str, str]) -> str:
         )
     if component_key == "global_l1_hit_path":
         return (
-            "L1_hit_pct="
-            f"{summary.get('ncu_l1_hit_rate_pct_min_med_max', '')}; "
+            "L1_path_hit_pct="
+            f"{summary.get('ncu_l1_path_hit_rate_pct_min_med_max', '')}; "
             "L1_accesses="
             f"{summary.get('ncu_l1_accesses_min_med_max', '')}; "
-            "L1_bytes="
-            f"{summary.get('ncu_l1_bytes_min_med_max', '')}; "
+            "L1_request/hit_bytes="
+            f"{summary.get('ncu_l1_request_bytes_min_med_max', '')}/"
+            f"{summary.get('ncu_l1_hit_bytes_min_med_max', '')}; "
             "DRAM_bytes="
             f"{summary.get('ncu_dram_bytes_min_med_max', '')}"
         )
     if component_key == "l2_hit_cg_path":
         return (
-            "L1_hit_pct="
-            f"{summary.get('ncu_l1_hit_rate_pct_min_med_max', '')}; "
-            "L2_hit_pct="
-            f"{summary.get('ncu_l2_hit_rate_pct_min_med_max', '')}; "
-            "L2_accesses="
-            f"{summary.get('ncu_l2_accesses_min_med_max', '')}; "
-            "L2_bytes="
-            f"{summary.get('ncu_l2_bytes_min_med_max', '')}; "
+            "L1_path_hit_pct="
+            f"{summary.get('ncu_l1_path_hit_rate_pct_min_med_max', '')}; "
+            "L1_request/hit_bytes="
+            f"{summary.get('ncu_l1_request_bytes_min_med_max', '')}/"
+            f"{summary.get('ncu_l1_hit_bytes_min_med_max', '')}; "
+            "L2_read_hit_pct="
+            f"{summary.get('ncu_l2_path_hit_rate_pct_min_med_max', '')}; "
+            "L2_read_hit/miss_sectors="
+            f"{summary.get('ncu_l2_read_hit_sectors_min_med_max', '')}/"
+            f"{summary.get('ncu_l2_read_miss_sectors_min_med_max', '')}; "
+            "L2_read_bytes="
+            f"{summary.get('ncu_l2_read_bytes_min_med_max', '')}; "
             "DRAM_bytes="
             f"{summary.get('ncu_dram_bytes_min_med_max', '')}"
         )
@@ -484,9 +516,20 @@ def counter_caveat_text(component_key: str) -> str:
         )
     if component_key == "tensor_mma_increment":
         return (
-            "Tensor validation uses HMMA instruction evidence and zero L1 bytes in "
-            "the NCU summary; spill counters are not reported in this summary, so "
-            "spill-free claims require ptxas/register-footprint evidence."
+            "Tensor validation uses HMMA instruction evidence plus zero spill/local "
+            "instructions. Cache traffic is contamination context, not a Tensor "
+            "denominator; ptxas/register-footprint evidence is still required."
+        )
+    if component_key == "global_l1_hit_path":
+        return (
+            "Global-L1 validation uses path-specific global-load lookup hit/miss and "
+            "request bytes. Aggregate L1 hit rate can include unrelated traffic."
+        )
+    if component_key == "l2_hit_cg_path":
+        return (
+            "An ld.global.cg request still traverses L1TEX, so L1 request bytes are "
+            "expected. Bypass is shown by near-zero path-specific L1 hit bytes and a "
+            "high path-specific L2 read hit rate; L2 read bytes are the denominator."
         )
     return "Cache hit/access/byte fields are path-relevant for this global-memory candidate."
 
@@ -749,7 +792,8 @@ def ncu_selftest_row(
     store_repeat: str = "1",
     **metrics: str,
 ) -> dict[str, str]:
-    row = {
+    row = {column: "0" for column in NCU_METRIC_COLUMNS}
+    row.update({
         "mode": mode,
         "status": "ok",
         "W_SM_KiB": w_sm_kib,
@@ -758,7 +802,7 @@ def ncu_selftest_row(
         "reuse_factor": reuse_factor,
         "load_repeat": load_repeat,
         "store_repeat": store_repeat,
-    }
+    })
     row.update(metrics)
     return row
 
@@ -801,16 +845,28 @@ def run_self_test() -> None:
                     w_sm_kib="16",
                     load_repeat="4",
                     l1_hit_rate_pct="99.9",
+                    l1_path_hit_rate_pct="99.9",
                     l2_hit_rate_pct="101.5",
                     l1_bytes="1000000",
+                    l1_request_bytes="1000000",
+                    l1_hit_bytes="999000",
+                    l1_miss_bytes="1000",
                 ),
                 ncu_selftest_row(
                     mode="l2_cg_load_only",
                     w_sm_kib="64",
                     load_repeat="4",
                     l1_hit_rate_pct="0.1",
+                    l1_path_hit_rate_pct="0.1",
                     l2_hit_rate_pct="99.0",
+                    l2_path_hit_rate_pct="99.0",
+                    l1_request_bytes="1000000",
+                    l1_hit_bytes="1000",
+                    l1_miss_bytes="999000",
                     l2_bytes="1000000",
+                    l2_read_bytes="1000000",
+                    l2_read_hit_sectors="30938",
+                    l2_read_miss_sectors="312",
                 ),
             ],
         )
@@ -837,24 +893,44 @@ def run_self_test() -> None:
                     w_sm_kib="16",
                     load_repeat="4",
                     l1_hit_rate_pct="99.999",
+                    l1_path_hit_rate_pct="99.999",
                     l2_hit_rate_pct="90.0",
                     l1_bytes="2000000",
+                    l1_request_bytes="2000000",
+                    l1_hit_bytes="1999980",
+                    l1_miss_bytes="20",
                 ),
                 ncu_selftest_row(
                     mode="l2_cg_load_only",
                     w_sm_kib="64",
                     load_repeat="4",
                     l1_hit_rate_pct="0.00001",
+                    l1_path_hit_rate_pct="0.00001",
                     l2_hit_rate_pct="99.98",
+                    l2_path_hit_rate_pct="99.98",
+                    l1_request_bytes="2000000",
+                    l1_hit_bytes="0.2",
+                    l1_miss_bytes="1999999.8",
                     l2_bytes="2000000",
+                    l2_read_bytes="2000000",
+                    l2_read_hit_sectors="62487.5",
+                    l2_read_miss_sectors="12.5",
                 ),
                 ncu_selftest_row(
                     mode="l2_cg_load_only",
                     w_sm_kib="64",
                     load_repeat="8",
                     l1_hit_rate_pct="0.00001",
+                    l1_path_hit_rate_pct="0.00001",
                     l2_hit_rate_pct="99.99",
+                    l2_path_hit_rate_pct="99.99",
+                    l1_request_bytes="4000000",
+                    l1_hit_bytes="0.4",
+                    l1_miss_bytes="3999999.6",
                     l2_bytes="4000000",
+                    l2_read_bytes="4000000",
+                    l2_read_hit_sectors="124987.5",
+                    l2_read_miss_sectors="12.5",
                 ),
             ],
         )
@@ -923,6 +999,20 @@ def run_self_test() -> None:
         l2_selected = select_ncu_summary_artifacts("l2_hit_cg_path", l2_details, paths)
         if l2_selected != str(memory):
             raise AssertionError(f"expected L2 memory artifact only, got {l2_selected}")
+        l1_evidence = ncu_evidence_summary(
+            "global_l1_hit_path", global_l1_details, global_l1_selected
+        )
+        if l1_evidence["ncu_l1_path_hit_rate_pct_min_med_max"] != "99.999":
+            raise AssertionError(f"missing path-specific L1 evidence: {l1_evidence}")
+        if l1_evidence["ncu_l1_request_bytes_min_med_max"] != "2000000":
+            raise AssertionError(f"missing L1 request-byte evidence: {l1_evidence}")
+        l2_evidence = ncu_evidence_summary("l2_hit_cg_path", l2_details, l2_selected)
+        if l2_evidence["ncu_l2_path_hit_rate_pct_min_med_max"] != "99.98/99.985/99.99":
+            raise AssertionError(f"missing path-specific L2 evidence: {l2_evidence}")
+        if l2_evidence["ncu_l2_read_bytes_min_med_max"] != "2000000/3000000/4000000":
+            raise AssertionError(f"missing L2 read-byte evidence: {l2_evidence}")
+        if "L1_request/hit_bytes=" not in l2_evidence["ncu_path_evidence"]:
+            raise AssertionError(f"L2 path evidence text is incomplete: {l2_evidence}")
     print("strict component summary builder self-test passed")
 
 
@@ -1024,12 +1114,13 @@ def write_md(path: str | Path, rows: list[dict[str, str]], *, target_profile: st
             )
         f.write("\n### Raw Counter Context\n\n")
         f.write(
-            "| component | coord rows | metric rows | metric modes | L1 hit % | L2 hit % | "
-            "L1 accesses | L2 accesses | DRAM accesses | shared bytes | L1 bytes | "
-            "L2 bytes | DRAM bytes | HMMA inst | long scoreboard % |\n"
+            "| component | coord rows | metric rows | metric modes | L1 path hit % | "
+            "L2 read hit % | L1 accesses | L2 accesses | DRAM accesses | shared bytes | "
+            "L1 request bytes | L1 hit bytes | L2 read bytes | DRAM bytes | HMMA inst | "
+            "long scoreboard % |\n"
         )
         f.write(
-            "|---|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+            "|---|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         )
         for row in rows:
             f.write(
@@ -1040,14 +1131,15 @@ def write_md(path: str | Path, rows: list[dict[str, str]], *, target_profile: st
                         row["ncu_coordinate_rows"],
                         row["ncu_metric_rows"],
                         md_escape(row["ncu_metric_modes"]),
-                        row["ncu_l1_hit_rate_pct_min_med_max"],
-                        row["ncu_l2_hit_rate_pct_min_med_max"],
+                        row["ncu_l1_path_hit_rate_pct_min_med_max"],
+                        row["ncu_l2_path_hit_rate_pct_min_med_max"],
                         row["ncu_l1_accesses_min_med_max"],
                         row["ncu_l2_accesses_min_med_max"],
                         row["ncu_dram_accesses_min_med_max"],
                         row["ncu_shared_bytes_min_med_max"],
-                        row["ncu_l1_bytes_min_med_max"],
-                        row["ncu_l2_bytes_min_med_max"],
+                        row["ncu_l1_request_bytes_min_med_max"],
+                        row["ncu_l1_hit_bytes_min_med_max"],
+                        row["ncu_l2_read_bytes_min_med_max"],
                         row["ncu_dram_bytes_min_med_max"],
                         row["ncu_tensor_hmma_inst_min_med_max"],
                         row["ncu_stall_long_scoreboard_pct_min_med_max"],

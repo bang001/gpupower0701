@@ -214,7 +214,9 @@ python3 scripts/audit_power_api_measurements.py \
   --out-md results/summary/h100_smoke_power_api_audit.md \
   --fail-on-reject \
   --fail-on-provisional \
-  --require-explicit-measurement-scope
+  --require-explicit-measurement-scope \
+  --require-mode-notes-marker \
+  reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1
 ```
 
 이 단계에서 모든 row가 `missing_column:measurement_scope` 또는

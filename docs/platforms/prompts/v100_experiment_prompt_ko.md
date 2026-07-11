@@ -154,7 +154,7 @@ V100 전용 기준:
    - seconds는 최종 실험에서 10 이상, repeats는 5 이상을 권장한다.
    - blocks/SM은 1,2,4,8,16,32를 energy diagnostic sweep으로 모두 수행한다.
    - strict coefficient는 generated sidecar의 exact NCU 좌표 B32와 일치하는 row만 우선 채택한다.
-   - Tensor는 reg_operand_only와 reg_mma matched-control 차분으로 본다.
+   - Tensor는 RF별로 reg_mma treatment 목표와 reg_operand_only control 최소시간을 각각 calibrate하고 두 ITER 중 큰 값을 두 mode에 적용한 뒤, duration scaling 없이 net-energy를 직접 차분한다. tensor_pair_calibration CSV의 두 candidate/max policy와 matched detail의 `pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1`을 확인한다.
    - shared scalar는 clocked_empty와 shared_scalar_load_only 차분으로 본다.
    - global L1은 global_addr_only와 global_l1_load_only 차분으로 본다.
    - L2는 global_addr_only와 l2_cg_load_only 차분으로 본다.
@@ -173,7 +173,7 @@ V100 전용 기준:
    - Tensor: HMMA/Tensor instruction이 존재하고 spill/local memory가 없어야 한다.
    - Shared scalar: shared bytes가 존재하고 bank conflict가 0 또는 매우 낮아야 한다.
    - Global L1: L1 hit >= 95%, L2/L1 bytes <= 1% 수준이어야 한다.
-   - L2 CG: L2 hit >= 95%, L1 bytes/L2 bytes <= 1%, DRAM/L2 bytes <= 2% 수준이어야 한다. aggregate L1 hit는 표시하되 `.cg` hard gate로 쓰지 않는다.
+   - L2 CG: path-specific L2 read hit >=95%, L1 path hit <=1%, L1 hit bytes/request bytes <=1%, DRAM/L2 read bytes <=2% 수준이어야 한다. `.cg`의 L1 request bytes 자체와 aggregate hit는 표시하되 hard gate로 쓰지 않는다.
    - DRAM sanity: L2 hit가 낮고 DRAM bytes가 충분히 커야 하며, 그렇지 않으면 DRAM coefficient로 쓰지 않는다.
 
 10. coefficient 계산
@@ -215,10 +215,10 @@ V100 전용 기준:
 
 | Component | 권장 mode pair | V100 우선 좌표 | NCU 채택 기준 | 결과 단위 |
 |---|---|---|---|---|
-| Tensor | `reg_mma - reg_operand_only` | energy B1-32; strict W2048/B32, reuse sweep | HMMA 존재, spill/local 0 | pJ/FLOP |
+| Tensor | `reg_mma - reg_operand_only` | energy B1-32; strict W2048/B32, reuse sweep | treatment HMMA 존재, control HMMA=0, spill/local 0, 두 mode ITER 동일 | pJ/FLOP |
 | Shared/L1 | `shared_scalar_load_only - clocked_empty` | energy W32/64, B1-32; strict W32/B32 | shared bytes 존재, bank conflict 낮음 | pJ/bit, pJ/Byte |
 | Global L1 | `global_l1_load_only - global_addr_only` | energy W8/16/32, B1-32; strict W32/B32 | L1 hit >= 95%, L2/DRAM 낮음 | pJ/bit, pJ/Byte |
-| L2 | `l2_cg_load_only - global_addr_only` | energy W32/64, B1-32; strict W32/B32 | L2 hit >= 95%, L1 bytes/L2 bytes <= 1%, DRAM 낮음 | pJ/bit, pJ/Byte |
+| L2 | `l2_cg_load_only - global_addr_only` | energy W32/64, B1-32; strict W32/B32 | L2 read path hit >=95%, L1 path hit와 hit/request bytes <=1%, DRAM 낮음 | pJ/bit, pJ/Byte |
 | DRAM sanity | `dram_cg_load_only - global_addr_only` | energy B1-32; strict W8192/B32 | DRAM bytes 충분, capacity-bound L2 residual hit 허용 | pJ/bit, pJ/Byte 후보 |
 
 ## 해석 시 주의할 표현

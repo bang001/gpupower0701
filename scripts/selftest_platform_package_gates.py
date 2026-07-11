@@ -45,14 +45,25 @@ STRICT_SUMMARY_COLUMNS = [
     "ncu_denominator_bytes_representative_min_med_max",
     "ncu_shared_bytes_min_med_max",
     "ncu_l1_hit_rate_pct_min_med_max",
+    "ncu_l1_path_hit_rate_pct_min_med_max",
     "ncu_l2_hit_rate_pct_min_med_max",
+    "ncu_l2_path_hit_rate_pct_min_med_max",
     "ncu_l1_accesses_min_med_max",
     "ncu_l2_accesses_min_med_max",
     "ncu_dram_accesses_min_med_max",
     "ncu_l1_bytes_min_med_max",
+    "ncu_l1_request_bytes_min_med_max",
+    "ncu_l1_hit_bytes_min_med_max",
+    "ncu_l1_miss_bytes_min_med_max",
     "ncu_l2_bytes_min_med_max",
+    "ncu_l2_read_bytes_min_med_max",
+    "ncu_l2_read_hit_sectors_min_med_max",
+    "ncu_l2_read_miss_sectors_min_med_max",
     "ncu_dram_bytes_min_med_max",
     "ncu_tensor_hmma_inst_min_med_max",
+    "ncu_local_read_bytes_min_med_max",
+    "ncu_local_write_bytes_min_med_max",
+    "ncu_spill_zero_verified_min_med_max",
     "ncu_stall_long_scoreboard_pct_min_med_max",
 ]
 
@@ -66,6 +77,7 @@ STRICT_AUDIT_COLUMNS = [
 ]
 
 RAW_COLUMNS = [
+    "mode",
     "profile_name",
     "architecture_family",
     "chip",
@@ -87,6 +99,7 @@ RAW_COLUMNS = [
     "idle_baseline_J",
     "net_E_J",
     "ITER",
+    "notes",
 ]
 
 POWER_API_COLUMNS = [
@@ -143,6 +156,29 @@ MATCHED_SUMMARY_COLUMNS = [
     "median_pJ_per_bit",
 ]
 
+MATCHED_DETAIL_COLUMNS = [
+    "component",
+    "valid_component_estimate",
+    "pair_energy_basis",
+    "numerator_ITER",
+    "control_ITER",
+    "iter_ratio",
+    "numerator_elapsed_s",
+    "control_elapsed_s",
+    "numerator_net_E_J",
+    "control_net_E_J",
+    "delta_E_J",
+    "denominator_source",
+    "numerator_energy_source",
+    "control_energy_source",
+    "numerator_energy_integration_method",
+    "control_energy_integration_method",
+    "numerator_measurement_scope",
+    "control_measurement_scope",
+    "numerator_power_semantics",
+    "control_power_semantics",
+]
+
 RELIABILITY_COLUMNS = [
     "component",
     "status",
@@ -174,14 +210,26 @@ NCU_ACCEPTANCE_COLUMNS = [
     "acceptance",
     "acceptance_reason",
     "l1_hit_rate_pct",
+    "l1_path_hit_rate_pct",
     "l2_hit_rate_pct",
+    "l2_path_hit_rate_pct",
     "shared_accesses",
     "shared_bytes",
     "shared_inst",
     "l1_bytes",
+    "l1_request_bytes",
+    "l1_hit_bytes",
+    "l1_miss_bytes",
     "l2_bytes",
+    "l2_read_bytes",
+    "l2_read_hit_sectors",
+    "l2_read_miss_sectors",
     "dram_bytes",
     "tensor_hmma_inst",
+    "local_read_bytes",
+    "local_write_bytes",
+    "spill_zero_verified",
+    "spill_evidence_source",
     "stall_long_scoreboard_pct",
 ]
 
@@ -393,14 +441,25 @@ def summary_evidence_fields(component: str, unit: str) -> dict[str, str]:
             "ncu_denominator_bytes_representative_min_med_max": "",
             "ncu_shared_bytes_min_med_max": "0",
             "ncu_l1_hit_rate_pct_min_med_max": "0",
+            "ncu_l1_path_hit_rate_pct_min_med_max": "0",
             "ncu_l2_hit_rate_pct_min_med_max": "0",
+            "ncu_l2_path_hit_rate_pct_min_med_max": "0",
             "ncu_l1_accesses_min_med_max": "0",
             "ncu_l2_accesses_min_med_max": "0",
             "ncu_dram_accesses_min_med_max": "0",
             "ncu_l1_bytes_min_med_max": "0",
+            "ncu_l1_request_bytes_min_med_max": "0",
+            "ncu_l1_hit_bytes_min_med_max": "0",
+            "ncu_l1_miss_bytes_min_med_max": "0",
             "ncu_l2_bytes_min_med_max": "0",
+            "ncu_l2_read_bytes_min_med_max": "0",
+            "ncu_l2_read_hit_sectors_min_med_max": "0",
+            "ncu_l2_read_miss_sectors_min_med_max": "0",
             "ncu_dram_bytes_min_med_max": "0",
             "ncu_tensor_hmma_inst_min_med_max": "1000",
+            "ncu_local_read_bytes_min_med_max": "0",
+            "ncu_local_write_bytes_min_med_max": "0",
+            "ncu_spill_zero_verified_min_med_max": "1",
         }
     if component == "Shared scalar path":
         evidence = {
@@ -416,22 +475,37 @@ def summary_evidence_fields(component: str, unit: str) -> dict[str, str]:
             "ncu_evidence_modes": "global_l1_load_only",
             "ncu_metric_modes": "global_l1_load_only",
             "ncu_evidence_coords": "global_l1_load_only:W16:B16:SM82:RF1:LR4:SR1",
-            "ncu_path_evidence": "L1_hit_pct=99; L1_bytes=1024",
+            "ncu_path_evidence": "L1_path_hit_pct=99; L1_request/hit_bytes=1024/1014",
             "ncu_counter_caveat": "l1 selftest evidence",
             "ncu_l1_hit_rate_pct_min_med_max": "99",
+            "ncu_l1_path_hit_rate_pct_min_med_max": "99",
             "ncu_l1_accesses_min_med_max": "32",
             "ncu_l1_bytes_min_med_max": "1024",
+            "ncu_l1_request_bytes_min_med_max": "1024",
+            "ncu_l1_hit_bytes_min_med_max": "1014",
+            "ncu_l1_miss_bytes_min_med_max": "10",
         }
     else:
         evidence = {
             "ncu_evidence_modes": "l2_cg_load_only",
             "ncu_metric_modes": "l2_cg_load_only",
             "ncu_evidence_coords": "l2_cg_load_only:W64:B16:SM82:RF1:LR4:SR1",
-            "ncu_path_evidence": "L2_hit_pct=99; L2_bytes=2048",
+            "ncu_path_evidence": (
+                "L1_path_hit_pct=0; L1_request/hit_bytes=2048/0; "
+                "L2_read_hit_pct=99; L2_read_bytes=2048"
+            ),
             "ncu_counter_caveat": "l2 selftest evidence",
+            "ncu_l1_path_hit_rate_pct_min_med_max": "0",
+            "ncu_l1_request_bytes_min_med_max": "2048",
+            "ncu_l1_hit_bytes_min_med_max": "0",
+            "ncu_l1_miss_bytes_min_med_max": "2048",
             "ncu_l2_hit_rate_pct_min_med_max": "99",
+            "ncu_l2_path_hit_rate_pct_min_med_max": "99",
             "ncu_l2_accesses_min_med_max": "64",
             "ncu_l2_bytes_min_med_max": "2048",
+            "ncu_l2_read_bytes_min_med_max": "2048",
+            "ncu_l2_read_hit_sectors_min_med_max": "63.36",
+            "ncu_l2_read_miss_sectors_min_med_max": "0.64",
         }
     defaults = {
         "denominator_source": "ncu_actual_exact" if unit == "pJ/bit" else "logical_or_expected",
@@ -440,12 +514,20 @@ def summary_evidence_fields(component: str, unit: str) -> dict[str, str]:
         ),
         "ncu_shared_bytes_min_med_max": "0",
         "ncu_l1_hit_rate_pct_min_med_max": "0",
+        "ncu_l1_path_hit_rate_pct_min_med_max": "0",
         "ncu_l2_hit_rate_pct_min_med_max": "0",
+        "ncu_l2_path_hit_rate_pct_min_med_max": "0",
         "ncu_l1_accesses_min_med_max": "0",
         "ncu_l2_accesses_min_med_max": "0",
         "ncu_dram_accesses_min_med_max": "0",
         "ncu_l1_bytes_min_med_max": "0",
+        "ncu_l1_request_bytes_min_med_max": "0",
+        "ncu_l1_hit_bytes_min_med_max": "0",
+        "ncu_l1_miss_bytes_min_med_max": "0",
         "ncu_l2_bytes_min_med_max": "0",
+        "ncu_l2_read_bytes_min_med_max": "0",
+        "ncu_l2_read_hit_sectors_min_med_max": "0",
+        "ncu_l2_read_miss_sectors_min_med_max": "0",
         "ncu_dram_bytes_min_med_max": "0",
         "ncu_tensor_hmma_inst_min_med_max": "0",
     }
@@ -600,13 +682,32 @@ def write_raw_files(
     idle_baseline_j: str = "0.1",
     net_e_j: str = "0.9",
     iter_count: str = "1000",
+    omit_tensor_revision: bool = False,
+    omit_cg_warmup_policy: bool = False,
 ) -> None:
     metadata = module.PROFILE_METADATA[profile]
     if power_semantics is None:
         power_semantics = module.PROFILE_POWER_SEMANTICS[profile]
     raw_paths = module.expected_paths(profile, tag)["raw"]
     for path in raw_paths:
+        suffix = path.stem.rsplit("_", 1)[-1]
+        mode_by_suffix = {
+            "tensor": "reg_mma",
+            "shared": "shared_scalar_load_only",
+            "l1": "global_l1_load_only",
+            "l2": "l2_cg_load_only",
+            "dram": "dram_cg_load_only",
+        }
+        mode = mode_by_suffix[suffix]
+        note_parts: list[str] = []
+        if mode == "reg_mma" and not omit_tensor_revision:
+            note_parts.append(
+                "tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1"
+            )
+        if mode in {"l2_cg_load_only", "dram_cg_load_only"} and not omit_cg_warmup_policy:
+            note_parts.append("global_warmup_policy=ld_global_cg")
         row = {
+            "mode": mode,
             "profile_name": metadata["profile_name"],
             "architecture_family": metadata["architecture_family"],
             "chip": metadata["chip"],
@@ -630,6 +731,7 @@ def write_raw_files(
             "idle_baseline_J": idle_baseline_j,
             "net_E_J": net_e_j,
             "ITER": iter_count,
+            "notes": ";".join(note_parts) + (";" if note_parts else ""),
         }
         write_csv(repo / path, RAW_COLUMNS, [row])
 
@@ -752,6 +854,121 @@ def write_matched_summary(
     write_csv(path, MATCHED_SUMMARY_COLUMNS, rows)
 
 
+def write_matched_detail(
+    module: Any,
+    repo: Path,
+    profile: str,
+    tag: str,
+    *,
+    tensor_pair_energy_basis: str = "matched_iters_net_energy",
+    tensor_control_iters: str = "1000",
+    tensor_control_elapsed_s: str = "1.0",
+) -> None:
+    semantics = module.PROFILE_POWER_SEMANTICS[profile]
+    rows: list[dict[str, str]] = []
+    for component in MATCHED_SUMMARY_COMPONENTS:
+        tensor = component == "tensor_mma_increment"
+        rows.append(
+            {
+                "component": component,
+                "valid_component_estimate": "True",
+                "pair_energy_basis": (
+                    tensor_pair_energy_basis
+                    if tensor
+                    else "duration_scaled_control_power"
+                ),
+                "numerator_ITER": "1000",
+                "control_ITER": tensor_control_iters if tensor else "900",
+                "iter_ratio": (
+                    str(1000.0 / float(tensor_control_iters))
+                    if tensor and float(tensor_control_iters) > 0.0
+                    else "1.111111111"
+                ),
+                "numerator_elapsed_s": "10",
+                "control_elapsed_s": tensor_control_elapsed_s if tensor else "10",
+                "numerator_net_E_J": "120",
+                "control_net_E_J": "20",
+                "delta_E_J": "20",
+                "denominator_source": (
+                    "logical_or_expected" if tensor else "ncu_actual_exact"
+                ),
+                "numerator_energy_source": "nvml_total_energy",
+                "control_energy_source": "nvml_total_energy",
+                "numerator_energy_integration_method": "total_energy_mj_delta",
+                "control_energy_integration_method": "total_energy_mj_delta",
+                "numerator_measurement_scope": "gpu_device_total_energy_counter",
+                "control_measurement_scope": "gpu_device_total_energy_counter",
+                "numerator_power_semantics": semantics,
+                "control_power_semantics": semantics,
+            }
+        )
+    write_csv(
+        repo / module.expected_paths(profile, tag)["matched_detail"],
+        MATCHED_DETAIL_COLUMNS,
+        rows,
+    )
+
+
+def write_tensor_pair_calibration_fixture(
+    module: Any,
+    repo: Path,
+    profile: str,
+    tag: str,
+    *,
+    control_iters: str = "1000",
+    manifest_iters: str = "1000",
+    treatment_calibrated_iters: str = "900",
+    control_min_calibrated_iters: str = "1000",
+    resolution_policy: str = "max_treatment_and_control_min_iters",
+) -> tuple[Path, Path]:
+    paths = module.expected_paths(profile, tag)
+    calibration_path = repo / paths["tensor_pair_calibration"]
+    tensor_path = repo / paths["raw"][0]
+    coord = {
+        "W_SM_KiB": "2048",
+        "blocks_per_SM": "16",
+        "active_SM": str(PROFILE_ACTIVE_SM[profile]),
+        "reuse_factor": "4",
+        "load_repeat": "1",
+        "store_repeat": "1",
+    }
+    calibration_row = {
+        "target_profile": profile,
+        "gpu_list": "0",
+        **coord,
+        "calibration_source_mode": "reg_mma",
+        "treatment_target_seconds": "10",
+        "control_min_seconds": "1",
+        "treatment_calibrated_iters": treatment_calibrated_iters,
+        "control_min_calibrated_iters": control_min_calibrated_iters,
+        "resolved_iters": manifest_iters,
+        "resolution_policy": resolution_policy,
+        "status": "pair_locked",
+        "calibration_command": "benchmark --mode reg_mma --calibrate-only",
+        "treatment_calibration_command": (
+            "benchmark --mode reg_mma --seconds 10 --calibrate-only"
+        ),
+        "control_calibration_command": (
+            "benchmark --mode reg_operand_only --seconds 1 --calibrate-only"
+        ),
+    }
+    write_csv(
+        calibration_path,
+        sorted(module.TENSOR_PAIR_CALIBRATION_REQUIRED_COLUMNS),
+        [calibration_row],
+    )
+    tensor_fields = ["mode", *coord.keys(), "ITER"]
+    write_csv(
+        tensor_path,
+        tensor_fields,
+        [
+            {"mode": "reg_mma", **coord, "ITER": "1000"},
+            {"mode": "reg_operand_only", **coord, "ITER": control_iters},
+        ],
+    )
+    return calibration_path, tensor_path
+
+
 def write_reliability(
     module: Any,
     repo: Path,
@@ -817,7 +1034,9 @@ def base_ncu_row(
         "reuse_factor": reuse_factor,
         "load_repeat": load_repeat,
         "l1_hit_rate_pct": "0",
+        "l1_path_hit_rate_pct": "0",
         "l2_hit_rate_pct": "0",
+        "l2_path_hit_rate_pct": "0",
         "l1_accesses": "0",
         "l1_access_unit": "requests",
         "l2_accesses": "0",
@@ -825,12 +1044,22 @@ def base_ncu_row(
         "dram_accesses": "0",
         "dram_access_unit": "requests",
         "l1_bytes": "0",
+        "l1_request_bytes": "0",
+        "l1_hit_bytes": "0",
+        "l1_miss_bytes": "0",
         "l2_bytes": "0",
+        "l2_read_bytes": "0",
+        "l2_read_hit_sectors": "0",
+        "l2_read_miss_sectors": "0",
         "dram_bytes": "0",
         "shared_accesses": "0",
         "shared_bytes": "0",
         "shared_inst": "0",
         "tensor_hmma_inst": "0",
+        "local_read_bytes": "0",
+        "local_write_bytes": "0",
+        "spill_zero_verified": "1",
+        "spill_evidence_source": "local_memory_bytes_zero_inference",
         "stall_long_scoreboard_pct": "0",
         "missing_metrics": "",
     }
@@ -846,12 +1075,22 @@ def base_ncu_row(
         row["shared_inst"] = "100"
     elif mode == "global_l1_load_only":
         row["l1_hit_rate_pct"] = "99"
+        row["l1_path_hit_rate_pct"] = "99"
         row["l1_accesses"] = "100"
         row["l1_bytes"] = "4096"
+        row["l1_request_bytes"] = "4096"
+        row["l1_hit_bytes"] = "4055.04"
+        row["l1_miss_bytes"] = "40.96"
     elif mode in {"l2_load_only", "l2_cg_load_only"}:
         row["l2_hit_rate_pct"] = "99"
+        row["l2_path_hit_rate_pct"] = "99"
+        row["l1_request_bytes"] = "4096"
+        row["l1_miss_bytes"] = "4096"
         row["l2_accesses"] = "100"
         row["l2_bytes"] = "4096"
+        row["l2_read_bytes"] = "4096"
+        row["l2_read_hit_sectors"] = "99"
+        row["l2_read_miss_sectors"] = "1"
     elif mode == "dram_cg_load_only":
         row["dram_accesses"] = "100"
         row["dram_bytes"] = "4096"
@@ -897,8 +1136,11 @@ def write_ncu_summary(
     zero_l2_bytes: bool = False,
     low_l1_hit: bool = False,
     l2_high_l1_traffic: bool = False,
+    misleading_aggregate_l2: bool = False,
+    low_l2_path_hit: bool = False,
     dram_high_l2_hit: bool = False,
     wrong_active_sm: bool = False,
+    local_spill: bool = False,
 ) -> None:
     path = repo / module.expected_paths(profile, tag)["ncu_summary"]
     fieldnames = sorted(module.NCU_REQUIRED_COLUMNS)
@@ -909,22 +1151,42 @@ def write_ncu_summary(
         for row in rows:
             if row["mode"] == "l2_cg_load_only":
                 row["l2_bytes"] = "0"
+                row["l2_read_bytes"] = "0"
     if low_l1_hit:
         for row in rows:
             if row["mode"] == "global_l1_load_only":
                 row["l1_hit_rate_pct"] = "10"
+                row["l1_path_hit_rate_pct"] = "10"
     if l2_high_l1_traffic:
         for row in rows:
             if row["mode"] == "l2_cg_load_only":
                 row["l1_hit_rate_pct"] = "50"
+                row["l1_path_hit_rate_pct"] = "50"
                 row["l1_bytes"] = row["l2_bytes"]
+                row["l1_hit_bytes"] = row["l1_request_bytes"]
+    if misleading_aggregate_l2:
+        for row in rows:
+            if row["mode"] == "l2_cg_load_only":
+                row["l1_hit_rate_pct"] = "71.5"
+                row["l2_hit_rate_pct"] = "71.5"
+                row["l1_bytes"] = row["l2_bytes"]
+    if low_l2_path_hit:
+        for row in rows:
+            if row["mode"] == "l2_cg_load_only":
+                row["l2_path_hit_rate_pct"] = "72"
     if dram_high_l2_hit:
         for row in rows:
             if row["mode"] == "dram_cg_load_only":
                 row["l2_hit_rate_pct"] = "99"
+                row["l2_path_hit_rate_pct"] = "99"
     if wrong_active_sm:
         for row in rows:
             row["active_SM"] = "82" if profile != "rtx3090" else "1"
+    if local_spill:
+        for row in rows:
+            if row["mode"] == "reg_mma":
+                row["local_read_bytes"] = "32"
+                row["spill_zero_verified"] = "0"
     filtered = [{key: row.get(key, "") for key in fieldnames} for row in rows]
     write_csv(path, fieldnames, filtered)
 
@@ -957,14 +1219,26 @@ def write_ncu_acceptance(
             "acceptance": "rejected" if candidate == rejected_candidate else "accepted",
             "acceptance_reason": "selftest" if candidate == rejected_candidate else "pass",
             "l1_hit_rate_pct": "0",
+            "l1_path_hit_rate_pct": "0",
             "l2_hit_rate_pct": "0",
+            "l2_path_hit_rate_pct": "0",
             "shared_accesses": "0",
             "shared_bytes": "0",
             "shared_inst": "0",
             "l1_bytes": "0",
+            "l1_request_bytes": "0",
+            "l1_hit_bytes": "0",
+            "l1_miss_bytes": "0",
             "l2_bytes": "0",
+            "l2_read_bytes": "0",
+            "l2_read_hit_sectors": "0",
+            "l2_read_miss_sectors": "0",
             "dram_bytes": "0",
             "tensor_hmma_inst": "0",
+            "local_read_bytes": "0",
+            "local_write_bytes": "0",
+            "spill_zero_verified": "1",
+            "spill_evidence_source": "local_memory_bytes_zero_inference",
             "stall_long_scoreboard_pct": "0",
         }
         if mode == "reg_mma":
@@ -975,10 +1249,20 @@ def write_ncu_acceptance(
             row["shared_inst"] = "100"
         elif mode == "global_l1_load_only":
             row["l1_hit_rate_pct"] = "10" if bad_l1_evidence else "99"
+            row["l1_path_hit_rate_pct"] = "10" if bad_l1_evidence else "99"
             row["l1_bytes"] = "4096"
+            row["l1_request_bytes"] = "4096"
+            row["l1_hit_bytes"] = "4055.04"
+            row["l1_miss_bytes"] = "40.96"
         elif mode == "l2_cg_load_only":
             row["l2_hit_rate_pct"] = "99"
+            row["l2_path_hit_rate_pct"] = "99"
+            row["l1_request_bytes"] = "4096"
+            row["l1_miss_bytes"] = "4096"
             row["l2_bytes"] = "4096"
+            row["l2_read_bytes"] = "4096"
+            row["l2_read_hit_sectors"] = "99"
+            row["l2_read_miss_sectors"] = "1"
         rows.append(row)
     fieldnames = list(NCU_ACCEPTANCE_COLUMNS)
     if missing_column is not None:
@@ -1137,8 +1421,11 @@ def run_ncu_summary_case(
     zero_l2_bytes: bool = False,
     low_l1_hit: bool = False,
     l2_high_l1_traffic: bool = False,
+    misleading_aggregate_l2: bool = False,
+    low_l2_path_hit: bool = False,
     dram_high_l2_hit: bool = False,
     wrong_active_sm: bool = False,
+    local_spill: bool = False,
 ) -> None:
     with tempfile.TemporaryDirectory(prefix=f"{name}_") as tmp:
         repo = Path(tmp)
@@ -1153,8 +1440,11 @@ def run_ncu_summary_case(
             zero_l2_bytes=zero_l2_bytes,
             low_l1_hit=low_l1_hit,
             l2_high_l1_traffic=l2_high_l1_traffic,
+            misleading_aggregate_l2=misleading_aggregate_l2,
+            low_l2_path_hit=low_l2_path_hit,
             dram_high_l2_hit=dram_high_l2_hit,
             wrong_active_sm=wrong_active_sm,
+            local_spill=local_spill,
         )
         rows = module.audit_package(
             repo,
@@ -1220,6 +1510,89 @@ def run_matched_summary_case(
         assert_status(
             rows,
             "matched_control_summary_policy",
+            expected_status,
+            actual_contains=expected_text,
+        )
+        print(f"{name}: ok")
+
+
+def run_matched_detail_case(
+    module: Any,
+    *,
+    name: str,
+    profile: str,
+    expected_status: str,
+    expected_text: str | None = None,
+    tensor_pair_energy_basis: str = "matched_iters_net_energy",
+    tensor_control_iters: str = "1000",
+    tensor_control_elapsed_s: str = "1.0",
+) -> None:
+    with tempfile.TemporaryDirectory(prefix=f"{name}_") as tmp:
+        repo = Path(tmp)
+        write_summary(repo, profile, "selftest", BASE_VALUES)
+        write_audit(repo, profile, "selftest", stale=False, failing=False)
+        write_matched_detail(
+            module,
+            repo,
+            profile,
+            "selftest",
+            tensor_pair_energy_basis=tensor_pair_energy_basis,
+            tensor_control_iters=tensor_control_iters,
+            tensor_control_elapsed_s=tensor_control_elapsed_s,
+        )
+        rows = module.audit_package(
+            repo,
+            profile,
+            "selftest",
+            expected_active_sm=PROFILE_ACTIVE_SM[profile],
+            expected_sm_count=None,
+        )
+        assert_status(rows, "matched_detail_present", "pass")
+        assert_status(
+            rows,
+            "matched_control_detail_policy",
+            expected_status,
+            actual_contains=expected_text,
+        )
+        print(f"{name}: ok")
+
+
+def run_tensor_pair_calibration_case(
+    module: Any,
+    *,
+    name: str,
+    expected_status: str,
+    expected_text: str | None = None,
+    control_iters: str = "1000",
+    manifest_iters: str = "1000",
+    treatment_calibrated_iters: str = "900",
+    control_min_calibrated_iters: str = "1000",
+    resolution_policy: str = "max_treatment_and_control_min_iters",
+) -> None:
+    with tempfile.TemporaryDirectory(prefix=f"{name}_") as tmp:
+        repo = Path(tmp)
+        calibration_path, tensor_path = write_tensor_pair_calibration_fixture(
+            module,
+            repo,
+            "a100",
+            "selftest",
+            control_iters=control_iters,
+            manifest_iters=manifest_iters,
+            treatment_calibrated_iters=treatment_calibrated_iters,
+            control_min_calibrated_iters=control_min_calibrated_iters,
+            resolution_policy=resolution_policy,
+        )
+        rows: list[dict[str, str]] = []
+        module.audit_tensor_pair_calibration(
+            repo,
+            rows,
+            calibration_path.relative_to(repo),
+            tensor_path.relative_to(repo),
+            profile="a100",
+        )
+        assert_status(
+            rows,
+            "tensor_pair_calibration_policy",
             expected_status,
             actual_contains=expected_text,
         )
@@ -1379,6 +1752,8 @@ def run_raw_policy_case(
     idle_baseline_j: str = "0.1",
     net_e_j: str = "0.9",
     iter_count: str = "1000",
+    omit_tensor_revision: bool = False,
+    omit_cg_warmup_policy: bool = False,
 ) -> None:
     with tempfile.TemporaryDirectory(prefix=f"{name}_") as tmp:
         repo = Path(tmp)
@@ -1401,6 +1776,8 @@ def run_raw_policy_case(
             idle_baseline_j=idle_baseline_j,
             net_e_j=net_e_j,
             iter_count=iter_count,
+            omit_tensor_revision=omit_tensor_revision,
+            omit_cg_warmup_policy=omit_cg_warmup_policy,
         )
         rows = module.audit_package(
             repo,
@@ -1606,6 +1983,20 @@ def main() -> int:
         delta_e_j="2",
         expected_raw_text="delta_E_J_counter_mismatch",
     )
+    run_raw_policy_case(
+        module,
+        name="bad_raw_stale_tensor_kernel_revision",
+        profile="a100",
+        omit_tensor_revision=True,
+        expected_raw_text="missing_tensor_kernel_revision",
+    )
+    run_raw_policy_case(
+        module,
+        name="bad_raw_missing_cg_warmup_policy",
+        profile="a100",
+        omit_cg_warmup_policy=True,
+        expected_raw_text="missing_cg_warmup_policy",
+    )
     run_power_api_case(
         module,
         name="good_power_api_final_candidate",
@@ -1692,6 +2083,62 @@ def main() -> int:
         expected_status="fail",
         expected_text="tensor_mma_increment:median=0",
     )
+    run_matched_detail_case(
+        module,
+        name="good_tensor_matched_iters_detail",
+        profile="a100",
+        expected_status="pass",
+    )
+    run_matched_detail_case(
+        module,
+        name="bad_tensor_duration_scaled_detail",
+        profile="a100",
+        tensor_pair_energy_basis="duration_scaled_control_power",
+        expected_status="fail",
+        expected_text="pair_energy_basis=duration_scaled_control_power",
+    )
+    run_matched_detail_case(
+        module,
+        name="bad_tensor_iter_mismatch_detail",
+        profile="a100",
+        tensor_control_iters="900",
+        expected_status="fail",
+        expected_text="tensor_iters=1000/900",
+    )
+    run_matched_detail_case(
+        module,
+        name="bad_tensor_control_too_short_detail",
+        profile="a100",
+        tensor_control_elapsed_s="0.1",
+        expected_status="fail",
+        expected_text="control_elapsed_s=0.1",
+    )
+    run_tensor_pair_calibration_case(
+        module,
+        name="good_tensor_pair_calibration_manifest",
+        expected_status="pass",
+    )
+    run_tensor_pair_calibration_case(
+        module,
+        name="bad_tensor_pair_raw_iter_mismatch",
+        control_iters="900",
+        expected_status="fail",
+        expected_text="ITER_sets=[1000]/[900]",
+    )
+    run_tensor_pair_calibration_case(
+        module,
+        name="bad_tensor_pair_manifest_iter_mismatch",
+        manifest_iters="900",
+        expected_status="fail",
+        expected_text="resolved=900:actual=1000",
+    )
+    run_tensor_pair_calibration_case(
+        module,
+        name="bad_tensor_pair_resolved_not_candidate_max",
+        control_min_calibrated_iters="1200",
+        expected_status="fail",
+        expected_text="resolved_not_candidate_max=1000!=1200",
+    )
     run_reliability_case(
         module,
         name="good_reliability_policy",
@@ -1738,6 +2185,13 @@ def main() -> int:
     )
     run_ncu_summary_case(
         module,
+        name="good_a100_l2_path_specific_despite_aggregate_71pct",
+        profile="a100",
+        misleading_aggregate_l2=True,
+        expected_status="pass",
+    )
+    run_ncu_summary_case(
+        module,
         name="bad_ncu_missing_l1_hit_rate",
         profile="rtx3090",
         missing_column="l1_hit_rate_pct",
@@ -1750,7 +2204,7 @@ def main() -> int:
         profile="rtx3090",
         zero_l2_bytes=True,
         expected_status="fail",
-        expected_text="l2_cg_load_only:l2_bytes=0",
+        expected_text="l2_cg_load_only:l2_read_bytes=0",
     )
     run_ncu_summary_case(
         module,
@@ -1770,6 +2224,14 @@ def main() -> int:
     )
     run_ncu_summary_case(
         module,
+        name="bad_a100_true_l2_path_hit_72pct",
+        profile="a100",
+        low_l2_path_hit=True,
+        expected_status="fail",
+        expected_text="l2_cg_load_only:no_path_sanity_pass",
+    )
+    run_ncu_summary_case(
+        module,
         name="bad_ncu_dram_high_l2_hit_rate",
         profile="rtx3090",
         dram_high_l2_hit=True,
@@ -1783,6 +2245,14 @@ def main() -> int:
         wrong_active_sm=True,
         expected_status="fail",
         expected_text="active_SM=82",
+    )
+    run_ncu_summary_case(
+        module,
+        name="bad_ncu_tensor_local_spill_bytes",
+        profile="a100",
+        local_spill=True,
+        expected_status="fail",
+        expected_text="reg_mma:no_path_sanity_pass",
     )
     run_ncu_acceptance_case(
         module,

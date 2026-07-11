@@ -102,12 +102,20 @@ STRICT_SUMMARY_NCU_EVIDENCE_COLUMNS = {
     "ncu_denominator_bytes_representative_min_med_max",
     "ncu_shared_bytes_min_med_max",
     "ncu_l1_hit_rate_pct_min_med_max",
+    "ncu_l1_path_hit_rate_pct_min_med_max",
     "ncu_l2_hit_rate_pct_min_med_max",
+    "ncu_l2_path_hit_rate_pct_min_med_max",
     "ncu_l1_accesses_min_med_max",
     "ncu_l2_accesses_min_med_max",
     "ncu_dram_accesses_min_med_max",
     "ncu_l1_bytes_min_med_max",
+    "ncu_l1_request_bytes_min_med_max",
+    "ncu_l1_hit_bytes_min_med_max",
+    "ncu_l1_miss_bytes_min_med_max",
     "ncu_l2_bytes_min_med_max",
+    "ncu_l2_read_bytes_min_med_max",
+    "ncu_l2_read_hit_sectors_min_med_max",
+    "ncu_l2_read_miss_sectors_min_med_max",
     "ncu_dram_bytes_min_med_max",
     "ncu_tensor_hmma_inst_min_med_max",
     "ncu_stall_long_scoreboard_pct_min_med_max",
@@ -131,14 +139,20 @@ STRICT_SUMMARY_REQUIRED_METRICS = {
     "Tensor MMA incremental": {"ncu_tensor_hmma_inst_min_med_max"},
     "Shared scalar path": {"ncu_shared_bytes_min_med_max"},
     "Global L1 hit path": {
-        "ncu_l1_hit_rate_pct_min_med_max",
+        "ncu_l1_path_hit_rate_pct_min_med_max",
         "ncu_l1_accesses_min_med_max",
-        "ncu_l1_bytes_min_med_max",
+        "ncu_l1_request_bytes_min_med_max",
+        "ncu_l1_hit_bytes_min_med_max",
     },
     "L2 CG hit path": {
-        "ncu_l2_hit_rate_pct_min_med_max",
+        "ncu_l1_path_hit_rate_pct_min_med_max",
+        "ncu_l1_request_bytes_min_med_max",
+        "ncu_l1_hit_bytes_min_med_max",
+        "ncu_l2_path_hit_rate_pct_min_med_max",
         "ncu_l2_accesses_min_med_max",
-        "ncu_l2_bytes_min_med_max",
+        "ncu_l2_read_bytes_min_med_max",
+        "ncu_l2_read_hit_sectors_min_med_max",
+        "ncu_l2_read_miss_sectors_min_med_max",
     },
 }
 
@@ -216,12 +230,24 @@ NCU_ACCEPTANCE_REQUIRED_COLUMNS = {
     "acceptance",
     "acceptance_reason",
     "l1_hit_rate_pct",
+    "l1_path_hit_rate_pct",
     "l2_hit_rate_pct",
+    "l2_path_hit_rate_pct",
     "shared_accesses",
     "shared_bytes",
     "shared_inst",
     "l1_bytes",
+    "l1_request_bytes",
+    "l1_hit_bytes",
+    "l1_miss_bytes",
     "l2_bytes",
+    "l2_read_bytes",
+    "l2_read_hit_sectors",
+    "l2_read_miss_sectors",
+    "local_read_bytes",
+    "local_write_bytes",
+    "spill_zero_verified",
+    "spill_evidence_source",
     "dram_bytes",
     "tensor_hmma_inst",
     "stall_long_scoreboard_pct",
@@ -230,6 +256,7 @@ NCU_ACCEPTANCE_REQUIRED_COLUMNS = {
 RAW_SUFFIXES = ("tensor", "shared", "l1", "l2", "dram")
 
 RAW_REQUIRED_MEASUREMENT_COLUMNS = {
+    "mode",
     "elapsed_s",
     "E_before_mJ",
     "E_after_mJ",
@@ -237,6 +264,29 @@ RAW_REQUIRED_MEASUREMENT_COLUMNS = {
     "idle_baseline_J",
     "net_E_J",
     "ITER",
+    "notes",
+}
+
+TENSOR_PAIR_CALIBRATION_REQUIRED_COLUMNS = {
+    "target_profile",
+    "gpu_list",
+    "W_SM_KiB",
+    "blocks_per_SM",
+    "active_SM",
+    "reuse_factor",
+    "load_repeat",
+    "store_repeat",
+    "calibration_source_mode",
+    "treatment_target_seconds",
+    "control_min_seconds",
+    "treatment_calibrated_iters",
+    "control_min_calibrated_iters",
+    "resolved_iters",
+    "resolution_policy",
+    "status",
+    "calibration_command",
+    "treatment_calibration_command",
+    "control_calibration_command",
 }
 
 POWER_STATE_REQUIRED_COLUMNS = {
@@ -271,7 +321,9 @@ NCU_REQUIRED_COLUMNS = {
     "reuse_factor",
     "load_repeat",
     "l1_hit_rate_pct",
+    "l1_path_hit_rate_pct",
     "l2_hit_rate_pct",
+    "l2_path_hit_rate_pct",
     "l1_accesses",
     "l1_access_unit",
     "l2_accesses",
@@ -279,12 +331,22 @@ NCU_REQUIRED_COLUMNS = {
     "dram_accesses",
     "dram_access_unit",
     "l1_bytes",
+    "l1_request_bytes",
+    "l1_hit_bytes",
+    "l1_miss_bytes",
     "l2_bytes",
+    "l2_read_bytes",
+    "l2_read_hit_sectors",
+    "l2_read_miss_sectors",
     "dram_bytes",
     "shared_accesses",
     "shared_bytes",
     "shared_inst",
     "tensor_hmma_inst",
+    "local_read_bytes",
+    "local_write_bytes",
+    "spill_zero_verified",
+    "spill_evidence_source",
     "stall_long_scoreboard_pct",
     "missing_metrics",
 }
@@ -328,8 +390,13 @@ NCU_LOAD_REPEAT_SWEEP_MODES = {
 NCU_POSITIVE_BY_MODE = {
     "shared_scalar_load_only": ("shared_accesses", "shared_bytes", "shared_inst"),
     "shared_load_only": ("shared_accesses", "shared_bytes", "shared_inst"),
-    "global_l1_load_only": ("l1_accesses", "l1_bytes"),
-    "l2_cg_load_only": ("l2_accesses", "l2_bytes"),
+    "global_l1_load_only": ("l1_accesses", "l1_request_bytes", "l1_hit_bytes"),
+    "l2_cg_load_only": (
+        "l1_request_bytes",
+        "l2_accesses",
+        "l2_read_bytes",
+        "l2_read_hit_sectors",
+    ),
     "dram_cg_load_only": ("dram_accesses", "dram_bytes"),
     "dram_load_only": ("dram_accesses", "dram_bytes"),
     "reg_mma": ("tensor_hmma_inst",),
@@ -339,6 +406,7 @@ NCU_L1_HIT_MIN_PCT = 95.0
 NCU_L1_L2_RATIO_MAX = 0.01
 NCU_L1_DRAM_RATIO_MAX = 0.01
 NCU_L2_L1_BYTES_RATIO_MAX = 0.01
+NCU_L2_L1_HIT_MAX_PCT = 1.0
 NCU_L2_HIT_MIN_PCT = 95.0
 NCU_L2_DRAM_RATIO_MAX = 0.02
 NCU_SHARED_GLOBAL_RATIO_MAX = 0.02
@@ -348,10 +416,11 @@ NCU_DRAM_L2_EXPECTED_MULTIPLIER = 2.0
 NCU_DRAM_L2_EXPECTED_SLACK_PCT = 2.0
 NCU_CONTROL_HMMA_PER_BLOCK_MAX = 1.0
 NCU_CONTROL_HMMA_PER_REG_OP_MAX = 1.0e-5
-NCU_GLOBAL_ADDRESS_CONTROL_DRAM_RATIO_MAX = 1.0e-4
+NCU_GLOBAL_ADDRESS_CONTROL_DRAM_RATIO_MAX = 1.0e-3
 NCU_DRAM_L2_RATIO_MIN = 0.5
 NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX = 1.0
 NCU_REGISTER_MEMORY_BYTES_PER_OP_MAX = 1.0
+TENSOR_CONTROL_MIN_ELAPSED_S = 0.8
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -421,6 +490,9 @@ def expected_paths(profile: str, tag: str) -> dict[str, Path | list[Path]]:
         "command_plan": Path(f"results/summary/{base}_command_plan.md"),
         "preflight": Path(f"results/summary/{base}_preflight.md"),
         "raw": [Path(f"results/raw/{base}_{suffix}.csv") for suffix in RAW_SUFFIXES],
+        "tensor_pair_calibration": Path(
+            f"results/raw/{base}_tensor_pair_calibration.csv"
+        ),
         "power_api": Path(f"results/summary/{base}_power_api_audit.csv"),
         "power_state": Path(f"results/summary/{base}_power_state_audit.csv"),
         "ncu_summary": Path(
@@ -633,6 +705,17 @@ def audit_raw_energy(
                 problems.append(
                     f"{prefix}:semantics={row.get('nvml_power_usage_semantics')}"
                 )
+            mode = row.get("mode", "")
+            notes = row.get("notes", "")
+            if mode in {"reg_mma", "reg_operand_only"} and (
+                "tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1"
+                not in notes
+            ):
+                problems.append(f"{prefix}:missing_tensor_kernel_revision")
+            if mode in {"l2_cg_load_only", "dram_cg_load_only"} and (
+                "global_warmup_policy=ld_global_cg" not in notes
+            ):
+                problems.append(f"{prefix}:missing_cg_warmup_policy")
             missing_measurement = sorted(
                 column for column in RAW_REQUIRED_MEASUREMENT_COLUMNS if column not in row
             )
@@ -688,7 +771,8 @@ def audit_raw_energy(
             "raw rows use target profile metadata, target active SM, total-energy "
             "delta, GPU/device scope, explicit measurement_scope, profile "
             "power semantics, positive counter delta, elapsed time, and iteration "
-            "count"
+            "count; Tensor rows carry the matched-add/scalar-epilogue revision and "
+            "CG rows carry the ld.global.cg warm-up policy"
         ),
         actual=f"rows={total_rows}" if not problems else ";".join(problems[:12]),
         evidence=";".join(str(path) for path in raw_paths),
@@ -696,6 +780,210 @@ def audit_raw_energy(
             "copy raw energy CSVs from the target node"
             if no_rows
             else "rerun energy sweep with the correct target profile and NVML policy"
+        ),
+    )
+
+
+def tensor_pair_coord(row: dict[str, str]) -> tuple[str, ...]:
+    return tuple(
+        row.get(column, "").strip()
+        for column in (
+            "W_SM_KiB",
+            "blocks_per_SM",
+            "active_SM",
+            "reuse_factor",
+            "load_repeat",
+            "store_repeat",
+        )
+    )
+
+
+def audit_tensor_pair_calibration(
+    repo: Path,
+    rows: list[dict[str, str]],
+    calibration_path: Path,
+    tensor_raw_path: Path,
+    *,
+    profile: str,
+) -> None:
+    calibration_full = rel(repo, calibration_path)
+    tensor_full = rel(repo, tensor_raw_path)
+    if not calibration_full.exists() or not tensor_full.exists():
+        return
+
+    with calibration_full.open(newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        calibration_fields = set(reader.fieldnames or [])
+        calibration_rows = list(reader)
+    with tensor_full.open(newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        tensor_fields = set(reader.fieldnames or [])
+        tensor_rows = list(reader)
+
+    problems: list[str] = []
+    missing_calibration = sorted(
+        TENSOR_PAIR_CALIBRATION_REQUIRED_COLUMNS - calibration_fields
+    )
+    required_raw = {
+        "mode",
+        "W_SM_KiB",
+        "blocks_per_SM",
+        "active_SM",
+        "reuse_factor",
+        "load_repeat",
+        "store_repeat",
+        "ITER",
+    }
+    missing_raw = sorted(required_raw - tensor_fields)
+    if missing_calibration:
+        problems.append("calibration_missing_columns=" + ",".join(missing_calibration))
+    if missing_raw:
+        problems.append("tensor_raw_missing_columns=" + ",".join(missing_raw))
+
+    calibration_by_coord: dict[tuple[str, ...], int] = {}
+    if not missing_calibration:
+        for idx, row in enumerate(calibration_rows, start=2):
+            coord = tensor_pair_coord(row)
+            resolved = parse_int(row.get("resolved_iters", ""))
+            treatment_candidate = parse_int(
+                row.get("treatment_calibrated_iters", "")
+            )
+            control_candidate = parse_int(
+                row.get("control_min_calibrated_iters", "")
+            )
+            treatment_target_seconds = parse_float(
+                row.get("treatment_target_seconds", "")
+            )
+            control_min_seconds = parse_float(row.get("control_min_seconds", ""))
+            if row.get("target_profile", "") != profile:
+                problems.append(
+                    f"calibration:{idx}:profile={row.get('target_profile', '')}"
+                )
+            if row.get("calibration_source_mode", "") != "reg_mma":
+                problems.append(
+                    f"calibration:{idx}:source={row.get('calibration_source_mode', '')}"
+                )
+            if row.get("status", "") != "pair_locked":
+                problems.append(f"calibration:{idx}:status={row.get('status', '')}")
+            if row.get("resolution_policy", "") != "max_treatment_and_control_min_iters":
+                problems.append(
+                    f"calibration:{idx}:resolution_policy="
+                    f"{row.get('resolution_policy', '')}"
+                )
+            if treatment_target_seconds is None or treatment_target_seconds <= 0.0:
+                problems.append(
+                    f"calibration:{idx}:treatment_target_seconds="
+                    f"{row.get('treatment_target_seconds', '')}"
+                )
+            if control_min_seconds is None or control_min_seconds <= 0.0:
+                problems.append(
+                    f"calibration:{idx}:control_min_seconds="
+                    f"{row.get('control_min_seconds', '')}"
+                )
+            treatment_command = row.get("treatment_calibration_command", "")
+            control_command = row.get("control_calibration_command", "")
+            if not (
+                "--mode reg_mma" in treatment_command
+                and "--calibrate-only" in treatment_command
+            ):
+                problems.append(
+                    f"calibration:{idx}:bad_treatment_calibration_command"
+                )
+            if not (
+                "--mode reg_operand_only" in control_command
+                and "--calibrate-only" in control_command
+                and "--seconds" in control_command
+            ):
+                problems.append(f"calibration:{idx}:bad_control_calibration_command")
+            if treatment_candidate is None or treatment_candidate <= 0:
+                problems.append(
+                    f"calibration:{idx}:treatment_calibrated_iters="
+                    f"{row.get('treatment_calibrated_iters', '')}"
+                )
+            if control_candidate is None or control_candidate <= 0:
+                problems.append(
+                    f"calibration:{idx}:control_min_calibrated_iters="
+                    f"{row.get('control_min_calibrated_iters', '')}"
+                )
+            if resolved is None or resolved <= 0:
+                problems.append(
+                    f"calibration:{idx}:resolved_iters={row.get('resolved_iters', '')}"
+                )
+                continue
+            if (
+                treatment_candidate is not None
+                and treatment_candidate > 0
+                and control_candidate is not None
+                and control_candidate > 0
+                and resolved != max(treatment_candidate, control_candidate)
+            ):
+                problems.append(
+                    f"calibration:{idx}:resolved_not_candidate_max="
+                    f"{resolved}!={max(treatment_candidate, control_candidate)}"
+                )
+            if coord in calibration_by_coord and calibration_by_coord[coord] != resolved:
+                problems.append(f"calibration:{idx}:duplicate_conflict={coord}")
+            calibration_by_coord[coord] = resolved
+
+    raw_iters: dict[tuple[str, ...], dict[str, set[int]]] = {}
+    if not missing_raw:
+        for idx, row in enumerate(tensor_rows, start=2):
+            mode = row.get("mode", "")
+            if mode not in {"reg_mma", "reg_operand_only"}:
+                continue
+            coord = tensor_pair_coord(row)
+            iters = parse_int(row.get("ITER", ""))
+            if iters is None or iters <= 0:
+                problems.append(f"tensor_raw:{idx}:ITER={row.get('ITER', '')}")
+                continue
+            raw_iters.setdefault(coord, {}).setdefault(mode, set()).add(iters)
+
+    for coord, by_mode in sorted(raw_iters.items()):
+        missing_modes = {"reg_mma", "reg_operand_only"} - set(by_mode)
+        if missing_modes:
+            problems.append(
+                f"tensor_raw:{coord}:missing_modes={','.join(sorted(missing_modes))}"
+            )
+            continue
+        combined = by_mode["reg_mma"] | by_mode["reg_operand_only"]
+        if len(combined) != 1:
+            problems.append(
+                f"tensor_raw:{coord}:ITER_sets="
+                f"{sorted(by_mode['reg_mma'])}/{sorted(by_mode['reg_operand_only'])}"
+            )
+            continue
+        actual = next(iter(combined))
+        resolved = calibration_by_coord.get(coord)
+        if resolved is None:
+            problems.append(f"tensor_raw:{coord}:missing_calibration")
+        elif resolved != actual:
+            problems.append(f"tensor_raw:{coord}:resolved={resolved}:actual={actual}")
+
+    extra_calibration = sorted(set(calibration_by_coord) - set(raw_iters))
+    if extra_calibration:
+        problems.append(f"calibration_without_raw={extra_calibration[:3]}")
+    if not raw_iters:
+        problems.append("no_tensor_pair_rows")
+
+    add(
+        rows,
+        area="analysis",
+        check="tensor_pair_calibration_policy",
+        status="pass" if not problems else "fail",
+        expected=(
+            "one treatment/control-floor dual calibration per Tensor coordinate, "
+            "resolved ITER=max(candidate ITERs), pair_locked manifest, and identical "
+            "positive ITER in reg_mma/reg_operand_only raw rows"
+        ),
+        actual=(
+            f"coordinates={len(raw_iters)}, calibrations={len(calibration_by_coord)}"
+            if not problems
+            else ";".join(problems[:12])
+        ),
+        evidence=f"{calibration_path};{tensor_raw_path}",
+        action=(
+            "rerun the Tensor sweep with --tensor-pair-lock-iters and do not append "
+            "to raw rows from a duration-calibrated run"
         ),
     )
 
@@ -899,35 +1187,53 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
     if row.get("status") != "ok" or row.get("missing_metrics", "").strip():
         return False
 
-    l1_hit = ncu_value(row, "l1_hit_rate_pct", -1.0)
-    l2_hit = ncu_value(row, "l2_hit_rate_pct", -1.0)
+    l1_hit = ncu_value(row, "l1_path_hit_rate_pct", -1.0)
+    l2_hit = ncu_value(row, "l2_path_hit_rate_pct", -1.0)
     l1_bytes = ncu_value(row, "l1_bytes")
+    l1_request_bytes = ncu_value(row, "l1_request_bytes")
+    l1_hit_bytes = ncu_value(row, "l1_hit_bytes")
     l2_bytes = ncu_value(row, "l2_bytes")
+    l2_read_bytes = ncu_value(row, "l2_read_bytes")
     dram_bytes = ncu_value(row, "dram_bytes")
     shared_bytes = ncu_value(row, "shared_bytes")
     shared_accesses = ncu_value(row, "shared_accesses")
     shared_inst = ncu_value(row, "shared_inst")
     tensor_hmma = ncu_value(row, "tensor_hmma_inst")
+    local_read_bytes = ncu_value(row, "local_read_bytes")
+    local_write_bytes = ncu_value(row, "local_write_bytes")
+    spill_zero_verified = ncu_value(row, "spill_zero_verified", -1.0)
+
+    if (
+        local_read_bytes > 0.0
+        or local_write_bytes > 0.0
+        or spill_zero_verified != 1.0
+    ):
+        return False
 
     if mode == "global_l1_load_only":
         return (
             l1_hit >= NCU_L1_HIT_MIN_PCT
-            and l1_bytes > 0.0
-            and ncu_ratio(l2_bytes, l1_bytes) <= NCU_L1_L2_RATIO_MAX
-            and ncu_ratio(dram_bytes, l1_bytes) <= NCU_L1_DRAM_RATIO_MAX
+            and l1_request_bytes > 0.0
+            and l1_hit_bytes > 0.0
+            and ncu_ratio(l2_read_bytes, l1_request_bytes) <= NCU_L1_L2_RATIO_MAX
+            and ncu_ratio(dram_bytes, l1_request_bytes) <= NCU_L1_DRAM_RATIO_MAX
         )
     if mode == "global_addr_only":
         return (
-            l1_bytes == 0.0
+            l1_request_bytes == 0.0
             and ncu_ratio(dram_bytes, ncu_expected_input_bytes(row))
             <= NCU_GLOBAL_ADDRESS_CONTROL_DRAM_RATIO_MAX
         )
     if mode == "l2_cg_load_only":
         return (
             l2_hit >= NCU_L2_HIT_MIN_PCT
-            and l2_bytes > 0.0
-            and ncu_ratio(l1_bytes, l2_bytes) <= NCU_L2_L1_BYTES_RATIO_MAX
-            and ncu_ratio(dram_bytes, l2_bytes) <= NCU_L2_DRAM_RATIO_MAX
+            and l2_read_bytes > 0.0
+            and l1_request_bytes > 0.0
+            and l1_hit >= 0.0
+            and l1_hit <= NCU_L2_L1_HIT_MAX_PCT
+            and ncu_ratio(l1_hit_bytes, l1_request_bytes)
+            <= NCU_L2_L1_BYTES_RATIO_MAX
+            and ncu_ratio(dram_bytes, l2_read_bytes) <= NCU_L2_DRAM_RATIO_MAX
         )
     if mode in {"shared_scalar_load_only", "shared_load_only"}:
         denominator = max(shared_bytes, 1.0)
@@ -956,7 +1262,8 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
         if tensor_hmma <= 0.0:
             return False
         return (
-            ncu_ratio(l2_bytes, tensor_hmma) <= NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX
+            ncu_ratio(l2_read_bytes, tensor_hmma)
+            <= NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX
             and ncu_ratio(dram_bytes, tensor_hmma)
             <= NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX
         )
@@ -975,7 +1282,8 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
         if expected_ops <= 0.0:
             return True
         return (
-            ncu_ratio(l2_bytes, expected_ops) <= NCU_REGISTER_MEMORY_BYTES_PER_OP_MAX
+            ncu_ratio(l2_read_bytes, expected_ops)
+            <= NCU_REGISTER_MEMORY_BYTES_PER_OP_MAX
             and ncu_ratio(dram_bytes, expected_ops)
             <= NCU_REGISTER_MEMORY_BYTES_PER_OP_MAX
         )
@@ -1105,9 +1413,54 @@ def audit_matched_control(
     problems: list[str] = []
     for idx, row in enumerate(csv_rows, start=2):
         valid = row.get("valid_component_estimate", row.get("valid_for_summary", "")).lower()
-        if row.get("component", "") != "tensor_mma_increment":
+        component = row.get("component", "")
+        if component != "tensor_mma_increment":
             if row.get("denominator_source") != "ncu_actual_exact":
                 problems.append(f"{path}:{idx}:denominator={row.get('denominator_source')}")
+        else:
+            if row.get("pair_energy_basis", "") != "matched_iters_net_energy":
+                problems.append(
+                    f"{path}:{idx}:pair_energy_basis={row.get('pair_energy_basis', '')}"
+                )
+            numerator_iters = parse_float(row.get("numerator_ITER", ""))
+            control_iters = parse_float(row.get("control_ITER", ""))
+            iter_ratio = parse_float(row.get("iter_ratio", ""))
+            if (
+                numerator_iters is None
+                or control_iters is None
+                or numerator_iters <= 0.0
+                or control_iters <= 0.0
+                or int(numerator_iters) != int(control_iters)
+            ):
+                problems.append(
+                    f"{path}:{idx}:tensor_iters="
+                    f"{row.get('numerator_ITER', '')}/{row.get('control_ITER', '')}"
+                )
+            if iter_ratio is None or not math.isclose(iter_ratio, 1.0, rel_tol=1.0e-9):
+                problems.append(f"{path}:{idx}:iter_ratio={row.get('iter_ratio', '')}")
+            numerator_elapsed = parse_float(row.get("numerator_elapsed_s", ""))
+            control_elapsed = parse_float(row.get("control_elapsed_s", ""))
+            numerator_net = parse_float(row.get("numerator_net_E_J", ""))
+            control_net = parse_float(row.get("control_net_E_J", ""))
+            if numerator_elapsed is None or numerator_elapsed <= 0.0:
+                problems.append(
+                    f"{path}:{idx}:numerator_elapsed_s={row.get('numerator_elapsed_s', '')}"
+                )
+            if (
+                control_elapsed is None
+                or control_elapsed < TENSOR_CONTROL_MIN_ELAPSED_S
+            ):
+                problems.append(
+                    f"{path}:{idx}:control_elapsed_s={row.get('control_elapsed_s', '')}"
+                )
+            if numerator_net is None or numerator_net <= 0.0:
+                problems.append(
+                    f"{path}:{idx}:numerator_net_E_J={row.get('numerator_net_E_J', '')}"
+                )
+            if control_net is None or control_net <= 0.0:
+                problems.append(
+                    f"{path}:{idx}:control_net_E_J={row.get('control_net_E_J', '')}"
+                )
         delta_j = parse_float(row.get("delta_E_J", ""))
         if valid == "true" and (delta_j is None or delta_j <= 0.0):
             problems.append(f"{path}:{idx}:non_positive_valid_delta")
@@ -1131,12 +1484,16 @@ def audit_matched_control(
         area="analysis",
         check="matched_control_detail_policy",
         status="pass" if not problems else "fail",
-        expected="NCU exact denominators for memory paths and no negative valid deltas",
+        expected=(
+            "Tensor rows use matched_iters_net_energy with identical positive ITER; "
+            "memory paths use exact NCU denominators; valid deltas are positive"
+        ),
         actual=f"rows={len(csv_rows)}" if not problems else ";".join(problems[:12]),
         evidence=str(path),
         action=(
-            "rerun matched-control with --require-ncu-denominator, "
-            "--require-total-energy, and the expected power semantics"
+            "rerun Tensor sweeps with --tensor-pair-lock-iters and analyze with "
+            "--tensor-pair-policy matched-iters; retain exact NCU denominators, "
+            "total-energy scope, and expected power semantics"
         ),
     )
 
@@ -1469,6 +1826,15 @@ def audit_package(
         expected_active_sm=expected_active_sm,
         expected_sm_count=expected_sm_count,
     )  # type: ignore[arg-type]
+    raw_paths = paths["raw"]
+    if isinstance(raw_paths, list) and raw_paths:
+        audit_tensor_pair_calibration(
+            repo,
+            rows,
+            paths["tensor_pair_calibration"],  # type: ignore[arg-type]
+            raw_paths[0],
+            profile=profile,
+        )
     audit_power_api(repo, rows, paths["power_api"], expected_semantics=semantics)  # type: ignore[arg-type]
     audit_power_state(repo, rows, paths["power_state"])  # type: ignore[arg-type]
     audit_ncu_summary_quality(

@@ -203,6 +203,16 @@ def first_non_none(*values: float | None) -> float | None:
     return None
 
 
+def first_metric_sum(metrics: Metrics, names: Iterable[str]) -> float | None:
+    """Return the first available metric sum without adding alias metrics."""
+
+    for name in names:
+        value = metrics.sum_names([name])
+        if value is not None:
+            return value
+    return None
+
+
 def sum_non_none(*values: float | None) -> float | None:
     present = [value for value in values if value is not None]
     if not present:
@@ -236,60 +246,105 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     for path in files:
         metrics.add_file(path)
 
-    l1_hit_rate = first_non_none(
-        metrics.first_names(
-            [
-                "l1tex__t_sector_hit_rate.pct",
-                "l1tex__t_sectors_hit_rate.pct",
-                "l1tex__t_bytes_hit_rate.pct",
-            ]
+    l1_global_load_hit_sectors = first_metric_sum(
+        metrics,
+        [
+            "l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit.sum",
+            "l1tex__t_sectors_lookup_hit.sum",
+        ],
+    )
+    l1_global_load_miss_sectors = first_metric_sum(
+        metrics,
+        [
+            "l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss.sum",
+            "l1tex__t_sectors_lookup_miss.sum",
+        ],
+    )
+    l1_global_load_hit_bytes_counter = first_metric_sum(
+        metrics,
+        [
+            "l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit.sum",
+            "l1tex__t_bytes_lookup_hit.sum",
+        ],
+    )
+    l1_global_load_miss_bytes_counter = first_metric_sum(
+        metrics,
+        [
+            "l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss.sum",
+            "l1tex__t_bytes_lookup_miss.sum",
+        ],
+    )
+    l1_hit_bytes = first_non_none(
+        l1_global_load_hit_bytes_counter,
+        l1_global_load_hit_sectors * SECTOR_BYTES
+        if l1_global_load_hit_sectors is not None
+        else None,
+    )
+    l1_miss_bytes = first_non_none(
+        l1_global_load_miss_bytes_counter,
+        l1_global_load_miss_sectors * SECTOR_BYTES
+        if l1_global_load_miss_sectors is not None
+        else None,
+    )
+    l1_path_hit_rate = first_non_none(
+        percent_from_hit_miss(
+            l1_global_load_hit_sectors, l1_global_load_miss_sectors
         ),
         percent_from_hit_miss(
-            metrics.sum_names(
-                [
-                    "l1tex__t_sectors_lookup_hit.sum",
-                    "l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit.sum",
-                    "l1tex__t_bytes_lookup_hit.sum",
-                    "l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit.sum",
-                ]
-            ),
-            metrics.sum_names(
-                [
-                    "l1tex__t_sectors_lookup_miss.sum",
-                    "l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss.sum",
-                    "l1tex__t_bytes_lookup_miss.sum",
-                    "l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss.sum",
-                ]
-            ),
+            l1_global_load_hit_bytes_counter, l1_global_load_miss_bytes_counter
         ),
     )
+    l1_aggregate_hit_rate = metrics.first_names(
+        [
+            "l1tex__t_sector_hit_rate.pct",
+            "l1tex__t_sectors_hit_rate.pct",
+            "l1tex__t_bytes_hit_rate.pct",
+        ]
+    )
+    l1_hit_rate = first_non_none(l1_path_hit_rate, l1_aggregate_hit_rate)
+    l1_hit_rate_source = (
+        "global_load_lookup_hit_miss"
+        if l1_path_hit_rate is not None
+        else "aggregate_fallback"
+        if l1_aggregate_hit_rate is not None
+        else ""
+    )
 
-    l2_hit_rate = first_non_none(
-        metrics.first_names(
-            [
-                "lts__t_sector_hit_rate.pct",
-                "lts__t_sectors_hit_rate.pct",
-                "lts__t_tag_hit_rate.pct",
-            ]
-        ),
-        percent_from_hit_miss(
-            metrics.sum_names(
-                [
-                    "lts__t_sectors_lookup_hit.sum",
-                    "lts__t_sectors_srcunit_tex_lookup_hit.sum",
-                    "lts__t_sectors_srcunit_tex_op_read_lookup_hit.sum",
-                    "lts__t_tag_requests_hit.sum",
-                ]
-            ),
-            metrics.sum_names(
-                [
-                    "lts__t_sectors_lookup_miss.sum",
-                    "lts__t_sectors_srcunit_tex_lookup_miss.sum",
-                    "lts__t_sectors_srcunit_tex_op_read_lookup_miss.sum",
-                    "lts__t_tag_requests_miss.sum",
-                ]
-            ),
-        ),
+    l2_read_hit_sectors = first_metric_sum(
+        metrics,
+        [
+            "lts__t_sectors_srcunit_tex_op_read_lookup_hit.sum",
+            "lts__t_sectors_srcunit_tex_lookup_hit.sum",
+            "lts__t_sectors_lookup_hit.sum",
+            "lts__t_tag_requests_hit.sum",
+        ],
+    )
+    l2_read_miss_sectors = first_metric_sum(
+        metrics,
+        [
+            "lts__t_sectors_srcunit_tex_op_read_lookup_miss.sum",
+            "lts__t_sectors_srcunit_tex_lookup_miss.sum",
+            "lts__t_sectors_lookup_miss.sum",
+            "lts__t_tag_requests_miss.sum",
+        ],
+    )
+    l2_path_hit_rate = percent_from_hit_miss(
+        l2_read_hit_sectors, l2_read_miss_sectors
+    )
+    l2_aggregate_hit_rate = metrics.first_names(
+        [
+            "lts__t_sector_hit_rate.pct",
+            "lts__t_sectors_hit_rate.pct",
+            "lts__t_tag_hit_rate.pct",
+        ]
+    )
+    l2_hit_rate = first_non_none(l2_path_hit_rate, l2_aggregate_hit_rate)
+    l2_hit_rate_source = (
+        "srcunit_tex_read_lookup_hit_miss"
+        if l2_path_hit_rate is not None
+        else "aggregate_fallback"
+        if l2_aggregate_hit_rate is not None
+        else ""
     )
 
     l1_read_requests = metrics.sum_names(
@@ -342,6 +397,14 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         ),
         metrics.sum_names(["l1tex__t_bytes_pipe_lsu.sum", "l1tex__t_bytes.sum"]),
         l1_sectors * SECTOR_BYTES if l1_sectors is not None else None,
+    )
+    l1_request_bytes = first_non_none(
+        first_metric_sum(
+            metrics,
+            ["l1tex__t_bytes_pipe_lsu_mem_global_op_ld.sum"],
+        ),
+        l1_read_sectors * SECTOR_BYTES if l1_read_sectors is not None else None,
+        sum_non_none(l1_hit_bytes, l1_miss_bytes),
     )
 
     shared_read_accesses = first_non_none(
@@ -485,17 +548,19 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         metrics.sum_names(["sm__sass_inst_executed_op_shared.sum"]),
     )
 
-    l2_read_sectors = metrics.sum_names(
+    l2_read_sectors = first_metric_sum(
+        metrics,
         [
-            "lts__t_sectors_op_read.sum",
             "lts__t_sectors_srcunit_tex_op_read.sum",
-        ]
+            "lts__t_sectors_op_read.sum",
+        ],
     )
-    l2_write_sectors = metrics.sum_names(
+    l2_write_sectors = first_metric_sum(
+        metrics,
         [
-            "lts__t_sectors_op_write.sum",
             "lts__t_sectors_srcunit_tex_op_write.sum",
-        ]
+            "lts__t_sectors_op_write.sum",
+        ],
     )
     l2_sectors = first_non_none(
         sum_non_none(l2_read_sectors, l2_write_sectors),
@@ -505,6 +570,9 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         metrics.sum_names(["lts__t_bytes.sum"]),
         metrics.sum_names(["lts__t_bytes_srcunit_tex.sum"]),
         l2_sectors * SECTOR_BYTES if l2_sectors is not None else None,
+    )
+    l2_read_bytes = (
+        l2_read_sectors * SECTOR_BYTES if l2_read_sectors is not None else None
     )
 
     dram_read_sectors = metrics.sum_names(["dram__sectors_read.sum"])
@@ -523,12 +591,41 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     )
 
     tensor_hmma_inst = metrics.sum_names(["sm__inst_executed_pipe_tensor_op_hmma.sum"])
+    local_read_bytes = metrics.sum_names(
+        ["l1tex__t_bytes_pipe_lsu_mem_local_op_ld.sum"]
+    )
+    local_write_bytes = metrics.sum_names(
+        ["l1tex__t_bytes_pipe_lsu_mem_local_op_st.sum"]
+    )
     spill_local_read_inst = metrics.sum_names(
         ["sass__inst_executed_register_spilling_mem_local_op_read.sum"]
     )
     spill_local_write_inst = metrics.sum_names(
         ["sass__inst_executed_register_spilling_mem_local_op_write.sum"]
     )
+    spill_evidence_source = "sass_register_spill_instructions"
+    if spill_local_read_inst is None and local_read_bytes == 0.0:
+        spill_local_read_inst = 0.0
+        spill_evidence_source = "local_memory_bytes_zero_inference"
+    if spill_local_write_inst is None and local_write_bytes == 0.0:
+        spill_local_write_inst = 0.0
+        spill_evidence_source = "local_memory_bytes_zero_inference"
+    if (
+        spill_local_read_inst is None
+        or spill_local_write_inst is None
+    ) and (local_read_bytes is not None or local_write_bytes is not None):
+        spill_evidence_source = "local_memory_bytes_nonzero_or_partial"
+    spill_zero_verified = None
+    if (local_read_bytes or 0.0) > 0.0 or (local_write_bytes or 0.0) > 0.0:
+        spill_zero_verified = 0.0
+    elif spill_local_read_inst is not None and spill_local_write_inst is not None:
+        spill_zero_verified = float(
+            spill_local_read_inst == 0.0 and spill_local_write_inst == 0.0
+        )
+    elif local_read_bytes is not None and local_write_bytes is not None:
+        spill_zero_verified = float(
+            local_read_bytes == 0.0 and local_write_bytes == 0.0
+        )
     stall_long_scoreboard_pct = metrics.first_names(
         ["smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.pct"]
     )
@@ -567,6 +664,19 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         missing.append("l2_accesses")
     if dram_sectors is None:
         missing.append("dram_accesses")
+    mode = manifest.get("mode", "")
+    if mode in {"global_l1_load_only", "l2_cg_load_only", "dram_cg_load_only"}:
+        if l1_request_bytes is None:
+            missing.append("l1_request_bytes")
+        if l1_path_hit_rate is None:
+            missing.append("l1_path_hit_rate_pct")
+    if mode == "l2_cg_load_only":
+        if l1_hit_bytes is None:
+            missing.append("l1_hit_bytes")
+        if l2_path_hit_rate is None:
+            missing.append("l2_path_hit_rate_pct")
+        if l2_read_bytes is None:
+            missing.append("l2_read_bytes")
 
     optional_missing = []
     if tensor_hmma_inst is None:
@@ -620,7 +730,13 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "legacy_shared_read_accesses": fmt(legacy_shared_read_accesses),
         "legacy_shared_write_accesses": fmt(legacy_shared_write_accesses),
         "l1_hit_rate_pct": fmt(l1_hit_rate),
+        "l1_path_hit_rate_pct": fmt(l1_path_hit_rate),
+        "l1_aggregate_hit_rate_pct": fmt(l1_aggregate_hit_rate),
+        "l1_hit_rate_source": l1_hit_rate_source,
         "l2_hit_rate_pct": fmt(l2_hit_rate),
+        "l2_path_hit_rate_pct": fmt(l2_path_hit_rate),
+        "l2_aggregate_hit_rate_pct": fmt(l2_aggregate_hit_rate),
+        "l2_hit_rate_source": l2_hit_rate_source,
         "l1_accesses": fmt(l1_accesses),
         "l1_access_unit": l1_access_unit,
         "l1_read_accesses": fmt(l1_read_accesses),
@@ -636,11 +752,21 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "shared_read_accesses": fmt(shared_read_accesses),
         "shared_write_accesses": fmt(shared_write_accesses),
         "l1_bytes": fmt(l1_bytes),
+        "l1_request_bytes": fmt(l1_request_bytes),
+        "l1_hit_bytes": fmt(l1_hit_bytes),
+        "l1_miss_bytes": fmt(l1_miss_bytes),
         "l2_bytes": fmt(l2_bytes),
+        "l2_read_bytes": fmt(l2_read_bytes),
+        "l2_read_hit_sectors": fmt(l2_read_hit_sectors),
+        "l2_read_miss_sectors": fmt(l2_read_miss_sectors),
         "dram_bytes": fmt(dram_bytes),
         "tensor_hmma_inst": fmt(tensor_hmma_inst),
+        "local_read_bytes": fmt(local_read_bytes),
+        "local_write_bytes": fmt(local_write_bytes),
         "spill_local_read_inst": fmt(spill_local_read_inst),
         "spill_local_write_inst": fmt(spill_local_write_inst),
+        "spill_zero_verified": fmt(spill_zero_verified),
+        "spill_evidence_source": spill_evidence_source,
         "stall_long_scoreboard_pct": fmt(stall_long_scoreboard_pct),
         "stall_short_scoreboard_pct": fmt(stall_short_scoreboard_pct),
         "stall_wait_pct": fmt(stall_wait_pct),
@@ -711,7 +837,65 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
                 f"{row['status']} | {notes} |\n"
             )
         f.write("\n")
+        f.write("## L1/L2 Path-Specific Evidence\n\n")
+        f.write(
+            "`L1 request bytes` are bytes presented to L1TEX; they are not L1 "
+            "cache-hit bytes. For `.cg`, L1 requests are expected while L1 hit "
+            "bytes/hit rate should remain near zero. L2 acceptance uses the "
+            "srcunit-TEX read hit/miss sectors when available.\n\n"
+        )
+        f.write(
+            "| label | mode | L1 path hit (%) | L1 aggregate hit (%) | L1 hit source | "
+            "L1 request bytes | L1 hit bytes | L1 miss bytes | L2 read hit (%) | "
+            "L2 aggregate hit (%) | L2 hit source | L2 read hit sectors | "
+            "L2 read miss sectors | L2 read bytes |\n"
+        )
+        f.write("|---|---|---:|---:|---|---:|---:|---:|---:|---:|---|---:|---:|---:|\n")
+        for row in rows:
+            f.write(
+                f"| {row['label']} | {row['mode']} | "
+                f"{row['l1_path_hit_rate_pct']} | {row['l1_aggregate_hit_rate_pct']} | "
+                f"{row['l1_hit_rate_source']} | {row['l1_request_bytes']} | "
+                f"{row['l1_hit_bytes']} | {row['l1_miss_bytes']} | "
+                f"{row['l2_path_hit_rate_pct']} | {row['l2_aggregate_hit_rate_pct']} | "
+                f"{row['l2_hit_rate_source']} | {row['l2_read_hit_sectors']} | "
+                f"{row['l2_read_miss_sectors']} | {row['l2_read_bytes']} |\n"
+            )
+        f.write("\n")
+        f.write("## Spill And Local-Memory Evidence\n\n")
+        f.write(
+            "Dedicated spill-instruction metrics are not available on every NCU/chip "
+            "combination. `spill_zero_verified=1` means either the dedicated counters "
+            "are zero or, for kernels with no intentional local-memory path, both "
+            "local load/store byte counters are zero.\n\n"
+        )
+        f.write(
+            "| label | mode | local read bytes | local write bytes | spill read inst | "
+            "spill write inst | spill zero verified | evidence source |\n"
+        )
+        f.write("|---|---|---:|---:|---:|---:|---:|---|\n")
+        for row in rows:
+            f.write(
+                f"| {row['label']} | {row['mode']} | {row['local_read_bytes']} | "
+                f"{row['local_write_bytes']} | {row['spill_local_read_inst']} | "
+                f"{row['spill_local_write_inst']} | {row['spill_zero_verified']} | "
+                f"{row['spill_evidence_source']} |\n"
+            )
+        f.write("\n")
         f.write("Access count unit: L1 prefers request counters when available; otherwise it falls back to sectors. L2 and DRAM access counts are sector counters. One sector is treated as 32 bytes when byte counters are unavailable. SB means scoreboard.\n")
+
+
+def run_self_test() -> None:
+    metrics = Metrics()
+    metrics.values["path_specific.sum"] = [10.0, 20.0]
+    metrics.values["aggregate_alias.sum"] = [1000.0]
+    assert first_metric_sum(
+        metrics, ["path_specific.sum", "aggregate_alias.sum"]
+    ) == 30.0
+    assert percent_from_hit_miss(95.0, 5.0) == 95.0
+    assert percent_from_hit_miss(0.0, 100.0) == 0.0
+    assert first_non_none(0.0, 1.0) == 0.0
+    print("NCU cache path-specific metric self-test passed")
 
 
 def main() -> int:
@@ -724,7 +908,12 @@ def main() -> int:
     parser.add_argument("--case-manifest", default="")
     parser.add_argument("--out-csv", default="results/summary/ncu_cache_validation_summary.csv")
     parser.add_argument("--out-md", default="results/summary/ncu_cache_validation_summary.md")
+    parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
+
+    if args.self_test:
+        run_self_test()
+        return 0
 
     patterns = args.patterns or ["results/ncu/**/*_raw_metrics.csv"]
     grouped = collect_files(patterns)
@@ -755,7 +944,13 @@ def main() -> int:
         "legacy_shared_read_accesses",
         "legacy_shared_write_accesses",
         "l1_hit_rate_pct",
+        "l1_path_hit_rate_pct",
+        "l1_aggregate_hit_rate_pct",
+        "l1_hit_rate_source",
         "l2_hit_rate_pct",
+        "l2_path_hit_rate_pct",
+        "l2_aggregate_hit_rate_pct",
+        "l2_hit_rate_source",
         "l1_accesses",
         "l1_access_unit",
         "l1_read_accesses",
@@ -771,11 +966,21 @@ def main() -> int:
         "shared_read_accesses",
         "shared_write_accesses",
         "l1_bytes",
+        "l1_request_bytes",
+        "l1_hit_bytes",
+        "l1_miss_bytes",
         "l2_bytes",
+        "l2_read_bytes",
+        "l2_read_hit_sectors",
+        "l2_read_miss_sectors",
         "dram_bytes",
         "tensor_hmma_inst",
+        "local_read_bytes",
+        "local_write_bytes",
         "spill_local_read_inst",
         "spill_local_write_inst",
+        "spill_zero_verified",
+        "spill_evidence_source",
         "stall_long_scoreboard_pct",
         "stall_short_scoreboard_pct",
         "stall_wait_pct",

@@ -35,6 +35,7 @@ cmake --build build-a100 -j
 | raw energy CSVs | `results/raw/a100_component_finalplan_20260708_l1.csv` | contains explicit total-energy rows, profile metadata, active SM, W_SM, blocks/SM | `raw_energy_profile_and_power` |
 | raw energy CSVs | `results/raw/a100_component_finalplan_20260708_l2.csv` | contains explicit total-energy rows, profile metadata, active SM, W_SM, blocks/SM | `raw_energy_profile_and_power` |
 | raw energy CSVs | `results/raw/a100_component_finalplan_20260708_dram.csv` | contains explicit total-energy rows, profile metadata, active SM, W_SM, blocks/SM | `raw_energy_profile_and_power` |
+| Tensor pair calibration manifest | `results/raw/a100_component_finalplan_20260708_tensor_pair_calibration.csv` | proves reg_mma-calibrated ITER was applied identically to treatment and control | `tensor_pair_calibration_policy` |
 | power API audit | `results/summary/a100_component_finalplan_20260708_power_api_audit.csv` | proves final rows use nvml_total_energy + total_energy_mj_delta + GPU/device scope | `power_api_final_candidate` |
 | power-state stability audit | `results/summary/a100_component_finalplan_20260708_power_state_audit.csv` | excludes average-power, endpoint-power, clock, and temperature outlier rows | `power_state_quality` |
 | NCU counter summary | `results/ncu/a100_component_finalplan_ncu_factor_20260708/ncu_cache_validation_summary.csv` | records L1/L2 hit rates, L1/L2/DRAM bytes/access counts, shared bytes, tensor inst, stalls | `ncu_summary_quality` |

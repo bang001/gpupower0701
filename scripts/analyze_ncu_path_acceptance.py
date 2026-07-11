@@ -104,12 +104,25 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
     l2_hit = f(row, "l2_hit_rate_pct", -1.0)
     l1_bytes = f(row, "l1_bytes")
     l2_bytes = f(row, "l2_bytes")
+    l1_request_bytes = f(row, "l1_request_bytes", l1_bytes)
+    l1_hit_bytes = f(row, "l1_hit_bytes")
+    l1_path_hit = f(row, "l1_path_hit_rate_pct", l1_hit)
+    l2_read_bytes = f(row, "l2_read_bytes", l2_bytes)
+    l2_path_hit = f(row, "l2_path_hit_rate_pct", l2_hit)
+    has_l1_request_bytes = bool(row.get("l1_request_bytes", "").strip())
+    has_l1_hit_bytes = bool(row.get("l1_hit_bytes", "").strip())
+    has_l1_path_hit = bool(row.get("l1_path_hit_rate_pct", "").strip())
+    has_l2_read_bytes = bool(row.get("l2_read_bytes", "").strip())
+    has_l2_path_hit = bool(row.get("l2_path_hit_rate_pct", "").strip())
     dram_bytes = f(row, "dram_bytes")
     shared_bytes = f(row, "shared_bytes")
     shared_accesses = f(row, "shared_accesses")
     shared_bank_conflicts = f(row, "shared_bank_conflicts")
     shared_inst = f(row, "shared_inst")
     tensor_hmma = f(row, "tensor_hmma_inst")
+    local_read_bytes = f(row, "local_read_bytes")
+    local_write_bytes = f(row, "local_write_bytes")
+    spill_zero_verified = f(row, "spill_zero_verified", -1.0)
     spill_read = f(row, "spill_local_read_inst")
     spill_write = f(row, "spill_local_write_inst")
     control_hmma_class = ""
@@ -119,29 +132,47 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
     dram_l2_hit_limit_pct = args.dram_l2_hit_max_pct
     address_control_dram_ratio = 0.0
 
-    if spill_read > 0.0 or spill_write > 0.0:
+    if not row.get("spill_zero_verified", "").strip():
+        reasons.append("missing_spill_zero_evidence")
+    elif (
+        spill_read > 0.0
+        or spill_write > 0.0
+        or local_read_bytes > 0.0
+        or local_write_bytes > 0.0
+        or spill_zero_verified != 1.0
+    ):
         reasons.append("local_spill_traffic_present")
 
     if mode == "global_l1_load_only":
         component = "global_l1_hit_path"
-        if l1_hit < args.l1_hit_min_pct:
+        if l1_path_hit < args.l1_hit_min_pct:
             reasons.append("l1_hit_below_threshold")
-        if l1_bytes <= 0.0:
+        if l1_request_bytes <= 0.0:
             reasons.append("missing_l1_bytes")
-        if ratio(l2_bytes, l1_bytes) > args.l1_l2_ratio_max:
+        if ratio(l2_bytes, l1_request_bytes) > args.l1_l2_ratio_max:
             reasons.append("l2_traffic_too_high_for_l1")
-        if ratio(dram_bytes, l1_bytes) > args.l1_dram_ratio_max:
+        if ratio(dram_bytes, l1_request_bytes) > args.l1_dram_ratio_max:
             reasons.append("dram_traffic_too_high_for_l1")
 
     elif mode == "l2_cg_load_only":
         component = "l2_hit_path"
-        if l2_hit < args.l2_hit_min_pct:
+        if not has_l2_path_hit:
+            reasons.append("missing_l2_path_hit_rate")
+        elif l2_path_hit < args.l2_hit_min_pct:
             reasons.append("l2_hit_below_threshold")
-        if l2_bytes <= 0.0:
-            reasons.append("missing_l2_bytes")
-        if ratio(l1_bytes, l2_bytes) > args.l2_l1_bytes_ratio_max:
-            reasons.append("l1_traffic_too_high_for_l2_cg")
-        if ratio(dram_bytes, l2_bytes) > args.l2_dram_ratio_max:
+        if not has_l2_read_bytes or l2_read_bytes <= 0.0:
+            reasons.append("missing_l2_read_bytes")
+        if not has_l1_request_bytes or l1_request_bytes <= 0.0:
+            reasons.append("missing_l1_request_bytes_for_l2_cg")
+        if not has_l1_path_hit:
+            reasons.append("missing_l1_path_hit_rate_for_l2_cg")
+        elif l1_path_hit > args.l2_l1_hit_max_pct:
+            reasons.append("l1_cache_hit_too_high_for_l2_cg")
+        if not has_l1_hit_bytes:
+            reasons.append("missing_l1_hit_bytes_for_l2_cg")
+        elif ratio(l1_hit_bytes, l1_request_bytes) > args.l2_l1_bytes_ratio_max:
+            reasons.append("l1_hit_bytes_too_high_for_l2_cg")
+        if ratio(dram_bytes, l2_read_bytes) > args.l2_dram_ratio_max:
             reasons.append("dram_traffic_too_high_for_l2")
 
     elif mode == "l2_load_only":
@@ -175,7 +206,7 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
         # This control must retain index arithmetic but issue no global input
         # loads. SMID verification uses global atomics, which can appear as
         # L2 sectors; only global-load bytes and DRAM scale are meaningful here.
-        if l1_bytes > 0.0:
+        if l1_request_bytes > 0.0:
             reasons.append("global_load_traffic_present_in_address_control")
         expected_input_bytes = expected_shared_bytes(row)
         address_control_dram_ratio = ratio(dram_bytes, expected_input_bytes)
@@ -259,7 +290,9 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
         status = "accepted"
     elif component == "shared_memory_path" and reasons == ["missing_shared_bytes"]:
         status = "provisional"
-    elif all(reason.startswith("missing_") for reason in reasons):
+    elif component != "l2_hit_path" and all(
+        reason.startswith("missing_") for reason in reasons
+    ):
         status = "provisional"
 
     out = dict(row)
@@ -278,8 +311,18 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
                 if mode in {"shared_scalar_load_only", "shared_load_only"} and shared_bytes > 0.0
                 else ""
             ),
-            "l2_to_l1_bytes": f"{ratio(l2_bytes, l1_bytes):.6g}" if l1_bytes > 0.0 else "",
-            "dram_to_l2_bytes": f"{ratio(dram_bytes, l2_bytes):.6g}" if l2_bytes > 0.0 else "",
+            "l2_to_l1_bytes": f"{ratio(l2_bytes, l1_request_bytes):.6g}" if l1_request_bytes > 0.0 else "",
+            "dram_to_l2_bytes": f"{ratio(dram_bytes, l2_read_bytes):.6g}" if l2_read_bytes > 0.0 else "",
+            "l1_hit_to_request_bytes": (
+                f"{ratio(l1_hit_bytes, l1_request_bytes):.6g}"
+                if l1_request_bytes > 0.0 and has_l1_hit_bytes
+                else ""
+            ),
+            "l1_request_to_l2_read_bytes": (
+                f"{ratio(l1_request_bytes, l2_read_bytes):.6g}"
+                if l2_read_bytes > 0.0
+                else ""
+            ),
             "tensor_l2_bytes_per_hmma": (
                 f"{ratio(l2_bytes, tensor_hmma):.6g}"
                 if mode == "reg_mma" and tensor_hmma > 0.0
@@ -351,11 +394,11 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
 
         out.write("\n")
         out.write(
-            "| mode | component | acceptance | reason | L1 hit (%) | L2 hit (%) | "
+            "| mode | component | acceptance | reason | L1 path hit (%) | L2 read hit (%) | "
             "L1 accesses | L2 accesses | DRAM accesses | shared bytes | "
-            "L1 bytes | L2 bytes | DRAM bytes | long SB (%) |\n"
+            "L1 request bytes | L1 hit bytes | L2 read bytes | DRAM bytes | long SB (%) |\n"
         )
-        out.write("|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+        out.write("|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
         for row in rows:
             l1_accesses = row.get("l1_accesses", "")
             if l1_accesses and row.get("l1_access_unit"):
@@ -369,10 +412,11 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
             out.write(
                 f"| {row.get('mode','')} | {row['component_candidate']} | "
                 f"{row['acceptance']} | {row['acceptance_reason']} | "
-                f"{row.get('l1_hit_rate_pct','')} | {row.get('l2_hit_rate_pct','')} | "
+                f"{row.get('l1_path_hit_rate_pct','')} | {row.get('l2_path_hit_rate_pct','')} | "
                 f"{l1_accesses} | {l2_accesses} | {dram_accesses} | "
-                f"{row.get('shared_bytes','')} | {row.get('l1_bytes','')} | "
-                f"{row.get('l2_bytes','')} | {row.get('dram_bytes','')} | "
+                f"{row.get('shared_bytes','')} | {row.get('l1_request_bytes','')} | "
+                f"{row.get('l1_hit_bytes','')} | {row.get('l2_read_bytes','')} | "
+                f"{row.get('dram_bytes','')} | "
                 f"{row.get('stall_long_scoreboard_pct','')} |\n"
             )
         out.write("\n")
@@ -380,22 +424,151 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
             "Cache-path evidence rule: accepted memory-path rows must expose hit-rate "
             "evidence and at least the path-relevant byte/access counters. L1 accesses "
             "use request counters when available and otherwise fall back to sectors; "
-            "L2 and DRAM accesses are sector counters. The byte columns are used as "
-            "the preferred denominator for pJ/bit or pJ/byte attribution.\n"
+            "L2 and DRAM accesses are sector counters. For `.cg`, L1 request bytes "
+            "are expected because the request traverses L1TEX; bypass is proven by "
+            "near-zero L1 path hit rate/hit bytes, not by zero L1 request bytes. "
+            "L2 read bytes are the preferred L2 pJ/bit denominator.\n"
         )
+
+
+def self_test_args() -> argparse.Namespace:
+    return argparse.Namespace(
+        target_profile="a100",
+        l1_hit_min_pct=95.0,
+        l1_l2_ratio_max=0.01,
+        l1_dram_ratio_max=0.01,
+        l2_l1_hit_max_pct=1.0,
+        l2_l1_bytes_ratio_max=0.01,
+        l2_hit_min_pct=95.0,
+        l2_dram_ratio_max=0.02,
+        shared_expected_ratio_min=0.5,
+        shared_expected_ratio_max=2.0,
+        shared_global_ratio_max=0.02,
+        shared_bank_conflict_ratio_max=0.05,
+        tensor_memory_bytes_max=1.0e8,
+        register_memory_bytes_max=1.0e8,
+        tensor_memory_bytes_per_hmma_max=1.0,
+        register_memory_bytes_per_op_max=1.0,
+        control_hmma_per_block_max=1.0,
+        control_hmma_per_reg_op_max=1.0e-5,
+        dram_l1_hit_max_pct=1.0,
+        dram_l2_hit_max_pct=5.0,
+        dram_l2_expected_multiplier=2.0,
+        dram_l2_expected_slack_pct=2.0,
+        dram_l2_ratio_min=0.5,
+        global_address_control_dram_ratio_max=1.0e-3,
+    )
+
+
+def run_self_test() -> None:
+    args = self_test_args()
+    row = {
+        "mode": "l2_cg_load_only",
+        "status": "ok",
+        "active_SM": "108",
+        "blocks_per_SM": "16",
+        "W_SM_KiB": "64",
+        "ITER": "100000",
+        "load_repeat": "4",
+        # Deliberately misleading aggregate/legacy values from the failure case.
+        "l1_hit_rate_pct": "71.5",
+        "l2_hit_rate_pct": "71.5",
+        "l1_bytes": "7.15e11",
+        "l2_bytes": "1e12",
+        # Path-specific evidence proves L1 bypass and an L2 read hit.
+        "l1_path_hit_rate_pct": "0",
+        "l1_request_bytes": "1e12",
+        "l1_hit_bytes": "0",
+        "l2_path_hit_rate_pct": "99.5",
+        "l2_read_bytes": "1e12",
+        "dram_bytes": "1e9",
+        "local_read_bytes": "0",
+        "local_write_bytes": "0",
+        "spill_zero_verified": "1",
+        "spill_evidence_source": "local_memory_bytes_zero_inference",
+    }
+    accepted = classify(row, args)
+    assert accepted["acceptance"] == "accepted", accepted["acceptance_reason"]
+    assert accepted["l1_request_to_l2_read_bytes"] == "1"
+    assert accepted["l1_hit_to_request_bytes"] == "0"
+
+    low_l2 = classify({**row, "l2_path_hit_rate_pct": "72"}, args)
+    assert low_l2["acceptance"] == "rejected"
+    assert "l2_hit_below_threshold" in low_l2["acceptance_reason"]
+
+    l1_polluted = classify({**row, "l1_hit_bytes": "7.2e11"}, args)
+    assert l1_polluted["acceptance"] == "rejected"
+    assert "l1_hit_bytes_too_high_for_l2_cg" in l1_polluted["acceptance_reason"]
+
+    local_spill = classify(
+        {**row, "local_read_bytes": "32", "spill_zero_verified": "0"}, args
+    )
+    assert local_spill["acceptance"] == "rejected"
+    assert "local_spill_traffic_present" in local_spill["acceptance_reason"]
+
+    missing_path = dict(row)
+    for key in (
+        "l1_path_hit_rate_pct",
+        "l1_request_bytes",
+        "l1_hit_bytes",
+        "l2_path_hit_rate_pct",
+        "l2_read_bytes",
+    ):
+        missing_path.pop(key)
+    missing = classify(missing_path, args)
+    assert missing["acceptance"] == "rejected"
+    assert "missing_l2_path_hit_rate" in missing["acceptance_reason"]
+
+    address_control = {
+        **row,
+        "mode": "global_addr_only",
+        "l1_request_bytes": "0",
+        "l1_hit_bytes": "0",
+        "dram_bytes": "3.5e8",
+    }
+    accepted_control = classify(address_control, args)
+    assert accepted_control["acceptance"] == "accepted", accepted_control[
+        "acceptance_reason"
+    ]
+    polluted_control = classify(
+        {**address_control, "dram_bytes": "1.5e9"}, args
+    )
+    assert polluted_control["acceptance"] == "rejected"
+    assert "dram_traffic_too_high_for_address_control" in polluted_control[
+        "acceptance_reason"
+    ]
+    print("NCU L2 path-specific acceptance self-test passed")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("ncu_summary_csv")
+    parser.add_argument("ncu_summary_csv", nargs="?")
+    parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--target-profile", choices=sorted(PROFILE_L2_MIB), default="")
-    parser.add_argument("--out-csv", required=True)
-    parser.add_argument("--out-md", required=True)
+    parser.add_argument(
+        "--out-csv", default="results/summary/ncu_path_acceptance.csv"
+    )
+    parser.add_argument(
+        "--out-md", default="results/summary/ncu_path_acceptance.md"
+    )
     parser.add_argument("--l1-hit-min-pct", type=float, default=95.0)
     parser.add_argument("--l1-l2-ratio-max", type=float, default=0.01)
     parser.add_argument("--l1-dram-ratio-max", type=float, default=0.01)
-    parser.add_argument("--l2-l1-hit-max-pct", type=float, default=1.0)
-    parser.add_argument("--l2-l1-bytes-ratio-max", type=float, default=0.01)
+    parser.add_argument(
+        "--l2-l1-hit-max-pct",
+        type=float,
+        default=1.0,
+        help="Maximum path-specific L1 hit rate for an ld.global.cg L2 candidate.",
+    )
+    parser.add_argument(
+        "--l2-l1-bytes-ratio-max",
+        type=float,
+        default=0.01,
+        help=(
+            "Maximum L1 hit bytes / L1 global-load request bytes for an L2 "
+            "candidate. L1 request bytes themselves are not an L1-hit signal."
+        ),
+    )
     parser.add_argument("--l2-hit-min-pct", type=float, default=95.0)
     parser.add_argument("--l2-dram-ratio-max", type=float, default=0.02)
     parser.add_argument("--shared-expected-ratio-min", type=float, default=0.5)
@@ -414,9 +587,23 @@ def main() -> int:
     parser.add_argument("--dram-l2-expected-slack-pct", type=float, default=2.0)
     parser.add_argument("--dram-l2-ratio-min", type=float, default=0.5)
     parser.add_argument(
-        "--global-address-control-dram-ratio-max", type=float, default=1.0e-4
+        "--global-address-control-dram-ratio-max",
+        type=float,
+        default=1.0e-3,
+        help=(
+            "Maximum address-control DRAM bytes divided by the paired path's "
+            "expected input bytes. The default 0.1% permits output-store, SMID "
+            "atomic, and profiler replay background while L1 input requests "
+            "must remain exactly zero."
+        ),
     )
     args = parser.parse_args()
+
+    if args.self_test:
+        run_self_test()
+        return 0
+    if not args.ncu_summary_csv:
+        parser.error("ncu_summary_csv is required")
 
     with Path(args.ncu_summary_csv).open(newline="") as f:
         rows = [classify(dict(row), args) for row in csv.DictReader(f)]

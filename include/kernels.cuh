@@ -35,7 +35,8 @@ cudaError_t configure_kernel_attributes(Mode mode, std::size_t dynamic_smem_byte
 cudaError_t launch_init_half(half* input, std::size_t half_count,
                              std::uint64_t seed, cudaStream_t stream);
 cudaError_t launch_global_warmup(const half* input, std::size_t half_count,
-                                 float* output, cudaStream_t stream);
+                                 float* output, bool cache_global_only,
+                                 cudaStream_t stream);
 cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg);
 
 }  // namespace a100fp16

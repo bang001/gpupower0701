@@ -54,6 +54,7 @@ NCU_FILTER_UNAVAILABLE_METRICS="${NCU_FILTER_UNAVAILABLE_METRICS:-${DEFAULT_FILT
 SHARED_W_SM_KIB="${SHARED_W_SM_KIB:-64}"
 L1_W_SM_KIB="${L1_W_SM_KIB:-16}"
 L2_W_SM_KIB="${L2_W_SM_KIB:-64}"
+L2_W_SM_KIB_VALUES="${L2_W_SM_KIB_VALUES:-${L2_W_SM_KIB}}"
 DRAM_W_SM_KIB="${DRAM_W_SM_KIB_OVERRIDE:-${DRAM_W_SM_KIB}}"
 BLOCKS_PER_SM="${BLOCKS_PER_SM:-16}"
 REG_W_SM_KIB="${REG_W_SM_KIB:-2048}"
@@ -65,6 +66,7 @@ STORE_REPEAT="${STORE_REPEAT:-1}"
 TENSOR_REUSE_FACTORS="${TENSOR_REUSE_FACTORS:-${REUSE_FACTOR}}"
 MEMORY_LOAD_REPEATS="${MEMORY_LOAD_REPEATS:-${LOAD_REPEAT}}"
 DRAM_LOAD_REPEATS="${DRAM_LOAD_REPEATS:-${MEMORY_LOAD_REPEATS}}"
+NCU_COMPONENTS="${NCU_COMPONENTS:-baseline,tensor,shared,l1,l2,dram}"
 INCLUDE_L2_CAPACITY_NCU="${INCLUDE_L2_CAPACITY_NCU:-0}"
 INCLUDE_DIAGNOSTIC_NCU="${INCLUDE_DIAGNOSTIC_NCU:-0}"
 DRY_RUN_NCU="${DRY_RUN_NCU:-0}"
@@ -123,6 +125,41 @@ csv_to_array() {
 csv_to_array TENSOR_REUSE_FACTOR_LIST "${TENSOR_REUSE_FACTORS}"
 csv_to_array MEMORY_LOAD_REPEAT_LIST "${MEMORY_LOAD_REPEATS}"
 csv_to_array DRAM_LOAD_REPEAT_LIST "${DRAM_LOAD_REPEATS}"
+csv_to_array L2_W_SM_KIB_LIST "${L2_W_SM_KIB_VALUES}"
+csv_to_array NCU_COMPONENT_LIST "${NCU_COMPONENTS}"
+
+component_enabled() {
+  local requested="$1"
+  local component
+  for component in "${NCU_COMPONENT_LIST[@]}"; do
+    case "${component}" in
+      all)
+        return 0
+        ;;
+      baseline|tensor|shared|l1|l2|dram)
+        if [[ "${component}" == "${requested}" ]]; then
+          return 0
+        fi
+        ;;
+      *)
+        echo "unknown NCU component '${component}'; expected baseline,tensor,shared,l1,l2,dram or all" >&2
+        return 2
+        ;;
+    esac
+  done
+  return 1
+}
+
+# Validate the complete list before launching the first profiler case.
+for component in "${NCU_COMPONENT_LIST[@]}"; do
+  case "${component}" in
+    all|baseline|tensor|shared|l1|l2|dram) ;;
+    *)
+      echo "unknown NCU component '${component}'; expected baseline,tensor,shared,l1,l2,dram or all" >&2
+      exit 2
+      ;;
+  esac
+done
 
 COMMON_SECTIONS=(
   --section LaunchStats
@@ -134,7 +171,7 @@ COMMON_SECTIONS=(
   --section WarpStateStats
   --section MemoryWorkloadAnalysis
 )
-DEFAULT_NCU_METRICS="l1tex__t_sector_hit_rate,l1tex__t_sectors_pipe_lsu_mem_global_op_ld,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_global_op_ld,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st,smsp__sass_data_bytes_mem_shared,smsp__sass_data_bytes_mem_shared_op_ld,smsp__sass_data_bytes_mem_shared_op_ldsm,smsp__sass_data_bytes_mem_shared_op_st,smsp__sass_inst_executed_op_shared,smsp__sass_inst_executed_op_shared_ld,smsp__sass_inst_executed_op_shared_st,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ld,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ldsm,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_st,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_ldsm,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_st,lts__t_sector_hit_rate,lts__t_sectors_srcunit_tex_op_read,lts__t_sectors_srcunit_tex_op_read_lookup_hit,lts__t_sectors_srcunit_tex_op_read_lookup_miss,lts__t_bytes,lts__t_bytes_equiv_l1sectormiss_pipe_lsu_mem_global_op_ld,dram__bytes,dram__bytes_read,dram__sectors,dram__sectors_read,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_wait_per_issue_active,smsp__average_warps_issue_stalled_not_selected_per_issue_active,sm__warps_active.avg.pct_of_peak_sustained_active,launch__registers_per_thread,launch__shared_mem_per_block_static,launch__shared_mem_per_block_dynamic,sm__inst_executed_pipe_tensor_op_hmma,sass__inst_executed_register_spilling_mem_local_op_read,sass__inst_executed_register_spilling_mem_local_op_write"
+DEFAULT_NCU_METRICS="l1tex__t_sector_hit_rate,l1tex__t_sectors_pipe_lsu_mem_global_op_ld,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_global_op_ld,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_local_op_ld,l1tex__t_bytes_pipe_lsu_mem_local_op_st,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st,smsp__sass_data_bytes_mem_shared,smsp__sass_data_bytes_mem_shared_op_ld,smsp__sass_data_bytes_mem_shared_op_ldsm,smsp__sass_data_bytes_mem_shared_op_st,smsp__sass_inst_executed_op_shared,smsp__sass_inst_executed_op_shared_ld,smsp__sass_inst_executed_op_shared_st,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ld,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ldsm,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_st,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_ldsm,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_st,lts__t_sector_hit_rate,lts__t_sectors_srcunit_tex_op_read,lts__t_sectors_srcunit_tex_op_read_lookup_hit,lts__t_sectors_srcunit_tex_op_read_lookup_miss,lts__t_bytes,lts__t_bytes_equiv_l1sectormiss_pipe_lsu_mem_global_op_ld,dram__bytes,dram__bytes_read,dram__sectors,dram__sectors_read,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_wait_per_issue_active,smsp__average_warps_issue_stalled_not_selected_per_issue_active,sm__warps_active.avg.pct_of_peak_sustained_active,launch__registers_per_thread,launch__shared_mem_per_block_static,launch__shared_mem_per_block_dynamic,sm__inst_executed_pipe_tensor_op_hmma,sass__inst_executed_register_spilling_mem_local_op_read,sass__inst_executed_register_spilling_mem_local_op_write"
 NCU_METRICS="${NCU_METRICS:-${DEFAULT_NCU_METRICS}}"
 
 filter_unavailable_ncu_metrics() {
@@ -245,28 +282,42 @@ run_case() {
 
 # Primary finalplan validation cases. These are the only modes needed for the
 # default component coefficient flow.
-run_case "clocked_empty_W64_B${BLOCKS_PER_SM}" "clocked_empty_kernel" "clocked_empty" 64 "${BLOCKS_PER_SM}" 1000000
+if component_enabled baseline; then
+  run_case "clocked_empty_W64_B${BLOCKS_PER_SM}" "clocked_empty_kernel" "clocked_empty" 64 "${BLOCKS_PER_SM}" 1000000
+fi
 
-for reuse_factor in "${TENSOR_REUSE_FACTOR_LIST[@]}"; do
-  run_case "reg_operand_only_W${REG_W_SM_KIB}_B${REG_BLOCKS_PER_SM}_RF${reuse_factor}" "reg_operand_only_kernel" "reg_operand_only" "${REG_W_SM_KIB}" "${REG_BLOCKS_PER_SM}" 100000 0 "${reuse_factor}" 1
-  run_case "reg_mma_W${REG_W_SM_KIB}_B${REG_BLOCKS_PER_SM}_RF${reuse_factor}" "reg_mma_kernel" "reg_mma" "${REG_W_SM_KIB}" "${REG_BLOCKS_PER_SM}" 100000 0 "${reuse_factor}" 1
-done
+if component_enabled tensor; then
+  for reuse_factor in "${TENSOR_REUSE_FACTOR_LIST[@]}"; do
+    run_case "reg_operand_only_W${REG_W_SM_KIB}_B${REG_BLOCKS_PER_SM}_RF${reuse_factor}" "reg_operand_only_kernel" "reg_operand_only" "${REG_W_SM_KIB}" "${REG_BLOCKS_PER_SM}" 100000 0 "${reuse_factor}" 1
+    run_case "reg_mma_W${REG_W_SM_KIB}_B${REG_BLOCKS_PER_SM}_RF${reuse_factor}" "reg_mma_kernel" "reg_mma" "${REG_W_SM_KIB}" "${REG_BLOCKS_PER_SM}" 100000 0 "${reuse_factor}" 1
+  done
+fi
 
 for load_repeat in "${MEMORY_LOAD_REPEAT_LIST[@]}"; do
-  run_case "shared_scalar_load_only_W${SHARED_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "shared_scalar_load_only_kernel" "shared_scalar_load_only" "${SHARED_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
-  run_case "global_addr_only_l1_W${L1_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${L1_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
-  run_case "global_l1_load_only_W${L1_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_ca_load_only_kernel" "global_l1_load_only" "${L1_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
-  if [[ "${INCLUDE_L2_CAPACITY_NCU}" == "1" ]]; then
-    run_case "l2_load_only_W${L2_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_load_only_kernel" "l2_load_only" "${L2_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+  if component_enabled shared; then
+    run_case "shared_scalar_load_only_W${SHARED_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "shared_scalar_load_only_kernel" "shared_scalar_load_only" "${SHARED_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
   fi
-  run_case "global_addr_only_l2_W${L2_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${L2_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
-  run_case "l2_cg_load_only_W${L2_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_cg_load_only_kernel" "l2_cg_load_only" "${L2_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+  if component_enabled l1; then
+    run_case "global_addr_only_l1_W${L1_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${L1_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+    run_case "global_l1_load_only_W${L1_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_ca_load_only_kernel" "global_l1_load_only" "${L1_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+  fi
+  if component_enabled l2; then
+    for l2_w_sm_kib in "${L2_W_SM_KIB_LIST[@]}"; do
+      if [[ "${INCLUDE_L2_CAPACITY_NCU}" == "1" ]]; then
+        run_case "l2_load_only_W${l2_w_sm_kib}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_load_only_kernel" "l2_load_only" "${l2_w_sm_kib}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+      fi
+      run_case "global_addr_only_l2_W${l2_w_sm_kib}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${l2_w_sm_kib}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+      run_case "l2_cg_load_only_W${l2_w_sm_kib}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_cg_load_only_kernel" "l2_cg_load_only" "${l2_w_sm_kib}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+    done
+  fi
 done
 
-for load_repeat in "${DRAM_LOAD_REPEAT_LIST[@]}"; do
-  run_case "global_addr_only_dram_W${DRAM_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${DRAM_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
-  run_case "dram_cg_load_only_W${DRAM_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_cg_load_only_kernel" "dram_cg_load_only" "${DRAM_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
-done
+if component_enabled dram; then
+  for load_repeat in "${DRAM_LOAD_REPEAT_LIST[@]}"; do
+    run_case "global_addr_only_dram_W${DRAM_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${DRAM_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+    run_case "dram_cg_load_only_W${DRAM_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_cg_load_only_kernel" "dram_cg_load_only" "${DRAM_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+  done
+fi
 
 if [[ "${INCLUDE_DIAGNOSTIC_NCU}" == "1" ]]; then
   run_case "empty_W64_B${BLOCKS_PER_SM}" "empty_kernel" "empty" 64 "${BLOCKS_PER_SM}" 1000000

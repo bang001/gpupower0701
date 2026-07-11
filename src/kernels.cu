@@ -74,6 +74,20 @@ __device__ __forceinline__ void consume_float(float value) {
   asm volatile("" : : "f"(value));
 }
 
+__device__ __forceinline__ void consume_uint(unsigned value) {
+  asm volatile("" : : "r"(value));
+}
+
+__device__ __forceinline__ unsigned register_control_step(
+    unsigned sink, float a_value, float b_value, float c_value) {
+  // One dependent register instruction keeps the RF-scaled loop and fragment
+  // operands live without the former FP32 FMA/checksum or any memory access.
+  asm volatile("add.u32 %0, %0, 1;"
+               : "+r"(sink)
+               : "f"(a_value), "f"(b_value), "f"(c_value));
+  return sink;
+}
+
 __device__ __forceinline__ void compiler_barrier() {
   asm volatile("" ::: "memory");
 }
@@ -108,6 +122,23 @@ __global__ void global_warmup_kernel(const half* input, std::size_t half_count,
   }
   if (output && tid < 1024) {
     output[tid] = acc;
+  }
+}
+
+__global__ void global_cg_warmup_kernel(const half* input,
+                                        std::size_t half_count, float* output) {
+  const auto* words = reinterpret_cast<const std::uint32_t*>(input);
+  const std::size_t word_count = half_count / 2;
+  const std::size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  const std::size_t stride = blockDim.x * gridDim.x;
+  std::uint32_t acc = static_cast<std::uint32_t>(tid + 1) * 2654435761u;
+  for (std::size_t i = tid; i < word_count; i += stride) {
+    std::uint32_t value;
+    asm volatile("ld.global.cg.u32 %0, [%1];" : "=r"(value) : "l"(words + i));
+    acc ^= value;
+  }
+  if (output && tid < 1024) {
+    output[tid] = static_cast<float>(acc & 0x00ffffffu);
   }
 }
 
@@ -159,14 +190,26 @@ __global__ void reg_mma_kernel(std::uint64_t iters, float* output,
   nvcuda::wmma::fill_fragment(b, __float2half_rn(0.0625f * block_scale));
   nvcuda::wmma::fill_fragment(c, 0.0f);
 
+  const float a_value = __half2float(a.x[0]);
+  const float b_value = __half2float(b.x[0]);
+  const float c_value = c.x[0];
+  unsigned sink = __float_as_uint(a_value) ^ __float_as_uint(b_value) ^
+                  __float_as_uint(c_value) ^
+                  static_cast<unsigned>(blockIdx.x * blockDim.x + threadIdx.x);
+
   for (std::uint64_t i = 0; i < iters; ++i) {
     for (std::uint64_t r = 0; r < reuse_factor; ++r) {
       do_mma(a, b, c);
+      sink = register_control_step(sink, a_value, b_value, c_value);
     }
   }
 
+  consume_uint(sink);
   if (output) {
-    store_matrix_sync(output + blockIdx.x * 256, c, 16, mem_row_major);
+#pragma unroll
+    for (int k = 0; k < c.num_elements; ++k) {
+      output[blockIdx.x * 256 + threadIdx.x * c.num_elements + k] = c.x[k];
+    }
   }
 }
 
@@ -205,27 +248,35 @@ __global__ void reg_operand_only_kernel(std::uint64_t iters, float* output,
 
   fragment<matrix_a, 16, 16, 16, half, row_major> a;
   fragment<matrix_b, 16, 16, 16, half, col_major> b;
+  fragment<accumulator, 16, 16, 16, float> c;
 
   const float block_scale = 1.0f + static_cast<float>(blockIdx.x & 7) * 0.03125f;
   nvcuda::wmma::fill_fragment(a, __float2half_rn(0.125f * block_scale));
   nvcuda::wmma::fill_fragment(b, __float2half_rn(0.0625f * block_scale));
+  nvcuda::wmma::fill_fragment(c, 0.0f);
 
-  float checksum = 0.0f;
+  const float a_value = __half2float(a.x[0]);
+  const float b_value = __half2float(b.x[0]);
+  const float c_value = c.x[0];
+  unsigned sink = __float_as_uint(a_value) ^ __float_as_uint(b_value) ^
+                  __float_as_uint(c_value) ^
+                  static_cast<unsigned>(blockIdx.x * blockDim.x + threadIdx.x);
+
   for (std::uint64_t i = 0; i < iters; ++i) {
     for (std::uint64_t r = 0; r < reuse_factor; ++r) {
-      compiler_barrier();
-      const float operand_sum = __half2float(a.x[0]) + __half2float(b.x[0]);
-      checksum = __fmaf_rn(
-          checksum, 1.000000119f,
-          operand_sum + static_cast<float>((i + r) & 31ull) * 0.0009765625f);
-      consume_float(checksum);
+      sink = register_control_step(sink, a_value, b_value, c_value);
     }
   }
 
+  consume_uint(sink);
   if (output) {
-    // Keep the register-fragment control observable without a WMMA store
-    // epilogue, which can otherwise emit a fixed HMMA-like instruction.
-    output[blockIdx.x * 256] = checksum;
+#pragma unroll
+    for (int k = 0; k < 8; ++k) {
+      const unsigned value =
+          sink ^ static_cast<unsigned>((k + 1) * 2654435761u);
+      output[blockIdx.x * 256 + threadIdx.x * 8 + k] =
+          __uint_as_float((value & 0x007fffffu) | 0x3f800000u);
+    }
   }
 }
 
@@ -717,11 +768,16 @@ cudaError_t launch_init_half(half* input, std::size_t half_count,
 }
 
 cudaError_t launch_global_warmup(const half* input, std::size_t half_count,
-                                 float* output, cudaStream_t stream) {
+                                 float* output, bool cache_global_only,
+                                 cudaStream_t stream) {
   constexpr int block = 256;
   int grid = static_cast<int>((half_count + block - 1) / block);
   grid = grid < 1 ? 1 : (grid > 65535 ? 65535 : grid);
-  global_warmup_kernel<<<grid, block, 0, stream>>>(input, half_count, output);
+  if (cache_global_only) {
+    global_cg_warmup_kernel<<<grid, block, 0, stream>>>(input, half_count, output);
+  } else {
+    global_warmup_kernel<<<grid, block, 0, stream>>>(input, half_count, output);
+  }
   return cudaGetLastError();
 }
 

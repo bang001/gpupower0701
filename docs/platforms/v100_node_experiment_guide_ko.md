@@ -1,6 +1,6 @@
 # V100 노드 실험 실행 가이드
 
-작성일: 2026-07-02, V100 좌표 재검토: 2026-07-10
+작성일: 2026-07-02, V100 좌표 재검토: 2026-07-11
 
 ## 목적
 
@@ -61,7 +61,7 @@ RTX 3090이나 A100에서 쓰던 좌표를 그대로 V100에 적용하면 L1/L2 
 | `sm_86`, `active_SM=82`, `max_blocks_per_SM=16` | RTX 3090/GA102 기준이 V100 실행에 섞인 상태 | build와 run option을 `sm_70`, `target_profile=v100`, `active_SM=80`으로 재확인 |
 | `sm_80`, `ga100`, `L2=40 MiB`, `shared=164 KiB/SM` | A100/GA100 기준이 섞인 상태 | A100 결과와 V100 결과를 다른 CSV/report로 분리 |
 | `NCU_CHIP` 미지정 또는 `gv100` query 실패 | Volta counter 경로 검증이 불가능할 수 있음 | `NCU_CHIP=gv100`으로 재실행하고, 실패하면 “NCU path acceptance 미완료”로 보고 |
-| L2 후보에서 L1 global-load bytes가 큼 | L2 coefficient가 L1 data path와 섞임 | V100 L2는 `l2_cg_load_only` 우선, NCU에서 L1 bytes/L2 bytes <= 1% 확인. aggregate L1 hit는 진단값 |
+| L2 후보에서 L1 request bytes가 L2 bytes와 비슷함 | `.cg` 요청도 L1TEX를 통과하므로 request byte만으로 L1 cache hit를 판정한 오류 | V100 L2는 `l2_cg_load_only` 우선, path-specific L1 hit bytes/request <=1%와 L2 read hit >=95% 확인. aggregate hit는 진단값 |
 | DRAM sanity에서 `W_SM`이 L2와 비슷함 | DRAM streaming이 아니라 L2 재사용을 측정할 수 있음 | `DRAM_W_SM_KIB_OVERRIDE=8192` 이상으로 sidecar를 재실행 |
 
 이 실험의 최종값은 순수 회로 에너지가 아니라 NCU로 경로가 검증된 effective microbenchmark coefficient다. 즉 `pJ/FLOP`, `pJ/bit`, `pJ/Byte`는 “이 커널, 이 access pattern, 이 GPU 상태에서 관찰된 board-level incremental coefficient”로 해석해야 한다.
@@ -326,7 +326,9 @@ python3 scripts/audit_power_api_measurements.py \
   --out-md results/summary/v100_smoke_power_api_audit.md \
   --fail-on-reject \
   --fail-on-provisional \
-  --require-explicit-measurement-scope
+  --require-explicit-measurement-scope \
+  --require-mode-notes-marker \
+  reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1
 ```
 
 이 단계에서 모든 row가 `missing_column:measurement_scope` 또는
@@ -558,7 +560,7 @@ python3 scripts/plot_results.py \
 | 단계 | script | 목적 |
 |---|---|---|
 | command plan | `scripts/plan_platform_component_experiment.py` | V100용 표준 energy/NCU/analyze 명령 생성 |
-| energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 duration-calibrated energy row 수집 |
+| energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 memory mode는 duration-calibrated, Tensor pair는 treatment/control-floor dual calibration의 최대 ITER를 두 mode에 동일 적용해 energy row 수집 |
 | NCU sidecar | `scripts/run_ncu_validation.sh` | path hit/access/stall/spill 검증 |
 | path acceptance | `scripts/analyze_ncu_path_acceptance.py` | accepted component 후보만 선별 |
 | matched-control | `scripts/analyze_matched_control_energy.py` | NCU actual-byte denominator로 pJ/bit 계산 |
@@ -592,6 +594,12 @@ bash results/summary/v100_component_finalplan_$(date +%Y%m%d)_commands.sh
 
 V100 추천 finalplan 좌표:
 
+RTX 3090/A100/V100의 전체 파라미터와 command 개수 비교는
+[cross-platform component experiment guide](cross_platform_component_experiment_guide_ko.md)의
+4.0-4.5절을 기준으로 한다. 현재 V100 표준 package는 유효 좌표 330개/1 repeat,
+`repeats=5` 적용 후 energy raw 1,650행, Tensor pair calibration 30 coordinates/60 commands, schema/revision smoke 3행,
+primary NCU 44 cases다.
+
 | Component | modes | energy W_SM (KiB) | energy blocks/SM | strict NCU W_SM/B | factor |
 |---|---|---:|---:|---:|---|
 | Tensor | `reg_operand_only,reg_mma` | 2048 | 1,2,4,8,16,32 | 2048/32 | reuse 1,2,4,8,16 |
@@ -599,6 +607,15 @@ V100 추천 finalplan 좌표:
 | Global L1 | `global_addr_only,global_l1_load_only` | 8,16,32 | 1,2,4,8,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
 | L2 CG | `global_addr_only,l2_cg_load_only` | 32,64 | 1,2,4,8,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 1,2,4,8,16,32 | 8192/32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
+
+Tensor는 각 B/RF 좌표에서 treatment 목표와 no-MMA control 최소시간을 각각 calibration하고
+두 candidate ITER의 최대값을 treatment/control에 동일하게 적용한다. 표준 10 s package는
+control floor 1 s를 사용한다. `*_tensor_pair_calibration.csv`, 두 raw mode의 ITER,
+matched detail의 `pair_energy_basis=matched_iters_net_energy`와 `iter_ratio=1`이 모두
+일치해야 final Tensor 후보가 된다. 이 정책은 A100 RF4 이상에서 드러난 mode별 duration
+calibration mismatch를 V100에서도 예방한다.
+두 kernel은 RF당 dependent register integer add 1개를 공통으로 실행하므로 control
+liveness instruction 비용은 direct 차분에서 상쇄된다.
 
 Energy sweep의 B1/B2/B4/B8/B16은 utilization 변화와 min/median/max 추세를 보는
 diagnostic이다. 현재 generated sidecar는 strict 대표점 B32만 exact NCU로 검증하므로,
@@ -616,10 +633,12 @@ B32가 아닌 row를 final coefficient로 채택하려면 같은 W/blocks/factor
 | Shared stress W64/B32 | `W_SM + B = 96 KiB/SM`으로 capacity 경계점이므로 strict 기본점이 아닌 stress 보조점 |
 
 V100은 6 MiB L2라 capacity 기반 `l2_load_only`가 L1 hit와 쉽게 섞일 수 있다. 따라서 L2 후보는 우선 `l2_cg_load_only`로 잡고, NCU에서 다음을 확인한다.
+CG mode의 warm-up도 `ld.global.cg.u32` 전용 kernel을 사용해 normal warm-up이 L1을
+미리 채우지 않도록 한다.
 
 | NCU 기준 | 통과 조건 |
 |---|---:|
-| L2 CG | L2 hit >= 95%, L2 access/bytes 존재, L1 bytes/L2 bytes <= 1%, DRAM/L2 bytes <= 2% |
+| L2 CG | path-specific L2 read hit >=95%, L2 read bytes 존재, L1 path hit <=1%, L1 hit/request bytes <=1%, DRAM/L2 read bytes <=2% |
 | Global L1 | L1 hit >= 95%, L1 access/bytes 존재, L2/L1 bytes <= 1% |
 | Shared scalar | shared access/bytes 존재, bank conflict 0 또는 매우 낮음 |
 | Tensor | HMMA > 0, spill/local 0 |

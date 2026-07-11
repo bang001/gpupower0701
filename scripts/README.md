@@ -9,16 +9,17 @@
 | preflight | `preflight_gpu_support.py` | GPU profile, NVML, CUDA compiler target, NCU, power scope, binary dry-run 확인. `--strict`는 profile/toolchain mismatch와 dry-run 실패를 nonzero로 막고 `--self-test`로 회귀 검증 |
 | command plan | `plan_platform_component_experiment.py` | 플랫폼별 finalplan 명령 생성 |
 | platform readiness | `audit_platform_power_readiness.py` | RTX 3090/V100/A100/H100 profile, power API 의미, 문서, 생성 plan 정합성 점검 |
-| energy sweep | `run_component_regression_sweep.py` | Python/C++ feasibility self-test와 unique-coordinate binary dry-run 후 NCU 없이 duration-calibrated energy CSV 수집 |
+| energy sweep | `run_component_regression_sweep.py` | Python/C++ feasibility self-test와 unique-coordinate binary dry-run 후 NCU 없이 energy CSV 수집. 알려진 2-mode control-treatment는 pair 단위로 회전하고 Tensor는 treatment 목표/control 최소시간의 dual calibration에서 큰 ITER를 두 mode에 동일 적용 |
 | paired stability | `run_paired_component_stability.py` | drift-sensitive component를 control-treatment-control 순서로 재측정 |
 | power API audit | `audit_power_api_measurements.py` | raw energy CSV가 power measurement matrix 기준 final/provisional/reject인지 판정하고 새 finalplan에서는 explicit `measurement_scope`를 요구하며 `--self-test`로 A100 semantics, fallback numerator, H100 module scope 혼입 회귀를 검증 |
 | power-state audit | `audit_power_state_stability.py` | raw row의 평균 전력/endpoint power outlier를 찾아 측정 품질 문제와 weak-signal 문제를 분리 |
-| NCU sidecar | `run_ncu_validation.sh` | chip별 metric availability를 확인한 뒤 primary finalplan mode의 hit/access/byte/stall/spill/occupancy/launch-resource counter 수집 |
+| NCU sidecar | `run_ncu_validation.sh` | chip별 metric availability를 확인한 뒤 primary finalplan mode의 hit/access/byte/stall/spill/occupancy/launch-resource counter 수집. `NCU_COMPONENTS=tensor,l2`처럼 targeted subset 선택 가능 |
 | NCU summary | `summarize_ncu_cache_metrics.py` | NCU raw export를 cache/path와 achieved occupancy/register/shared-block summary로 정리 |
 | path acceptance | `analyze_ncu_path_acceptance.py` | accepted/provisional/rejected path 판정 |
 | matched-control | `analyze_matched_control_energy.py` | NCU byte denominator 기반 pJ/FLOP, pJ/byte, pJ/bit 계산 |
 | component reliability | `audit_component_reliability.py` | power/NCU/matched-control 결과를 결합해 component별 최종 verdict 생성 |
 | instability audit | `audit_matched_control_instability.py` | invalid/weak-signal matched-control row 원인과 follow-up 실험 조건 요약 |
+| A100 Tensor/L2 remediation audit | `audit_a100_tensor_l2_remediation.py` | RF별 dual-calibration max ITER, 실제 control duration, 동일 ITER/HMMA/spill/양수 delta와 W별 path-specific L1/L2 hit, exact NCU denominator, 인접-W pJ/bit plateau를 검증 |
 | strict summary build | `build_strict_component_summary.py` | accepted reliability, matched-control, NCU acceptance artifact에서 보고용 strict component coefficient summary 생성. 여러 NCU summary artifact가 입력되면 component별 strict detail 좌표를 덮는 artifact만 row에 연결하고, path-relevant NCU hit/access/byte/stall evidence를 summary row에 직접 노출하며 `--self-test`로 Tensor B4/B16 artifact 선택 회귀를 검증 |
 | strict summary audit | `audit_strict_component_summary.py` | strict component summary가 reliability artifact, matched-control detail row, power API scope, NCU denominator, 계층 순서, broad plausibility range, NCU counter schema, coordinate alignment, `ncu_evidence_summary_fields`에 일치하는지 검증하고, `--self-test`로 strict detail 좌표 mismatch를 잡는지 검증 |
 | platform package audit | `audit_platform_result_package.py` | 외부 노드에서 복사해 온 단일 profile/tag 결과 패키지의 raw profile metadata, active SM, power, NCU, reliability, strict summary gate를 검수 |
@@ -77,6 +78,7 @@ goal readiness가 찾는 `*_strict_scope_fresh_ncu_component_coefficients_*.csv`
 | GPU | command plan | executable shell |
 |---|---|---|
 | A100 | `results/summary/a100_component_finalplan_20260708_command_plan.md` | `results/summary/a100_component_finalplan_20260708_commands.sh` |
+| A100 Tensor/L2 remediation | `results/summary/a100_tensor_l2_remediation_20260710_command_plan.md` | `results/summary/a100_tensor_l2_remediation_20260710_commands.sh` |
 | V100 | `results/summary/v100_component_finalplan_20260708_command_plan.md` | `results/summary/v100_component_finalplan_20260708_commands.sh` |
 | H100 | `results/summary/h100_component_finalplan_20260708_command_plan.md` | `results/summary/h100_component_finalplan_20260708_commands.sh` |
 
@@ -84,6 +86,11 @@ L1처럼 treatment-control drift가 의심되는 component는 factor sweep runne
 paired stability runner를 사용한다. 이 runner는 각 repeat를
 `clocked_empty -> treatment -> clocked_empty`로 bracket해서 nearest-control pairing의
 시간/온도 거리를 줄인다.
+
+표준 component sweep runner도 현재 알려진 2-mode pair를 원자적으로 회전하므로 반복
+경계에서 control/treatment가 분리되지 않는다. A100 Tensor/L2 targeted 결과는
+`audit_a100_tensor_l2_remediation.py`로 RF별 동일 ITER/HMMA/spill/양수 차분과 L2
+path-specific hit 및 인접 W plateau를 함께 검사한다.
 
 ```bash
 python3 scripts/run_paired_component_stability.py \

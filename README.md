@@ -93,7 +93,9 @@ Experiment setup and method documents:
 | How does the current experiment work? | `docs/methodology/howitworks.md` |
 | What are the final sweep/settings and gates? | `docs/methodology/component_energy_final_experiment_plan_ko.md` |
 | How are NCU counters used for pJ/FLOP and pJ/bit? | `docs/methodology/ncu_validation_energy_calculation_ko.md` |
+| Why did the A100 Tensor RF/L2 strict run fail, and what changed? | `docs/audits/a100_strict_summary_failure_remediation_ko.md` |
 | How should A100/V100/H100 be run? | `docs/platforms/cross_platform_component_experiment_guide_ko.md` |
+| How do RTX 3090/A100/V100 parameters and experiment counts differ? | `docs/platforms/cross_platform_component_experiment_guide_ko.md` sections 4.0-4.5 |
 | What power APIs are available by GPU generation, and which ones can be final numerators? | `docs/platforms/power_measurement_api_matrix_ko.md` |
 | How do I check profile/power readiness before a new platform run? | `results/summary/platform_power_readiness_audit_20260708.md` and `scripts/audit_platform_power_readiness.py` |
 | How do I refresh local audits, external package gap reports, and the dashboard? | `scripts/run_local_readiness_checks.sh` |
@@ -249,6 +251,7 @@ Generated cross-platform command packages:
 | GPU | command plan | executable shell |
 |---|---|---|
 | A100 | `results/summary/a100_component_finalplan_20260708_command_plan.md` | `results/summary/a100_component_finalplan_20260708_commands.sh` |
+| A100 Tensor/L2 remediation | `results/summary/a100_tensor_l2_remediation_20260710_command_plan.md` | `results/summary/a100_tensor_l2_remediation_20260710_commands.sh` |
 | V100 | `results/summary/v100_component_finalplan_20260708_command_plan.md` | `results/summary/v100_component_finalplan_20260708_commands.sh` |
 | H100 | `results/summary/h100_component_finalplan_20260708_command_plan.md` | `results/summary/h100_component_finalplan_20260708_commands.sh` |
 
@@ -476,7 +479,7 @@ Primary finalplan modes:
 
 | component/path | treatment mode | control mode | why it is used |
 |---|---|---|---|
-| Tensor MMA increment | `reg_mma` | `reg_operand_only` | isolates the extra WMMA/HMMA work over the matched register operand loop |
+| Tensor MMA increment | `reg_mma` | `reg_operand_only` | RF별 treatment 목표와 control 최소시간을 각각 calibration하고 두 ITER 중 큰 값을 두 mode에 동일 적용한 뒤 direct net-energy 차분으로 extra WMMA/HMMA work를 추정 |
 | Shared scalar path | `shared_scalar_load_only` | `clocked_empty` | measures a simple shared-memory scalar load path without Tensor Core work |
 | Global L1 hit path | `global_l1_load_only` | `global_addr_only` | same address/tile/repeat control; NCU must show L1-hit-dominated traffic |
 | L2 hit path | `l2_cg_load_only` | `global_addr_only` | uses cache-global loads to reduce L1 participation and target L2-hit traffic |
@@ -492,7 +495,7 @@ Control and diagnostic modes:
 | `clocked_empty` | shared-path control | duration-calibrated scheduler/control loop with no operand traffic |
 | `global_addr_only` | primary global-memory control | same global address/tile/repeat/checksum loop without an input load |
 | `reg_fragment_only` | diagnostic | WMMA fragment/register setup without MMA |
-| `reg_operand_only` | primary control | WMMA register fragments kept live and sampled in the same loop shape as `reg_mma` |
+| `reg_operand_only` | primary control | one dependent register integer add per RF keeps the loop/fragments live without the former FP32 FMA/checksum or memory; `reg_mma` executes the same add so it cancels in the same-ITER direct difference |
 | `reg_pressure` | diagnostic | scalar register-pressure payload sweep; do not report as pure register-file energy |
 | `addr_only` | diagnostic | global-memory tile address walk without issuing operand loads |
 | `shared_load_only` | diagnostic | shared WMMA operand loads without MMA; useful for NCU comparison, not primary coefficient |
@@ -642,10 +645,18 @@ before using the NCU bytes/op visualization.
 NCU CSV files and generate cache summaries. `run_ncu_validation.sh` profiles
 only the primary finalplan modes by default; set `INCLUDE_DIAGNOSTIC_NCU=1` to
 also collect legacy/diagnostic modes such as `shared_mma`, `l2_mma`, and
-`dram_mma`. The summary table includes L1 hit rate (%), L2 hit rate (%), L1
-accesses, L2 accesses (sectors), DRAM accesses (sectors), and L1/L2/DRAM bytes.
+`dram_mma`. The summary table includes aggregate and path-specific L1/L2 hit
+rates (%), L1 request/hit/miss bytes, L2 read hit/miss sectors and bytes,
+L1 accesses, L2 accesses (sectors), DRAM accesses (sectors), and DRAM bytes.
 L1 accesses prefer request counters when NCU provides them and fall back to
 sector counters otherwise.
+
+For `ld.global.cg`, L1 request bytes are expected because the request traverses
+L1TEX. They are not L1 cache-hit bytes. Strict L2 acceptance therefore checks
+near-zero path-specific L1 hit bytes and at least 95% path-specific L2 read hit
+rate instead of requiring total L1 request bytes to be near zero.
+The timed CG paths are preceded by an `ld.global.cg` warm-up kernel rather than
+a normal cached-load warm-up, avoiding pre-population of L1 by the harness.
 
 Nsight Compute support is version dependent. As of the 2026-06-29 release
 history, NVIDIA lists Nsight Compute 2026.2.1 as the latest public release, and

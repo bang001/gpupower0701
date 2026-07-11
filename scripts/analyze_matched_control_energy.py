@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Analyze duration-calibrated component runs with matched controls.
+"""Analyze component runs with matched treatment/control rows.
 
-The duration-calibrated runner intentionally lets each mode choose its own ITER.
-That means same-ITER pair analyzers are not appropriate. This script matches
-rows by configuration excluding ITER, converts the control row to a power rate,
-and subtracts `control_power_W * numerator_elapsed_s` from the numerator energy.
+Memory paths can use elapsed-aware control-power scaling. Tensor finalplan rows
+can instead require pair-locked ITER and directly subtract the two net energies,
+so different calibrated work counts cannot masquerade as Tensor energy.
 
 The output is an effective microbenchmark energy estimate. It is not a pure
 physical SRAM/register/DRAM bitcell energy.
@@ -350,24 +349,28 @@ def read_ncu_denominator_scales(
 ) -> tuple[dict[tuple[str, ...], tuple[float, float]], dict[tuple[str, ...], tuple[float, float]]]:
     exact: dict[tuple[str, ...], tuple[float, float]] = {}
     same_working_set: dict[tuple[str, ...], tuple[float, float]] = {}
-    actual_column_by_mode = {
-        "shared_scalar_load_only": "shared_bytes",
-        "shared_load_only": "shared_bytes",
-        "global_l1_load_only": "l1_bytes",
-        "l2_cg_load_only": "l2_bytes",
-        "l2_load_only": "l2_bytes",
-        "dram_cg_load_only": "dram_bytes",
-        "dram_load_only": "dram_bytes",
+    actual_columns_by_mode = {
+        "shared_scalar_load_only": ["shared_bytes"],
+        "shared_load_only": ["shared_bytes"],
+        "global_l1_load_only": ["l1_request_bytes", "l1_bytes"],
+        "l2_cg_load_only": ["l2_read_bytes", "l2_bytes"],
+        "l2_load_only": ["l2_read_bytes", "l2_bytes"],
+        "dram_cg_load_only": ["dram_bytes"],
+        "dram_load_only": ["dram_bytes"],
     }
     for path in paths:
         with Path(path).open(newline="") as f:
             for row in csv.DictReader(f):
                 mode = row.get("mode", "")
-                actual_column = actual_column_by_mode.get(mode)
-                if not actual_column or row.get("status") != "ok":
+                actual_columns = actual_columns_by_mode.get(mode)
+                if not actual_columns or row.get("status") != "ok":
                     continue
                 expected = ncu_expected_bytes(row)
-                actual = as_float(row, actual_column)
+                actual = 0.0
+                for actual_column in actual_columns:
+                    actual = as_float(row, actual_column)
+                    if actual > 0.0:
+                        break
                 if expected <= 0.0 or actual <= 0.0:
                     continue
                 scale = actual / expected
@@ -497,6 +500,7 @@ def make_detail_rows(
     exact_ncu_scales: dict[tuple[str, ...], tuple[float, float]],
     same_working_set_ncu_scales: dict[tuple[str, ...], tuple[float, float]],
     min_elapsed_s: float,
+    tensor_control_min_elapsed_s: float,
     max_elapsed_ratio: float,
     min_delta_j: float,
     min_delta_fraction: float,
@@ -505,6 +509,7 @@ def make_detail_rows(
     expected_power_semantics: str,
     exclude_power_state_rejects: bool,
     pairing: str,
+    tensor_pair_policy: str,
 ) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, ...], dict[str, list[dict[str, str]]]] = defaultdict(
         lambda: defaultdict(list)
@@ -537,9 +542,15 @@ def make_detail_rows(
                 if ok:
                     num_ok_rows.append(row)
             for row in control_rows:
+                control_min_elapsed = (
+                    tensor_control_min_elapsed_s
+                    if spec["component"] == "tensor_mma_increment"
+                    and tensor_pair_policy == "matched-iters"
+                    else min_elapsed_s
+                )
                 ok, _ = row_ok(
                     row,
-                    min_elapsed_s=min_elapsed_s,
+                    min_elapsed_s=control_min_elapsed,
                     require_total_energy=require_total_energy,
                     expected_power_semantics=expected_power_semantics,
                     exclude_power_state_rejects=exclude_power_state_rejects,
@@ -584,10 +595,20 @@ def make_detail_rows(
                 control_elapsed = as_float(control, "elapsed_s")
                 numerator_energy = as_float(numerator, "net_E_J")
                 control_energy = as_float(control, "net_E_J")
+                numerator_iters = as_float(numerator, "ITER")
+                control_iters = as_float(control, "ITER")
                 control_power = (
                     control_energy / control_elapsed if control_elapsed > 0.0 else 0.0
                 )
-                control_energy_scaled = control_power * numerator_elapsed
+                pair_energy_basis = "duration_scaled_control_power"
+                if (
+                    spec["component"] == "tensor_mma_increment"
+                    and tensor_pair_policy == "matched-iters"
+                ):
+                    pair_energy_basis = "matched_iters_net_energy"
+                    control_energy_scaled = control_energy
+                else:
+                    control_energy_scaled = control_power * numerator_elapsed
                 delta_j = numerator_energy - control_energy_scaled
                 signal_reference_j = max(numerator_energy, control_energy_scaled)
                 delta_fraction = (
@@ -617,8 +638,21 @@ def make_detail_rows(
                 )
 
                 reasons: list[str] = []
-                if elapsed_ratio > max_elapsed_ratio:
+                if (
+                    pair_energy_basis == "duration_scaled_control_power"
+                    and elapsed_ratio > max_elapsed_ratio
+                ):
                     reasons.append(f"elapsed_ratio>{max_elapsed_ratio:g}")
+                if pair_energy_basis == "matched_iters_net_energy":
+                    if (
+                        not math.isfinite(numerator_iters)
+                        or not math.isfinite(control_iters)
+                        or numerator_iters <= 0.0
+                        or control_iters <= 0.0
+                    ):
+                        reasons.append("missing_pair_locked_iters")
+                    elif int(numerator_iters) != int(control_iters):
+                        reasons.append("tensor_iter_mismatch")
                 if numerator.get("energy_source", "") != control.get("energy_source", ""):
                     reasons.append("energy_source_mismatch")
                 if numerator.get("energy_integration_method", "") != control.get(
@@ -681,6 +715,7 @@ def make_detail_rows(
                         "component": spec["component"],
                         "pair": spec["pair"],
                         "pairing": pairing,
+                        "pair_energy_basis": pair_energy_basis,
                         "numerator_mode": numerator_mode,
                         "control_mode": control_mode,
                         "numerator_run_id": numerator.get("run_id", ""),
@@ -688,9 +723,23 @@ def make_detail_rows(
                         "run_order_distance": abs(
                             run_order(numerator) - run_order(control)
                         ),
+                        "pair_start_distance_ms": abs(
+                            run_order(numerator) - run_order(control)
+                        ),
                         "numerator_elapsed_s": numerator_elapsed,
                         "control_elapsed_s": control_elapsed,
                         "elapsed_ratio": elapsed_ratio,
+                        "numerator_ITER": (
+                            int(numerator_iters) if math.isfinite(numerator_iters) else ""
+                        ),
+                        "control_ITER": (
+                            int(control_iters) if math.isfinite(control_iters) else ""
+                        ),
+                        "iter_ratio": (
+                            numerator_iters / control_iters
+                            if control_iters > 0.0
+                            else float("inf")
+                        ),
                         "numerator_net_E_J": numerator_energy,
                         "control_net_E_J": control_energy,
                         "control_power_W": control_power,
@@ -914,7 +963,10 @@ def write_markdown(
         f.write("# Matched-Control Component Energy\n\n")
         f.write("## Method\n\n")
         f.write(
-            "`delta_E_J = E_mode_J - (E_control_J / t_control_s) * t_mode_s`.\n\n"
+            "Memory/default rows use `delta_E_J = E_mode_J - "
+            "(E_control_J / t_control_s) * t_mode_s`. Tensor rows use direct "
+            "`E_reg_mma_J - E_reg_operand_only_J` only when "
+            "`--tensor-pair-policy=matched-iters` and both ITER values match.\n\n"
         )
         f.write(
             "Only rows passing elapsed, net-energy, SMID, and optional NCU "
@@ -931,8 +983,13 @@ def write_markdown(
             f"| power-state audit CSVs | `{', '.join(args.power_state_audit_csv)}` |\n"
         )
         f.write(f"| min elapsed (s) | {args.min_elapsed_s:g} |\n")
+        f.write(
+            "| Tensor control min elapsed (s) | "
+            f"{args.tensor_control_min_elapsed_s:g} |\n"
+        )
         f.write(f"| max elapsed ratio | {args.max_elapsed_ratio:g} |\n")
         f.write(f"| pairing | `{args.pairing}` |\n")
+        f.write(f"| Tensor pair policy | `{args.tensor_pair_policy}` |\n")
         f.write(f"| min delta_E (J) | {args.min_delta_j:g} |\n")
         f.write(f"| min delta fraction | {args.min_delta_fraction:g} |\n")
         f.write(f"| require NCU denominator | {args.require_ncu_denominator} |\n")
@@ -1058,9 +1115,96 @@ def write_markdown(
         )
 
 
+def run_self_test() -> None:
+    common = {
+        "profile_name": "a100",
+        "gpu_id": "0",
+        "n_gpu_active": "1",
+        "W_SM_KiB": "2048",
+        "blocks_per_SM": "16",
+        "active_SM": "108",
+        "reuse_factor": "4",
+        "load_repeat": "1",
+        "store_repeat": "1",
+        "ITER": "100",
+        "smid_histogram_ok": "true",
+        "energy_source": "nvml_total_energy",
+        "energy_integration_method": "total_energy_mj_delta",
+        "measurement_scope": "gpu_device_total_energy_counter",
+        "nvml_total_energy_supported": "true",
+        "nvml_power_usage_semantics": "instant",
+    }
+    treatment = {
+        **common,
+        "mode": "reg_mma",
+        "run_id": "reg_mma_200_r0",
+        "elapsed_s": "10",
+        "net_E_J": "30",
+        "FLOP": "1415577600",
+    }
+    control = {
+        **common,
+        "mode": "reg_operand_only",
+        "run_id": "reg_operand_only_199_r0",
+        "elapsed_s": "5",
+        "net_E_J": "10",
+        "FLOP": "0",
+    }
+    kwargs = dict(
+        accepted_modes=set(),
+        accepted_keys_by_mode={},
+        exact_ncu_scales={},
+        same_working_set_ncu_scales={},
+        min_elapsed_s=1.0,
+        tensor_control_min_elapsed_s=0.05,
+        max_elapsed_ratio=3.0,
+        min_delta_j=0.0,
+        min_delta_fraction=0.0,
+        require_ncu_denominator=False,
+        require_total_energy=True,
+        expected_power_semantics="instant",
+        exclude_power_state_rejects=False,
+        pairing="nearest-control",
+    )
+    matched = make_detail_rows(
+        [treatment, control], tensor_pair_policy="matched-iters", **kwargs
+    )
+    assert len(matched) == 1
+    assert matched[0]["pair_energy_basis"] == "matched_iters_net_energy"
+    assert abs(float(matched[0]["delta_E_J"]) - 20.0) < 1.0e-9
+    assert matched[0]["valid_component_estimate"]
+
+    duration_scaled = make_detail_rows(
+        [treatment, control], tensor_pair_policy="duration-scaled", **kwargs
+    )
+    assert abs(float(duration_scaled[0]["delta_E_J"]) - 10.0) < 1.0e-9
+
+    short_control = {**control, "elapsed_s": "0.1", "net_E_J": "1"}
+    matched_short = make_detail_rows(
+        [treatment, short_control], tensor_pair_policy="matched-iters", **kwargs
+    )
+    assert len(matched_short) == 1
+    assert abs(float(matched_short[0]["delta_E_J"]) - 29.0) < 1.0e-9
+    duration_short = make_detail_rows(
+        [treatment, short_control], tensor_pair_policy="duration-scaled", **kwargs
+    )
+    assert not duration_short
+
+    mismatched_control = {**control, "ITER": "99"}
+    mismatched = make_detail_rows(
+        [treatment, mismatched_control],
+        tensor_pair_policy="matched-iters",
+        **kwargs,
+    )
+    assert not mismatched[0]["valid_component_estimate"]
+    assert "tensor_iter_mismatch" in mismatched[0]["diagnostic"]
+    print("matched-control Tensor pair-policy self-test passed")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("csv_paths", nargs="+")
+    parser.add_argument("csv_paths", nargs="*")
+    parser.add_argument("--self-test", action="store_true")
     parser.add_argument(
         "--acceptance-csv",
         nargs="*",
@@ -1115,6 +1259,16 @@ def main() -> int:
         default="results/summary/matched_control_component_energy.md",
     )
     parser.add_argument("--min-elapsed-s", type=float, default=1.0)
+    parser.add_argument(
+        "--tensor-control-min-elapsed-s",
+        type=float,
+        default=0.05,
+        help=(
+            "Minimum elapsed time for a matched-ITER reg_operand_only control. "
+            "It is intentionally lower than --min-elapsed-s because the no-MMA "
+            "control completes the same ITER much faster than reg_mma."
+        ),
+    )
     parser.add_argument("--max-elapsed-ratio", type=float, default=1.35)
     parser.add_argument("--min-delta-j", type=float, default=0.0)
     parser.add_argument("--min-delta-fraction", type=float, default=0.0)
@@ -1128,7 +1282,22 @@ def main() -> int:
             "control run order."
         ),
     )
+    parser.add_argument(
+        "--tensor-pair-policy",
+        choices=["duration-scaled", "matched-iters"],
+        default="duration-scaled",
+        help=(
+            "Use matched-iters for Tensor finalplan rows. It requires equal ITER "
+            "and subtracts net energies directly instead of scaling control power."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.self_test:
+        run_self_test()
+        return 0
+    if not args.csv_paths:
+        parser.error("at least one raw CSV path is required")
 
     rows = read_rows(args.csv_paths)
     power_state_audit = read_power_state_audit(args.power_state_audit_csv)
@@ -1144,6 +1313,7 @@ def main() -> int:
         exact_ncu_scales=exact_ncu_scales,
         same_working_set_ncu_scales=same_working_set_ncu_scales,
         min_elapsed_s=args.min_elapsed_s,
+        tensor_control_min_elapsed_s=args.tensor_control_min_elapsed_s,
         max_elapsed_ratio=args.max_elapsed_ratio,
         min_delta_j=args.min_delta_j,
         min_delta_fraction=args.min_delta_fraction,
@@ -1152,6 +1322,7 @@ def main() -> int:
         expected_power_semantics=args.expected_power_semantics,
         exclude_power_state_rejects=args.exclude_power_state_rejects,
         pairing=args.pairing,
+        tensor_pair_policy=args.tensor_pair_policy,
     )
     summary_rows = make_summary_rows(detail_rows)
 
@@ -1168,14 +1339,19 @@ def main() -> int:
         "component",
         "pair",
         "pairing",
+        "pair_energy_basis",
         "numerator_mode",
         "control_mode",
         "numerator_run_id",
         "control_run_id",
         "run_order_distance",
+        "pair_start_distance_ms",
         "numerator_elapsed_s",
         "control_elapsed_s",
         "elapsed_ratio",
+        "numerator_ITER",
+        "control_ITER",
+        "iter_ratio",
         "numerator_net_E_J",
         "control_net_E_J",
         "control_power_W",

@@ -1,6 +1,6 @@
 # NCU 검증과 pJ 계산 보고서
 
-작성일: 2026-07-07
+작성일: 2026-07-07, updated 2026-07-11
 
 ## 핵심 요약
 
@@ -40,7 +40,8 @@ NCU가 측정한 L1 energy
    - 의도한 경로가 counter로 확인된 row만 accepted
 
 4. Matched-control 계산
-   - treatment energy에서 control energy rate를 같은 시간만큼 차감
+   - memory는 control energy rate를 treatment 시간으로 보정
+   - Tensor는 동일 ITER로 실행한 treatment-control net energy를 직접 차감
 
 5. pJ/FLOP, pJ/byte, pJ/bit 계산
    - Tensor는 logical FLOP denominator 사용
@@ -53,14 +54,15 @@ NCU가 측정한 L1 energy
 |---|---|---|
 | Tensor MMA incremental | Tensor/HMMA instruction, spill/local memory, L1/L2/DRAM traffic | `reg_mma`가 실제 Tensor instruction을 실행하고, control에는 Tensor instruction이 없어야 한다. |
 | Shared scalar path | shared accesses, shared bytes, shared instruction count, bank conflict | shared memory scalar load path가 충분히 발생하고 bank conflict가 낮아야 한다. |
-| Global L1-hit path | L1 hit rate, L1 accesses, L1 bytes, L2/DRAM accesses 또는 bytes | global load가 L1 hit 중심이어야 하며 L2/DRAM leakage가 낮아야 한다. |
-| L2 CG hit path | L1 hit rate, L2 hit rate, L2 accesses, L2 bytes, DRAM accesses 또는 bytes | L1은 사실상 우회되고 L2 hit가 지배적이어야 한다. |
+| Global L1-hit path | path-specific L1 hit rate, L1 accesses, L1 request/hit bytes, L2 read/DRAM bytes | global load가 L1 lookup hit 중심이어야 하며 L2/DRAM leakage가 낮아야 한다. |
+| L2 CG hit path | path-specific L1 hit bytes, L2 read hit/miss sectors, L1 request/L2 read/DRAM bytes | `.cg` 요청은 L1TEX를 통과하되 L1 cache hit는 거의 없고 L2 read hit가 지배적이어야 한다. |
 | DRAM CG streaming path | DRAM accesses, DRAM bytes, L1/L2 hit rate, L2 bytes 대비 DRAM bytes | DRAM streaming sanity check로만 사용한다. |
 | 공통 | long/short scoreboard stall, wait stall, SMID histogram, spill/local | stall 또는 placement 문제를 보고서에 같이 기록한다. |
 
 구현 기준은 hit rate만으로 통과시키지 않는 것이다. `ncu_cache_validation_summary.csv`와
 `analyze_ncu_path_acceptance.py` 결과에는 `l1_accesses`, `l2_accesses`,
-`dram_accesses`, `l1_bytes`, `l2_bytes`, `dram_bytes`가 함께 있어야 한다.
+`dram_accesses`, `l1_request_bytes`, `l1_hit_bytes`, `l2_read_bytes`,
+`l2_read_hit_sectors`, `l2_read_miss_sectors`, `dram_bytes`가 함께 있어야 한다.
 L1 access는 NCU가 request counter를 제공하면 request를 쓰고, 없으면 sector로
 fallback한다. L2/DRAM access는 sector counter다. byte counter가 없으면 sector를
 32 bytes로 환산하지만, 보고서에는 이 값이 NCU-derived effective denominator임을
@@ -75,9 +77,14 @@ fallback한다. L2/DRAM access는 sector counter다. byte counter가 없으면 s
 | Tensor | `reg_mma`에서 Tensor/HMMA instruction > 0, spill/local 0, memory traffic이 threshold 이하 |
 | Tensor control | `reg_operand_only`에서 Tensor/HMMA instruction = 0, spill/local 0 |
 | Shared scalar | shared bytes/accesses > 0, shared instruction 존재, bank conflict ratio 낮음, global/L2/DRAM traffic 낮음 |
-| Global L1 | L1 hit >= 95%, L2/L1 byte ratio <= 1%, DRAM/L1 byte ratio <= 1% |
-| L2 CG | L2 hit >= 95%, L1 bytes/L2 bytes <= 1%, DRAM/L2 byte ratio <= 2%. aggregate L1 hit는 진단값이며 `.cg` hard gate가 아님 |
+| Global L1 | path-specific L1 hit >=95%, L1 request/hit bytes 존재, L2 read/L1 request <=1%, DRAM/L1 request <=1% |
+| L2 CG | path-specific L2 read hit >=95%, L1 path hit <=1%, L1 hit/request bytes <=1%, DRAM/L2 read <=2%. aggregate hit rate는 진단값 |
 | DRAM sanity | L1 hit <= 1%, L2 hit <= 5%, DRAM bytes dominant |
+
+L2 CG mode은 measurement 전 warm-up도 `ld.global.cg.u32`를 쓰는
+`global_cg_warmup_kernel`로 수행한다. 일반 cached load warm-up이 L1을 채운 뒤
+L2 target을 시작하는 혼입을 막기 위한 조치다. 그러나 `.cg` 요청이 L1TEX를
+통과하는 것은 정상이므로 L1 request byte 자체는 reject 조건이 아니다.
 
 이 기준을 통과하지 못한 row는 pJ 값이 양수여도 최종 component coefficient로 채택하지 않는다.
 
@@ -88,9 +95,9 @@ Memory path는 다음 pair를 사용한다.
 | Component/path | treatment | control | denominator |
 |---|---|---|---|
 | Shared scalar | `shared_scalar_load_only` | `clocked_empty` | NCU shared bytes |
-| Global L1-hit | `global_l1_load_only` | `clocked_empty` | NCU L1 bytes |
-| L2 CG hit | `l2_cg_load_only` | `clocked_empty` | NCU L2 bytes |
-| DRAM CG streaming | `dram_cg_load_only` | `clocked_empty` | NCU DRAM bytes |
+| Global L1-hit | `global_l1_load_only` | `global_addr_only` | NCU L1 request bytes |
+| L2 CG hit | `l2_cg_load_only` | `global_addr_only` | NCU L2 read bytes |
+| DRAM CG streaming | `dram_cg_load_only` | `global_addr_only` | NCU DRAM bytes |
 
 에너지 차분은 elapsed time 차이를 보정한다.
 
@@ -161,6 +168,7 @@ python3 scripts/analyze_matched_control_energy.py ... \
   --require-total-energy \
   --expected-power-semantics one_sec_average \
   --pairing nearest-control \
+  --tensor-pair-policy matched-iters \
   --min-delta-j 10 \
   --min-delta-fraction 0.005
 ```
@@ -215,13 +223,27 @@ Tensor는 memory path처럼 pJ/byte가 아니라 pJ/FLOP로 계산한다. 사용
 | treatment | `reg_mma` | register fragment를 준비하고 `mma_sync`를 반복 실행 |
 | control | `reg_operand_only` | 같은 register fragment 구조를 쓰지만 `mma_sync`는 실행하지 않음 |
 
-Tensor incremental energy는 다음처럼 계산한다.
+Tensor finalplan은 각 RF에서 treatment 목표시간의 `reg_mma` ITER와 control 최소시간의
+`reg_operand_only` ITER를 각각 구하고, 둘 중 큰 값을 두 mode에 동일 적용한다. 서로 다른
+ITER를 각 mode에 적용한 뒤 elapsed time으로 보정하는 이전 방식은 A100 RF4
+이상에서 work mismatch와 음수 delta를 만들 수 있어 final 경로에서 제외했다.
+`reg_operand_only`의 기존 RF 비례 FP32 FMA/checksum/memory는 제거했다. 대신
+compiler가 loop를 삭제하지 못하도록 RF당 dependent register integer add 1개를
+두 mode에 모두 넣었다. 따라서 공통 add 비용은 treatment-control 차분에서
+상쇄된다.
 
 ```text
-control_power_W = E_reg_operand_only_J / t_reg_operand_only_s
-control_energy_scaled_J = control_power_W * t_reg_mma_s
-delta_E_J = E_reg_mma_J - control_energy_scaled_J
+ITER_reg_mma = ITER_reg_operand_only
+delta_E_J = net_E_reg_mma_J - net_E_reg_operand_only_J
 ```
+
+Matched detail에서 `pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1`을 확인하고,
+`*_tensor_pair_calibration.csv`의 resolved ITER가 두 raw mode의 ITER와 같은지도 package
+audit으로 검증한다.
+같은 ITER의 no-MMA control은 더 짧게 실행되므로 calibration 단계에서 별도 duration
+floor를 둔다. 표준 10 s package는 1 s floor와 0.8 s analyzer gate, A100 targeted 20 s
+package는 2 s floor와 1.6 s gate를 사용한다. Gate 미만 또는 non-positive control net
+energy는 식별 불충분으로 reject한다.
 
 FLOP denominator는 logical MMA 정의에서 나온다.
 
