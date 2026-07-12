@@ -50,14 +50,14 @@ COMPONENTS = [
         "component": "Global L1 hit path",
         "mode_pair": "global_l1_load_only - global_addr_only",
         "unit": "pJ/bit",
-        "ncu_candidates": ["global_l1_hit_path"],
+        "ncu_candidates": ["global_l1_hit_path", "global_address_control"],
     },
     {
         "component_key": "l2_hit_cg_path",
         "component": "L2 CG hit path",
         "mode_pair": "l2_cg_load_only - global_addr_only",
         "unit": "pJ/bit",
-        "ncu_candidates": ["l2_hit_path"],
+        "ncu_candidates": ["l2_hit_path", "global_address_control"],
     },
 ]
 
@@ -73,8 +73,8 @@ NCU_COORDINATE_COLUMNS = [
 NCU_EXACT_COORDINATE_MODES_BY_COMPONENT = {
     "tensor_mma_increment": {"reg_mma", "reg_operand_only"},
     "shared_l1_scalar_path": {"shared_scalar_load_only"},
-    "global_l1_hit_path": {"global_l1_load_only"},
-    "l2_hit_cg_path": {"l2_cg_load_only"},
+    "global_l1_hit_path": {"global_l1_load_only", "global_addr_only"},
+    "l2_hit_cg_path": {"l2_cg_load_only", "global_addr_only"},
 }
 
 NCU_METRIC_MODES_BY_COMPONENT = {
@@ -298,10 +298,7 @@ def expected_ncu_coords(component_key: str, details: list[dict[str, str]]) -> se
     exact_modes = NCU_EXACT_COORDINATE_MODES_BY_COMPONENT.get(component_key, set())
     expected: set[tuple[str, ...]] = set()
     for detail in details:
-        if component_key == "tensor_mma_increment":
-            modes = {detail.get("numerator_mode", ""), detail.get("control_mode", "")}
-        else:
-            modes = {detail.get("numerator_mode", "")}
+        modes = {detail.get("numerator_mode", ""), detail.get("control_mode", "")}
         for mode in modes & exact_modes:
             expected.add(coord_key(mode, detail))
     return expected
@@ -901,6 +898,11 @@ def run_self_test() -> None:
                     l1_miss_bytes="20",
                 ),
                 ncu_selftest_row(
+                    mode="global_addr_only",
+                    w_sm_kib="16",
+                    load_repeat="4",
+                ),
+                ncu_selftest_row(
                     mode="l2_cg_load_only",
                     w_sm_kib="64",
                     load_repeat="4",
@@ -915,6 +917,16 @@ def run_self_test() -> None:
                     l2_read_bytes="2000000",
                     l2_read_hit_sectors="62487.5",
                     l2_read_miss_sectors="12.5",
+                ),
+                ncu_selftest_row(
+                    mode="global_addr_only",
+                    w_sm_kib="64",
+                    load_repeat="4",
+                ),
+                ncu_selftest_row(
+                    mode="global_addr_only",
+                    w_sm_kib="64",
+                    load_repeat="8",
                 ),
                 ncu_selftest_row(
                     mode="l2_cg_load_only",
@@ -962,6 +974,7 @@ def run_self_test() -> None:
             detail_selftest_row(
                 component="global_l1_hit_path",
                 numerator_mode="global_l1_load_only",
+                control_mode="global_addr_only",
                 w_sm_kib="16",
                 load_repeat="4",
             )
@@ -970,12 +983,14 @@ def run_self_test() -> None:
             detail_selftest_row(
                 component="l2_hit_cg_path",
                 numerator_mode="l2_cg_load_only",
+                control_mode="global_addr_only",
                 w_sm_kib="64",
                 load_repeat="4",
             ),
             detail_selftest_row(
                 component="l2_hit_cg_path",
                 numerator_mode="l2_cg_load_only",
+                control_mode="global_addr_only",
                 w_sm_kib="64",
                 load_repeat="8",
             ),

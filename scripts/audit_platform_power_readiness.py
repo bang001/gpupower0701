@@ -305,6 +305,27 @@ def audit_profiles(repo: Path) -> list[dict[str, str]]:
         evidence=str(matrix_path),
     )
 
+    ncu_wrapper_path = repo / "scripts" / "run_ncu_validation.sh"
+    ncu_wrapper_text = ncu_wrapper_path.read_text(encoding="utf-8")
+    ncu_wrapper_terms = [
+        "NCU_AUTO_SUDO=\"${NCU_AUTO_SUDO:-1}\"",
+        "ERR_NVGPUCTRPERM",
+        "enable_sudo_ncu",
+        "--target-processes all",
+        "NCU_PERMISSION_PROBE_ONLY",
+        "ncu_permission_mode.txt",
+    ]
+    ok, missing = text_contains_all(ncu_wrapper_text, ncu_wrapper_terms)
+    add_row(
+        rows,
+        profile="all",
+        check="ncu_permission_fallback_policy",
+        status=status_for(ok),
+        expected="counter probe, exact-error sudo retry, child-process coverage",
+        actual="ok" if ok else f"missing:{missing}",
+        evidence=str(ncu_wrapper_path),
+    )
+
     with tempfile.TemporaryDirectory(prefix="platform_readiness_") as tmp:
         tmpdir = Path(tmp)
         for profile, expected in EXPECTED.items():
@@ -461,6 +482,10 @@ def audit_profiles(repo: Path) -> list[dict[str, str]]:
                     f"--target-profile {profile}",
                     f"--expected-power-semantics {expected['power_semantics']}",
                     f"TARGET_PROFILE={profile}",
+                    "NCU_PERMISSION_PROBE_ONLY=1",
+                    "NCU_AUTO_SUDO=\"${NCU_AUTO_SUDO:-1}\"",
+                    "permission probe selected sudo for the remaining NCU stages",
+                    "scripts/selftest_ncu_permission_fallback.sh",
                 ]
                 if profile == "v100":
                     shell_terms.extend(

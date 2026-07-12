@@ -149,7 +149,9 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
             reasons.append("l1_hit_below_threshold")
         if l1_request_bytes <= 0.0:
             reasons.append("missing_l1_bytes")
-        if ratio(l2_bytes, l1_request_bytes) > args.l1_l2_ratio_max:
+        if not has_l2_read_bytes:
+            reasons.append("missing_l2_read_bytes_for_l1")
+        elif ratio(l2_read_bytes, l1_request_bytes) > args.l1_l2_ratio_max:
             reasons.append("l2_traffic_too_high_for_l1")
         if ratio(dram_bytes, l1_request_bytes) > args.l1_dram_ratio_max:
             reasons.append("dram_traffic_too_high_for_l1")
@@ -237,7 +239,10 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
         expected_ops = expected_register_ops(row)
         control_hmma_per_block = ratio(tensor_hmma, launched_blocks(row))
         control_hmma_per_reg_op = ratio(tensor_hmma, expected_ops)
-        if tensor_hmma > 0.0:
+        if mode == "reg_operand_only" and tensor_hmma > 0.0:
+            reasons.append("tensor_hmma_present_in_control")
+            control_hmma_class = "strict_no_hmma_reject"
+        elif tensor_hmma > 0.0:
             fixed_epilogue_limit = (
                 launched_blocks(row) * args.control_hmma_per_block_max
             )
@@ -249,6 +254,8 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
                 control_hmma_class = "workload_proportional_reject"
             else:
                 control_hmma_class = "fixed_epilogue_allowed"
+        elif mode == "reg_operand_only":
+            control_hmma_class = "strict_no_hmma_pass"
         for value, reason in [
             (l1_bytes, "l1_traffic_too_high_for_register_control"),
             (l2_bytes, "l2_traffic_too_high_for_register_control"),
@@ -266,8 +273,12 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
 
     elif mode == "dram_cg_load_only":
         component = "dram_sanity_path"
-        if l1_hit > args.dram_l1_hit_max_pct:
+        if not has_l1_path_hit:
+            reasons.append("missing_l1_path_hit_rate_for_dram")
+        elif l1_path_hit > args.dram_l1_hit_max_pct:
             reasons.append("l1_hit_too_high_for_dram")
+        if not has_l2_path_hit:
+            reasons.append("missing_l2_path_hit_rate_for_dram")
         dram_expected_l2_hit_pct = expected_l2_residency_hit_pct(
             row, args.target_profile
         )
@@ -276,11 +287,13 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
             dram_expected_l2_hit_pct * args.dram_l2_expected_multiplier
             + args.dram_l2_expected_slack_pct,
         )
-        if l2_hit > dram_l2_hit_limit_pct:
+        if has_l2_path_hit and l2_path_hit > dram_l2_hit_limit_pct:
             reasons.append("l2_hit_too_high_for_dram")
         if dram_bytes <= 0.0:
             reasons.append("missing_dram_bytes")
-        if ratio(dram_bytes, l2_bytes) < args.dram_l2_ratio_min:
+        if not has_l2_read_bytes or l2_read_bytes <= 0.0:
+            reasons.append("missing_l2_read_bytes_for_dram")
+        elif ratio(dram_bytes, l2_read_bytes) < args.dram_l2_ratio_min:
             reasons.append("dram_not_dominant_over_l2")
 
     else:
@@ -311,7 +324,7 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
                 if mode in {"shared_scalar_load_only", "shared_load_only"} and shared_bytes > 0.0
                 else ""
             ),
-            "l2_to_l1_bytes": f"{ratio(l2_bytes, l1_request_bytes):.6g}" if l1_request_bytes > 0.0 else "",
+            "l2_to_l1_bytes": f"{ratio(l2_read_bytes, l1_request_bytes):.6g}" if l1_request_bytes > 0.0 else "",
             "dram_to_l2_bytes": f"{ratio(dram_bytes, l2_read_bytes):.6g}" if l2_read_bytes > 0.0 else "",
             "l1_hit_to_request_bytes": (
                 f"{ratio(l1_hit_bytes, l1_request_bytes):.6g}"
@@ -535,6 +548,50 @@ def run_self_test() -> None:
     )
     assert polluted_control["acceptance"] == "rejected"
     assert "dram_traffic_too_high_for_address_control" in polluted_control[
+        "acceptance_reason"
+    ]
+
+    dram_stream = {
+        **row,
+        "mode": "dram_cg_load_only",
+        "W_SM_KiB": "8192",
+        # Aggregate values may include unrelated traffic. The path-specific
+        # global-load/L2-read values are the acceptance evidence.
+        "l1_hit_rate_pct": "71",
+        "l2_hit_rate_pct": "71",
+        "l1_path_hit_rate_pct": "0.1",
+        "l2_path_hit_rate_pct": "5.5",
+        "l1_request_bytes": "1e12",
+        "l1_hit_bytes": "1e9",
+        "l2_read_bytes": "1e12",
+        "dram_bytes": "9e11",
+    }
+    accepted_dram = classify(dram_stream, args)
+    assert accepted_dram["acceptance"] == "accepted", accepted_dram[
+        "acceptance_reason"
+    ]
+    assert float(accepted_dram["dram_l2_hit_limit_pct"]) > 5.5
+    missing_dram_path = classify(
+        {**dram_stream, "l2_path_hit_rate_pct": ""}, args
+    )
+    assert missing_dram_path["acceptance"] == "provisional"
+    assert "missing_l2_path_hit_rate_for_dram" in missing_dram_path[
+        "acceptance_reason"
+    ]
+    strict_tensor_control = {
+        **row,
+        "mode": "reg_operand_only",
+        "W_SM_KiB": "2048",
+        "reuse_factor": "8",
+        "tensor_hmma_inst": "1",
+        "l1_bytes": "0",
+        "l2_bytes": "0",
+        "l2_read_bytes": "0",
+        "dram_bytes": "0",
+    }
+    rejected_tensor_control = classify(strict_tensor_control, args)
+    assert rejected_tensor_control["acceptance"] == "rejected"
+    assert "tensor_hmma_present_in_control" in rejected_tensor_control[
         "acceptance_reason"
     ]
     print("NCU L2 path-specific acceptance self-test passed")

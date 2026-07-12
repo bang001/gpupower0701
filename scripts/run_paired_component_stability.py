@@ -16,6 +16,14 @@ import time
 from pathlib import Path
 
 
+FINAL_CONTROL_BY_TREATMENT = {
+    "shared_scalar_load_only": "clocked_empty",
+    "global_l1_load_only": "global_addr_only",
+    "l2_cg_load_only": "global_addr_only",
+    "dram_cg_load_only": "global_addr_only",
+}
+
+
 def build_command(
     args: argparse.Namespace,
     *,
@@ -143,7 +151,7 @@ def main() -> int:
     parser.add_argument("--target-profile", default="rtx3090")
     parser.add_argument("--gpu-ids", default="0")
     parser.add_argument("--active-sm", type=int, required=True)
-    parser.add_argument("--control-mode", default="clocked_empty")
+    parser.add_argument("--control-mode", required=True)
     parser.add_argument("--treatment-mode", required=True)
     parser.add_argument("--w-sm-kib", type=int, required=True)
     parser.add_argument("--blocks-per-sm", type=int, required=True)
@@ -164,6 +172,17 @@ def main() -> int:
         raise ValueError("--repeats must be positive")
     if args.warmup_repeats < 0:
         raise ValueError("--warmup-repeats must be non-negative")
+    expected_control = FINAL_CONTROL_BY_TREATMENT.get(args.treatment_mode)
+    if expected_control and args.control_mode != expected_control:
+        raise ValueError(
+            f"{args.treatment_mode} current protocol requires "
+            f"--control-mode {expected_control}, got {args.control_mode}"
+        )
+    if args.treatment_mode == "reg_mma":
+        raise ValueError(
+            "reg_mma requires pair-locked ITER; use run_component_regression_sweep.py "
+            "with --tensor-pair-lock-iters"
+        )
 
     warmup_output = args.warmup_output
     if not warmup_output:

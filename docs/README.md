@@ -1,24 +1,38 @@
 # Documentation Map
 
-이 디렉토리는 현재 finalplan 기준 문서를 목적별로 분류한다. 과거 탐색 설계, 폐기된 분석 흐름, 현재 coefficient 산출에 직접 쓰지 않는 초기 결과는 `archive/legacy_20260707/`에 보관한다.
+이 디렉토리는 현행 finalplan 기준 문서를 목적별로 분류한다. 과거 탐색 설계와
+폐기된 분석 흐름은 `archive/legacy_20260707/`에 보관한다. 2026-07-08 RTX 3090
+결과 문서/산출물은 재현 이력 때문에 active 경로에 남아 있지만, 2026-07-12에 추가한
+address-control exact NCU gate 이전 결과이므로 historical/provisional이다.
+
+## 발표 자료
+
+- [GPU component energy experiment PowerPoint](presentations/gpu_component_energy_experiment_whitepaper_ko.pptx)
+- [Rendered PDF](presentations/gpu_component_energy_experiment_whitepaper_ko.pdf)
+- [Slide evidence notes](presentations/gpu_component_energy_experiment_whitepaper_ko.md)
+- [Rendered contact sheet](presentations/gpu_component_energy_experiment_whitepaper_ko_rendered_contact_sheet.png)
 
 ## 빠른 시작
 
 | 목적 | 먼저 볼 문서 |
 |---|---|
 | 현재 코드와 실험 구조 이해 | `docs/methodology/howitworks.md` |
-| RTX 3090 최종 결과 확인 | `docs/results/gpu_power_modeling_experiment_results_ko.md` |
+| 현재 결과 상태와 RTX 3090 재측정 조건 확인 | `docs/results/gpu_power_modeling_experiment_results_ko.md` |
+| RTX 3090 DRAM 최신 보고 범위/상태 확인 | `results/summary/rtx3090_dram_current_reporting_policy_20260712.md` |
+| 현재 목표/코드/문서 정합성 감사 | `docs/audits/current_goal_alignment_audit_ko.md` |
 | 백서용 문장/주장 범위 확인 | `docs/reports/gpu_power_modeling_whitepaper_synthesis_ko.md` |
 | 다른 GPU에서 실행 | `docs/platforms/README.md` |
 | GPU 세대별 power API 사용 가능성/제약/최종 채택 기준 확인 | `docs/platforms/power_measurement_api_matrix_ko.md` |
 | 플랫폼 profile/power 정합성 audit | `results/summary/platform_power_readiness_audit_20260708.md` |
-| strict + fresh NCU 결과 확인 | `results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md` |
+| 과거 strict + fresh NCU 결과 확인 | `results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md` |
 | strict + fresh NCU reliability 확인 | `results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.md` |
 | strict + fresh NCU summary audit 확인 | `results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_20260708.md` |
 | strict raw power API 재감사 확인 | `results/summary/rtx3090_strict_scope_power_api_reaudit_20260708.md` |
-| 전체 목표 readiness 확인 | `results/summary/component_energy_goal_readiness_audit_20260708.md` |
+| 전체 목표 readiness 확인 | `results/summary/component_energy_goal_readiness_audit_20260712.md` |
 | 플랫폼 결과 intake dashboard | `results/summary/platform_component_intake_dashboard_20260708.md` |
 | A100/V100/H100 command package | `results/summary/a100_component_finalplan_20260708_command_plan.md`, `results/summary/v100_component_finalplan_20260708_command_plan.md`, `results/summary/h100_component_finalplan_20260708_command_plan.md` |
+| RTX 3090 현행 protocol 재실행 package | `results/summary/rtx3090_component_finalplan_20260712_command_plan.md` |
+| RTX 3090 과거 strict 결과 현행 재감사 | `results/summary/rtx3090_current_protocol_reaudit_20260712.md` |
 | active/archive 경계 확인 | `docs/audits/repository_active_archive_audit_ko.md` |
 | A100 Tensor RF 음수, L2 counter 의미, L1 W16/B32 중단 리메디에이션 | `docs/audits/a100_strict_summary_failure_remediation_ko.md` |
 | A100 Tensor/L2 targeted 재실행 계획 | `results/summary/a100_tensor_l2_remediation_20260710_command_plan.md`, `results/summary/a100_tensor_l2_remediation_20260710_commands.sh` |
@@ -37,12 +51,13 @@
 | 5. 세대별 power API | `docs/platforms/power_measurement_api_matrix_ko.md` | 실험 전 1페이지 판정표, NVML total energy, `GetPowerUsage`, nvidia-smi GPU/module/memory power의 사용 가능성, 제약, final/provisional/reject 기준 |
 | 6. 플랫폼 정합성 audit | `results/summary/platform_power_readiness_audit_20260708.md` | RTX 3090/V100/A100/H100 profile, power API, 문서, 생성 plan 일치 여부 |
 | 7. GPU별 실행 가이드 | `docs/platforms/a100_node_experiment_guide_ko.md`, `docs/platforms/v100_node_experiment_guide_ko.md`, `docs/platforms/h100_node_experiment_guide_ko.md` | A100/V100/H100에서 수정해야 할 SM/L2/shared/NCU/NVML 조건 |
-| 8. 결과 해석 | `docs/results/gpu_power_modeling_experiment_results_ko.md` | RTX 3090 기준 결과 표, sweep 결과, 현재 인정 가능한 coefficient |
-| 9. 결과 sanity audit | `results/summary/rtx3090_current_component_sanity_audit_20260708.md` | 현재 보고값의 power scope, 단위, 계층 순서, warning/fail 확인 |
+| 8. 결과 해석 | `docs/results/gpu_power_modeling_experiment_results_ko.md` | RTX 3090 과거 결과 표, sweep 결과, 현행 protocol에서 재측정할 항목 |
+| 9. 과거 결과 sanity audit | `results/summary/rtx3090_current_component_sanity_audit_20260708.md` | 2026-07-08 protocol의 역사 audit. DRAM current 값으로 인용하지 않음 |
+| 9a. DRAM current policy | `results/summary/rtx3090_dram_current_reporting_policy_20260712.md` | 26.709-28.409 pJ/bit provisional band, strict 미채택, matched-ITER 재실행 조건 |
 | 10. strict + fresh NCU 확인 | `results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md` | raw CSV에 explicit `measurement_scope`가 기록되고 fresh NCU sidecar로 denominator/path를 재검증한 RTX 3090 결과 |
 | 11. strict summary build/audit | `scripts/build_strict_component_summary.py`, `results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_20260708.md` | accepted reliability에서 보고용 summary 생성 후 reliability artifact, power scope, NCU denominator, hierarchy/plausibility gate, NCU counter schema/coordinate/path-evidence 노출 여부 확인 |
-| 12. goal readiness audit | `results/summary/component_energy_goal_readiness_audit_20260708.md` | RTX 3090 accepted 증거, NCU availability, A100/V100/H100 결과 패키지 누락 여부, platform summary/power API/power-state/reliability/NCU acceptance policy |
-| 12a. 외부 플랫폼 결과 intake | `results/summary/component_energy_goal_readiness_audit_20260708.md`의 `External Platform Result Intake Checklist` | A100/V100/H100 노드에서 실행 후 되가져와야 할 raw, power API, power-state, NCU, reliability, strict summary artifact 목록 |
+| 12. goal readiness audit | `results/summary/component_energy_goal_readiness_audit_20260712.md` | RTX 3090 현행 control gate 실패, NCU availability, A100/V100/H100 결과 패키지 누락 여부, platform summary/power API/power-state/reliability/NCU acceptance policy |
+| 12a. 외부 플랫폼 결과 intake | `results/summary/component_energy_goal_readiness_audit_20260712.md`의 `External Platform Result Intake Checklist` | A100/V100/H100 노드에서 실행 후 되가져와야 할 raw, power API, power-state, NCU, reliability, strict summary artifact 목록 |
 | 12b. 외부 플랫폼 패키지 audit | `scripts/audit_platform_result_package.py` | 복사해 온 A100/V100/H100 결과 패키지가 profile metadata, active SM, power matrix, NCU, reliability, strict summary 기준을 만족하는지 단일 profile/tag로 검수 |
 | 12c. 플랫폼 intake dashboard | `results/summary/platform_component_intake_dashboard_20260708.md` | RTX 3090 local strict evidence와 V100/A100/H100 외부 package/gap/strict summary 상태를 한 표로 확인 |
 | 12d. 로컬 readiness wrapper | `scripts/run_local_readiness_checks.sh` | preflight/power API/strict summary build/audit/package/goal/manifest/gap/dashboard self-test, platform power readiness, RTX 3090 strict summary audit, goal readiness audit, dashboard refresh, `git diff --check`를 한 번에 실행 |
@@ -73,8 +88,8 @@
 | methodology | `docs/methodology/component_energy_final_experiment_plan_ko.md` | 2026-07-05, updated 2026-07-08 | finalplan 실험 조건과 채택/제외 기준 |
 | methodology | `docs/methodology/component_energy_method_comparison_ko.md` | 2026-07-06, updated 2026-07-08 | 초기 sweep과 finalplan 방식의 차이, sweep 조건 설명 |
 | methodology | `docs/methodology/ncu_validation_energy_calculation_ko.md` | 2026-07-08 | NCU counter로 path와 denominator를 검증하는 방법 |
-| results | `docs/results/gpu_power_modeling_experiment_results_ko.md` | 2026-07-08 | RTX 3090 finalplan strict 결과와 sweep 표 |
-| reports | `docs/reports/gpu_power_modeling_whitepaper_synthesis_ko.md` | 2026-07-08 | 백서용 핵심 주장, 결과, 한계 정리 |
+| results | `docs/results/gpu_power_modeling_experiment_results_ko.md` | 2026-07-12 | 현행 결과 상태, 과거 수치의 지위, RTX 3090 재실행 표 |
+| reports | `docs/reports/gpu_power_modeling_whitepaper_synthesis_ko.md` | 2026-07-12 | 백서용 핵심 주장, 현행 결과 상태, 보고 원칙 |
 | platforms | `docs/platforms/README.md` | 2026-07-08, updated 2026-07-09 | GPU별 구조/NVML/NCU 차이와 power API 채택 기준 |
 | platforms | `docs/platforms/cross_platform_component_experiment_guide_ko.md` | 2026-07-06, updated 2026-07-10 | A100/V100/H100 공통 실행/해석 기준과 V100 CUDA 12.x gate |
 | platforms | `docs/platforms/power_measurement_api_matrix_ko.md` | 2026-07-09 | GPU 세대별 NVML/nvidia-smi power/energy API 의미와 final/provisional gate |
@@ -87,6 +102,7 @@
 | audits | `docs/audits/a100_strict_summary_failure_remediation_ko.md` | 2026-07-10 | A100 Tensor 동일 ITER pair-lock, path-specific L2 counter, Global L1 coordinate filter, 재실행 조건 |
 | audits | `docs/audits/v100_32gb_platform_review_ko.md` | 2026-07-10 | V100 32GB capacity, blocks sweep, strict NCU W/B 좌표 검토 |
 | audits | `docs/audits/repository_active_archive_audit_ko.md` | 2026-07-08 | active/archive 분리 근거 |
+| audits | `docs/audits/current_goal_alignment_audit_ko.md` | 2026-07-12 | 현행 treatment/control/NCU gate와 코드·문서 불일치 수정 기록 |
 | design | `docs/design/a100_fp16_energy_experiment_design_v2.md` | 2026-07-01 계열 | 초기 FP16 WMMA v2 상세설계 reference |
 
 ## Archive 기준

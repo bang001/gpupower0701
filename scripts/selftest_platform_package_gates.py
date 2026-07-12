@@ -160,6 +160,8 @@ MATCHED_DETAIL_COLUMNS = [
     "component",
     "valid_component_estimate",
     "pair_energy_basis",
+    "ncu_control_acceptance_required",
+    "ncu_control_acceptance_exact",
     "numerator_ITER",
     "control_ITER",
     "iter_ratio",
@@ -239,6 +241,7 @@ NCU_ACCEPTANCE_CANDIDATES = [
     ("shared_scalar_load_only", "shared_memory_path"),
     ("global_l1_load_only", "global_l1_hit_path"),
     ("l2_cg_load_only", "l2_hit_path"),
+    ("global_addr_only", "global_address_control"),
 ]
 
 BASE_VALUES = {
@@ -253,6 +256,7 @@ MATCHED_SUMMARY_COMPONENTS = {
     "shared_l1_scalar_path": ("1.20", "pJ/byte", "6", "0.15"),
     "global_l1_hit_path": ("1.40", "pJ/byte", "6", "0.175"),
     "l2_hit_cg_path": ("9.00", "pJ/byte", "6", "1.125"),
+    "dram_cg_stream_path": ("216.00", "pJ/byte", "6", "27.0"),
 }
 
 RELIABILITY_COMPONENTS = {
@@ -472,7 +476,7 @@ def summary_evidence_fields(component: str, unit: str) -> dict[str, str]:
         }
     elif component == "Global L1 hit path":
         evidence = {
-            "ncu_evidence_modes": "global_l1_load_only",
+            "ncu_evidence_modes": "global_addr_only,global_l1_load_only",
             "ncu_metric_modes": "global_l1_load_only",
             "ncu_evidence_coords": "global_l1_load_only:W16:B16:SM82:RF1:LR4:SR1",
             "ncu_path_evidence": "L1_path_hit_pct=99; L1_request/hit_bytes=1024/1014",
@@ -487,7 +491,7 @@ def summary_evidence_fields(component: str, unit: str) -> dict[str, str]:
         }
     else:
         evidence = {
-            "ncu_evidence_modes": "l2_cg_load_only",
+            "ncu_evidence_modes": "global_addr_only,l2_cg_load_only",
             "ncu_metric_modes": "l2_cg_load_only",
             "ncu_evidence_coords": "l2_cg_load_only:W64:B16:SM82:RF1:LR4:SR1",
             "ncu_path_evidence": (
@@ -863,11 +867,15 @@ def write_matched_detail(
     tensor_pair_energy_basis: str = "matched_iters_net_energy",
     tensor_control_iters: str = "1000",
     tensor_control_elapsed_s: str = "1.0",
+    dram_pair_energy_basis: str = "matched_iters_net_energy",
+    dram_control_iters: str = "1000",
+    dram_control_elapsed_s: str = "1.0",
 ) -> None:
     semantics = module.PROFILE_POWER_SEMANTICS[profile]
     rows: list[dict[str, str]] = []
     for component in MATCHED_SUMMARY_COMPONENTS:
         tensor = component == "tensor_mma_increment"
+        dram = component == "dram_cg_stream_path"
         rows.append(
             {
                 "component": component,
@@ -875,17 +883,55 @@ def write_matched_detail(
                 "pair_energy_basis": (
                     tensor_pair_energy_basis
                     if tensor
+                    else dram_pair_energy_basis
+                    if dram
                     else "duration_scaled_control_power"
                 ),
+                "ncu_control_acceptance_required": (
+                    "True"
+                    if component
+                    in {
+                        "tensor_mma_increment",
+                        "global_l1_hit_path",
+                        "l2_hit_cg_path",
+                        "dram_cg_stream_path",
+                    }
+                    else "False"
+                ),
+                "ncu_control_acceptance_exact": (
+                    "True"
+                    if component
+                    in {
+                        "tensor_mma_increment",
+                        "global_l1_hit_path",
+                        "l2_hit_cg_path",
+                        "dram_cg_stream_path",
+                    }
+                    else ""
+                ),
                 "numerator_ITER": "1000",
-                "control_ITER": tensor_control_iters if tensor else "900",
+                "control_ITER": (
+                    tensor_control_iters
+                    if tensor
+                    else dram_control_iters
+                    if dram
+                    else "900"
+                ),
                 "iter_ratio": (
                     str(1000.0 / float(tensor_control_iters))
                     if tensor and float(tensor_control_iters) > 0.0
+                    else str(1000.0 / float(dram_control_iters))
+                    if dram and float(dram_control_iters) > 0.0
                     else "1.111111111"
                 ),
                 "numerator_elapsed_s": "10",
-                "control_elapsed_s": tensor_control_elapsed_s if tensor else "10",
+                "control_elapsed_s": (
+                    tensor_control_elapsed_s
+                    if tensor
+                    else dram_control_elapsed_s
+                    if dram
+                    else "10"
+                ),
                 "numerator_net_E_J": "120",
                 "control_net_E_J": "20",
                 "delta_E_J": "20",
@@ -967,6 +1013,63 @@ def write_tensor_pair_calibration_fixture(
         ],
     )
     return calibration_path, tensor_path
+
+
+def write_dram_pair_calibration_fixture(
+    module: Any,
+    repo: Path,
+    profile: str,
+    tag: str,
+    *,
+    control_iters: str = "1000",
+    manifest_iters: str = "1000",
+) -> tuple[Path, Path]:
+    paths = module.expected_paths(profile, tag)
+    calibration_path = repo / paths["dram_pair_calibration"]
+    dram_path = repo / paths["raw"][-1]
+    coord = {
+        "W_SM_KiB": "8192",
+        "blocks_per_SM": "16",
+        "active_SM": str(PROFILE_ACTIVE_SM[profile]),
+        "reuse_factor": "1",
+        "load_repeat": "4",
+        "store_repeat": "1",
+    }
+    calibration_row = {
+        "target_profile": profile,
+        "gpu_list": "0",
+        **coord,
+        "calibration_source_mode": "dram_cg_load_only",
+        "treatment_target_seconds": "10",
+        "control_min_seconds": "1",
+        "treatment_calibrated_iters": "1000",
+        "control_min_calibrated_iters": "300",
+        "resolved_iters": manifest_iters,
+        "resolution_policy": "max_treatment_and_control_min_iters",
+        "status": "pair_locked",
+        "calibration_command": "benchmark --mode dram_cg_load_only --calibrate-only",
+        "treatment_calibration_command": (
+            "benchmark --mode dram_cg_load_only --seconds 10 --calibrate-only"
+        ),
+        "control_calibration_command": (
+            "benchmark --mode global_addr_only --seconds 1 --calibrate-only"
+        ),
+    }
+    write_csv(
+        calibration_path,
+        sorted(module.TENSOR_PAIR_CALIBRATION_REQUIRED_COLUMNS),
+        [calibration_row],
+    )
+    raw_fields = ["mode", *coord.keys(), "ITER"]
+    write_csv(
+        dram_path,
+        raw_fields,
+        [
+            {"mode": "dram_cg_load_only", **coord, "ITER": "1000"},
+            {"mode": "global_addr_only", **coord, "ITER": control_iters},
+        ],
+    )
+    return calibration_path, dram_path
 
 
 def write_reliability(
@@ -1526,6 +1629,9 @@ def run_matched_detail_case(
     tensor_pair_energy_basis: str = "matched_iters_net_energy",
     tensor_control_iters: str = "1000",
     tensor_control_elapsed_s: str = "1.0",
+    dram_pair_energy_basis: str = "matched_iters_net_energy",
+    dram_control_iters: str = "1000",
+    dram_control_elapsed_s: str = "1.0",
 ) -> None:
     with tempfile.TemporaryDirectory(prefix=f"{name}_") as tmp:
         repo = Path(tmp)
@@ -1539,6 +1645,9 @@ def run_matched_detail_case(
             tensor_pair_energy_basis=tensor_pair_energy_basis,
             tensor_control_iters=tensor_control_iters,
             tensor_control_elapsed_s=tensor_control_elapsed_s,
+            dram_pair_energy_basis=dram_pair_energy_basis,
+            dram_control_iters=dram_control_iters,
+            dram_control_elapsed_s=dram_control_elapsed_s,
         )
         rows = module.audit_package(
             repo,
@@ -1593,6 +1702,42 @@ def run_tensor_pair_calibration_case(
         assert_status(
             rows,
             "tensor_pair_calibration_policy",
+            expected_status,
+            actual_contains=expected_text,
+        )
+        print(f"{name}: ok")
+
+
+def run_dram_pair_calibration_case(
+    module: Any,
+    *,
+    name: str,
+    expected_status: str,
+    expected_text: str | None = None,
+    control_iters: str = "1000",
+    manifest_iters: str = "1000",
+) -> None:
+    with tempfile.TemporaryDirectory(prefix=f"{name}_") as tmp:
+        repo = Path(tmp)
+        calibration_path, dram_path = write_dram_pair_calibration_fixture(
+            module,
+            repo,
+            "a100",
+            "selftest",
+            control_iters=control_iters,
+            manifest_iters=manifest_iters,
+        )
+        rows: list[dict[str, str]] = []
+        module.audit_dram_pair_calibration(
+            repo,
+            rows,
+            calibration_path.relative_to(repo),
+            dram_path.relative_to(repo),
+            profile="a100",
+        )
+        assert_status(
+            rows,
+            "dram_pair_calibration_policy",
             expected_status,
             actual_contains=expected_text,
         )
@@ -2113,6 +2258,22 @@ def main() -> int:
         expected_status="fail",
         expected_text="control_elapsed_s=0.1",
     )
+    run_matched_detail_case(
+        module,
+        name="bad_dram_duration_scaled_detail",
+        profile="a100",
+        dram_pair_energy_basis="duration_scaled_control_power",
+        expected_status="fail",
+        expected_text="pair_energy_basis=duration_scaled_control_power",
+    )
+    run_matched_detail_case(
+        module,
+        name="bad_dram_iter_mismatch_detail",
+        profile="a100",
+        dram_control_iters="900",
+        expected_status="fail",
+        expected_text="dram_iters=1000/900",
+    )
     run_tensor_pair_calibration_case(
         module,
         name="good_tensor_pair_calibration_manifest",
@@ -2138,6 +2299,18 @@ def main() -> int:
         control_min_calibrated_iters="1200",
         expected_status="fail",
         expected_text="resolved_not_candidate_max=1000!=1200",
+    )
+    run_dram_pair_calibration_case(
+        module,
+        name="good_dram_pair_calibration_manifest",
+        expected_status="pass",
+    )
+    run_dram_pair_calibration_case(
+        module,
+        name="bad_dram_pair_raw_iter_mismatch",
+        control_iters="900",
+        expected_status="fail",
+        expected_text="ITER_sets=[900, 1000]",
     )
     run_reliability_case(
         module,

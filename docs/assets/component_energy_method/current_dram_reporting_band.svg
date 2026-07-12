@@ -1,0 +1,3244 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="810.446084pt" height="377.139437pt" viewBox="0 0 810.446084 377.139437" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-07-13T07:52:43.541702</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.5, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 377.139437
+L 810.446084 377.139437
+L 810.446084 0
+L 0 0
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 10.5 339.789125
+L 763.8 339.789125
+L 763.8 40.413125
+L 10.5 40.413125
+z
+" style="fill: #ffffff"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 639.246553 339.789125
+L 679.265616 339.789125
+L 679.265616 40.413125
+L 639.246553 40.413125
+z
+" clip-path="url(#p36ad09d9f8)" style="fill: #fbeed9; stroke: #fbeed9; stroke-linejoin: miter"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <path d="M 10.5 339.789125
+L 10.5 40.413125
+" clip-path="url(#p36ad09d9f8)" style="fill: none; stroke: #d5dee2; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_2">
+      <defs>
+       <path id="m6c8efa0e1b" d="M 0 0
+L 0 3.5
+" style="stroke: #000000; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#m6c8efa0e1b" x="10.5" y="339.789125" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_1">
+      <!-- 0 -->
+      <g transform="translate(7.2 354.334437) scale(0.11 -0.11)">
+       <defs>
+        <path id="UnDotum-30" d="M 3584 2176
+Q 3584 1786 3488 1405
+Q 3392 1024 3200 688
+Q 3008 352 2681 144
+Q 2355 -64 1939 -64
+Q 1510 -64 1174 141
+Q 838 346 646 682
+Q 454 1018 355 1402
+Q 256 1786 256 2189
+Q 256 2592 345 2973
+Q 435 3354 617 3696
+Q 800 4038 1129 4246
+Q 1459 4454 1888 4454
+Q 2330 4454 2669 4249
+Q 3008 4045 3200 3705
+Q 3392 3366 3488 2979
+Q 3584 2592 3584 2176
+z
+M 3021 2099
+Q 3021 2426 2976 2720
+Q 2931 3014 2819 3331
+Q 2707 3648 2467 3840
+Q 2227 4032 1888 4032
+Q 1568 4032 1344 3853
+Q 1120 3674 1014 3379
+Q 909 3085 864 2806
+Q 819 2528 819 2227
+Q 819 1907 864 1619
+Q 909 1331 1021 1027
+Q 1133 723 1369 540
+Q 1606 358 1939 358
+Q 2253 358 2477 528
+Q 2701 698 2813 976
+Q 2925 1254 2973 1529
+Q 3021 1805 3021 2099
+z
+" transform="scale(0.015625)"/>
+       </defs>
+       <use xlink:href="#UnDotum-30"/>
+      </g>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_3">
+      <path d="M 128.203125 339.789125
+L 128.203125 40.413125
+" clip-path="url(#p36ad09d9f8)" style="fill: none; stroke: #d5dee2; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_4">
+      <g>
+       <use xlink:href="#m6c8efa0e1b" x="128.203125" y="339.789125" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_2">
+      <!-- 5 -->
+      <g transform="translate(124.903125 354.334437) scale(0.11 -0.11)">
+       <defs>
+        <path id="UnDotum-35" d="M 3533 1485
+Q 3533 781 3046 358
+Q 2560 -64 1843 -64
+Q 1325 -64 886 217
+Q 448 499 307 973
+L 781 1133
+Q 909 774 1190 572
+Q 1472 371 1856 371
+Q 2374 371 2688 672
+Q 3002 973 3002 1491
+Q 3002 1946 2710 2240
+Q 2419 2534 1971 2534
+Q 1651 2534 1379 2374
+Q 1107 2214 934 1939
+L 499 2029
+L 646 4390
+L 3245 4390
+L 3200 3917
+L 1043 3917
+L 947 2502
+Q 1434 2976 2003 2976
+Q 2650 2976 3091 2550
+Q 3533 2125 3533 1485
+z
+" transform="scale(0.015625)"/>
+       </defs>
+       <use xlink:href="#UnDotum-35"/>
+      </g>
+     </g>
+    </g>
+    <g id="xtick_3">
+     <g id="line2d_5">
+      <path d="M 245.90625 339.789125
+L 245.90625 40.413125
+" clip-path="url(#p36ad09d9f8)" style="fill: none; stroke: #d5dee2; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_6">
+      <g>
+       <use xlink:href="#m6c8efa0e1b" x="245.90625" y="339.789125" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_3">
+      <!-- 10 -->
+      <g transform="translate(239.30625 354.334437) scale(0.11 -0.11)">
+       <defs>
+        <path id="UnDotum-31" d="M 3558 0
+L 486 0
+L 486 403
+L 1798 403
+L 1798 3725
+Q 1229 3123 589 2790
+L 589 3334
+Q 1459 3782 1933 4390
+L 2330 4390
+L 2330 403
+L 3558 403
+L 3558 0
+z
+" transform="scale(0.015625)"/>
+       </defs>
+       <use xlink:href="#UnDotum-31"/>
+       <use xlink:href="#UnDotum-30" transform="translate(59.999985 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="xtick_4">
+     <g id="line2d_7">
+      <path d="M 363.609375 339.789125
+L 363.609375 40.413125
+" clip-path="url(#p36ad09d9f8)" style="fill: none; stroke: #d5dee2; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_8">
+      <g>
+       <use xlink:href="#m6c8efa0e1b" x="363.609375" y="339.789125" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_4">
+      <!-- 15 -->
+      <g transform="translate(357.009375 354.334437) scale(0.11 -0.11)">
+       <use xlink:href="#UnDotum-31"/>
+       <use xlink:href="#UnDotum-35" transform="translate(59.999985 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="xtick_5">
+     <g id="line2d_9">
+      <path d="M 481.3125 339.789125
+L 481.3125 40.413125
+" clip-path="url(#p36ad09d9f8)" style="fill: none; stroke: #d5dee2; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_10">
+      <g>
+       <use xlink:href="#m6c8efa0e1b" x="481.3125" y="339.789125" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_5">
+      <!-- 20 -->
+      <g transform="translate(474.7125 354.334437) scale(0.11 -0.11)">
+       <defs>
+        <path id="UnDotum-32" d="M 3488 0
+L 371 0
+L 371 454
+L 2150 1850
+Q 2931 2464 2931 3142
+Q 2931 3526 2630 3769
+Q 2330 4013 1933 4013
+Q 1517 4013 1209 3721
+Q 902 3430 883 3014
+L 371 3168
+Q 493 3770 915 4112
+Q 1338 4454 1952 4454
+Q 2560 4454 3021 4096
+Q 3482 3738 3482 3142
+Q 3482 2310 2522 1568
+L 1069 454
+L 3488 454
+L 3488 0
+z
+" transform="scale(0.015625)"/>
+       </defs>
+       <use xlink:href="#UnDotum-32"/>
+       <use xlink:href="#UnDotum-30" transform="translate(59.999985 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="xtick_6">
+     <g id="line2d_11">
+      <path d="M 599.015625 339.789125
+L 599.015625 40.413125
+" clip-path="url(#p36ad09d9f8)" style="fill: none; stroke: #d5dee2; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_12">
+      <g>
+       <use xlink:href="#m6c8efa0e1b" x="599.015625" y="339.789125" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_6">
+      <!-- 25 -->
+      <g transform="translate(592.415625 354.334437) scale(0.11 -0.11)">
+       <use xlink:href="#UnDotum-32"/>
+       <use xlink:href="#UnDotum-35" transform="translate(59.999985 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="xtick_7">
+     <g id="line2d_13">
+      <path d="M 716.71875 339.789125
+L 716.71875 40.413125
+" clip-path="url(#p36ad09d9f8)" style="fill: none; stroke: #d5dee2; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_14">
+      <g>
+       <use xlink:href="#m6c8efa0e1b" x="716.71875" y="339.789125" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_7">
+      <!-- 30 -->
+      <g transform="translate(710.11875 354.334437) scale(0.11 -0.11)">
+       <defs>
+        <path id="UnDotum-33" d="M 3590 1229
+Q 3590 800 3331 496
+Q 3072 192 2707 64
+Q 2342 -64 1926 -64
+Q 1344 -64 889 205
+Q 435 474 256 998
+L 768 1171
+Q 992 378 1914 378
+Q 2374 378 2697 582
+Q 3021 787 3021 1229
+Q 3021 1645 2637 1882
+Q 2464 1984 2227 2032
+Q 1990 2080 1779 2070
+Q 1568 2061 1338 2067
+L 1338 2496
+Q 1382 2496 1545 2493
+Q 1709 2490 1798 2493
+Q 1888 2496 2025 2505
+Q 2163 2515 2272 2540
+Q 2381 2566 2464 2611
+Q 2643 2694 2752 2870
+Q 2861 3046 2861 3245
+Q 2861 3616 2589 3821
+Q 2317 4026 1933 4026
+Q 1581 4026 1299 3837
+Q 1018 3648 909 3315
+L 416 3456
+Q 595 3942 1017 4198
+Q 1440 4454 1978 4454
+Q 2566 4454 2992 4147
+Q 3418 3840 3418 3277
+Q 3418 2918 3171 2646
+Q 2925 2374 2573 2317
+L 2573 2304
+Q 3014 2240 3302 1952
+Q 3590 1664 3590 1229
+z
+" transform="scale(0.015625)"/>
+       </defs>
+       <use xlink:href="#UnDotum-33"/>
+       <use xlink:href="#UnDotum-30" transform="translate(59.999985 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="text_8">
+     <!-- Effective path energy [pJ/bit] -->
+     <g transform="translate(317.96 367.827094) scale(0.11 -0.11)">
+      <defs>
+       <path id="UnDotum-45" d="M 3386 0
+L 544 0
+L 544 4390
+L 3322 4390
+L 3322 3917
+L 1094 3917
+L 1094 2522
+L 2861 2522
+L 2861 2080
+L 1094 2080
+L 1094 474
+L 3386 474
+L 3386 0
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-66" d="M 2086 4006
+Q 1818 4058 1677 4058
+Q 1350 4058 1244 3891
+Q 1139 3725 1139 3379
+L 1139 3251
+L 1894 3251
+L 1894 2854
+L 1139 2854
+L 1139 0
+L 640 0
+L 640 2854
+L 64 2854
+L 64 3251
+L 640 3251
+L 640 3347
+Q 640 3834 841 4147
+Q 1043 4461 1504 4461
+Q 1574 4461 2086 4410
+L 2086 4006
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-65" d="M 3187 1587
+L 838 1587
+Q 832 1056 1059 707
+Q 1286 358 1792 358
+Q 2099 358 2326 524
+Q 2554 691 2662 986
+L 3136 890
+Q 2995 454 2611 195
+Q 2227 -64 1754 -64
+Q 1050 -64 662 419
+Q 275 902 275 1626
+Q 275 2342 672 2838
+Q 1069 3334 1766 3334
+Q 2458 3334 2822 2854
+Q 3187 2374 3187 1664
+L 3187 1587
+z
+M 2637 1958
+Q 2643 2381 2412 2665
+Q 2182 2950 1766 2950
+Q 1376 2950 1126 2656
+Q 877 2362 864 1958
+L 2637 1958
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-63" d="M 2854 1075
+Q 2765 563 2435 249
+Q 2106 -64 1600 -64
+Q 1139 -64 819 185
+Q 499 435 358 806
+Q 218 1178 218 1626
+Q 218 2074 358 2448
+Q 499 2822 825 3078
+Q 1152 3334 1606 3334
+Q 2125 3334 2448 3030
+Q 2771 2726 2854 2208
+L 2394 2125
+Q 2355 2464 2153 2688
+Q 1952 2912 1619 2912
+Q 1165 2912 957 2534
+Q 749 2157 749 1658
+Q 749 1434 787 1226
+Q 826 1018 912 813
+Q 998 608 1174 486
+Q 1350 365 1587 365
+Q 2240 365 2394 1158
+L 2854 1075
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-74" d="M 1997 -26
+Q 1946 -32 1731 -51
+Q 1517 -70 1408 -70
+Q 595 -70 595 998
+L 595 2880
+L 19 2880
+L 19 3277
+L 595 3277
+L 595 4083
+L 1094 4134
+L 1094 3277
+L 1818 3277
+L 1818 2880
+L 1094 2880
+L 1094 915
+Q 1094 333 1536 333
+L 1997 371
+L 1997 -26
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-69" d="M 1043 3827
+L 493 3827
+L 493 4390
+L 1043 4390
+L 1043 3827
+z
+M 1018 0
+L 518 0
+L 518 3251
+L 1018 3251
+L 1018 0
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-76" d="M 2829 3251
+L 1709 0
+L 1184 0
+L 26 3251
+L 582 3251
+L 1491 608
+L 2381 3251
+L 2829 3251
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-20" transform="scale(0.015625)"/>
+       <path id="UnDotum-70" d="M 3258 1651
+Q 3258 1229 3136 854
+Q 3014 480 2710 208
+Q 2406 -64 1971 -64
+Q 1344 -64 998 512
+L 998 -1062
+L 499 -1062
+L 499 3251
+L 954 3251
+L 954 2624
+L 966 2624
+Q 1094 2957 1356 3145
+Q 1619 3334 1971 3334
+Q 2400 3334 2704 3068
+Q 3008 2803 3133 2435
+Q 3258 2067 3258 1651
+z
+M 2694 1632
+Q 2694 1939 2630 2201
+Q 2566 2464 2368 2678
+Q 2170 2893 1856 2893
+Q 1600 2893 1395 2733
+Q 1190 2573 1075 2323
+Q 998 2170 998 2099
+L 998 1274
+Q 998 928 1257 643
+Q 1517 358 1856 358
+Q 2099 358 2275 476
+Q 2451 595 2537 796
+Q 2624 998 2659 1200
+Q 2694 1402 2694 1632
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-61" d="M 3181 0
+L 2682 0
+L 2624 608
+Q 2291 -64 1485 -64
+Q 1005 -64 678 195
+Q 352 454 352 922
+Q 352 1216 518 1456
+Q 685 1696 954 1824
+Q 1120 1901 1344 1949
+Q 1568 1997 1776 2006
+Q 1984 2016 2211 2019
+Q 2438 2022 2624 2016
+L 2624 2157
+Q 2624 2586 2425 2765
+Q 2227 2944 1798 2944
+Q 1024 2944 909 2368
+L 442 2445
+Q 474 2688 611 2867
+Q 749 3046 957 3145
+Q 1165 3245 1385 3289
+Q 1606 3334 1843 3334
+Q 2579 3334 2844 3014
+Q 3110 2694 3110 1946
+L 3110 685
+Q 3110 243 3181 0
+z
+M 2624 1427
+L 2624 1638
+L 2208 1638
+Q 890 1638 890 896
+Q 890 614 1094 470
+Q 1299 326 1594 326
+Q 2042 326 2333 652
+Q 2624 979 2624 1427
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-68" d="M 3008 0
+L 2509 0
+L 2509 1894
+Q 2509 2067 2502 2185
+Q 2496 2304 2457 2457
+Q 2419 2611 2355 2700
+Q 2291 2790 2163 2857
+Q 2035 2925 1856 2925
+Q 1485 2925 1197 2579
+Q 947 2278 947 1670
+L 947 0
+L 448 0
+L 448 4390
+L 947 4390
+L 947 2650
+L 966 2650
+Q 1286 3334 1978 3334
+Q 2496 3334 2752 2992
+Q 3008 2650 3008 2118
+L 3008 0
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-6e" d="M 3014 0
+L 2515 0
+L 2515 2010
+Q 2515 2458 2426 2611
+Q 2349 2746 2192 2826
+Q 2035 2906 1869 2906
+Q 1402 2906 1171 2550
+Q 941 2195 941 1702
+L 941 0
+L 442 0
+L 442 3251
+L 915 3251
+L 915 2650
+L 928 2650
+Q 1069 2963 1337 3148
+Q 1606 3334 1939 3334
+Q 2560 3334 2861 2829
+Q 3014 2566 3014 1933
+L 3014 0
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-72" d="M 2061 2848
+L 1958 2848
+Q 1478 2848 1219 2493
+Q 960 2138 960 1638
+L 960 0
+L 461 0
+L 461 3251
+L 909 3251
+L 909 2490
+L 922 2490
+Q 1216 3341 1818 3341
+Q 1894 3341 2061 3328
+L 2061 2848
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-67" d="M 3194 -294
+Q 3194 -1229 1587 -1229
+Q 77 -1229 77 -384
+Q 77 102 570 275
+Q 256 474 256 787
+Q 256 1005 368 1136
+Q 480 1267 704 1370
+Q 282 1702 282 2227
+Q 282 2733 650 3033
+Q 1018 3334 1530 3334
+Q 1888 3334 2189 3194
+Q 2240 3494 2390 3625
+Q 2541 3757 2848 3757
+Q 2995 3757 3066 3750
+L 3072 3347
+Q 2880 3347 2777 3334
+Q 2675 3322 2572 3235
+Q 2470 3149 2445 2976
+Q 2758 2630 2758 2176
+Q 2758 1690 2387 1402
+Q 2016 1114 1517 1114
+Q 1440 1114 1293 1139
+Q 1146 1165 1075 1165
+Q 954 1165 842 1075
+Q 730 986 730 864
+Q 730 653 973 589
+Q 1203 525 1830 528
+Q 2458 531 2694 422
+Q 2918 333 3056 137
+Q 3194 -58 3194 -294
+z
+M 2253 2227
+Q 2253 2528 2041 2733
+Q 1830 2938 1530 2938
+Q 1216 2938 1008 2736
+Q 800 2534 800 2221
+Q 800 1888 998 1696
+Q 1197 1504 1530 1504
+Q 1856 1504 2054 1702
+Q 2253 1901 2253 2227
+z
+M 2714 -314
+Q 2714 -115 2512 -19
+Q 2310 77 2086 67
+Q 1862 58 1702 77
+Q 1459 90 922 128
+Q 570 -38 570 -314
+Q 570 -474 678 -586
+Q 787 -698 960 -749
+Q 1133 -800 1286 -819
+Q 1440 -838 1594 -838
+Q 1760 -838 1920 -822
+Q 2080 -806 2275 -758
+Q 2470 -710 2592 -595
+Q 2714 -480 2714 -314
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-79" d="M 2720 3251
+L 1446 -307
+Q 1286 -742 1078 -950
+Q 870 -1158 454 -1158
+Q 301 -1158 83 -1101
+L 83 -698
+Q 275 -742 416 -742
+Q 557 -742 669 -697
+Q 781 -653 848 -573
+Q 915 -493 972 -390
+Q 1030 -288 1065 -176
+Q 1101 -64 1146 58
+L 19 3251
+L 538 3251
+L 1408 806
+L 2298 3251
+L 2720 3251
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-5b" d="M 1555 -1094
+L 416 -1094
+L 416 4390
+L 1555 4390
+L 1555 4064
+L 858 4064
+L 858 -749
+L 1555 -749
+L 1555 -1094
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-4a" d="M 2067 1434
+Q 2067 704 1763 320
+Q 1459 -64 749 -64
+Q 429 -64 109 26
+L 109 474
+Q 416 410 672 410
+Q 954 410 1130 470
+Q 1306 531 1386 675
+Q 1466 819 1491 982
+Q 1517 1146 1517 1434
+L 1517 4390
+L 2067 4390
+L 2067 1434
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-2f" d="M 3213 4390
+L 563 -1094
+L 134 -1094
+L 2778 4390
+L 3213 4390
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-62" d="M 3181 1670
+Q 3181 1229 3046 848
+Q 2912 467 2595 201
+Q 2278 -64 1824 -64
+Q 1510 -64 1244 105
+Q 979 275 826 557
+L 640 0
+L 397 0
+L 397 4390
+L 896 4390
+L 896 2714
+L 922 2714
+Q 1248 3334 1875 3334
+Q 2509 3334 2845 2835
+Q 3181 2336 3181 1670
+z
+M 2643 1587
+Q 2643 1818 2604 2032
+Q 2566 2246 2476 2460
+Q 2387 2675 2208 2803
+Q 2029 2931 1786 2931
+Q 1421 2931 1158 2624
+Q 896 2317 896 1939
+L 896 1363
+Q 896 947 1136 643
+Q 1376 339 1786 339
+Q 2093 339 2297 547
+Q 2502 755 2572 1017
+Q 2643 1280 2643 1587
+z
+" transform="scale(0.015625)"/>
+       <path id="UnDotum-5d" d="M 1555 -1094
+L 416 -1094
+L 416 -749
+L 1114 -749
+L 1114 4064
+L 416 4064
+L 416 4390
+L 1555 4390
+L 1555 -1094
+z
+" transform="scale(0.015625)"/>
+      </defs>
+      <use xlink:href="#UnDotum-45"/>
+      <use xlink:href="#UnDotum-66" transform="translate(55.999985 0)"/>
+      <use xlink:href="#UnDotum-66" transform="translate(85.999969 0)"/>
+      <use xlink:href="#UnDotum-65" transform="translate(115.999954 0)"/>
+      <use xlink:href="#UnDotum-63" transform="translate(169.999939 0)"/>
+      <use xlink:href="#UnDotum-74" transform="translate(217.999924 0)"/>
+      <use xlink:href="#UnDotum-69" transform="translate(249.999908 0)"/>
+      <use xlink:href="#UnDotum-76" transform="translate(273.999893 0)"/>
+      <use xlink:href="#UnDotum-65" transform="translate(317.999878 0)"/>
+      <use xlink:href="#UnDotum-20" transform="translate(371.999863 0)"/>
+      <use xlink:href="#UnDotum-70" transform="translate(401.999847 0)"/>
+      <use xlink:href="#UnDotum-61" transform="translate(455.999832 0)"/>
+      <use xlink:href="#UnDotum-74" transform="translate(509.999817 0)"/>
+      <use xlink:href="#UnDotum-68" transform="translate(541.999802 0)"/>
+      <use xlink:href="#UnDotum-20" transform="translate(595.999786 0)"/>
+      <use xlink:href="#UnDotum-65" transform="translate(625.999771 0)"/>
+      <use xlink:href="#UnDotum-6e" transform="translate(679.999756 0)"/>
+      <use xlink:href="#UnDotum-65" transform="translate(733.999741 0)"/>
+      <use xlink:href="#UnDotum-72" transform="translate(787.999725 0)"/>
+      <use xlink:href="#UnDotum-67" transform="translate(819.99971 0)"/>
+      <use xlink:href="#UnDotum-79" transform="translate(869.999695 0)"/>
+      <use xlink:href="#UnDotum-20" transform="translate(911.99968 0)"/>
+      <use xlink:href="#UnDotum-5b" transform="translate(941.999664 0)"/>
+      <use xlink:href="#UnDotum-70" transform="translate(971.999649 0)"/>
+      <use xlink:href="#UnDotum-4a" transform="translate(1025.999634 0)"/>
+      <use xlink:href="#UnDotum-2f" transform="translate(1065.999619 0)"/>
+      <use xlink:href="#UnDotum-62" transform="translate(1117.999603 0)"/>
+      <use xlink:href="#UnDotum-69" transform="translate(1171.999588 0)"/>
+      <use xlink:href="#UnDotum-74" transform="translate(1195.999573 0)"/>
+      <use xlink:href="#UnDotum-5d" transform="translate(1227.999557 0)"/>
+     </g>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2"/>
+   <g id="patch_4">
+    <path d="M 10.5 339.789125
+L 763.8 339.789125
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="LineCollection_1">
+    <path d="M 639.246553 202.575125
+L 679.265616 202.575125
+" clip-path="url(#p36ad09d9f8)" style="fill: none; stroke: #d78a26; stroke-width: 12"/>
+   </g>
+   <g id="text_9">
+    <!-- 하한  26.709 -->
+    <g style="fill: #172a3a" transform="translate(569.638428 170.812212) scale(0.11 -0.11)">
+     <defs>
+      <path id="UnDotum-d558" d="M 1178 4480
+L 3136 4480
+L 3136 4058
+L 1178 4058
+L 1178 4480
+z
+M 243 3546
+L 4051 3546
+L 4051 3130
+L 243 3130
+L 243 3546
+z
+M 730 1491
+Q 730 1997 1130 2368
+Q 1530 2739 2138 2739
+Q 2739 2739 3152 2371
+Q 3565 2003 3565 1491
+Q 3565 986 3152 614
+Q 2739 243 2137 243
+Q 1536 243 1133 611
+Q 730 979 730 1491
+z
+M 3098 1491
+Q 3098 1856 2813 2089
+Q 2528 2323 2144 2323
+L 2138 2323
+Q 1728 2317 1462 2070
+Q 1197 1824 1197 1491
+Q 1197 1133 1475 896
+Q 1754 659 2138 659
+Q 2547 659 2822 908
+Q 3098 1158 3098 1491
+z
+M 4723 4794
+L 5133 4794
+Q 5203 4794 5216 4749
+Q 5165 4544 5165 4525
+L 5165 2310
+L 6240 2310
+L 6240 1894
+L 5165 1894
+L 5165 -915
+L 4723 -915
+L 4723 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-d55c" d="M 1363 4646
+L 3270 4646
+L 3270 4230
+L 1363 4230
+L 1363 4646
+z
+M 512 3859
+L 4109 3859
+L 4109 3443
+L 512 3443
+L 512 3859
+z
+M 2278 3149
+Q 3744 3149 3744 2125
+Q 3744 1075 2298 1075
+Q 1920 1075 1619 1164
+Q 1318 1254 1104 1500
+Q 890 1747 890 2131
+Q 890 2419 1008 2627
+Q 1126 2835 1334 2944
+Q 1542 3053 1772 3101
+Q 2003 3149 2278 3149
+z
+M 1357 2125
+Q 1357 1491 2304 1491
+Q 3270 1491 3270 2118
+Q 3270 2733 2330 2733
+Q 1357 2733 1357 2125
+z
+M 1312 774
+L 1709 774
+Q 1811 774 1811 717
+Q 1811 678 1785 608
+Q 1760 538 1760 499
+L 1760 -358
+L 5510 -358
+L 5510 -774
+L 1312 -774
+L 1312 774
+z
+M 4851 4794
+L 5280 4794
+Q 5344 4794 5344 4742
+Q 5344 4710 5321 4640
+Q 5299 4570 5299 4531
+L 5299 2694
+L 6240 2694
+L 6240 2272
+L 5299 2272
+L 5299 243
+L 4851 243
+L 4851 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-36" d="M 3552 1434
+Q 3552 787 3097 361
+Q 2643 -64 1997 -64
+Q 1562 -64 1222 118
+Q 883 301 684 611
+Q 486 922 387 1293
+Q 288 1664 288 2080
+Q 288 2534 384 2937
+Q 480 3341 678 3693
+Q 877 4045 1235 4249
+Q 1594 4454 2074 4454
+Q 2586 4454 2954 4208
+Q 3322 3962 3482 3482
+L 2989 3347
+Q 2746 4006 2074 4006
+Q 1690 4006 1421 3817
+Q 1152 3629 1024 3305
+Q 896 2982 845 2665
+Q 794 2349 794 1984
+L 806 1984
+Q 960 2381 1325 2624
+Q 1690 2867 2118 2867
+Q 2726 2867 3139 2451
+Q 3552 2035 3552 1434
+z
+M 3040 1408
+Q 3040 1830 2749 2131
+Q 2458 2432 2035 2432
+Q 1587 2432 1254 2118
+Q 922 1805 922 1357
+Q 922 947 1245 662
+Q 1568 378 1984 378
+Q 2432 378 2736 672
+Q 3040 966 3040 1408
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-2e" d="M 1344 0
+L 634 0
+L 634 723
+L 1344 723
+L 1344 0
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-37" d="M 3398 4058
+Q 1837 2176 1837 0
+L 1274 0
+Q 1267 1050 1683 2061
+Q 2099 3072 2822 3910
+L 442 3910
+L 499 4390
+L 3398 4390
+L 3398 4058
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-39" d="M 3453 3113
+Q 3546 2739 3546 2297
+Q 3546 1856 3450 1453
+Q 3354 1050 3155 701
+Q 2957 352 2601 144
+Q 2246 -64 1773 -64
+Q 1286 -64 918 157
+Q 550 378 397 813
+L 838 973
+Q 954 685 1203 528
+Q 1453 371 1773 371
+Q 2131 371 2393 556
+Q 2656 742 2790 1043
+Q 2925 1344 2982 1661
+Q 3040 1978 3040 2310
+L 3027 2310
+Q 2829 1933 2496 1731
+Q 2163 1530 1741 1530
+Q 1126 1530 710 1939
+Q 294 2349 294 2963
+Q 294 3597 736 4025
+Q 1178 4454 1818 4454
+Q 2278 4454 2624 4278
+Q 2970 4102 3165 3795
+Q 3360 3488 3453 3113
+z
+M 2925 2995
+Q 2925 3450 2624 3728
+Q 2323 4006 1862 4006
+Q 1402 4006 1110 3712
+Q 819 3418 819 2957
+Q 819 2515 1123 2240
+Q 1427 1965 1875 1965
+Q 2298 1965 2611 2269
+Q 2925 2573 2925 2995
+z
+" transform="scale(0.015625)"/>
+     </defs>
+     <use xlink:href="#UnDotum-d558"/>
+     <use xlink:href="#UnDotum-d55c" transform="translate(99.999985 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(199.999969 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(229.999954 0)"/>
+     <use xlink:href="#UnDotum-32" transform="translate(259.999939 0)"/>
+     <use xlink:href="#UnDotum-36" transform="translate(319.999924 0)"/>
+     <use xlink:href="#UnDotum-2e" transform="translate(379.999908 0)"/>
+     <use xlink:href="#UnDotum-37" transform="translate(409.999893 0)"/>
+     <use xlink:href="#UnDotum-30" transform="translate(469.999878 0)"/>
+     <use xlink:href="#UnDotum-39" transform="translate(529.999863 0)"/>
+    </g>
+   </g>
+   <g id="text_10">
+    <!-- midpoint -->
+    <g style="fill: #172a3a" transform="translate(638.466084 105.046925) scale(0.11 -0.11)">
+     <defs>
+      <path id="UnDotum-6d" d="M 4813 0
+L 4314 0
+L 4314 2067
+Q 4314 2432 4166 2678
+Q 4019 2925 3680 2925
+Q 3302 2925 3053 2560
+Q 2970 2438 2928 2291
+Q 2886 2144 2880 2045
+Q 2874 1946 2874 1754
+L 2874 0
+L 2374 0
+L 2374 2061
+Q 2374 2426 2220 2675
+Q 2067 2925 1722 2925
+Q 1382 2925 1133 2605
+Q 934 2355 934 1862
+L 934 0
+L 435 0
+L 435 3251
+L 890 3251
+L 890 2624
+L 902 2624
+Q 1030 2938 1289 3136
+Q 1549 3334 1875 3334
+Q 2221 3334 2467 3120
+Q 2714 2906 2790 2560
+Q 2931 2912 3203 3123
+Q 3475 3334 3840 3334
+Q 4083 3334 4310 3206
+Q 4538 3078 4659 2867
+Q 4813 2605 4813 2048
+L 4813 0
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-64" d="M 3059 0
+L 2579 0
+L 2579 576
+L 2566 576
+Q 2253 -64 1574 -64
+Q 1146 -64 845 201
+Q 544 467 422 835
+Q 301 1203 301 1626
+Q 301 2061 429 2435
+Q 557 2810 867 3072
+Q 1178 3334 1619 3334
+Q 2189 3334 2560 2810
+L 2560 4390
+L 3059 4390
+L 3059 0
+z
+M 2560 1408
+L 2560 1926
+Q 2560 2368 2329 2653
+Q 2099 2938 1664 2938
+Q 1434 2938 1264 2819
+Q 1094 2701 1008 2505
+Q 922 2310 880 2105
+Q 838 1901 838 1683
+Q 838 1446 870 1238
+Q 902 1030 982 816
+Q 1062 602 1235 477
+Q 1408 352 1651 352
+Q 2061 352 2310 669
+Q 2560 986 2560 1408
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-6f" d="M 3174 1645
+Q 3174 922 2771 429
+Q 2368 -64 1664 -64
+Q 1203 -64 873 189
+Q 544 442 400 819
+Q 256 1197 256 1651
+Q 256 2368 649 2851
+Q 1043 3334 1747 3334
+Q 2419 3334 2796 2838
+Q 3174 2342 3174 1645
+z
+M 2618 1651
+Q 2618 1978 2544 2246
+Q 2470 2515 2256 2720
+Q 2042 2925 1709 2925
+Q 1382 2925 1171 2717
+Q 960 2509 886 2240
+Q 813 1971 813 1651
+Q 813 1414 854 1200
+Q 896 986 989 787
+Q 1082 589 1267 470
+Q 1453 352 1709 352
+Q 2048 352 2262 563
+Q 2477 774 2547 1046
+Q 2618 1318 2618 1651
+z
+" transform="scale(0.015625)"/>
+     </defs>
+     <use xlink:href="#UnDotum-6d"/>
+     <use xlink:href="#UnDotum-69" transform="translate(81.999985 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(105.999969 0)"/>
+     <use xlink:href="#UnDotum-70" transform="translate(159.999954 0)"/>
+     <use xlink:href="#UnDotum-6f" transform="translate(213.999939 0)"/>
+     <use xlink:href="#UnDotum-69" transform="translate(267.999924 0)"/>
+     <use xlink:href="#UnDotum-6e" transform="translate(291.999908 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(345.999893 0)"/>
+    </g>
+    <!-- 27.559 -->
+    <g style="fill: #172a3a" transform="translate(641.106084 115.926612) scale(0.11 -0.11)">
+     <use xlink:href="#UnDotum-32"/>
+     <use xlink:href="#UnDotum-37" transform="translate(59.999985 0)"/>
+     <use xlink:href="#UnDotum-2e" transform="translate(119.999969 0)"/>
+     <use xlink:href="#UnDotum-35" transform="translate(149.999954 0)"/>
+     <use xlink:href="#UnDotum-35" transform="translate(209.999939 0)"/>
+     <use xlink:href="#UnDotum-39" transform="translate(269.999924 0)"/>
+    </g>
+   </g>
+   <g id="text_11">
+    <!-- 28.409  상한 -->
+    <g style="fill: #172a3a" transform="translate(683.973741 170.812212) scale(0.11 -0.11)">
+     <defs>
+      <path id="UnDotum-38" d="M 3616 1178
+Q 3616 851 3465 604
+Q 3315 358 3065 217
+Q 2816 77 2531 6
+Q 2246 -64 1946 -64
+Q 1664 -64 1376 3
+Q 1088 70 822 204
+Q 557 339 390 579
+Q 224 819 224 1126
+Q 224 1882 1267 2278
+Q 909 2413 675 2688
+Q 442 2963 442 3322
+Q 442 3706 685 3971
+Q 928 4237 1257 4345
+Q 1587 4454 1965 4454
+Q 2534 4454 2979 4179
+Q 3424 3904 3424 3366
+Q 3424 2637 2573 2355
+Q 2803 2246 2960 2156
+Q 3117 2067 3283 1926
+Q 3450 1786 3533 1597
+Q 3616 1408 3616 1178
+z
+M 2944 3341
+Q 2944 3718 2662 3881
+Q 2381 4045 1971 4045
+Q 1600 4045 1299 3878
+Q 998 3712 998 3373
+Q 998 3053 1286 2841
+Q 1574 2630 1933 2547
+Q 2144 2605 2269 2649
+Q 2394 2694 2576 2787
+Q 2758 2880 2851 3021
+Q 2944 3162 2944 3341
+z
+M 3072 1094
+Q 3072 1734 1875 2048
+Q 1440 1958 1101 1731
+Q 762 1504 762 1133
+Q 762 845 963 656
+Q 1165 467 1411 406
+Q 1658 346 1946 346
+Q 2202 346 2442 410
+Q 2682 474 2877 653
+Q 3072 832 3072 1094
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-34" d="M 3629 1024
+L 2912 1024
+L 2912 0
+L 2381 0
+L 2381 1024
+L 218 1024
+L 218 1389
+L 2227 4390
+L 2912 4390
+L 2912 1446
+L 3629 1446
+L 3629 1024
+z
+M 2381 1446
+L 2381 3962
+L 787 1446
+L 2381 1446
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c0c1" d="M 1818 4538
+L 2016 4538
+Q 2099 4557 2227 4544
+Q 2355 4531 2355 4422
+Q 2355 4365 2313 4227
+Q 2272 4090 2272 4006
+Q 2272 3450 2547 2998
+Q 2822 2547 3315 2253
+L 3821 1952
+Q 3789 1907 3648 1760
+Q 3507 1613 3488 1613
+Q 3430 1613 3270 1741
+Q 2861 2016 2582 2313
+Q 2304 2611 2048 3046
+Q 1901 2720 1536 2352
+Q 1171 1984 800 1728
+Q 646 1606 602 1606
+Q 582 1606 435 1744
+Q 288 1882 250 1920
+Q 390 2010 524 2096
+Q 659 2182 780 2265
+Q 902 2349 1014 2438
+Q 1126 2528 1225 2624
+Q 1325 2720 1411 2832
+Q 1498 2944 1568 3069
+Q 1638 3194 1692 3347
+Q 1747 3501 1779 3674
+Q 1818 3859 1818 4538
+z
+M 3277 1120
+Q 5421 1120 5421 102
+Q 5421 -141 5280 -329
+Q 5139 -518 4924 -627
+Q 4710 -736 4412 -806
+Q 4115 -877 3843 -899
+Q 3571 -922 3277 -922
+Q 2918 -922 2595 -877
+Q 2272 -832 1955 -726
+Q 1638 -621 1449 -409
+Q 1261 -198 1261 96
+Q 1261 390 1446 601
+Q 1632 813 1945 918
+Q 2259 1024 2585 1072
+Q 2912 1120 3277 1120
+z
+M 3277 698
+Q 1728 698 1728 96
+Q 1728 -83 1891 -211
+Q 2054 -339 2316 -396
+Q 2579 -454 2809 -476
+Q 3040 -499 3277 -499
+Q 4954 -499 4954 102
+Q 4954 301 4790 432
+Q 4627 563 4329 614
+Q 4032 666 3808 682
+Q 3584 698 3277 698
+z
+M 4851 4794
+L 5274 4794
+Q 5350 4794 5350 4736
+Q 5350 4698 5324 4634
+Q 5299 4570 5299 4531
+L 5299 3136
+L 6240 3136
+L 6240 2720
+L 5299 2720
+L 5299 1261
+L 4851 1261
+L 4851 4794
+z
+" transform="scale(0.015625)"/>
+     </defs>
+     <use xlink:href="#UnDotum-32"/>
+     <use xlink:href="#UnDotum-38" transform="translate(59.999985 0)"/>
+     <use xlink:href="#UnDotum-2e" transform="translate(119.999969 0)"/>
+     <use xlink:href="#UnDotum-34" transform="translate(149.999954 0)"/>
+     <use xlink:href="#UnDotum-30" transform="translate(209.999939 0)"/>
+     <use xlink:href="#UnDotum-39" transform="translate(269.999924 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(329.999908 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(359.999893 0)"/>
+     <use xlink:href="#UnDotum-c0c1" transform="translate(389.999878 0)"/>
+     <use xlink:href="#UnDotum-d55c" transform="translate(489.999863 0)"/>
+    </g>
+   </g>
+   <g id="text_12">
+    <!-- provisional reference-aligned cumulative effective path band -->
+    <g style="fill: #d78a26" transform="translate(515.266084 267.622869) scale(0.11 -0.11)">
+     <defs>
+      <path id="UnDotum-73" d="M 3034 941
+Q 3034 435 2630 185
+Q 2227 -64 1683 -64
+Q 1165 -64 768 166
+Q 371 397 256 864
+L 742 960
+Q 794 659 1088 505
+Q 1382 352 1722 352
+Q 2029 352 2269 480
+Q 2509 608 2509 890
+Q 2509 1120 2291 1241
+Q 2074 1363 1760 1411
+Q 1446 1459 1136 1526
+Q 826 1594 608 1805
+Q 390 2016 390 2381
+Q 390 2848 752 3091
+Q 1114 3334 1606 3334
+Q 2080 3334 2429 3136
+Q 2778 2938 2893 2515
+L 2432 2419
+Q 2246 2931 1600 2931
+Q 1331 2931 1120 2816
+Q 909 2701 909 2458
+Q 909 2234 1110 2112
+Q 1312 1990 1574 1958
+Q 1837 1926 2157 1856
+Q 2477 1786 2643 1677
+Q 3034 1414 3034 941
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-6c" d="M 1018 0
+L 518 0
+L 518 4390
+L 1018 4390
+L 1018 0
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-2d" d="M 1363 1446
+L 0 1446
+L 0 1843
+L 1363 1843
+L 1363 1446
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-75" d="M 2995 0
+L 2541 0
+L 2541 646
+L 2528 646
+Q 2406 339 2131 137
+Q 1856 -64 1530 -64
+Q 954 -64 698 304
+Q 442 672 442 1274
+L 442 3251
+L 941 3251
+L 941 1274
+Q 941 371 1574 371
+Q 2016 371 2256 716
+Q 2496 1062 2496 1523
+L 2496 3251
+L 2995 3251
+L 2995 0
+z
+" transform="scale(0.015625)"/>
+     </defs>
+     <use xlink:href="#UnDotum-70"/>
+     <use xlink:href="#UnDotum-72" transform="translate(53.999985 0)"/>
+     <use xlink:href="#UnDotum-6f" transform="translate(85.999969 0)"/>
+     <use xlink:href="#UnDotum-76" transform="translate(139.999954 0)"/>
+     <use xlink:href="#UnDotum-69" transform="translate(183.999939 0)"/>
+     <use xlink:href="#UnDotum-73" transform="translate(207.999924 0)"/>
+     <use xlink:href="#UnDotum-69" transform="translate(259.999908 0)"/>
+     <use xlink:href="#UnDotum-6f" transform="translate(283.999893 0)"/>
+     <use xlink:href="#UnDotum-6e" transform="translate(337.999878 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(391.999863 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(445.999847 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(469.999832 0)"/>
+     <use xlink:href="#UnDotum-72" transform="translate(499.999817 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(531.999802 0)"/>
+     <use xlink:href="#UnDotum-66" transform="translate(585.999786 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(615.999771 0)"/>
+     <use xlink:href="#UnDotum-72" transform="translate(669.999756 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(701.999741 0)"/>
+     <use xlink:href="#UnDotum-6e" transform="translate(755.999725 0)"/>
+     <use xlink:href="#UnDotum-63" transform="translate(809.99971 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(857.999695 0)"/>
+     <use xlink:href="#UnDotum-2d" transform="translate(911.99968 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(933.999664 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(987.999649 0)"/>
+     <use xlink:href="#UnDotum-69" transform="translate(1011.999634 0)"/>
+     <use xlink:href="#UnDotum-67" transform="translate(1035.999619 0)"/>
+     <use xlink:href="#UnDotum-6e" transform="translate(1085.999603 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(1139.999588 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(1193.999573 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(1247.999557 0)"/>
+     <use xlink:href="#UnDotum-63" transform="translate(1277.999542 0)"/>
+     <use xlink:href="#UnDotum-75" transform="translate(1325.999527 0)"/>
+     <use xlink:href="#UnDotum-6d" transform="translate(1379.999512 0)"/>
+     <use xlink:href="#UnDotum-75" transform="translate(1461.999496 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(1515.999481 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(1539.999466 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(1593.999451 0)"/>
+     <use xlink:href="#UnDotum-69" transform="translate(1625.999435 0)"/>
+     <use xlink:href="#UnDotum-76" transform="translate(1649.99942 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(1693.999405 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(1747.99939 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(1777.999374 0)"/>
+     <use xlink:href="#UnDotum-66" transform="translate(1831.999359 0)"/>
+     <use xlink:href="#UnDotum-66" transform="translate(1861.999344 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(1891.999329 0)"/>
+     <use xlink:href="#UnDotum-63" transform="translate(1945.999313 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(1993.999298 0)"/>
+     <use xlink:href="#UnDotum-69" transform="translate(2025.999283 0)"/>
+     <use xlink:href="#UnDotum-76" transform="translate(2049.999268 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(2093.999252 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(2147.999237 0)"/>
+     <use xlink:href="#UnDotum-70" transform="translate(2177.999222 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(2231.999207 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(2285.999191 0)"/>
+     <use xlink:href="#UnDotum-68" transform="translate(2317.999176 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(2371.999161 0)"/>
+     <use xlink:href="#UnDotum-62" transform="translate(2401.999146 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(2455.99913 0)"/>
+     <use xlink:href="#UnDotum-6e" transform="translate(2509.999115 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(2563.9991 0)"/>
+    </g>
+   </g>
+   <g id="text_13">
+    <!-- 현재 저장소에는 matched-ITER global_addr_only pair가 없으므로 accepted 실측 coefficient가 아니다. -->
+    <g style="fill: #b94b4b" transform="translate(18.033 61.369445) scale(0.11 -0.11)">
+     <defs>
+      <path id="UnDotum-d604" d="M 1357 4646
+L 3206 4646
+L 3206 4230
+L 1357 4230
+L 1357 4646
+z
+M 512 3859
+L 4045 3859
+L 4045 3443
+L 512 3443
+L 512 3859
+z
+M 2368 3149
+Q 2912 3149 3277 2902
+Q 3642 2656 3642 2138
+Q 3642 1075 2227 1075
+Q 1683 1075 1302 1334
+Q 922 1594 922 2112
+Q 922 3149 2368 3149
+z
+M 1389 2125
+Q 1389 1491 2285 1491
+Q 3168 1491 3168 2131
+Q 3168 2733 2304 2733
+Q 1389 2733 1389 2125
+z
+M 1402 774
+L 1792 774
+Q 1901 774 1901 710
+Q 1901 678 1872 611
+Q 1843 544 1843 499
+L 1843 -358
+L 5600 -358
+L 5600 -774
+L 1402 -774
+L 1402 774
+z
+M 4934 4794
+L 5363 4794
+Q 5440 4794 5440 4736
+Q 5440 4704 5414 4633
+Q 5389 4563 5389 4525
+L 5389 352
+L 4934 352
+L 4934 1504
+L 3834 1504
+L 3834 1920
+L 4934 1920
+L 4934 2784
+L 3834 2784
+L 3834 3200
+L 4934 3200
+L 4934 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c7ac" d="M 403 4122
+L 3110 4122
+L 3110 3706
+L 1958 3706
+L 1958 3398
+Q 1958 2170 2733 1216
+Q 2854 1069 3123 800
+Q 3136 787 3209 720
+Q 3283 653 3315 614
+Q 2976 365 2918 326
+Q 2880 371 2803 454
+Q 2726 538 2720 544
+Q 2387 915 2176 1276
+Q 1965 1638 1734 2176
+Q 1427 1299 672 480
+Q 531 339 518 333
+L 83 538
+Q 122 589 218 675
+Q 314 762 326 774
+Q 512 947 704 1197
+Q 1075 1658 1292 2227
+Q 1510 2797 1510 3360
+Q 1510 3418 1507 3533
+Q 1504 3648 1504 3706
+L 403 3706
+L 403 4122
+z
+M 4998 4794
+L 5414 4794
+Q 5427 4794 5446 4790
+Q 5466 4787 5472 4787
+Q 5491 4768 5491 4736
+Q 5491 4704 5472 4640
+Q 5453 4576 5453 4544
+L 5453 -915
+L 4998 -915
+L 4998 1875
+L 4128 1875
+L 4128 -550
+L 3686 -550
+L 3686 4614
+L 4102 4614
+Q 4179 4614 4179 4550
+Q 4179 4518 4153 4448
+Q 4128 4378 4128 4346
+L 4128 2291
+L 4998 2291
+L 4998 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c800" d="M 678 4122
+L 3827 4122
+L 3827 3706
+L 2458 3706
+Q 2458 2240 3334 1318
+Q 3578 1062 3802 883
+Q 4013 730 4045 678
+Q 3731 365 3686 365
+Q 3667 365 3469 531
+Q 2995 954 2784 1277
+Q 2573 1600 2266 2285
+Q 1907 1222 1069 518
+Q 1050 499 934 409
+Q 819 320 812 320
+Q 806 320 397 595
+Q 429 627 470 662
+Q 512 698 566 739
+Q 621 781 646 800
+Q 1005 1094 1165 1267
+Q 1632 1766 1821 2355
+Q 2010 2944 2010 3706
+L 678 3706
+L 678 4122
+z
+M 4934 4794
+L 5363 4794
+Q 5440 4794 5440 4736
+Q 5440 4704 5414 4633
+Q 5389 4563 5389 4525
+L 5389 -915
+L 4934 -915
+L 4934 2208
+L 3526 2208
+L 3526 2630
+L 4934 2630
+L 4934 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c7a5" d="M 749 4378
+L 3885 4378
+L 3885 3955
+L 2554 3955
+Q 2554 3411 2822 2972
+Q 3091 2534 3578 2253
+Q 4038 1990 4160 1946
+Q 4128 1907 3974 1756
+Q 3821 1606 3802 1606
+Q 3757 1606 3629 1702
+Q 2944 2118 2477 2758
+Q 2355 2925 2330 2982
+Q 2054 2547 1776 2256
+Q 1498 1965 1075 1690
+Q 1069 1683 1011 1644
+Q 954 1606 902 1577
+Q 851 1549 845 1549
+Q 819 1549 646 1683
+Q 474 1818 442 1856
+Q 730 2022 931 2156
+Q 1133 2291 1373 2492
+Q 1613 2694 1760 2899
+Q 1907 3104 2006 3379
+Q 2106 3654 2106 3955
+L 749 3955
+L 749 4378
+z
+M 3277 1120
+Q 5421 1120 5421 102
+Q 5421 -141 5280 -329
+Q 5139 -518 4924 -627
+Q 4710 -736 4412 -806
+Q 4115 -877 3843 -899
+Q 3571 -922 3277 -922
+Q 2918 -922 2595 -877
+Q 2272 -832 1955 -726
+Q 1638 -621 1449 -409
+Q 1261 -198 1261 96
+Q 1261 390 1446 601
+Q 1632 813 1945 918
+Q 2259 1024 2585 1072
+Q 2912 1120 3277 1120
+z
+M 3277 698
+Q 1728 698 1728 96
+Q 1728 -83 1891 -211
+Q 2054 -339 2316 -396
+Q 2579 -454 2809 -476
+Q 3040 -499 3277 -499
+Q 4954 -499 4954 102
+Q 4954 301 4790 432
+Q 4627 563 4329 614
+Q 4032 666 3808 682
+Q 3584 698 3277 698
+z
+M 4851 4794
+L 5274 4794
+Q 5350 4794 5350 4736
+Q 5350 4698 5324 4634
+Q 5299 4570 5299 4531
+L 5299 3136
+L 6240 3136
+L 6240 2720
+L 5299 2720
+L 5299 1261
+L 4851 1261
+L 4851 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c18c" d="M 2918 4352
+L 3430 4352
+Q 3526 4352 3526 4294
+Q 3526 4243 3488 4147
+Q 3450 4051 3450 3994
+Q 3450 3770 3731 3411
+Q 4461 2502 5933 2016
+Q 5888 1958 5728 1792
+Q 5568 1626 5555 1626
+Q 5536 1626 5248 1754
+Q 4147 2285 3437 3110
+Q 3245 3341 3206 3405
+Q 2720 2758 2336 2441
+Q 1952 2125 1254 1779
+Q 909 1626 896 1626
+Q 877 1626 486 2016
+Q 947 2163 1331 2352
+Q 1715 2541 2096 2819
+Q 2477 3098 2697 3491
+Q 2918 3885 2918 4352
+z
+M 2976 1638
+L 3386 1638
+Q 3469 1638 3469 1574
+Q 3469 1536 3443 1472
+Q 3418 1408 3418 1370
+L 3418 186
+L 5920 186
+L 5920 -230
+L 474 -230
+L 474 186
+L 2976 186
+L 2976 1638
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c5d0" d="M 371 2317
+Q 371 2752 454 3097
+Q 538 3443 666 3654
+Q 794 3866 966 4006
+Q 1139 4147 1299 4201
+Q 1459 4256 1626 4256
+Q 1837 4256 2041 4163
+Q 2246 4070 2448 3862
+Q 2650 3654 2774 3254
+Q 2899 2854 2899 2316
+Q 2899 1779 2774 1379
+Q 2650 979 2448 771
+Q 2246 563 2041 470
+Q 1837 378 1626 378
+Q 1421 378 1216 474
+Q 1011 570 812 781
+Q 614 992 492 1389
+Q 371 1786 371 2317
+z
+M 2432 2317
+Q 2432 2752 2355 3065
+Q 2278 3379 2147 3536
+Q 2016 3693 1888 3763
+Q 1760 3834 1625 3834
+Q 1491 3834 1363 3763
+Q 1235 3693 1110 3536
+Q 986 3379 912 3062
+Q 838 2746 838 2317
+Q 845 1491 1085 1145
+Q 1325 800 1626 800
+Q 1939 800 2185 1139
+Q 2432 1478 2432 2317
+z
+M 4998 4794
+L 5421 4794
+Q 5427 4794 5446 4790
+Q 5466 4787 5478 4787
+Q 5498 4768 5498 4742
+Q 5498 4704 5475 4640
+Q 5453 4576 5453 4544
+L 5453 -915
+L 4998 -915
+L 4998 4794
+z
+M 3789 4614
+L 4192 4614
+Q 4282 4614 4282 4557
+Q 4282 4518 4256 4448
+Q 4230 4378 4230 4346
+L 4230 -550
+L 3789 -550
+L 3789 2202
+L 2797 2202
+L 2797 2624
+L 3789 2624
+L 3789 4614
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-b294" d="M 1146 4602
+L 1555 4602
+Q 1638 4602 1638 4538
+Q 1638 4499 1612 4428
+Q 1587 4358 1587 4326
+L 1587 2995
+L 5395 2995
+L 5395 2579
+L 1146 2579
+L 1146 4602
+z
+M 1101 890
+L 1523 890
+Q 1594 890 1594 851
+Q 1594 813 1568 736
+Q 1542 659 1542 621
+L 1542 -358
+L 5434 -358
+L 5434 -774
+L 1101 -774
+L 1101 890
+z
+M 474 1754
+L 5920 1754
+L 5920 1338
+L 474 1338
+L 474 1754
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-49" d="M 1101 0
+L 550 0
+L 550 4390
+L 1101 4390
+L 1101 0
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-54" d="M 3117 3910
+L 1869 3910
+L 1869 0
+L 1318 0
+L 1318 3910
+L 70 3910
+L 70 4390
+L 3117 4390
+L 3117 3910
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-52" d="M 3674 0
+L 3098 0
+L 2285 1901
+L 1069 1901
+L 1069 0
+L 518 0
+L 518 4390
+L 2163 4390
+Q 2790 4390 3209 4083
+Q 3629 3776 3629 3162
+Q 3629 2765 3408 2451
+Q 3187 2138 2810 2035
+L 3674 0
+z
+M 3078 3168
+Q 3078 3565 2825 3741
+Q 2573 3917 2163 3917
+L 1069 3917
+L 1069 2349
+L 2099 2349
+Q 2534 2349 2806 2544
+Q 3078 2739 3078 3168
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-5f" d="M 3200 -800
+L 0 -800
+L 0 -480
+L 3200 -480
+L 3200 -800
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-ac00" d="M 646 4122
+L 3398 4122
+Q 3386 3066 3027 2269
+Q 2669 1472 1875 832
+Q 1728 717 1299 435
+Q 870 154 787 154
+Q 768 154 608 298
+Q 448 442 397 493
+Q 1498 1018 2182 1814
+Q 2867 2611 2906 3706
+L 646 3706
+L 646 4122
+z
+M 4723 4794
+L 5133 4794
+Q 5203 4794 5216 4749
+Q 5165 4544 5165 4525
+L 5165 2310
+L 6240 2310
+L 6240 1894
+L 5165 1894
+L 5165 -915
+L 4723 -915
+L 4723 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c5c6" d="M 2144 4589
+Q 2797 4589 3177 4192
+Q 3558 3795 3558 3142
+Q 3558 2534 3113 2208
+Q 2669 1882 2042 1882
+Q 1402 1882 982 2272
+Q 563 2662 563 3296
+Q 563 3910 1036 4249
+Q 1510 4589 2144 4589
+z
+M 1990 4166
+Q 1587 4166 1308 3900
+Q 1030 3635 1030 3238
+Q 1030 2822 1324 2560
+Q 1619 2298 2035 2298
+Q 2534 2298 2812 2544
+Q 3091 2790 3091 3283
+Q 3091 3680 2812 3923
+Q 2534 4166 2131 4166
+L 1990 4166
+z
+M 4570 1338
+L 4973 1338
+Q 5069 1338 5069 1286
+Q 5069 1254 5040 1142
+Q 5011 1030 5011 934
+Q 5011 275 5811 -307
+Q 6214 -589 6221 -595
+Q 5862 -909 5843 -909
+Q 5837 -909 5702 -819
+Q 5446 -640 5168 -317
+Q 4890 6 4806 262
+L 4794 262
+Q 4704 38 4419 -301
+Q 4134 -640 3910 -819
+L 3789 -902
+Q 3770 -902 3578 -790
+Q 3386 -678 3354 -653
+Q 4346 0 4531 819
+Q 4570 992 4570 1338
+z
+M 1171 1318
+L 1600 1318
+Q 1670 1318 1670 1261
+Q 1670 1229 1644 1165
+Q 1619 1101 1619 1062
+L 1619 666
+L 2746 666
+L 2746 1318
+L 3181 1318
+Q 3238 1318 3238 1261
+Q 3238 1229 3216 1165
+Q 3194 1101 3194 1062
+L 3194 -826
+L 2746 -826
+L 2746 -646
+L 1619 -646
+L 1619 -826
+L 1171 -826
+L 1171 1318
+z
+M 2746 269
+L 1619 269
+L 1619 -256
+L 2746 -256
+L 2746 269
+z
+M 4934 4794
+L 5363 4794
+Q 5440 4794 5440 4736
+Q 5440 4704 5414 4633
+Q 5389 4563 5389 4525
+L 5389 1613
+L 4934 1613
+L 4934 2906
+L 3667 2906
+L 3667 3322
+L 4934 3322
+L 4934 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c73c" d="M 3520 4339
+Q 3878 4339 4192 4262
+Q 4506 4186 4771 4026
+Q 5037 3866 5193 3584
+Q 5350 3302 5350 2931
+Q 5350 2541 5164 2259
+Q 4979 1978 4668 1834
+Q 4358 1690 4028 1626
+Q 3699 1562 3334 1562
+Q 3034 1562 2810 1578
+Q 2586 1594 2301 1635
+Q 2016 1677 1811 1776
+Q 1606 1875 1424 2022
+Q 1242 2170 1149 2413
+Q 1056 2656 1056 2970
+Q 1056 3296 1209 3552
+Q 1363 3808 1622 3961
+Q 1882 4115 2160 4198
+Q 2438 4282 2752 4314
+Q 2778 4314 2874 4326
+Q 2970 4339 3014 4339
+L 3520 4339
+z
+M 3123 3923
+Q 2835 3923 2579 3881
+Q 2323 3840 2070 3734
+Q 1818 3629 1670 3414
+Q 1523 3200 1523 2899
+Q 1523 1965 3347 1965
+Q 4883 1965 4883 3021
+Q 4883 3232 4800 3392
+Q 4717 3552 4557 3648
+Q 4397 3744 4240 3805
+Q 4083 3866 3849 3888
+Q 3616 3910 3472 3916
+Q 3328 3923 3123 3923
+z
+M 474 314
+L 5920 314
+L 5920 -102
+L 474 -102
+L 474 314
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-bbc0" d="M 1203 4154
+L 5197 4154
+L 5197 1594
+L 1203 1594
+L 1203 4154
+z
+M 4742 3738
+L 1651 3738
+L 1651 2010
+L 4742 2010
+L 4742 3738
+z
+M 474 314
+L 5920 314
+L 5920 -102
+L 474 -102
+L 474 314
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-b85c" d="M 1165 4282
+L 5242 4282
+L 5242 2656
+L 1613 2656
+L 1613 1843
+L 5318 1843
+L 5318 1421
+L 1165 1421
+L 1165 3072
+L 4800 3072
+L 4800 3859
+L 1165 3859
+L 1165 4282
+z
+M 2976 1222
+L 3386 1222
+Q 3469 1222 3469 1171
+Q 3469 1126 3443 1056
+Q 3418 986 3418 941
+L 3418 186
+L 5920 186
+L 5920 -230
+L 474 -230
+L 474 186
+L 2976 186
+L 2976 1222
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c2e4" d="M 1939 4538
+L 2355 4538
+Q 2470 4538 2470 4442
+Q 2470 4378 2428 4243
+Q 2387 4109 2387 4026
+Q 2387 3866 2458 3629
+Q 2528 3405 2646 3209
+Q 2765 3014 2886 2876
+Q 3008 2739 3203 2588
+Q 3398 2438 3539 2348
+Q 3680 2259 3923 2112
+Q 3898 2074 3754 1926
+Q 3610 1779 3590 1779
+Q 3571 1779 3379 1894
+Q 3008 2125 2669 2489
+Q 2330 2854 2176 3213
+L 2163 3213
+Q 2144 3142 2029 2976
+Q 1632 2368 896 1869
+L 717 1760
+Q 710 1760 547 1913
+Q 384 2067 358 2099
+Q 845 2381 973 2477
+Q 1939 3206 1939 4122
+L 1939 4538
+z
+M 1312 1408
+L 5389 1408
+L 5389 115
+L 1760 115
+L 1760 -358
+L 5562 -358
+L 5562 -774
+L 1312 -774
+L 1312 531
+L 4934 531
+L 4934 992
+L 1312 992
+L 1312 1408
+z
+M 4934 4794
+L 5370 4794
+Q 5440 4794 5440 4742
+Q 5440 4710 5414 4640
+Q 5389 4570 5389 4531
+L 5389 1658
+L 4934 1658
+L 4934 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-ce21" d="M 2131 4762
+L 4262 4762
+L 4262 4346
+L 2131 4346
+L 2131 4762
+z
+M 1101 3955
+L 5293 3955
+L 5293 3546
+L 3482 3539
+Q 3994 2880 5120 2714
+Q 5139 2714 5360 2688
+Q 5581 2662 5690 2637
+Q 5651 2566 5507 2393
+Q 5363 2221 5325 2221
+Q 5229 2221 5075 2259
+Q 4102 2458 3418 2995
+Q 3411 3002 3369 3037
+Q 3328 3072 3289 3101
+Q 3251 3130 3244 3130
+Q 3238 3130 3078 3008
+Q 2912 2886 2682 2752
+Q 2387 2586 1868 2406
+Q 1350 2227 1088 2227
+Q 1069 2227 909 2403
+Q 749 2579 730 2618
+Q 781 2618 1210 2688
+Q 2624 2938 2989 3546
+L 1101 3546
+L 1101 3955
+z
+M 1037 922
+L 5299 922
+L 5299 -966
+L 4858 -966
+L 4858 499
+L 1037 499
+L 1037 922
+z
+M 474 1869
+L 5920 1869
+L 5920 1453
+L 474 1453
+L 474 1869
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c544" d="M 1001 966
+Q 595 1517 595 2336
+Q 595 3155 1001 3715
+Q 1408 4275 2048 4275
+L 2054 4275
+Q 2701 4275 3107 3718
+Q 3514 3162 3514 2336
+Q 3514 1504 3101 960
+Q 2688 416 2054 416
+Q 1408 416 1001 966
+z
+M 2048 3853
+Q 1882 3853 1722 3779
+Q 1562 3706 1408 3542
+Q 1254 3379 1158 3062
+Q 1062 2746 1062 2323
+Q 1062 1549 1372 1193
+Q 1683 838 2054 838
+Q 2426 838 2736 1193
+Q 3046 1549 3046 2323
+Q 3046 2752 2950 3065
+Q 2854 3379 2697 3542
+Q 2541 3706 2381 3779
+Q 2221 3853 2054 3853
+L 2048 3853
+z
+M 4723 4794
+L 5133 4794
+Q 5203 4794 5216 4749
+Q 5165 4544 5165 4525
+L 5165 2310
+L 6240 2310
+L 6240 1894
+L 5165 1894
+L 5165 -915
+L 4723 -915
+L 4723 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-b2c8" d="M 691 4179
+L 1107 4179
+Q 1197 4179 1197 4134
+Q 1197 4096 1174 4025
+Q 1152 3955 1152 3917
+L 1152 1178
+Q 2765 1178 4243 1536
+Q 4282 1293 4275 1152
+L 4275 1126
+Q 4198 1069 3418 947
+Q 2138 730 691 730
+L 691 4179
+z
+M 4934 4794
+L 5344 4794
+Q 5434 4794 5434 4730
+Q 5434 4698 5411 4634
+Q 5389 4570 5389 4538
+L 5389 -915
+L 4934 -915
+L 4934 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-b2e4" d="M 4205 1069
+Q 2611 717 979 717
+L 576 717
+L 576 4122
+L 3462 4122
+L 3462 3706
+L 1030 3706
+L 1030 1158
+L 1421 1158
+Q 2099 1158 2636 1235
+Q 3174 1312 4173 1510
+L 4205 1069
+z
+M 4723 4794
+L 5133 4794
+Q 5203 4794 5216 4749
+Q 5165 4544 5165 4525
+L 5165 2310
+L 6240 2310
+L 6240 1894
+L 5165 1894
+L 5165 -915
+L 4723 -915
+L 4723 4794
+z
+" transform="scale(0.015625)"/>
+     </defs>
+     <use xlink:href="#UnDotum-d604"/>
+     <use xlink:href="#UnDotum-c7ac" transform="translate(99.999985 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(199.999969 0)"/>
+     <use xlink:href="#UnDotum-c800" transform="translate(229.999954 0)"/>
+     <use xlink:href="#UnDotum-c7a5" transform="translate(329.999939 0)"/>
+     <use xlink:href="#UnDotum-c18c" transform="translate(429.999924 0)"/>
+     <use xlink:href="#UnDotum-c5d0" transform="translate(529.999908 0)"/>
+     <use xlink:href="#UnDotum-b294" transform="translate(629.999893 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(729.999878 0)"/>
+     <use xlink:href="#UnDotum-6d" transform="translate(759.999863 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(841.999847 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(895.999832 0)"/>
+     <use xlink:href="#UnDotum-63" transform="translate(927.999817 0)"/>
+     <use xlink:href="#UnDotum-68" transform="translate(975.999802 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(1029.999786 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(1083.999771 0)"/>
+     <use xlink:href="#UnDotum-2d" transform="translate(1137.999756 0)"/>
+     <use xlink:href="#UnDotum-49" transform="translate(1159.999741 0)"/>
+     <use xlink:href="#UnDotum-54" transform="translate(1185.999725 0)"/>
+     <use xlink:href="#UnDotum-45" transform="translate(1235.99971 0)"/>
+     <use xlink:href="#UnDotum-52" transform="translate(1291.999695 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(1353.99968 0)"/>
+     <use xlink:href="#UnDotum-67" transform="translate(1383.999664 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(1433.999649 0)"/>
+     <use xlink:href="#UnDotum-6f" transform="translate(1457.999634 0)"/>
+     <use xlink:href="#UnDotum-62" transform="translate(1511.999619 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(1565.999603 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(1619.999588 0)"/>
+     <use xlink:href="#UnDotum-5f" transform="translate(1643.999573 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(1693.999557 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(1747.999542 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(1801.999527 0)"/>
+     <use xlink:href="#UnDotum-72" transform="translate(1855.999512 0)"/>
+     <use xlink:href="#UnDotum-5f" transform="translate(1887.999496 0)"/>
+     <use xlink:href="#UnDotum-6f" transform="translate(1937.999481 0)"/>
+     <use xlink:href="#UnDotum-6e" transform="translate(1991.999466 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(2045.999451 0)"/>
+     <use xlink:href="#UnDotum-79" transform="translate(2069.999435 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(2111.99942 0)"/>
+     <use xlink:href="#UnDotum-70" transform="translate(2141.999405 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(2195.99939 0)"/>
+     <use xlink:href="#UnDotum-69" transform="translate(2249.999374 0)"/>
+     <use xlink:href="#UnDotum-72" transform="translate(2273.999359 0)"/>
+     <use xlink:href="#UnDotum-ac00" transform="translate(2305.999344 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(2405.999329 0)"/>
+     <use xlink:href="#UnDotum-c5c6" transform="translate(2435.999313 0)"/>
+     <use xlink:href="#UnDotum-c73c" transform="translate(2535.999298 0)"/>
+     <use xlink:href="#UnDotum-bbc0" transform="translate(2635.999283 0)"/>
+     <use xlink:href="#UnDotum-b85c" transform="translate(2735.999268 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(2835.999252 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(2865.999237 0)"/>
+     <use xlink:href="#UnDotum-63" transform="translate(2919.999222 0)"/>
+     <use xlink:href="#UnDotum-63" transform="translate(2967.999207 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(3015.999191 0)"/>
+     <use xlink:href="#UnDotum-70" transform="translate(3069.999176 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(3123.999161 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(3155.999146 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(3209.99913 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(3263.999115 0)"/>
+     <use xlink:href="#UnDotum-c2e4" transform="translate(3293.9991 0)"/>
+     <use xlink:href="#UnDotum-ce21" transform="translate(3393.999084 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(3493.999069 0)"/>
+     <use xlink:href="#UnDotum-63" transform="translate(3523.999054 0)"/>
+     <use xlink:href="#UnDotum-6f" transform="translate(3571.999039 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(3625.999023 0)"/>
+     <use xlink:href="#UnDotum-66" transform="translate(3679.999008 0)"/>
+     <use xlink:href="#UnDotum-66" transform="translate(3709.998993 0)"/>
+     <use xlink:href="#UnDotum-69" transform="translate(3739.998978 0)"/>
+     <use xlink:href="#UnDotum-63" transform="translate(3763.998962 0)"/>
+     <use xlink:href="#UnDotum-69" transform="translate(3811.998947 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(3835.998932 0)"/>
+     <use xlink:href="#UnDotum-6e" transform="translate(3889.998917 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(3943.998901 0)"/>
+     <use xlink:href="#UnDotum-ac00" transform="translate(3975.998886 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(4075.998871 0)"/>
+     <use xlink:href="#UnDotum-c544" transform="translate(4105.998856 0)"/>
+     <use xlink:href="#UnDotum-b2c8" transform="translate(4205.99884 0)"/>
+     <use xlink:href="#UnDotum-b2e4" transform="translate(4305.998825 0)"/>
+     <use xlink:href="#UnDotum-2e" transform="translate(4405.99881 0)"/>
+    </g>
+   </g>
+   <g id="text_14">
+    <!-- 확정 조건: dram_cg_load_only - global_addr_only · 동일 ITER · NVML total-energy delta · exact NCU dram_bytes × 8 · strict audits -->
+    <g style="fill: #667784" transform="translate(18.033 321.826565) scale(0.11 -0.11)">
+     <defs>
+      <path id="UnDotum-d655" d="M 1542 4762
+L 3450 4762
+L 3450 4346
+L 1542 4346
+L 1542 4762
+z
+M 646 4064
+L 4346 4064
+L 4346 3648
+L 646 3648
+L 646 4064
+z
+M 2291 3424
+L 2739 3424
+Q 3987 3424 3987 2720
+Q 3987 2579 3920 2470
+Q 3853 2362 3773 2294
+Q 3693 2227 3523 2179
+Q 3354 2131 3261 2108
+Q 3168 2086 2957 2076
+Q 2746 2067 2694 2067
+Q 2643 2067 2458 2067
+Q 2266 2067 2170 2070
+Q 2074 2074 1866 2090
+Q 1658 2106 1536 2150
+Q 1414 2195 1276 2265
+Q 1139 2336 1072 2464
+Q 1005 2592 1005 2758
+Q 1005 2957 1142 3097
+Q 1280 3238 1497 3305
+Q 1715 3373 1910 3398
+Q 2106 3424 2291 3424
+z
+M 1472 2746
+Q 1472 2586 1750 2509
+Q 2029 2432 2317 2441
+Q 2605 2451 2765 2445
+Q 2861 2445 2966 2454
+Q 3072 2464 3209 2489
+Q 3347 2515 3433 2579
+Q 3520 2643 3520 2739
+Q 3520 3034 2637 3034
+Q 2515 3027 2256 3036
+Q 1997 3046 1734 2972
+Q 1472 2899 1472 2746
+z
+M 1088 832
+L 5299 832
+L 5299 -966
+L 4851 -966
+L 4851 410
+L 1088 410
+L 1088 832
+z
+M 4851 4794
+L 5274 4794
+Q 5350 4794 5350 4736
+Q 5350 4698 5324 4634
+Q 5299 4570 5299 4538
+L 5299 2752
+L 6240 2752
+L 6240 2342
+L 5299 2342
+L 5299 1146
+L 4851 1146
+L 4851 4794
+z
+M 2278 2131
+L 2733 2131
+L 2733 1734
+Q 2970 1747 3584 1772
+Q 4198 1798 4531 1818
+L 4531 1402
+Q 3872 1376 2656 1318
+Q 1440 1261 1056 1242
+Q 954 1235 816 1180
+Q 678 1126 640 1126
+Q 602 1126 563 1177
+Q 525 1229 496 1309
+Q 467 1389 448 1462
+Q 429 1536 416 1603
+Q 403 1670 403 1677
+Q 717 1677 1341 1689
+Q 1965 1702 2278 1709
+L 2278 2131
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c815" d="M 666 4378
+L 3776 4378
+L 3776 3955
+L 2451 3955
+Q 2451 2810 3398 2227
+L 3904 1920
+Q 3859 1862 3718 1728
+Q 3578 1594 3552 1594
+Q 3520 1594 3366 1709
+Q 3014 1958 2704 2297
+Q 2394 2637 2240 2982
+L 2227 2982
+Q 2202 2906 2093 2752
+Q 1677 2131 1005 1670
+Q 858 1562 832 1562
+Q 813 1562 637 1699
+Q 461 1837 429 1875
+Q 915 2170 1011 2246
+Q 1453 2586 1728 3024
+Q 2003 3462 2003 3955
+L 666 3955
+L 666 4378
+z
+M 3104 1120
+L 3533 1120
+Q 3763 1120 3942 1110
+Q 4122 1101 4365 1072
+Q 4608 1043 4787 972
+Q 4966 902 5129 796
+Q 5293 691 5379 515
+Q 5466 339 5466 109
+Q 5466 -96 5379 -259
+Q 5293 -422 5168 -524
+Q 5043 -627 4841 -704
+Q 4640 -781 4467 -816
+Q 4294 -851 4054 -873
+Q 3814 -896 3670 -899
+Q 3526 -902 3328 -902
+Q 1306 -902 1306 128
+Q 1306 429 1491 637
+Q 1677 845 1974 944
+Q 2272 1043 2547 1081
+Q 2822 1120 3104 1120
+z
+M 3117 698
+Q 2938 698 2746 675
+Q 2554 653 2314 598
+Q 2074 544 1923 419
+Q 1773 294 1773 115
+Q 1773 -480 3341 -480
+Q 4998 -480 4998 122
+Q 4998 410 4691 554
+Q 4384 698 3546 698
+L 3117 698
+z
+M 4934 4794
+L 5363 4794
+Q 5440 4794 5440 4736
+Q 5440 4704 5414 4633
+Q 5389 4563 5389 4525
+L 5389 1229
+L 4934 1229
+L 4934 2842
+L 3686 2842
+L 3686 3258
+L 4934 3258
+L 4934 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c870" d="M 998 4115
+L 5453 4115
+L 5453 3699
+L 3469 3699
+Q 3469 3418 3657 3133
+Q 3846 2848 4137 2627
+Q 4429 2406 4726 2240
+Q 5024 2074 5293 1984
+L 5792 1811
+Q 5747 1754 5596 1581
+Q 5446 1408 5427 1408
+Q 5363 1408 5146 1517
+Q 4128 1952 3501 2624
+Q 3290 2854 3245 2944
+Q 2477 2022 1299 1549
+Q 998 1427 966 1427
+Q 947 1427 777 1593
+Q 608 1760 563 1811
+L 1197 2035
+Q 1414 2112 1638 2221
+Q 1862 2330 2108 2490
+Q 2355 2650 2544 2829
+Q 2733 3008 2857 3238
+Q 2982 3469 2982 3699
+L 998 3699
+L 998 4115
+z
+M 2976 1638
+L 3386 1638
+Q 3469 1638 3469 1574
+Q 3469 1536 3443 1472
+Q 3418 1408 3418 1370
+L 3418 186
+L 5920 186
+L 5920 -230
+L 474 -230
+L 474 186
+L 2976 186
+L 2976 1638
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-ac74" d="M 877 4314
+L 3654 4314
+L 3597 3891
+Q 3501 3187 3040 2588
+Q 2579 1990 1914 1562
+Q 1760 1459 1385 1251
+Q 1011 1043 934 1043
+Q 922 1043 563 1402
+Q 2784 2195 3104 3891
+L 877 3891
+L 877 4314
+z
+M 1402 890
+L 1837 890
+Q 1888 890 1894 858
+Q 1843 653 1843 621
+L 1843 -358
+L 5600 -358
+L 5600 -774
+L 1402 -774
+L 1402 890
+z
+M 4934 4794
+L 5363 4794
+Q 5440 4794 5440 4736
+Q 5440 4704 5414 4633
+Q 5389 4563 5389 4525
+L 5389 416
+L 4934 416
+L 4934 2406
+L 3322 2406
+L 3322 2829
+L 4934 2829
+L 4934 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-3a" d="M 1344 2528
+L 634 2528
+L 634 3251
+L 1344 3251
+L 1344 2528
+z
+M 1344 0
+L 634 0
+L 634 723
+L 1344 723
+L 1344 0
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-b7" d="M 1101 1965
+Q 1101 1824 1001 1728
+Q 902 1632 762 1632
+Q 627 1632 531 1731
+Q 435 1830 435 1964
+Q 435 2099 534 2192
+Q 634 2285 768 2285
+Q 902 2285 1001 2192
+Q 1101 2099 1101 1965
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-b3d9" d="M 1101 4602
+L 5299 4602
+L 5299 4179
+L 1542 4179
+L 1542 3072
+L 5299 3072
+L 5299 2656
+L 1101 2656
+L 1101 4602
+z
+M 2970 1133
+L 3411 1133
+Q 3699 1133 3984 1094
+Q 4269 1056 4595 963
+Q 4922 870 5123 656
+Q 5325 442 5325 141
+Q 5325 -922 3117 -922
+Q 2861 -922 2630 -906
+Q 2400 -890 2096 -826
+Q 1792 -762 1577 -656
+Q 1363 -550 1212 -348
+Q 1062 -147 1062 122
+Q 1062 422 1264 636
+Q 1466 851 1789 950
+Q 2112 1050 2400 1091
+Q 2688 1133 2970 1133
+z
+M 2944 710
+Q 2752 710 2553 691
+Q 2355 672 2102 617
+Q 1850 563 1690 432
+Q 1530 301 1530 109
+Q 1530 -90 1699 -224
+Q 1869 -358 2141 -416
+Q 2413 -474 2621 -493
+Q 2829 -512 3027 -512
+Q 3213 -512 3392 -505
+Q 3571 -499 3856 -464
+Q 4141 -429 4349 -368
+Q 4557 -307 4710 -185
+Q 4864 -64 4864 102
+Q 4864 294 4710 428
+Q 4557 563 4304 617
+Q 4051 672 3856 691
+Q 3661 710 3462 710
+L 2944 710
+z
+M 2982 2797
+L 3424 2797
+L 3424 1997
+L 5920 1997
+L 5920 1581
+L 474 1581
+L 474 1997
+L 2982 1997
+L 2982 2797
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c77c" d="M 2144 4589
+Q 2797 4589 3177 4192
+Q 3558 3795 3558 3142
+Q 3558 2534 3113 2208
+Q 2669 1882 2042 1882
+Q 1402 1882 982 2272
+Q 563 2662 563 3296
+Q 563 3910 1036 4249
+Q 1510 4589 2144 4589
+z
+M 1990 4166
+Q 1587 4166 1308 3900
+Q 1030 3635 1030 3238
+Q 1030 2822 1324 2560
+Q 1619 2298 2035 2298
+Q 2534 2298 2812 2544
+Q 3091 2790 3091 3283
+Q 3091 3680 2812 3923
+Q 2534 4166 2131 4166
+L 1990 4166
+z
+M 1312 1408
+L 5389 1408
+L 5389 115
+L 1760 115
+L 1760 -358
+L 5562 -358
+L 5562 -774
+L 1312 -774
+L 1312 531
+L 4934 531
+L 4934 992
+L 1312 992
+L 1312 1408
+z
+M 4934 4794
+L 5370 4794
+Q 5440 4794 5440 4742
+Q 5440 4710 5414 4640
+Q 5389 4570 5389 4531
+L 5389 1658
+L 4934 1658
+L 4934 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-4e" d="M 3757 0
+L 3219 0
+L 986 3827
+L 986 0
+L 525 0
+L 525 4390
+L 1216 4390
+L 3296 813
+L 3296 4390
+L 3757 4390
+L 3757 0
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-56" d="M 3558 4390
+L 2074 0
+L 1549 0
+L 64 4390
+L 640 4390
+L 1862 768
+L 3078 4390
+L 3558 4390
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-4d" d="M 4755 0
+L 4205 0
+L 4205 3834
+L 4179 3834
+L 2790 0
+L 2419 0
+L 998 3834
+L 973 3834
+L 973 0
+L 512 0
+L 512 4390
+L 1331 4390
+L 2656 877
+L 3949 4390
+L 4755 4390
+L 4755 0
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-4c" d="M 3130 0
+L 538 0
+L 538 4390
+L 1088 4390
+L 1088 486
+L 3130 486
+L 3130 0
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-78" d="M 2803 0
+L 2214 0
+L 1389 1318
+L 544 0
+L 51 0
+L 1139 1683
+L 154 3251
+L 723 3251
+L 1427 2138
+L 2144 3251
+L 2630 3251
+L 1677 1792
+L 2803 0
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-43" d="M 3680 1370
+Q 3520 698 3117 317
+Q 2714 -64 2054 -64
+Q 1600 -64 1245 141
+Q 890 346 685 682
+Q 480 1018 374 1414
+Q 269 1811 269 2240
+Q 269 2835 454 3321
+Q 640 3808 1065 4131
+Q 1491 4454 2099 4454
+Q 2733 4454 3136 4073
+Q 3539 3693 3680 3053
+L 3162 2957
+Q 3027 3437 2777 3715
+Q 2528 3994 2080 3994
+Q 1741 3994 1494 3824
+Q 1248 3654 1117 3376
+Q 986 3098 928 2803
+Q 870 2509 870 2195
+Q 870 1894 931 1600
+Q 992 1306 1117 1024
+Q 1242 742 1485 569
+Q 1728 397 2054 397
+Q 2918 397 3181 1478
+L 3680 1370
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-55" d="M 3546 1613
+Q 3546 1222 3485 940
+Q 3424 659 3226 422
+Q 2816 -64 2042 -64
+Q 1210 -64 864 352
+Q 518 768 518 1613
+L 518 4390
+L 1069 4390
+L 1069 1613
+Q 1069 998 1280 710
+Q 1491 422 2086 422
+Q 2650 422 2867 726
+Q 3085 1030 3085 1613
+L 3085 4390
+L 3546 4390
+L 3546 1613
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-d7" d="M 3571 480
+L 3277 186
+L 1920 1549
+L 563 186
+L 269 480
+L 1626 1843
+L 269 3206
+L 563 3501
+L 1920 2138
+L 3277 3501
+L 3571 3206
+L 2214 1843
+L 3571 480
+z
+" transform="scale(0.015625)"/>
+     </defs>
+     <use xlink:href="#UnDotum-d655"/>
+     <use xlink:href="#UnDotum-c815" transform="translate(99.999985 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(199.999969 0)"/>
+     <use xlink:href="#UnDotum-c870" transform="translate(229.999954 0)"/>
+     <use xlink:href="#UnDotum-ac74" transform="translate(329.999939 0)"/>
+     <use xlink:href="#UnDotum-3a" transform="translate(429.999924 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(459.999908 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(489.999893 0)"/>
+     <use xlink:href="#UnDotum-72" transform="translate(543.999878 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(575.999863 0)"/>
+     <use xlink:href="#UnDotum-6d" transform="translate(629.999847 0)"/>
+     <use xlink:href="#UnDotum-5f" transform="translate(711.999832 0)"/>
+     <use xlink:href="#UnDotum-63" transform="translate(761.999817 0)"/>
+     <use xlink:href="#UnDotum-67" transform="translate(809.999802 0)"/>
+     <use xlink:href="#UnDotum-5f" transform="translate(859.999786 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(909.999771 0)"/>
+     <use xlink:href="#UnDotum-6f" transform="translate(933.999756 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(987.999741 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(1041.999725 0)"/>
+     <use xlink:href="#UnDotum-5f" transform="translate(1095.99971 0)"/>
+     <use xlink:href="#UnDotum-6f" transform="translate(1145.999695 0)"/>
+     <use xlink:href="#UnDotum-6e" transform="translate(1199.99968 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(1253.999664 0)"/>
+     <use xlink:href="#UnDotum-79" transform="translate(1277.999649 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(1319.999634 0)"/>
+     <use xlink:href="#UnDotum-2d" transform="translate(1349.999619 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(1371.999603 0)"/>
+     <use xlink:href="#UnDotum-67" transform="translate(1401.999588 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(1451.999573 0)"/>
+     <use xlink:href="#UnDotum-6f" transform="translate(1475.999557 0)"/>
+     <use xlink:href="#UnDotum-62" transform="translate(1529.999542 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(1583.999527 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(1637.999512 0)"/>
+     <use xlink:href="#UnDotum-5f" transform="translate(1661.999496 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(1711.999481 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(1765.999466 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(1819.999451 0)"/>
+     <use xlink:href="#UnDotum-72" transform="translate(1873.999435 0)"/>
+     <use xlink:href="#UnDotum-5f" transform="translate(1905.99942 0)"/>
+     <use xlink:href="#UnDotum-6f" transform="translate(1955.999405 0)"/>
+     <use xlink:href="#UnDotum-6e" transform="translate(2009.99939 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(2063.999374 0)"/>
+     <use xlink:href="#UnDotum-79" transform="translate(2087.999359 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(2129.999344 0)"/>
+     <use xlink:href="#UnDotum-b7" transform="translate(2159.999329 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(2183.999313 0)"/>
+     <use xlink:href="#UnDotum-b3d9" transform="translate(2213.999298 0)"/>
+     <use xlink:href="#UnDotum-c77c" transform="translate(2313.999283 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(2413.999268 0)"/>
+     <use xlink:href="#UnDotum-49" transform="translate(2443.999252 0)"/>
+     <use xlink:href="#UnDotum-54" transform="translate(2469.999237 0)"/>
+     <use xlink:href="#UnDotum-45" transform="translate(2519.999222 0)"/>
+     <use xlink:href="#UnDotum-52" transform="translate(2575.999207 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(2637.999191 0)"/>
+     <use xlink:href="#UnDotum-b7" transform="translate(2667.999176 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(2691.999161 0)"/>
+     <use xlink:href="#UnDotum-4e" transform="translate(2721.999146 0)"/>
+     <use xlink:href="#UnDotum-56" transform="translate(2787.99913 0)"/>
+     <use xlink:href="#UnDotum-4d" transform="translate(2843.999115 0)"/>
+     <use xlink:href="#UnDotum-4c" transform="translate(2925.9991 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(2975.999084 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(3005.999069 0)"/>
+     <use xlink:href="#UnDotum-6f" transform="translate(3037.999054 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(3091.999039 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(3123.999023 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(3177.999008 0)"/>
+     <use xlink:href="#UnDotum-2d" transform="translate(3201.998993 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(3223.998978 0)"/>
+     <use xlink:href="#UnDotum-6e" transform="translate(3277.998962 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(3331.998947 0)"/>
+     <use xlink:href="#UnDotum-72" transform="translate(3385.998932 0)"/>
+     <use xlink:href="#UnDotum-67" transform="translate(3417.998917 0)"/>
+     <use xlink:href="#UnDotum-79" transform="translate(3467.998901 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(3509.998886 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(3539.998871 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(3593.998856 0)"/>
+     <use xlink:href="#UnDotum-6c" transform="translate(3647.99884 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(3671.998825 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(3703.99881 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(3757.998795 0)"/>
+     <use xlink:href="#UnDotum-b7" transform="translate(3787.998779 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(3811.998764 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(3841.998749 0)"/>
+     <use xlink:href="#UnDotum-78" transform="translate(3895.998734 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(3939.998718 0)"/>
+     <use xlink:href="#UnDotum-63" transform="translate(3993.998703 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(4041.998688 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(4073.998672 0)"/>
+     <use xlink:href="#UnDotum-4e" transform="translate(4103.998657 0)"/>
+     <use xlink:href="#UnDotum-43" transform="translate(4169.998642 0)"/>
+     <use xlink:href="#UnDotum-55" transform="translate(4231.998627 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(4295.998611 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(4325.998596 0)"/>
+     <use xlink:href="#UnDotum-72" transform="translate(4379.998581 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(4411.998566 0)"/>
+     <use xlink:href="#UnDotum-6d" transform="translate(4465.99855 0)"/>
+     <use xlink:href="#UnDotum-5f" transform="translate(4547.998535 0)"/>
+     <use xlink:href="#UnDotum-62" transform="translate(4597.99852 0)"/>
+     <use xlink:href="#UnDotum-79" transform="translate(4651.998505 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(4693.998489 0)"/>
+     <use xlink:href="#UnDotum-65" transform="translate(4725.998474 0)"/>
+     <use xlink:href="#UnDotum-73" transform="translate(4779.998459 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(4831.998444 0)"/>
+     <use xlink:href="#UnDotum-d7" transform="translate(4861.998428 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(4921.998413 0)"/>
+     <use xlink:href="#UnDotum-38" transform="translate(4951.998398 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(5011.998383 0)"/>
+     <use xlink:href="#UnDotum-b7" transform="translate(5041.998367 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(5065.998352 0)"/>
+     <use xlink:href="#UnDotum-73" transform="translate(5095.998337 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(5147.998322 0)"/>
+     <use xlink:href="#UnDotum-72" transform="translate(5179.998306 0)"/>
+     <use xlink:href="#UnDotum-69" transform="translate(5211.998291 0)"/>
+     <use xlink:href="#UnDotum-63" transform="translate(5235.998276 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(5283.99826 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(5315.998245 0)"/>
+     <use xlink:href="#UnDotum-61" transform="translate(5345.99823 0)"/>
+     <use xlink:href="#UnDotum-75" transform="translate(5399.998215 0)"/>
+     <use xlink:href="#UnDotum-64" transform="translate(5453.998199 0)"/>
+     <use xlink:href="#UnDotum-69" transform="translate(5507.998184 0)"/>
+     <use xlink:href="#UnDotum-74" transform="translate(5531.998169 0)"/>
+     <use xlink:href="#UnDotum-73" transform="translate(5563.998154 0)"/>
+    </g>
+   </g>
+   <g id="text_15">
+    <!-- RTX 3090 DRAM 최신 보고 범위 -->
+    <g style="fill: #172a3a" transform="translate(10.5 20.413125) scale(0.18 -0.18)">
+     <defs>
+      <path id="UnDotum-58" d="M 3450 0
+L 2829 0
+L 1722 1869
+L 570 0
+L 58 0
+L 1466 2272
+L 211 4390
+L 826 4390
+L 1792 2765
+L 2771 4390
+L 3277 4390
+L 2048 2381
+L 3450 0
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-44" d="M 3974 2208
+Q 3974 1619 3776 1129
+Q 3578 640 3142 320
+Q 2707 0 2112 0
+L 544 0
+L 544 4390
+L 1933 4390
+Q 2432 4390 2787 4252
+Q 3142 4115 3443 3770
+Q 3974 3149 3974 2208
+z
+M 3418 2208
+Q 3418 2982 3014 3482
+Q 2803 3744 2544 3837
+Q 2285 3930 1901 3930
+L 1094 3930
+L 1094 467
+L 1901 467
+Q 2310 467 2601 588
+Q 2893 710 3098 1024
+Q 3418 1510 3418 2208
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-41" d="M 3552 0
+L 2989 0
+L 2547 1280
+L 922 1280
+L 531 0
+L 70 0
+L 1491 4390
+L 2125 4390
+L 3552 0
+z
+M 2426 1696
+L 1754 3802
+L 1075 1696
+L 2426 1696
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-cd5c" d="M 1530 4538
+L 3552 4538
+L 3552 4115
+L 1530 4115
+L 1530 4538
+z
+M 806 3622
+L 4282 3622
+L 4282 3206
+L 2771 3206
+Q 2778 3072 2925 2861
+Q 3392 2214 4544 1882
+L 4237 1504
+Q 3968 1574 3504 1849
+Q 3040 2125 2861 2330
+L 2560 2675
+Q 2387 2387 1945 2076
+Q 1504 1766 1101 1581
+Q 909 1498 896 1498
+Q 883 1498 716 1654
+Q 550 1811 518 1850
+Q 2234 2426 2310 3206
+L 806 3206
+L 806 3622
+z
+M 4934 4794
+L 5344 4794
+Q 5434 4794 5434 4730
+Q 5434 4698 5411 4634
+Q 5389 4570 5389 4538
+L 5389 -915
+L 4934 -915
+L 4934 4794
+z
+M 2304 1677
+L 2726 1677
+Q 2810 1677 2810 1606
+Q 2810 1574 2787 1504
+Q 2765 1434 2765 1402
+L 2765 755
+Q 3072 774 3673 822
+Q 4275 870 4582 890
+L 4582 480
+Q 4032 422 3024 336
+Q 2016 250 1709 218
+Q 1210 166 960 147
+Q 922 147 848 96
+Q 774 45 736 45
+Q 666 45 653 109
+L 525 582
+Q 2080 704 2304 710
+L 2304 1677
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c2e0" d="M 1901 4442
+L 2317 4442
+Q 2451 4442 2451 4346
+Q 2451 4275 2403 4124
+Q 2355 3974 2355 3891
+Q 2355 2816 3558 1946
+Q 3840 1747 3968 1683
+Q 3942 1645 3792 1517
+Q 3642 1389 3590 1357
+Q 3226 1632 3011 1814
+Q 2797 1997 2547 2297
+Q 2298 2598 2150 2918
+L 2138 2918
+Q 2125 2861 1978 2630
+Q 1549 2003 909 1517
+Q 742 1382 704 1382
+Q 685 1382 505 1526
+Q 326 1670 301 1683
+Q 320 1702 550 1843
+Q 781 1984 986 2163
+Q 1901 2931 1901 3923
+L 1901 4442
+z
+M 1402 890
+L 1837 890
+Q 1888 890 1894 858
+Q 1843 653 1843 621
+L 1843 -358
+L 5600 -358
+L 5600 -774
+L 1402 -774
+L 1402 890
+z
+M 4934 4794
+L 5370 4794
+Q 5440 4794 5440 4742
+Q 5440 4710 5414 4640
+Q 5389 4570 5389 4531
+L 5389 474
+L 4934 474
+L 4934 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-bcf4" d="M 1190 4378
+L 1606 4378
+Q 1690 4378 1690 4326
+Q 1690 4288 1664 4214
+Q 1638 4141 1638 4102
+L 1638 3373
+L 4755 3373
+L 4755 4378
+L 5184 4378
+Q 5254 4378 5254 4320
+Q 5254 4288 5228 4214
+Q 5203 4141 5203 4102
+L 5203 1510
+L 1190 1510
+L 1190 4378
+z
+M 4755 2957
+L 1638 2957
+L 1638 1926
+L 4755 1926
+L 4755 2957
+z
+M 2976 1222
+L 3386 1222
+Q 3469 1222 3469 1171
+Q 3469 1126 3443 1056
+Q 3418 986 3418 941
+L 3418 186
+L 5920 186
+L 5920 -230
+L 474 -230
+L 474 186
+L 2976 186
+L 2976 1222
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-ace0" d="M 1018 4211
+L 5370 4211
+Q 5280 1933 5082 902
+L 4621 947
+Q 4781 1869 4800 2035
+Q 4890 2944 4890 3795
+L 1018 3795
+L 1018 4211
+z
+M 2541 2310
+L 2950 2310
+L 2976 2310
+Q 3040 2310 3040 2253
+Q 3040 2214 3017 2150
+Q 2995 2086 2995 2048
+L 2995 186
+L 5920 186
+L 5920 -230
+L 474 -230
+L 474 186
+L 2541 186
+L 2541 2310
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-bc94" d="M 698 4506
+L 1133 4506
+Q 1178 4506 1190 4493
+Q 1203 4480 1203 4435
+Q 1203 4403 1180 4342
+Q 1158 4282 1158 4243
+L 1158 3558
+L 3110 3558
+L 3110 4506
+L 3539 4506
+Q 3610 4506 3610 4442
+Q 3610 4410 3587 4346
+Q 3565 4282 3565 4243
+L 3565 1734
+L 698 1734
+L 698 4506
+z
+M 3110 3149
+L 1158 3149
+L 1158 2150
+L 3110 2150
+L 3110 3149
+z
+M 1306 1056
+L 5389 1056
+L 5389 -966
+L 4934 -966
+L 4934 -774
+L 1754 -774
+L 1754 -966
+L 1306 -966
+L 1306 1056
+z
+M 4934 627
+L 1754 627
+L 1754 -358
+L 4934 -358
+L 4934 627
+z
+M 4934 4794
+L 5363 4794
+Q 5440 4794 5440 4736
+Q 5440 4704 5414 4633
+Q 5389 4563 5389 4525
+L 5389 1357
+L 4934 1357
+L 4934 2842
+L 3667 2842
+L 3667 3258
+L 4934 3258
+L 4934 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="UnDotum-c704" d="M 2656 4614
+Q 3187 4614 3603 4304
+Q 4019 3994 4019 3482
+Q 4019 3142 3894 2899
+Q 3770 2656 3542 2521
+Q 3315 2387 3049 2329
+Q 2784 2272 2458 2272
+Q 2093 2272 1769 2393
+Q 1446 2515 1219 2787
+Q 992 3059 992 3430
+Q 992 3757 1142 4000
+Q 1293 4243 1545 4371
+Q 1798 4499 2073 4556
+Q 2349 4614 2656 4614
+z
+M 1466 3443
+Q 1466 3066 1770 2880
+Q 2074 2694 2477 2694
+Q 2746 2694 2973 2755
+Q 3200 2816 3379 2992
+Q 3558 3168 3558 3443
+Q 3558 3814 3232 4006
+Q 2906 4198 2509 4198
+Q 2093 4198 1779 4012
+Q 1466 3827 1466 3443
+z
+M 4934 4794
+L 5357 4794
+Q 5440 4794 5440 4736
+Q 5440 4698 5414 4637
+Q 5389 4576 5389 4544
+L 5389 -915
+L 4934 -915
+L 4934 4794
+z
+M 390 1632
+Q 3168 1760 4557 1830
+L 4557 1414
+Q 4256 1395 3651 1356
+Q 3046 1318 2746 1299
+L 2746 -717
+L 2285 -717
+L 2285 1267
+Q 1843 1229 960 1165
+Q 896 1165 784 1107
+Q 672 1050 608 1050
+Q 531 1050 512 1120
+L 390 1632
+z
+" transform="scale(0.015625)"/>
+     </defs>
+     <use xlink:href="#UnDotum-52"/>
+     <use xlink:href="#UnDotum-54" transform="translate(61.999985 0)"/>
+     <use xlink:href="#UnDotum-58" transform="translate(111.999969 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(165.999954 0)"/>
+     <use xlink:href="#UnDotum-33" transform="translate(195.999939 0)"/>
+     <use xlink:href="#UnDotum-30" transform="translate(255.999924 0)"/>
+     <use xlink:href="#UnDotum-39" transform="translate(315.999908 0)"/>
+     <use xlink:href="#UnDotum-30" transform="translate(375.999893 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(435.999878 0)"/>
+     <use xlink:href="#UnDotum-44" transform="translate(465.999863 0)"/>
+     <use xlink:href="#UnDotum-52" transform="translate(531.999847 0)"/>
+     <use xlink:href="#UnDotum-41" transform="translate(593.999832 0)"/>
+     <use xlink:href="#UnDotum-4d" transform="translate(649.999817 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(731.999802 0)"/>
+     <use xlink:href="#UnDotum-cd5c" transform="translate(761.999786 0)"/>
+     <use xlink:href="#UnDotum-c2e0" transform="translate(861.999771 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(961.999756 0)"/>
+     <use xlink:href="#UnDotum-bcf4" transform="translate(991.999741 0)"/>
+     <use xlink:href="#UnDotum-ace0" transform="translate(1091.999725 0)"/>
+     <use xlink:href="#UnDotum-20" transform="translate(1191.99971 0)"/>
+     <use xlink:href="#UnDotum-bc94" transform="translate(1221.999695 0)"/>
+     <use xlink:href="#UnDotum-c704" transform="translate(1321.99968 0)"/>
+    </g>
+   </g>
+   <g id="PathCollection_1">
+    <path d="M 639.246553 207.819169
+C 640.63729 207.819169 641.971253 207.266624 642.954652 206.283224
+C 643.938052 205.299825 644.490597 203.965862 644.490597 202.575125
+C 644.490597 201.184388 643.938052 199.850425 642.954652 198.867026
+C 641.971253 197.883626 640.63729 197.331081 639.246553 197.331081
+C 637.855816 197.331081 636.521853 197.883626 635.538454 198.867026
+C 634.555054 199.850425 634.002509 201.184388 634.002509 202.575125
+C 634.002509 203.965862 634.555054 205.299825 635.538454 206.283224
+C 636.521853 207.266624 637.855816 207.819169 639.246553 207.819169
+z
+" clip-path="url(#p36ad09d9f8)" style="fill: #d78a26; stroke: #d78a26"/>
+    <path d="M 659.256084 208.698849
+C 660.880115 208.698849 662.437848 208.053615 663.586211 206.905252
+C 664.734575 205.756889 665.379809 204.199156 665.379809 202.575125
+C 665.379809 200.951094 664.734575 199.393361 663.586211 198.244998
+C 662.437848 197.096635 660.880115 196.451401 659.256084 196.451401
+C 657.632054 196.451401 656.07432 197.096635 654.925957 198.244998
+C 653.777594 199.393361 653.13236 200.951094 653.13236 202.575125
+C 653.13236 204.199156 653.777594 205.756889 654.925957 206.905252
+C 656.07432 208.053615 657.632054 208.698849 659.256084 208.698849
+z
+" clip-path="url(#p36ad09d9f8)" style="fill: #172a3a; stroke: #172a3a"/>
+    <path d="M 679.265616 207.819169
+C 680.656352 207.819169 681.990315 207.266624 682.973715 206.283224
+C 683.957114 205.299825 684.50966 203.965862 684.50966 202.575125
+C 684.50966 201.184388 683.957114 199.850425 682.973715 198.867026
+C 681.990315 197.883626 680.656352 197.331081 679.265616 197.331081
+C 677.874879 197.331081 676.540916 197.883626 675.557516 198.867026
+C 674.574117 199.850425 674.021571 201.184388 674.021571 202.575125
+C 674.021571 203.965862 674.574117 205.299825 675.557516 206.283224
+C 676.540916 207.266624 677.874879 207.819169 679.265616 207.819169
+z
+" clip-path="url(#p36ad09d9f8)" style="fill: #d78a26; stroke: #d78a26"/>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p36ad09d9f8">
+   <rect x="10.5" y="40.413125" width="753.3" height="299.376"/>
+  </clipPath>
+ </defs>
+</svg>

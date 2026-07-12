@@ -13,9 +13,9 @@ from pathlib import Path
 COMPONENT_TO_NCU = {
     "tensor_mma_increment": ["tensor_increment_candidate", "register_control_candidate"],
     "shared_l1_scalar_path": ["shared_memory_path"],
-    "global_l1_hit_path": ["global_l1_hit_path"],
-    "l2_hit_cg_path": ["l2_hit_path"],
-    "dram_cg_stream_path": ["dram_sanity_path"],
+    "global_l1_hit_path": ["global_l1_hit_path", "global_address_control"],
+    "l2_hit_cg_path": ["l2_hit_path", "global_address_control"],
+    "dram_cg_stream_path": ["dram_sanity_path", "global_address_control"],
 }
 
 MEMORY_COMPONENTS = {

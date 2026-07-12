@@ -449,16 +449,51 @@ bash scripts/run_ncu_validation.sh
 
 | 오류/상태 | 의미 | 조치 |
 |---|---|---|
-| `ERR_NVGPUCTRPERM` | performance counter 권한 없음 | 관리자/root 권한 또는 counter 접근 허용 필요 |
+| `ERR_NVGPUCTRPERM` | metric 목록 조회는 가능하지만 실제 hardware counter 권한 없음 | generated package의 사전 counter probe와 sudo retry 사용; 최종적으로 관리자 권한 정책 수정 권장 |
 | `gv100` chip 미지원 | NCU 버전이 Volta를 지원하지 않음 | GV100 지원이 확인된 2024.3 계열을 우선 지정하고 `--list-chips`, metric query 재확인 |
 | metric query 실패 | metric 이름/section 호환 문제 | `--query-metrics --chips gv100`로 metric availability 확인 |
+| `selected=34 dropped=10` | GV100에 없는 optional metric 10개를 제외했다는 뜻 | drop 목록 보존; 필수 path evidence가 빠지면 acceptance에서 reject |
+| `Running with uncontrolled GPU caches` | `--cache-control none`에 대한 NCU 경고 | warm/cache path를 유지하려는 현재 정책에서 비치명적; 반복 NCU hit/access 편차는 별도 확인 |
+| `No kernels were profiled` | 해당 NCU report는 사용할 수 없음 | permission/kernel regex/target process를 해결하고 report를 다시 생성 |
+| child-process warning | root process만 profile한 설정 경고 | 현행 wrapper는 `--target-processes all`을 사용 |
 
-`ERR_NVGPUCTRPERM`이면 관리자가 non-admin GPU performance counter 접근을 허용하는
-것이 가장 좋다. 노드 정책상 즉시 변경이 어렵고 sudo 권한이 있으면 NCU sidecar만
-sudo로 우회할 수 있다. Finalplan package 전체를 재실행할 때는 다음처럼 실행한다.
+현행 generated package는 긴 energy sweep 전에 baseline hardware-counter profile을
+실행한다. 일반 사용자 profile에서 `ERR_NVGPUCTRPERM`이 나오면 정확히 한 번
+`sudo -E`로 같은 case를 재시도한다. wrapper는 `ncu_permission_mode.txt`에
+`unprivileged`, `explicit_sudo`, `auto_sudo` 중 실제 mode를 기록한다. 자동 retry를 끄려면
+`NCU_AUTO_SUDO=0`을 사용한다.
+
+관리자가 non-admin GPU performance counter 접근을 허용하는 것이 가장 좋다. NVIDIA
+공식 안내는 Linux에서 sudo/CAP_SYS_ADMIN, R565 이상에서는 CAP_PERFMON, 또는 driver
+permission 설정을 제시한다. Legacy regkey 상태는 다음처럼 확인한다.
+
+```bash
+grep RmProfilingAdminOnly /proc/driver/nvidia/params
+```
+
+`1`이면 일반 사용자 counter 접근이 제한된 상태다. Legacy driver에서 영구 허용하려면
+관리자가 `/etc/modprobe.d/*.conf`에 아래 값을 설정하고 initramfs 갱신 및 reboot를
+수행한다. 실제 노드 운영정책을 먼저 확인한다.
+
+```text
+options nvidia NVreg_RestrictProfilingToAdminUsers=0
+```
+
+R610 이상은 `/proc/driver/nvidia-caps/sys-minors`의 `profiler-device` capability와
+해당 `/dev/nvidia-caps/nvidia-cap*` 권한을 사용한다. 자세한 절차는 NVIDIA 공식
+`ERR_NVGPUCTRPERM` 문서를 따른다:
+https://developer.nvidia.com/nvidia-development-tools-solutions-ERR_NVGPUCTRPERM-permission-issue-performance-counters
+
+관리자 정책을 즉시 변경할 수 없으면 처음부터 sudo mode로 실행할 수 있다.
 
 ```bash
 NCU_USE_SUDO=1 bash results/summary/v100_component_finalplan_20260708_commands.sh
+```
+
+기본 자동 fallback을 사용하려면 일반 명령 그대로 실행한다.
+
+```bash
+NCU_AUTO_SUDO=1 bash results/summary/v100_component_finalplan_20260708_commands.sh
 ```
 
 수동 NCU validation만 다시 돌릴 때는 기존 명령에 `NCU_USE_SUDO=1`을 붙인다.
@@ -550,7 +585,7 @@ python3 scripts/plot_results.py \
 | smoke | `energy_source` 기록, `smid_histogram_ok=true` |
 | full sweep | raw CSV와 matrix CSV 모두 생성 |
 | component pairs | `reg_mma_minus_reg_operand` pair와 단위 포함 summary 생성 |
-| NCU | counter 수집 성공 또는 실패 사유 문서화 |
+| NCU | energy sweep 전 hardware-counter permission probe 통과; final sidecar report와 raw/details CSV 존재 |
 | report | mode 설명 표와 단위 포함 sweep 표 작성 |
 
 ## 13. 2026-07-06 Component finalplan 업데이트
@@ -575,6 +610,24 @@ python3 scripts/plan_platform_component_experiment.py \
   --active-sm 80 \
   --seconds 10 \
   --repeats 5
+```
+
+GPU index 7에서 기존 `20260710_gpu7` tag를 다시 생성하려면 다음처럼 index와 출력명을
+명시한다. 새 shell에는 energy sweep 전 counter permission probe와 자동 sudo retry가
+포함된다.
+
+```bash
+python3 scripts/plan_platform_component_experiment.py \
+  --target-profile v100 \
+  --gpu-ids 7 \
+  --binary ./build-v100/a100_fp16_energy_v2 \
+  --ncu "${NCU:-$(command -v ncu)}" \
+  --active-sm 80 \
+  --seconds 10 \
+  --repeats 5 \
+  --tag 20260710_gpu7 \
+  --out-sh results/summary/v100_component_finalplan_20260710_gpu7_commands.sh \
+  --out-md results/summary/v100_component_finalplan_20260710_gpu7_command_plan.md
 ```
 
 생성 shell은 `NVCC` 환경변수를 preflight에 전달한다. 기본 `nvcc`가 CUDA 13이면 다음처럼
@@ -608,12 +661,42 @@ primary NCU 44 cases다.
 | L2 CG | `global_addr_only,l2_cg_load_only` | 32,64 | 1,2,4,8,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 1,2,4,8,16,32 | 8192/32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
+### V100 sweep를 그래프로 해석하기
+
+![플랫폼별 blocks/SM sweep](../presentations/assets/platform_blocks_per_sm_sweep.png)
+
+V100 B1/B2/B4/B8/B16은 low-density utilization 진단이며 GV100에서만 필요한 규칙이
+아니다. strict anchor는 B32이고, 다른 B를 final로 쓰려면 exact-coordinate NCU가 필요하다.
+플랫폼 공통 final 비교가 목적이면 B16/B32를 기본으로 보고 B1-B8은 optional diagnostic으로
+분리한다.
+
+![플랫폼별 W_SM path sweep](../presentations/assets/platform_wsm_path_sweep.png)
+
+- Shared strict W32/B32는 `W+B=64 KiB/SM`, stress W64/B32는 96 KiB allocation 경계다.
+- Global L1 strict W32/B32는 block당 1 KiB를 확보한다. W8/B16·B32와 W16/B32는 tile
+  부족으로 제외한다.
+- L2 W32는 전체 2.5 MiB로 6 MiB L2의 약 42%, W64는 5 MiB로 약 83%인 stress 점이다.
+- DRAM W8192는 전체 640 MiB다. Shared는 별도 address space이며 이 L1-L2-DRAM
+  global hierarchy 전이축과 섞어 해석하지 않는다.
+
+현행 분석은 `--require-control-ncu-acceptance`를 사용한다. 따라서 V100에서도
+`reg_operand_only`와 `global_addr_only`가 각 treatment와 동일
+`W_SM/B/active_SM/RF 또는 LR` 좌표에서 NCU accepted여야 한다. treatment만 통과한
+row는 strict coefficient가 아니다.
+
 Tensor는 각 B/RF 좌표에서 treatment 목표와 no-MMA control 최소시간을 각각 calibration하고
 두 candidate ITER의 최대값을 treatment/control에 동일하게 적용한다. 표준 10 s package는
 control floor 1 s를 사용한다. `*_tensor_pair_calibration.csv`, 두 raw mode의 ITER,
 matched detail의 `pair_energy_basis=matched_iters_net_energy`와 `iter_ratio=1`이 모두
 일치해야 final Tensor 후보가 된다. 이 정책은 A100 RF4 이상에서 드러난 mode별 duration
 calibration mismatch를 V100에서도 예방한다.
+DRAM pair도 동일한 원칙을 사용한다. 각 B/LR 좌표에서 `dram_cg_load_only`의 목표
+시간 ITER와 `global_addr_only`의 최소 control 시간 ITER를 구하고, 그중 큰 동일
+ITER를 양쪽에 전달한다. 분석은 `--dram-pair-policy matched-iters`로 두
+idle-corrected `net_E`를 직접 차분한다. `*_dram_pair_calibration.csv`가 없거나 raw
+`ITER`가 다르거나 matched detail의 `iter_ratio`가 1이 아니면 V100 DRAM 결과는
+reject한다.
+
 두 kernel은 RF당 dependent register integer add 1개를 공통으로 실행하므로 control
 liveness instruction 비용은 direct 차분에서 상쇄된다.
 

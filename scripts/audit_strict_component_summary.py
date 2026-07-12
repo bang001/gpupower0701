@@ -104,8 +104,8 @@ NCU_SUMMARY_REQUIRED_COLUMNS = (
 NCU_SUMMARY_REQUIRED_MODES = {
     "Tensor MMA incremental": {"reg_mma", "reg_operand_only"},
     "Shared scalar path": {"shared_scalar_load_only"},
-    "Global L1 hit path": {"global_l1_load_only"},
-    "L2 CG hit path": {"l2_cg_load_only"},
+    "Global L1 hit path": {"global_l1_load_only", "global_addr_only"},
+    "L2 CG hit path": {"l2_cg_load_only", "global_addr_only"},
 }
 
 NCU_COORDINATE_COLUMNS = [
@@ -120,8 +120,8 @@ NCU_COORDINATE_COLUMNS = [
 NCU_EXACT_COORDINATE_MODES = {
     "Tensor MMA incremental": {"reg_mma", "reg_operand_only"},
     "Shared scalar path": {"shared_scalar_load_only"},
-    "Global L1 hit path": {"global_l1_load_only"},
-    "L2 CG hit path": {"l2_cg_load_only"},
+    "Global L1 hit path": {"global_l1_load_only", "global_addr_only"},
+    "L2 CG hit path": {"l2_cg_load_only", "global_addr_only"},
 }
 
 NCU_METRIC_MODES = {
@@ -564,15 +564,11 @@ def check_ncu_summary_coordinate_alignment(
             continue
         if not truthy(detail.get("valid_component_estimate", "")):
             continue
-        if component == "Tensor MMA incremental":
-            # Tensor uses an exact treatment-control pair. Both reg_mma and
-            # reg_operand_only must have matching NCU sidecar rows for every RF.
-            modes = {detail.get("numerator_mode", ""), detail.get("control_mode", "")}
-        else:
-            # For memory paths the clocked_empty control carries negligible
-            # traffic and may be shared across W_SM labels. The treatment path
-            # coordinate is the cache-path evidence that must match exactly.
-            modes = {detail.get("numerator_mode", "")}
+        # Exact-coordinate modes deliberately include the treatment and every
+        # control whose lack of Tensor/global traffic is part of the claim.
+        # Shared keeps clocked_empty outside this set because it has no
+        # path-specific byte denominator.
+        modes = {detail.get("numerator_mode", ""), detail.get("control_mode", "")}
         for mode in modes & exact_modes:
             expected_coords.add(coord_key(mode, detail))
 

@@ -9,13 +9,13 @@ It is not a replacement for the package audit; it is a debugging guide.
 | result manifest CSV | `results/summary/v100_component_finalplan_20260708_result_manifest.csv` |
 | expected power semantics | `instant` |
 | final numerator policy | `nvml_total_energy + total_energy_mj_delta + gpu_device_total_energy_counter` |
-| open gaps | `13` |
+| open gaps | `15` |
 
 ## Severity Counts
 
 | severity | gaps |
 |---|---:|
-| `blocker` | 13 |
+| `blocker` | 15 |
 
 ## Next Actions
 
@@ -34,6 +34,8 @@ It is not a replacement for the package audit; it is a debugging guide.
 | instability diagnosis | `blocker` | `missing` | missing | `results/summary/v100_component_finalplan_20260708_matched_control_instability_audit.csv (instability audit)` | Generate or copy the missing artifact listed in the package audit and manifest. | `python3 scripts/audit_matched_control_instability.py ...` |
 | strict summary | `blocker` | `missing` | missing | `results/summary/v100_strict_scope_fresh_ncu_component_coefficients_20260708.csv (strict component coefficient summary)` | Generate or copy the missing artifact listed in the package audit and manifest. | `python3 scripts/build_strict_component_summary.py ...` |
 | strict summary audit | `blocker` | `missing` | missing | `results/summary/v100_strict_scope_fresh_ncu_component_summary_audit_20260708.csv (strict component summary audit)` | Run `scripts/audit_strict_component_summary.py --fail-on-fail` after building the strict summary. | `python3 scripts/audit_strict_component_summary.py ... --fail-on-fail` |
+| other | `blocker` | `missing` | missing | `results/raw/v100_component_finalplan_20260708_dram_pair_calibration.csv (DRAM pair calibration manifest)` | Generate or copy the missing artifact listed in the package audit and manifest. | `` |
+| other | `blocker` | `missing` | missing | `results/raw/v100_component_finalplan_20260708_tensor_pair_calibration.csv (Tensor pair calibration manifest)` | Generate or copy the missing artifact listed in the package audit and manifest. | `` |
 
 ## Power API Interpretation
 

@@ -350,9 +350,10 @@ bash scripts/run_ncu_validation.sh
 ERR_NVGPUCTRPERM
 ```
 
-이 경우 관리자가 performance counter 접근을 허용하는 것이 가장 좋다. 노드 정책상 즉시
-변경이 어렵고 sudo 권한이 있으면 NCU sidecar만 sudo로 우회할 수 있다. Finalplan
-package 전체를 재실행할 때는 다음처럼 실행한다.
+Generated package는 energy sweep 전에 hardware-counter permission probe를 수행하고,
+기본 `NCU_AUTO_SUDO=1`에서 이 오류가 나오면 같은 case를 `sudo -E`로 한 번 재시도한다.
+관리자가 performance counter 접근을 허용하는 것이 장기적으로 가장 좋다. 처음부터
+sudo를 사용하려면 다음처럼 실행한다.
 
 ```bash
 NCU_USE_SUDO=1 bash results/summary/a100_component_finalplan_20260708_commands.sh
@@ -503,6 +504,26 @@ primary NCU 74 cases다.
 | L2 CG | `global_addr_only,l2_cg_load_only` | 16,32,64,128 | valid W/B: 16/16, 32/16,32, 64/16,32, 128/16,32 | energy load_repeat 4,8,16; NCU는 네 W 모두에서 1,2,4,8,16 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 16,32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
+### A100 sweep를 그래프로 해석하기
+
+![플랫폼별 W_SM path sweep](../presentations/assets/platform_wsm_path_sweep.png)
+
+- Shared W64/W128은 164 KiB shared allocation profile 안에서 낮은 점과 높은 점을 비교한다.
+  strict W128/B16의 보수적 예약량은 `128+16=144 KiB/SM`이다.
+- Global L1 W16/W32는 B16/B32에서 block당 1 KiB 이상을 유지하는 작은 cached-global
+  working set이다. W16/B32는 0.5 KiB/block이므로 실행하지 않는다.
+- L2 W16/W32/W64/W128은 전체 1.688/3.375/6.75/13.5 MiB로 40 MiB L2 안의
+  plateau 후보다. 네 점 모두 L2라는 뜻이 아니라 NCU L1 bypass와 L2 read hit를 통과한
+  점만 채택한다.
+- DRAM W8192는 전체 864 MiB로 L2보다 충분히 크지만, capacity-aware residual L2 hit와
+  DRAM bytes dominance가 확인되어야 sanity 후보가 된다.
+
+![strict anchor capacity 맥락](../presentations/assets/platform_capacity_context.png)
+
+A100 L2 strict anchor W16은 nominal L2의 약 4.2%에 불과하므로 대표값 하나만으로 다른
+GPU의 40-85% anchor와 직접 비교하지 않는다. A100은 네 W의 coefficient/hit/stall plateau를
+함께 보고 선택한다.
+
 Tensor는 각 `W/B/SM/RF` 좌표에서 `reg_mma`를 treatment 목표시간으로,
 `reg_operand_only`를 control 최소시간으로 각각 calibration하고 두 ITER 중 큰 값을
 두 mode에 똑같이 전달한다. 표준 10 s package의 control floor는 1 s이고, A100 targeted
@@ -525,6 +546,15 @@ control duration floor를 먼저 보장한다. 표준 package analyzer는 calibr
 `net_E_J <= 0`이면 duration을 만족해도 energy counter/noise floor에서 식별되지 않은 것으로
 보고 reject한다.
 
+DRAM은 각 `W_SM/blocks/SM/load_repeat` 좌표에서 `dram_cg_load_only`를 목표
+측정시간으로, `global_addr_only`를 최소 control 시간으로 각각 calibration한 뒤 두
+ITER 중 큰 값을 두 mode에 동일하게 전달한다. 분석은
+`--dram-pair-policy matched-iters`를 사용하여 elapsed power scaling 없이
+`net_E(dram_cg_load_only) - net_E(global_addr_only)`를 직접 계산한다. 생성되는
+`*_dram_pair_calibration.csv`, 두 raw mode의 `ITER`, matched detail의
+`pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1`이 모두 일치해야 DRAM
+sanity 후보가 된다. Duration-calibrated DRAM 값은 플랫폼 비교용 final evidence가 아니다.
+
 `W16/B32`는 block당 0.5 KiB이므로 Global L1과 L2 CG의
 `global_addr_only`/treatment 모두 matrix에서 `valid=false`로 남기고 실행하지 않는다.
 B32 L1 diagnostic은 W32/B32에서만 수행한다. 표준 runner는 energy 수집 전에 unique valid 좌표를
@@ -544,6 +574,10 @@ CG raw row의 `notes`에는 `global_warmup_policy=ld_global_cg`가 있어야 하
 | Tensor | treatment HMMA > 0, control HMMA=0, spill/local 0, treatment-control ITER 동일. legacy epilogue 완화는 과거 결과 설명용이며 새 final run에는 사용하지 않음 |
 
 `global_addr_only`는 `global_l1_load_only`, `l2_cg_load_only`, `dram_cg_load_only`와 동일한 block/tile/index/repeat loop를 실행하지만 global input load는 수행하지 않는다. 따라서 memory pair의 차분은 단순 `clocked_empty` 대비보다 주소 계산과 loop 비용을 더 잘 제거한다. NCU sidecar에서는 global-load L1 request byte가 0인지 확인한다. `--verify-smid=1` atomic bookkeeping 때문에 L2 sector가 소량 보일 수 있으므로 L2 sector 0을 요구하지 않는다.
+
+분석 단계의 `--require-control-ncu-acceptance`는 이 조건을 mode-level이 아니라
+동일 `W_SM/B/active_SM/LR` 좌표로 요구한다. A100 treatment가 accepted여도 대응
+`global_addr_only`가 reject이면 해당 계수 row는 생성하지 않는다.
 
 `l2_cg_load_only`에서는 반대로 L1 request byte가 존재해야 한다. `.cg` global load도 요청은
 L1TEX를 통과하므로 `L1 request bytes / L2 read bytes`가 약 1인 것은 L1 cache hit 증거가

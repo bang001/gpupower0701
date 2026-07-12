@@ -1,6 +1,6 @@
 # A100 Component Finalplan Command Plan
 
-Generated: 2026-07-11
+Generated: 2026-07-13
 
 | item | value |
 |---|---|
@@ -14,8 +14,11 @@ Generated: 2026-07-11
 | seconds (s) | `10.0` |
 | repeats | `5` |
 | Tensor control calibration floor (s) | `1.0` |
+| DRAM address-control calibration floor (s) | `1.0` |
 | binary | `./build-a100/a100_fp16_energy_v2` |
 | NCU | `ncu` |
+| NCU counter permission probe | baseline hardware-counter profile before energy sweep |
+| NCU automatic sudo retry | enabled by default with `NCU_AUTO_SUDO=1` |
 | NCU sudo fallback | `NCU_USE_SUDO=1 bash results/summary/a100_component_finalplan_20260708_commands.sh` |
 | generated shell | `results/summary/a100_component_finalplan_20260708_commands.sh` |
 
@@ -49,7 +52,7 @@ binary whose CSV header includes `measurement_scope`.
 | Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | 128/16 | energy load_repeat 4,8,16; NCU also checks 1,2 |
 | Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | 16/16 | energy load_repeat 4,8,16; NCU also checks 1,2 |
 | L2 | `global_addr_only,l2_cg_load_only` | 16,32,64,128 | 16,32,64,128/16 | energy load_repeat 4,8,16; NCU also checks 1,2 |
-| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 8192/16 | energy load_repeat 4,8,16; NCU checks 1,4,8,16 |
+| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 8192/16 | energy load_repeat 4,8,16; treatment/control-floor dual-calibrated pair-locked ITER; NCU checks 1,4,8,16 |
 
 The energy runner applies the same 1 KiB/block feasibility rule to treatment and
 matched control. Global L1 valid coordinates are
@@ -64,6 +67,12 @@ is also checked with the binary's `--dry-run` mode.
 The generated package is not valid from hit rate alone. Every target-profile
 run must keep the architecture-specific NCU sidecar and acceptance report with
 both cache-hit direction and traffic magnitude:
+
+The hard gates require path-specific L1 hit evidence and path-specific L2 read hit
+evidence; aggregate cache percentages are diagnostic context only.
+The matched-control analyzer also requires exact-coordinate accepted NCU rows
+for `reg_operand_only` and `global_addr_only`; a clean treatment cannot rescue
+an unvalidated or traffic-contaminated control.
 
 | evidence | required columns | unit / meaning |
 |---|---|---|
@@ -101,10 +110,11 @@ diagnostic-only rather than strict L2 evidence.
 bash results/summary/a100_component_finalplan_20260708_commands.sh
 ```
 
-If Nsight Compute fails with `ERR_NVGPUCTRPERM`, the account does not have GPU
-performance-counter permission. The preferred fix is administrator-side access
-to non-admin GPU performance counters. For a temporary target-node run, rerun
-only the NCU wrapper path through sudo:
+The generated shell performs a real baseline hardware-counter profile before
+the long energy sweep. If Nsight Compute reports `ERR_NVGPUCTRPERM`, the wrapper
+retries that case once through `sudo -E` by default. The preferred permanent fix
+is administrator-side access for non-admin GPU performance counters. Automatic
+retry can be disabled with `NCU_AUTO_SUDO=0`. To use sudo from the beginning:
 
 ```bash
 NCU_USE_SUDO=1 bash results/summary/a100_component_finalplan_20260708_commands.sh
@@ -116,6 +126,13 @@ binary explicit and preserve the environment:
 ```bash
 NCU_BIN="$(command -v ncu)" NCU_USE_SUDO=1 NCU_SUDO="sudo -E" bash results/summary/a100_component_finalplan_20260708_commands.sh
 ```
+
+For non-interactive scheduler jobs, pre-cache sudo credentials or request the
+administrator-side permission change; otherwise sudo may be unable to prompt.
+The wrapper writes `ncu_permission_mode.txt` as `unprivileged`, `explicit_sudo`,
+or `auto_sudo`.
+`--target-processes all` is used so kernels launched through child processes are
+not silently omitted.
 
 The generated shell keeps NVML energy sweeps detached from NCU. The sudo
 fallback is only for the NCU sidecar/preflight/goal-readiness commands; failed
@@ -191,6 +208,15 @@ analysis then uses `--tensor-pair-policy matched-iters` and directly subtracts
 the two idle-corrected net energies. An ITER mismatch is a hard-invalid Tensor
 detail row; the analysis no longer rescales a differently calibrated Tensor
 control by elapsed-time power.
+DRAM energy rows use `--memory-pair-lock-iters` together with
+`--memory-pair-control-min-seconds=1.0`. Each W/B/LR
+coordinate calibrates `dram_cg_load_only` for the treatment target and
+`global_addr_only` for the control-duration floor, then runs both with the
+larger identical ITER. Matched-control analysis uses
+`--dram-pair-policy matched-iters` and directly computes
+`net_E(dram_cg_load_only) - net_E(global_addr_only)`. An ITER mismatch is a
+hard-invalid DRAM detail row; duration-scaled DRAM coefficients are not final
+cross-platform evidence.
 The runner rotates complete control-treatment coordinate pairs between repeats;
 it never rotates a flat list by one command and split a pair across repeat
 boundaries. The same atomic pair ordering applies to the generated Shared,
@@ -209,8 +235,9 @@ rejects either missing marker so a stale binary with the same CSV schema cannot
 silently pass.
 Because the no-MMA control completes the same ITER much faster, dual calibration
 prevents it from falling below 1.0 s by construction. The
-analyzer still uses a separate `--tensor-control-min-elapsed-s=0.05` hard schema
-floor instead of the full treatment `--min-elapsed-s`; non-positive control net
+analyzer uses a separate
+`--tensor-control-min-elapsed-s=0.8` floor
+instead of the full treatment `--min-elapsed-s`; non-positive control net
 energy remains rejected. The package audit cross-checks both candidate ITERs,
 the max-resolution policy, the raw ITER,
 matched-detail basis, ITER ratio, and control elapsed time.

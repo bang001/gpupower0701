@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NCU="${NCU:-/home/bang001/miniforge3/envs/ssc21env/bin/ncu}"
-read -r -a NCU_CMD <<< "${NCU}"
+NCU="${NCU:-ncu}"
+read -r -a NCU_BASE_CMD <<< "${NCU}"
+NCU_CMD=("${NCU_BASE_CMD[@]}")
 NCU_USE_SUDO="${NCU_USE_SUDO:-0}"
+NCU_AUTO_SUDO="${NCU_AUTO_SUDO:-1}"
 NCU_SUDO="${NCU_SUDO:-sudo -E}"
+NCU_IS_PRIVILEGED=0
 if [[ "${NCU_USE_SUDO}" == "1" ]]; then
   read -r -a NCU_SUDO_CMD <<< "${NCU_SUDO}"
-  NCU_CMD=("${NCU_SUDO_CMD[@]}" "${NCU_CMD[@]}")
+  NCU_CMD=("${NCU_SUDO_CMD[@]}" "${NCU_BASE_CMD[@]}")
+  NCU_IS_PRIVILEGED=1
+elif [[ "${NCU_BASE_CMD[0]##*/}" == "sudo" ]]; then
+  NCU_IS_PRIVILEGED=1
 fi
 BIN="${BIN:-./build/a100_fp16_energy_v2}"
 OUTDIR="${OUTDIR:-results/ncu/rtx3090_validation_20260701}"
@@ -70,11 +76,17 @@ NCU_COMPONENTS="${NCU_COMPONENTS:-baseline,tensor,shared,l1,l2,dram}"
 INCLUDE_L2_CAPACITY_NCU="${INCLUDE_L2_CAPACITY_NCU:-0}"
 INCLUDE_DIAGNOSTIC_NCU="${INCLUDE_DIAGNOSTIC_NCU:-0}"
 DRY_RUN_NCU="${DRY_RUN_NCU:-0}"
+NCU_PERMISSION_PROBE_ONLY="${NCU_PERMISSION_PROBE_ONLY:-0}"
 SUMMARY_CSV="${SUMMARY_CSV:-${OUTDIR}/ncu_cache_validation_summary.csv}"
 SUMMARY_MD="${SUMMARY_MD:-${OUTDIR}/ncu_cache_validation_summary.md}"
 CASE_MANIFEST="${CASE_MANIFEST:-${OUTDIR}/ncu_validation_cases.csv}"
 
 mkdir -p "${OUTDIR}" "$(dirname "${RAW_OUT}")"
+if [[ "${NCU_IS_PRIVILEGED}" == "1" ]]; then
+  printf "mode=explicit_sudo\ncommand=%s\n" "${NCU_CMD[*]}" > "${OUTDIR}/ncu_permission_mode.txt"
+else
+  printf "mode=unprivileged\ncommand=%s\n" "${NCU_CMD[*]}" > "${OUTDIR}/ncu_permission_mode.txt"
+fi
 printf "label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,report\n" > "${CASE_MANIFEST}"
 
 print_ncu_permission_hint() {
@@ -89,6 +101,9 @@ Preferred fix:
 Temporary sudo fallback for this script:
   NCU_USE_SUDO=1 NCU="$(command -v ncu)" ... bash scripts/run_ncu_validation.sh
 
+Automatic fallback is enabled by default and retries only after the exact
+ERR_NVGPUCTRPERM error. Disable it with NCU_AUTO_SUDO=0.
+
 For generated platform packages:
   NCU_USE_SUDO=1 bash results/summary/<profile>_component_finalplan_<tag>_commands.sh
 
@@ -97,16 +112,51 @@ NCU evidence with unvalidated denominators in final component coefficients.
 EOF
 }
 
+enable_sudo_ncu() {
+  if [[ "${NCU_IS_PRIVILEGED}" == "1" ]]; then
+    return 0
+  fi
+  read -r -a NCU_SUDO_CMD <<< "${NCU_SUDO}"
+  if [[ "${#NCU_SUDO_CMD[@]}" -eq 0 ]] || ! command -v "${NCU_SUDO_CMD[0]}" >/dev/null 2>&1; then
+    echo "NCU automatic sudo fallback unavailable: '${NCU_SUDO}' was not found." >&2
+    return 1
+  fi
+  NCU_CMD=("${NCU_SUDO_CMD[@]}" "${NCU_BASE_CMD[@]}")
+  NCU_IS_PRIVILEGED=1
+  printf "mode=auto_sudo\ncommand=%s\n" "${NCU_CMD[*]}" > "${OUTDIR}/ncu_permission_mode.txt"
+  echo "Retrying NCU with elevated privileges after ERR_NVGPUCTRPERM: ${NCU_CMD[*]}" >&2
+}
+
 run_ncu_profile() {
   local label="$1"
   shift
   local log="${OUTDIR}/${label}_ncu_stderr.log"
+  local retry_log="${OUTDIR}/${label}_ncu_sudo_retry_stderr.log"
   set +e
   "${NCU_CMD[@]}" "$@" 2> >(tee "${log}" >&2)
   local rc=$?
   set -e
-  if [[ "${rc}" -ne 0 ]] && grep -q "ERR_NVGPUCTRPERM" "${log}" 2>/dev/null; then
+  if grep -q "ERR_NVGPUCTRPERM" "${log}" 2>/dev/null; then
+    local permission_rc="${rc}"
+    if [[ "${permission_rc}" -eq 0 ]]; then
+      permission_rc=13
+    fi
     print_ncu_permission_hint
+    if [[ "${NCU_AUTO_SUDO}" == "1" && "${NCU_IS_PRIVILEGED}" != "1" ]]; then
+      enable_sudo_ncu || return "${permission_rc}"
+      set +e
+      "${NCU_CMD[@]}" "$@" 2> >(tee "${retry_log}" >&2)
+      rc=$?
+      set -e
+      if [[ "${rc}" -eq 0 ]] && ! grep -q "ERR_NVGPUCTRPERM" "${retry_log}" 2>/dev/null; then
+        echo "NCU sudo retry succeeded for ${label}." >&2
+      else
+        echo "NCU sudo retry failed for ${label}; no counter evidence is accepted." >&2
+        return "${permission_rc}"
+      fi
+    else
+      return "${permission_rc}"
+    fi
   fi
   return "${rc}"
 }
@@ -248,7 +298,7 @@ run_case() {
   run_ncu_profile "${label}" \
     "${COMMON_SECTIONS[@]}" \
     "${EXPLICIT_METRIC_ARGS[@]}" \
-    --target-processes application-only \
+    --target-processes all \
     --kernel-name-base demangled \
     --kernel-name "regex:${kernel_regex}" \
     --launch-count 1 \
@@ -274,6 +324,11 @@ run_case() {
       --output "${RAW_OUT}" \
       --verify-smid 1
 
+  if [[ ! -s "${report}.ncu-rep" ]]; then
+    echo "NCU produced no usable report for ${label}: ${report}.ncu-rep" >&2
+    return 3
+  fi
+
   "${NCU_CMD[@]}" --import "${report}.ncu-rep" --page raw --csv \
     > "${report}_raw_metrics.csv"
   "${NCU_CMD[@]}" --import "${report}.ncu-rep" --page details --csv \
@@ -284,6 +339,11 @@ run_case() {
 # default component coefficient flow.
 if component_enabled baseline; then
   run_case "clocked_empty_W64_B${BLOCKS_PER_SM}" "clocked_empty_kernel" "clocked_empty" 64 "${BLOCKS_PER_SM}" 1000000
+fi
+
+if [[ "${NCU_PERMISSION_PROBE_ONLY}" == "1" ]]; then
+  echo "NCU permission probe succeeded; hardware counters are accessible with mode ${NCU_IS_PRIVILEGED}."
+  exit 0
 fi
 
 if component_enabled tensor; then

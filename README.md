@@ -3,6 +3,17 @@
 CUDA/C++ microbenchmark framework for estimating effective energy of a logical
 warp-level FP16 `m16n16k16` MMA operation on NVIDIA Tensor Core GPUs.
 
+## Presentation
+
+GPU component/path별 effective microbenchmark coefficient가 만들어지는 전체 과정을
+22장 PowerPoint로 정리했다. 현행 finalplan과 2026-07-08 RTX 3090 historical snapshot을
+분리하고, NVML measurement scope, treatment-control, NCU denominator/path 검증 및
+strict/package audit를 단계별로 설명한다.
+
+- [PowerPoint](docs/presentations/gpu_component_energy_experiment_whitepaper_ko.pptx)
+- [Rendered PDF](docs/presentations/gpu_component_energy_experiment_whitepaper_ko.pdf)
+- [Evidence notes](docs/presentations/gpu_component_energy_experiment_whitepaper_ko.md)
+
 The default runtime profile in this checkout targets GeForce RTX 3090
 (`sm_86`, 82 SMs, 6 MiB nominal L2). Additional profiles are available for
 V100, A100, and H100. Use `--target-profile auto` to select a profile from the
@@ -36,10 +47,22 @@ Do not equate API visibility with coefficient validity: `power.draw.*`,
 or provisional fallbacks, but the current final denominator policy requires a
 GPU/device total-energy mJ delta plus NCU path validation.
 
-Current RTX 3090 strict result artifacts:
+**Current protocol status (2026-07-12):** the RTX 3090 coefficients produced on
+2026-07-08 are historical evidence, not current strict-final values. Their
+Global L1/L2 energy pairs use `clocked_empty` and do not carry same-coordinate
+`global_addr_only` NCU acceptance. The current protocol requires address
+controls, exact control NCU acceptance, and pair-locked Tensor/DRAM work. See
+`docs/audits/current_goal_alignment_audit_ko.md` and rerun
+`results/summary/rtx3090_component_finalplan_20260712_commands.sh` before
+publishing updated RTX 3090 coefficients.
+
+Historical RTX 3090 result artifacts:
 
 | artifact | path |
 |---|---|
+| current-protocol alignment audit | `docs/audits/current_goal_alignment_audit_ko.md` |
+| current-protocol reaudit of old strict result | `results/summary/rtx3090_current_protocol_reaudit_20260712.md` |
+| current-protocol rerun plan | `results/summary/rtx3090_component_finalplan_20260712_command_plan.md` |
 | strict + fresh NCU component summary | `results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md` |
 | strict + fresh NCU reliability audit | `results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.md` |
 | strict + fresh NCU acceptance CSV | `results/summary/rtx3090_strict_scope_fresh_ncu_combined_acceptance_20260708.csv` |
@@ -55,7 +78,7 @@ Current RTX 3090 strict result artifacts:
 | component reliability audit | `results/summary/rtx3090_finalplan_stability_component_reliability_audit_20260708.md` |
 | matched-control instability audit | `results/summary/rtx3090_finalplan_stability_matched_control_instability_audit_20260708.md` |
 | platform power/readiness audit | `results/summary/platform_power_readiness_audit_20260708.md` |
-| component-energy goal readiness audit | `results/summary/component_energy_goal_readiness_audit_20260708.md` |
+| current component-energy goal readiness audit | `results/summary/component_energy_goal_readiness_audit_20260712.md` |
 | Tensor targeted rerun | `results/summary/rtx3090_tensor_targeted_rf8_rf16_report_20260708_ko.md` |
 | Tensor fixed-ITER check | `results/summary/rtx3090_tensor_fixed_iter_rf8_rf16_report_20260708_ko.md` |
 | Tensor RF8 duration-scaling check | `results/summary/rtx3090_tensor_rf8_duration_scaling_report_20260708_ko.md` |
@@ -80,10 +103,11 @@ Current RTX 3090 strict result artifacts:
 | L2 LR4/LR8 paired 30 s combined primary check | `results/summary/rtx3090_l2_paired_lr4_lr8_30s_combined_report_20260708_ko.md` |
 | L2 LR4 paired 30 s auxiliary check | `results/summary/rtx3090_l2_paired_lr4_30s_stability_report_20260708_ko.md` |
 | L2 LR8 paired 30 s auxiliary check | `results/summary/rtx3090_l2_paired_lr8_30s_stability_report_20260708_ko.md` |
-| current reporting CSV | `results/summary/rtx3090_current_reporting_component_coefficients_20260708.csv` |
-| current evidence matrix | `results/summary/rtx3090_current_reporting_evidence_matrix_20260708.md` |
-| current sanity audit | `results/summary/rtx3090_current_component_sanity_audit_20260708.md` |
-| current primary selection audit | `results/summary/rtx3090_current_primary_selection_audit_20260708_ko.md` |
+| historical 2026-07-08 reporting CSV | `results/summary/rtx3090_current_reporting_component_coefficients_20260708.csv` |
+| historical 2026-07-08 evidence matrix | `results/summary/rtx3090_current_reporting_evidence_matrix_20260708.md` |
+| historical 2026-07-08 sanity audit | `results/summary/rtx3090_current_component_sanity_audit_20260708.md` |
+| historical 2026-07-08 primary selection audit | `results/summary/rtx3090_current_primary_selection_audit_20260708_ko.md` |
+| current DRAM reporting policy | `results/summary/rtx3090_dram_current_reporting_policy_20260712.md` |
 | result overview | `docs/results/gpu_power_modeling_experiment_results_ko.md` |
 
 Experiment setup and method documents:
@@ -99,7 +123,7 @@ Experiment setup and method documents:
 | What power APIs are available by GPU generation, and which ones can be final numerators? | `docs/platforms/power_measurement_api_matrix_ko.md` |
 | How do I check profile/power readiness before a new platform run? | `results/summary/platform_power_readiness_audit_20260708.md` and `scripts/audit_platform_power_readiness.py` |
 | How do I refresh local audits, external package gap reports, and the dashboard? | `scripts/run_local_readiness_checks.sh` |
-| Is the broader multi-platform goal complete? | `results/summary/component_energy_goal_readiness_audit_20260708.md` and `scripts/audit_component_goal_readiness.py` |
+| Is the broader multi-platform goal complete? | `results/summary/component_energy_goal_readiness_audit_20260712.md` and `scripts/audit_component_goal_readiness.py` |
 | Where is the full documentation map? | `docs/README.md` |
 
 The goal readiness audit treats a platform result package as valid only when the
@@ -122,14 +146,16 @@ estimates around `0.144-0.156 pJ/FLOP`. The RF=16 duration-scaling check is
 Tensor should be reported as RF-dependent: RF16 lower side around
 `0.06-0.09 pJ/FLOP`, RF8 upper side around `0.14-0.15 pJ/FLOP`, not as a pure
 circuit constant. Shared scalar primary is
-`0.149 pJ/bit`, Global L1 is `0.148 pJ/bit`, L2 CG is `1.017 pJ/bit`, and
-DRAM CG streaming sanity is `3.541 pJ/bit`. Memory path denominators use
+`0.149 pJ/bit`, Global L1 is `0.148 pJ/bit`, L2 CG is `1.017 pJ/bit`. DRAM은
+`26.709-28.409 pJ/bit`의 provisional reference-aligned cumulative-path band로만
+보고한다. 현행 matched-ITER `global_addr_only` raw pair가 아직 없으므로 accepted 실측
+coefficient가 아니며 V100/A100/H100에 전이하지 않는다. Memory path denominators use
 `ncu_actual_exact` for the current stability factor set. The broader Tensor
 factor exact-NCU sweep over RF=1,2,4,8,16 produced `0.170 pJ/FLOP` with low
 stability, so it is retained as history rather than the current Tensor
 reporting value. The current evidence matrix now marks Tensor, Shared, Global L1, and
-L2 as `strong_candidate`; DRAM is
-reported as a hierarchy sanity path. The L2 targeted rerun remains auxiliary
+L2 as `strong_candidate`; DRAM은 strict component 표와 분리된 provisional reporting
+band다. The L2 targeted rerun remains auxiliary
 support because it is consistent with the paired primary but carries one
 traceability-only control temperature caution row. The current sanity audit has
 0 failures and 4 expected warnings: Tensor RF sensitivity, Shared method
@@ -140,8 +166,8 @@ so their GPU/device scope was inferred from `nvml_total_energy` +
 `total_energy_mj_delta`; new finalplan runs require explicit
 `measurement_scope=gpu_device_total_energy_counter`.
 
-Explicit measurement-scope + fresh NCU rerun values are stricter and should be
-read separately from the older inferred-scope representative table: Tensor
+Under the 2026-07-08 protocol, explicit measurement-scope + fresh NCU rerun
+values were stricter than the older inferred-scope table: Tensor
 `0.129 pJ/FLOP` (`accepted`), Shared scalar `0.171 pJ/bit` (`accepted`),
 Global L1 `0.173 pJ/bit` (`accepted`), and L2 CG `1.131 pJ/bit` (`accepted`).
 These rows all use `nvml_total_energy` with
@@ -151,11 +177,13 @@ mixed LR4/LR8 run; Global L1 uses an LR4-only follow-up to separate the previous
 LR8 weak-signal behavior.
 The fresh NCU replay was run from a no-space WSL path (`/tmp/ncu2025/.../ncu`)
 because the Windows Nsight Compute install directory contains spaces. The
-combined fresh NCU reliability audit accepted Tensor, Shared, Global L1, and L2.
+historical combined fresh NCU reliability audit accepted Tensor, Shared,
+Global L1, and L2 under that version's treatment-focused NCU gate.
 The strict table is generated or cross-checked from accepted reliability evidence
 with `scripts/build_strict_component_summary.py` and then checked by
 `scripts/audit_strict_component_summary.py`;
-the fresh NCU 2026-07-08 audit has 169 pass checks, 0 failures, and 0 warnings,
+the fresh NCU 2026-07-08 audit had 169 pass checks, 0 failures, and 0 warnings
+under the older audit schema,
 including
 matched-control detail-row scope, power API audit artifact, energy-source,
 power-state reject, and exact NCU denominator checks.
@@ -167,7 +195,7 @@ matched-control rows. The targeted power-state audit identified two of those
 L1 LR=16 negative rows as average-power low outliers.
 Shared duration-scaling produced 15/15 valid rows with ratio median
 `0.198 pJ/bit`, but slope estimates with an intercept were `0.10-0.12 pJ/bit`.
-This is retained as method-sensitivity evidence; the current primary is the
+This is retained as historical method-sensitivity evidence; the former primary is the
 cleaner LR4/LR8 fixed-ITER focus result at `0.149 pJ/bit`.
 Shared LR=4 paired 30 s auxiliary produced `0.236 pJ/bit` with 6/6 valid rows,
 Shared LR=8 paired 30 s combined auxiliary produced `0.177 pJ/bit` with
@@ -484,7 +512,12 @@ Primary finalplan modes:
 | Global L1 hit path | `global_l1_load_only` | `global_addr_only` | same address/tile/repeat control; NCU must show L1-hit-dominated traffic |
 | L2 hit path | `l2_cg_load_only` | `global_addr_only` | uses cache-global loads to reduce L1 participation and target L2-hit traffic |
 | L2 capacity diagnostic | `l2_load_only` | none | normal global-load diagnostic; excluded from strict L2 coefficient because it can hit L1 |
-| DRAM streaming sanity | `dram_cg_load_only` | `global_addr_only` | sanity path only; use as final coefficient only if NCU shows DRAM-dominant traffic |
+| DRAM streaming sanity | `dram_cg_load_only` | `global_addr_only` | treatment/control-floor dual calibration, identical ITER, direct net-energy subtraction; NCU must show DRAM-dominant traffic |
+
+Final platform packages pass `--require-control-ncu-acceptance`. Consequently,
+`reg_operand_only` and `global_addr_only` must have an accepted NCU row at the
+same `W_SM`, blocks/SM, active-SM, and RF/LR coordinate as the treatment. A
+clean treatment row is insufficient when its subtraction control is unverified.
 
 Control and diagnostic modes:
 
@@ -621,7 +654,7 @@ archive/legacy_20260707/
 ```
 
 Do not use archived scripts for new component-energy claims unless the report
-explicitly labels them as legacy diagnostics. The current primary path is the
+explicitly labels them as legacy diagnostics. The current implementation path is the
 acceptance-first finalplan flow above.
 
 ## Nsight Compute
@@ -714,6 +747,9 @@ elapsed-time-scaled `idle_baseline_J`. `net_E_J = delta_E_J - idle_baseline_J`.
   energy unless elapsed-time matching and NCU traffic validation pass. Large
   elapsed ratios or negative `*_mma - *_load_only` coefficients mean the pair is
   diagnostic-only.
+- V100/A100/H100 DRAM packages require `--memory-pair-lock-iters` and
+  `--dram-pair-policy matched-iters`. A duration-scaled DRAM row or `iter_ratio != 1`
+  is rejected even when NCU shows a DRAM-dominant path.
 
 ## Included Reference Assets
 

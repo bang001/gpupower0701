@@ -93,12 +93,17 @@ COMMAND_SHELL_TERMS = [
     "scripts/analyze_matched_control_energy.py",
     "--tensor-pair-lock-iters",
     "--tensor-pair-policy matched-iters",
-    "--tensor-control-min-elapsed-s 0.05",
+    "--tensor-control-min-elapsed-s",
     "_tensor_pair_calibration.csv",
+    "--memory-pair-lock-iters",
+    "--dram-pair-policy matched-iters",
+    "--dram-control-min-elapsed-s",
+    "_dram_pair_calibration.csv",
     "L2_W_SM_KIB_VALUES=",
     "--power-state-audit-csv",
     "--exclude-power-state-rejects",
     "--require-ncu-denominator",
+    "--require-control-ncu-acceptance",
     "--require-total-energy",
     "--expected-power-semantics",
     "scripts/audit_component_reliability.py",
@@ -321,8 +326,8 @@ SUMMARY_REQUIRED_COLUMNS = SUMMARY_BASE_REQUIRED_COLUMNS | SUMMARY_PATH_REQUIRED
 STRICT_SUMMARY_EVIDENCE_MODES = {
     "Tensor MMA incremental": {"reg_mma", "reg_operand_only"},
     "Shared scalar path": {"shared_scalar_load_only"},
-    "Global L1 hit path": {"global_l1_load_only"},
-    "L2 CG hit path": {"l2_cg_load_only"},
+    "Global L1 hit path": {"global_l1_load_only", "global_addr_only"},
+    "L2 CG hit path": {"l2_cg_load_only", "global_addr_only"},
 }
 
 STRICT_SUMMARY_METRIC_MODES = {
@@ -489,6 +494,11 @@ def expected_intake_artifacts(profile: str, tag: str) -> list[tuple[str, str, st
             "raw energy CSVs",
             f"results/raw/{base}_tensor.csv, _shared.csv, _l1.csv, _l2.csv, _dram.csv",
             "NVML total-energy rows and explicit measurement scope",
+        ),
+        (
+            "pair calibration manifests",
+            f"results/raw/{base}_tensor_pair_calibration.csv, _dram_pair_calibration.csv",
+            "resolved treatment/control ITER and identical-work policy evidence",
         ),
         (
             "power API audit",
@@ -767,6 +777,8 @@ def ncu_path_sanity_pass(
         )
     if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}:
         expected_ops = ncu_expected_ops(row)
+        if mode == "reg_operand_only" and tensor_hmma > 0.0:
+            return False
         fixed_epilogue_limit = (
             ncu_value(row, "active_SM")
             * ncu_value(row, "blocks_per_SM")
@@ -2323,6 +2335,31 @@ def audit_rtx3090_strict(repo: Path, rows: list[dict[str, str]]) -> None:
         next_action="recompute or remove rows that violate the power measurement matrix",
     )
 
+    expected_pairs = {
+        "Tensor MMA incremental": "reg_mma - reg_operand_only",
+        "Shared scalar path": "shared_scalar_load_only - clocked_empty",
+        "Global L1 hit path": "global_l1_load_only - global_addr_only",
+        "L2 CG hit path": "l2_cg_load_only - global_addr_only",
+    }
+    bad_pairs = [
+        f"{component}:{by_component.get(component, {}).get('mode_pair', '')}"
+        for component, expected_pair in expected_pairs.items()
+        if by_component.get(component, {}).get("mode_pair", "") != expected_pair
+    ]
+    add(
+        rows,
+        area="rtx3090",
+        check="strict_control_protocol",
+        status="pass" if not bad_pairs else "fail",
+        expected="current Tensor/Shared/address-control treatment-control pairs",
+        actual="ok" if not bad_pairs else ";".join(bad_pairs),
+        evidence=str(summary_path),
+        next_action=(
+            "rerun the RTX 3090 20260712 command package; historical clocked_empty "
+            "Global L1/L2 rows are not current strict evidence"
+        ),
+    )
+
     if audit_path.exists():
         audit_rows = read_csv(audit_path)
         failures = [row for row in audit_rows if row.get("status") == "fail"]
@@ -2413,6 +2450,7 @@ def audit_rtx3090_fresh_ncu(repo: Path, rows: list[dict[str, str]]) -> None:
         "shared_memory_path",
         "global_l1_hit_path",
         "l2_hit_path",
+        "global_address_control",
     }
     missing = sorted(component for component in required if accepted_by_component.get(component, 0) <= 0)
     add(
@@ -2462,7 +2500,7 @@ def audit_cross_platform_results(repo: Path, rows: list[dict[str, str]]) -> None
             evidence=str(summary),
             next_action="verify this summary with the strict/package audits before publication",
         )
-        require_path_specific_cache_evidence = profile != "rtx3090"
+        require_path_specific_cache_evidence = True
         ok, detail = validate_component_summary(
             summary_rows,
             expected_semantics=semantics,
@@ -2476,11 +2514,7 @@ def audit_cross_platform_results(repo: Path, rows: list[dict[str, str]]) -> None
             expected=(
                 "required components accepted with total-energy delta, "
                 "GPU/device scope, matching power semantics, same-coordinate NCU rows, "
-                + (
-                    "and path-specific NCU evidence fields"
-                    if require_path_specific_cache_evidence
-                    else "and historical aggregate-compatible NCU evidence fields"
-                )
+                + "and path-specific NCU evidence fields"
             ),
             actual=detail,
             evidence=str(summary),
@@ -2673,11 +2707,11 @@ def main() -> int:
     parser.add_argument("--ncu", default="ncu")
     parser.add_argument(
         "--out-csv",
-        default="results/summary/component_energy_goal_readiness_audit_20260708.csv",
+        default="results/summary/component_energy_goal_readiness_audit_20260712.csv",
     )
     parser.add_argument(
         "--out-md",
-        default="results/summary/component_energy_goal_readiness_audit_20260708.md",
+        default="results/summary/component_energy_goal_readiness_audit_20260712.md",
     )
     parser.add_argument("--fail-on-fail", action="store_true")
     parser.add_argument("--fail-on-incomplete", action="store_true")

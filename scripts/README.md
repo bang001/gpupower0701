@@ -9,8 +9,8 @@
 | preflight | `preflight_gpu_support.py` | GPU profile, NVML, CUDA compiler target, NCU, power scope, binary dry-run 확인. `--strict`는 profile/toolchain mismatch와 dry-run 실패를 nonzero로 막고 `--self-test`로 회귀 검증 |
 | command plan | `plan_platform_component_experiment.py` | 플랫폼별 finalplan 명령 생성 |
 | platform readiness | `audit_platform_power_readiness.py` | RTX 3090/V100/A100/H100 profile, power API 의미, 문서, 생성 plan 정합성 점검 |
-| energy sweep | `run_component_regression_sweep.py` | Python/C++ feasibility self-test와 unique-coordinate binary dry-run 후 NCU 없이 energy CSV 수집. 알려진 2-mode control-treatment는 pair 단위로 회전하고 Tensor는 treatment 목표/control 최소시간의 dual calibration에서 큰 ITER를 두 mode에 동일 적용 |
-| paired stability | `run_paired_component_stability.py` | drift-sensitive component를 control-treatment-control 순서로 재측정 |
+| energy sweep | `run_component_regression_sweep.py` | Python/C++ feasibility self-test와 unique-coordinate binary dry-run 후 NCU 없이 energy CSV 수집. 알려진 2-mode control-treatment는 pair 단위로 회전하고 Tensor와 DRAM은 treatment 목표/control 최소시간의 dual calibration에서 큰 ITER를 두 mode에 동일 적용 |
+| paired stability | `run_paired_component_stability.py` | drift-sensitive component를 explicit control-treatment-control 순서로 재측정. Global L1/L2/DRAM은 `global_addr_only`, Shared는 `clocked_empty`를 강제 |
 | power API audit | `audit_power_api_measurements.py` | raw energy CSV가 power measurement matrix 기준 final/provisional/reject인지 판정하고 새 finalplan에서는 explicit `measurement_scope`를 요구하며 `--self-test`로 A100 semantics, fallback numerator, H100 module scope 혼입 회귀를 검증 |
 | power-state audit | `audit_power_state_stability.py` | raw row의 평균 전력/endpoint power outlier를 찾아 측정 품질 문제와 weak-signal 문제를 분리 |
 | NCU sidecar | `run_ncu_validation.sh` | chip별 metric availability를 확인한 뒤 primary finalplan mode의 hit/access/byte/stall/spill/occupancy/launch-resource counter 수집. `NCU_COMPONENTS=tensor,l2`처럼 targeted subset 선택 가능 |
@@ -29,9 +29,7 @@
 | platform result manifest | `write_platform_result_manifest.py` | 외부 노드에서 복사해 와야 할 raw/audit/NCU/summary artifact 목록을 CSV/Markdown으로 생성 |
 | goal readiness audit | `audit_component_goal_readiness.py` | power matrix, RTX 3090 strict evidence, NCU availability, local readiness runner policy, A100/V100/H100 result package 누락 여부를 상위 목표 기준으로 점검하며 preflight/power API/strict summary/package/goal validator self-test 상태도 확인 |
 | local readiness runner | `run_local_readiness_checks.sh` | preflight/power API/strict summary/package/goal/manifest/gap/dashboard self-test, platform readiness, A100/V100/H100 manifest+package audit+gap report refresh, RTX 3090 strict audit, goal readiness, dashboard refresh, `git diff --check`를 한 번에 실행 |
-| evidence matrix | `build_component_evidence_matrix.py` | current reporting coefficient별 power scope, NCU, reliability, power-state 증거를 통합 |
-| current sanity audit | `audit_current_component_sanity.py` | 보고용 coefficient의 scope, 단위, 양수 CI, 계층 순서, primary/auxiliary 구분, auxiliary spread를 최종 점검 |
-| result figures | `plot_component_method_visuals.py` | 문서용 SVG 생성 |
+| historical evidence/figures | `archive/pre_current_protocol_20260712/scripts/` | 2026-07-08 reporting matrix와 그림 재현 전용; 현행 coefficient 생성에 사용하지 않음 |
 
 ## Supporting Tools
 
@@ -40,6 +38,10 @@
 | `run_sweep.py` | 초기 feasibility/blocks/W_SM sweep 및 active runner helper |
 | `run_ncu.sh` | 단일 mode NCU profiling helper |
 | `plot_results.py` | raw sweep CSV용 일반 plot helper |
+| `plot_platform_sweep_design.py` | planner profile에서 플랫폼별 blocks/SM, W_SM path, capacity-context 그래프 생성. `--self-test`로 좌표 feasibility와 용량 산술 검증 |
+| `plot_dram_reporting_policy.py` | RTX 3090 DRAM 26.709-28.409 pJ/bit provisional reporting band 시각화. strict 미채택과 pJ/byte-pJ/bit 환산을 `--self-test`로 검증 |
+| `build_gpu_component_energy_presentation.py` | sweep 그래프를 재생성하고 22장 기술백서 PPT/PDF와 렌더 검토 이미지를 빌드 |
+| `selftest_ncu_permission_fallback.sh` | fake NCU/sudo로 `ERR_NVGPUCTRPERM` 자동 재시도와 `NCU_AUTO_SUDO=0` hard-fail을 회귀 검증 |
 
 `run_ncu_validation.sh`는 기본적으로 `clocked_empty`, `reg_operand_only`,
 `reg_mma`, `shared_scalar_load_only`, `global_l1_load_only`,
@@ -83,9 +85,11 @@ goal readiness가 찾는 `*_strict_scope_fresh_ncu_component_coefficients_*.csv`
 | H100 | `results/summary/h100_component_finalplan_20260708_command_plan.md` | `results/summary/h100_component_finalplan_20260708_commands.sh` |
 
 L1처럼 treatment-control drift가 의심되는 component는 factor sweep runner 대신
-paired stability runner를 사용한다. 이 runner는 각 repeat를
-`clocked_empty -> treatment -> clocked_empty`로 bracket해서 nearest-control pairing의
-시간/온도 거리를 줄인다.
+paired stability runner를 사용할 수 있다. 이 runner는 각 repeat를
+`explicit control -> treatment -> explicit control`로 bracket해서 nearest-control
+pairing의 시간/온도 거리를 줄인다. Global L1/L2/DRAM은 `global_addr_only`, Shared는
+`clocked_empty`를 명시한다. Tensor는 이 runner를 쓰지 않고 pair-locked ITER sweep을
+사용한다.
 
 표준 component sweep runner도 현재 알려진 2-mode pair를 원자적으로 회전하므로 반복
 경계에서 control/treatment가 분리되지 않는다. A100 Tensor/L2 targeted 결과는
@@ -99,6 +103,7 @@ python3 scripts/run_paired_component_stability.py \
   --target-profile rtx3090 \
   --gpu-ids 0 \
   --active-sm 82 \
+  --control-mode global_addr_only \
   --treatment-mode global_l1_load_only \
   --w-sm-kib 16 \
   --blocks-per-sm 16 \
@@ -180,6 +185,7 @@ python3 scripts/analyze_matched_control_energy.py \
   --power-state-audit-csv results/summary/power_state_audit.csv \
   --exclude-power-state-rejects \
   --require-ncu-denominator \
+  --require-control-ncu-acceptance \
   --require-total-energy \
   --expected-power-semantics one_sec_average \
   --pairing nearest-control \
@@ -189,6 +195,10 @@ python3 scripts/analyze_matched_control_energy.py \
   --out-detail-csv results/summary/matched_control_detail.csv \
   --out-md results/summary/matched_control_report.md
 ```
+
+Final package에서는 `--require-control-ncu-acceptance`를 생략하지 않는다.
+`reg_operand_only`와 `global_addr_only`가 treatment와 같은 좌표에서 NCU
+`accepted`여야 하며, treatment만 통과한 pair는 계수 후보에서 제외된다.
 
 Matched-control 이후에는 component reliability audit을 실행한다.
 
@@ -345,6 +355,9 @@ hit-rate sanity를 만족해야 한다. 예를 들어 `global_l1_load_only`는 L
 `dram_cg_load_only`는 낮은 L1/L2 hit와 DRAM traffic 중심이어야 한다.
 `l2_load_only`는 capacity diagnostic이며 strict package 필수 mode가 아니다. Tensor pair는 `reuse_factor`가 최소 3개 이상,
 memory path는 `load_repeat`가 최소 3개 이상이어야 한다.
+DRAM raw pair는 `*_dram_pair_calibration.csv`의 resolved ITER와 일치해야 하며,
+`dram_cg_load_only`와 `global_addr_only`의 ITER가 다르면 package audit이 실패한다.
+Matched detail도 `pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1`을 요구한다.
 Strict summary는 양수/단위/power scope뿐 아니라 L2가 shared/global L1보다 커야 한다는
 broad hierarchy gate와, Tensor/Shared/L1/L2가 넓은 plausibility range 안에 들어오는지도
 검사한다. 이 gate는 문헌값 fitting이 아니라 단위, denominator, path attribution 오류를
@@ -422,6 +435,11 @@ goal readiness artifact를 남기고 마지막에 package audit exit code로 종
 package audit, gap report를 매번 다시 생성한 뒤 dashboard를 만들기 때문에, 외부 결과
 파일을 복사한 직후에는 이 wrapper만 실행해도 첫 open stage와 다음 명령이 최신 상태로
 정리된다.
+기본 `TAG=20260708`은 기존 외부 command package/artifact tag이고,
+`READINESS_TAG=20260712`는 현행 protocol 재감사 보고서 tag다. 기존 RTX 3090 결과가
+새 address-control/path-specific gate를 실패해도 wrapper는 나머지 보고서를 끝까지
+생성한 뒤 non-zero로 종료한다. 이는 실패를 우회한 것이 아니라 불완전 상태를 전체
+readiness report에 남기기 위한 동작이다.
 기본 active SM 기준은 A100=108, V100=80, H100=132이며, runtime/preflight 값이 다르면
 `A100_ACTIVE_SM=<n>`, `V100_ACTIVE_SM=<n>`, `H100_ACTIVE_SM=<n>`로 override한다.
 
@@ -453,6 +471,8 @@ power-state audit에서 평균 전력 evidence column이 빠지거나 reject row
 있어도 실패해야 한다.
 NCU path acceptance CSV에서 evidence column이 빠지거나 accepted row의 counter가
 accepted 판정과 맞지 않아도 실패해야 한다.
+Tensor/Global L1/L2/DRAM matched detail은 대응 `reg_operand_only` 또는
+`global_addr_only`의 exact-coordinate NCU acceptance 표시가 없으면 실패해야 한다.
 새 플랫폼 self-test에는 A100 NCU summary가 `active_SM=82`처럼 RTX 3090 좌표를
 가져온 경우도 포함되어야 한다.
 

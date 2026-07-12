@@ -256,6 +256,36 @@ bash results/summary/h100_component_finalplan_$(date +%Y%m%d)_commands.sh
 | L2 CG | `global_addr_only,l2_cg_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 16,32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
+### H100 sweep를 그래프로 해석하기
+
+![플랫폼별 W_SM path sweep](../presentations/assets/platform_wsm_path_sweep.png)
+
+- Shared W64/W128은 228 KiB shared allocation profile 안의 후보이며 strict W128/B16의
+  보수적 예약량은 144 KiB/SM이다. 다음 power-of-two W256은 profile 한도를 넘는다.
+- Global L1 W16/W32는 작은 cached-global 후보이고 strict W16/B16은 block당 1 KiB를
+  제공한다.
+- L2 W64/W128은 전체 8.25/16.5 MiB로 50 MiB L2의 약 16.5/33%다. A100처럼 더 작은
+  W를 포함하지 않은 것은 current heuristic이며 target-node NCU plateau 검증이 필요하다.
+- DRAM W8192는 전체 약 1,056 MiB다. HBM3 physical energy가 아니라 device-level
+  streaming sanity path로만 해석한다.
+
+현재 H100 좌표가 WGMMA/TMA용으로 별도 최적화된 것은 아니다. kernel은 FP16 WMMA
+compatibility path이며, WGMMA/TMA energy를 주장하려면 별도 kernel과 NCU instruction
+evidence가 필요하다.
+
+현행 분석은 `--require-control-ncu-acceptance`를 사용한다. H100에서도
+`reg_operand_only`와 `global_addr_only`가 treatment와 동일 좌표에서 NCU
+accepted여야 한다. 이 gate는 WMMA compatibility path의 control 검증이며 WGMMA/TMA
+지원 여부를 검증하는 것은 아니다.
+
+DRAM energy sweep는 mode별 duration calibration을 사용하지 않는다. 각 W/B/LR
+좌표에서 treatment와 address control을 dual-calibrate하고 동일한 resolved ITER를
+`dram_cg_load_only`와 `global_addr_only`에 전달한다. 분석은
+`--dram-pair-policy matched-iters`와 direct net-energy subtraction을 사용한다.
+`*_dram_pair_calibration.csv`, raw ITER equality, `pair_energy_basis=matched_iters_net_energy`,
+`iter_ratio=1`이 H100 DRAM sanity의 필수 gate다. 이 값도 HBM3 device 단독
+에너지가 아니라 Hopper GPU/device-level effective streaming-path coefficient다.
+
 ## 7. NCU validation
 
 H100은 NCU chip alias가 `gh100`이다.
@@ -296,9 +326,10 @@ bash scripts/run_ncu_validation.sh
 ERR_NVGPUCTRPERM
 ```
 
-이 경우 관리자가 performance counter 접근을 허용하는 것이 가장 좋다. 노드 정책상 즉시
-변경이 어렵고 sudo 권한이 있으면 NCU sidecar만 sudo로 우회할 수 있다. Finalplan
-package 전체를 재실행할 때는 다음처럼 실행한다.
+Generated package는 energy sweep 전에 hardware-counter permission probe를 수행하고,
+기본 `NCU_AUTO_SUDO=1`에서 이 오류가 나오면 같은 case를 `sudo -E`로 한 번 재시도한다.
+관리자가 performance counter 접근을 허용하는 것이 장기적으로 가장 좋다. 처음부터
+sudo를 사용하려면 다음처럼 실행한다.
 
 ```bash
 NCU_USE_SUDO=1 bash results/summary/h100_component_finalplan_20260708_commands.sh

@@ -2,6 +2,13 @@
 
 작성일: 2026-07-08
 
+> 2026-07-12 갱신: 이 문서의 “현재 RTX 3090 대표 수치” 표현은 당시
+> active/archive 분류를 기록한 것이다. 현행 protocol은 Global L1/L2/DRAM
+> `global_addr_only` control과 exact-coordinate control NCU acceptance를 추가했다.
+> 따라서 아래 2026-07-08 strict 결과는 active provenance로 보존하지만 현행 strict
+> final 값은 아니다. 최신 판정은 `docs/audits/current_goal_alignment_audit_ko.md`를
+> 따른다.
+
 점검 범위: `results/`, `docs/`, `include/`, `src/`
 
 목적: 현재 finalplan coefficient 산출에 직접 필요한 파일과 과거 탐색/진단 파일을 분리한다. 현재 산출값과 무관한 과거 결과가 active 경로에 남아 있으면 RTX 3090 final coefficient의 근거를 잘못 이해할 수 있으므로 archive로 이동했다.
@@ -48,7 +55,14 @@
 archive/legacy_20260707/results/
 ```
 
-초기 sweep 그림을 다시 생성해야 하는 경우 `scripts/plot_component_method_visuals.py`가 archive CSV fallback을 사용한다.
+초기 sweep 그림을 다시 생성해야 하는 경우
+`archive/pre_current_protocol_20260712/scripts/plot_component_method_visuals.py`를 사용한다.
+이 스크립트, `build_component_evidence_matrix.py`,
+`audit_current_component_sanity.py`는 2026-07-08 historical reporting 전용이며 현행
+final coefficient 산출 경로가 아니다.
+`run_interleaved_component_stability.py`도 과거 `clocked_empty` 중심 auxiliary run
+재현용으로 같은 archive에 이동했다. 현행 drift 재측정은 explicit control을 요구하는
+`scripts/run_paired_component_stability.py`를 사용한다.
 
 ## 4. Active 문서 기준
 
@@ -67,6 +81,14 @@ archive/legacy_20260707/results/
 
 ```text
 archive/legacy_20260707/docs/gpu_power_modeling_whitepaper_synthesis_history_ko.md
+```
+
+2026-07-08 당시의 상세 결과/백서 문서는 현행 address-control protocol 도입 후 아래에
+추가 보존했다. Active 경로에는 현재 상태와 재실행 기준만 남긴다.
+
+```text
+archive/pre_current_protocol_20260712/docs/gpu_power_modeling_experiment_results_ko.md
+archive/pre_current_protocol_20260712/docs/gpu_power_modeling_whitepaper_synthesis_ko.md
 ```
 
 ## 5. include/src 점검

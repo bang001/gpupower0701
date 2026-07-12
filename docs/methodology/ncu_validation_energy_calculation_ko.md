@@ -79,7 +79,7 @@ fallback한다. L2/DRAM access는 sector counter다. byte counter가 없으면 s
 | Shared scalar | shared bytes/accesses > 0, shared instruction 존재, bank conflict ratio 낮음, global/L2/DRAM traffic 낮음 |
 | Global L1 | path-specific L1 hit >=95%, L1 request/hit bytes 존재, L2 read/L1 request <=1%, DRAM/L1 request <=1% |
 | L2 CG | path-specific L2 read hit >=95%, L1 path hit <=1%, L1 hit/request bytes <=1%, DRAM/L2 read <=2%. aggregate hit rate는 진단값 |
-| DRAM sanity | L1 hit <= 1%, L2 hit <= 5%, DRAM bytes dominant |
+| DRAM sanity | path-specific L1 hit <=1%, DRAM bytes dominant, path-specific L2 read hit은 `max(5%, 2 x L2_capacity/full_working_set + 2%)` 이하 |
 
 L2 CG mode은 measurement 전 warm-up도 `ld.global.cg.u32`를 쓰는
 `global_cg_warmup_kernel`로 수행한다. 일반 cached load warm-up이 L1을 채운 뒤
@@ -328,9 +328,12 @@ reg_operand_only 대비 reg_mma의 effective MMA incremental cost
 | Shared scalar LR4/LR8 fixed-ITER focus auxiliary | 1.190 | pJ/byte | 0.149 | LR4/LR8만 5 cycles 반복. 10/10 valid, power-state 30/30 ok, LR4 0.179/LR8 0.142 pJ/bit로 primary 0.152를 직접 지지 |
 | Global L1-hit path | 1.188 | pJ/byte | 0.148 | NCU L1 bytes 기준 effective path coefficient. C-T-C paired 30초 combined primary |
 | L2 CG hit path | 8.132 | pJ/byte | 1.017 | NCU L2 bytes 기준 effective path coefficient. C-T-C paired LR4/LR8 30초 combined primary |
-| DRAM CG streaming path | 28.334 | pJ/byte | 3.542 | DRAM streaming sanity coefficient |
+| DRAM cumulative effective path | 213.672-227.272 | pJ/byte 환산 범위 | 26.709-28.409 | provisional reference-aligned band; matched-ITER address-control 실측 필요 |
 
-이 표는 순수 회로 에너지 표가 아니다. GPU board-level energy, control 차분, NCU denominator가 결합된 microbenchmark coefficient 표다.
+이 표는 순수 회로 에너지 표가 아니다. GPU/device-level energy, control 차분, NCU
+denominator가 결합된 microbenchmark coefficient 표다. DRAM 행은 아직 측정 결과가
+아니라 최신 보고 범위이며, 동일 ITER `global_addr_only` pair와 exact NCU DRAM bytes를
+확보한 뒤에만 median/CI로 교체한다.
 
 ## A100/V100/H100 적용 시 주의
 

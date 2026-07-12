@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Run component regression sweeps with optional Tensor pair-locked ITER.
+"""Run component regression sweeps with optional pair-locked ITER.
 
-Memory paths retain per-mode duration calibration. Tensor finalplan runs can
-calibrate reg_mma for the treatment target and reg_operand_only for a minimum
-control duration, then apply the larger ITER to both modes. This keeps the work
-count comparable without allowing a high-RF control to fall below the energy
-counter/idle-subtraction noise floor.
+Tensor and selected global-memory finalplan runs can calibrate the treatment
+for the target duration and the control for a minimum duration, then apply the
+larger ITER to both modes. This keeps the work count comparable without
+allowing a faster control to fall below the energy counter/idle-subtraction
+noise floor.
 """
 
 from __future__ import annotations
@@ -52,6 +52,7 @@ DEFAULT_MODES = [
 ]
 
 TENSOR_PAIR_MODES = {"reg_operand_only", "reg_mma"}
+DRAM_PAIR_MODES = {"global_addr_only", "dram_cg_load_only"}
 ATOMIC_MODE_PAIRS = {
     frozenset({"reg_operand_only", "reg_mma"}): ("reg_operand_only", "reg_mma"),
     frozenset({"clocked_empty", "shared_scalar_load_only"}): (
@@ -263,7 +264,11 @@ def write_pair_calibration_manifest(
 
 
 def update_matrix_with_resolved_iters(
-    matrix_path: Path, resolved: dict[tuple[str, ...], int]
+    matrix_path: Path,
+    resolved: dict[tuple[str, ...], int],
+    *,
+    pair_modes: set[str] = TENSOR_PAIR_MODES,
+    measurement_policy: str = "tensor_pair_locked_iters",
 ) -> None:
     with matrix_path.open(newline="") as f:
         reader = csv.DictReader(f)
@@ -273,14 +278,14 @@ def update_matrix_with_resolved_iters(
     if "resolved_iters" not in fieldnames:
         fieldnames.append("resolved_iters")
     for row in rows:
-        if row.get("mode") not in TENSOR_PAIR_MODES or row.get("valid") != "True":
+        if row.get("mode") not in pair_modes or row.get("valid") != "True":
             continue
         key = tensor_pair_key(row)
         value = resolved.get(key)
         if value is None:
             continue
         row["resolved_iters"] = str(value)
-        row["measurement_policy"] = "tensor_pair_locked_iters"
+        row["measurement_policy"] = measurement_policy
         row["command"] = f"{row['command']} --iters {value}"
 
     with matrix_path.open("w", newline="") as f:
@@ -426,6 +431,147 @@ def resolve_tensor_pair_iters(
     return 0, resolved
 
 
+def resolve_dram_pair_iters(
+    commands: list[dict[str, Any]],
+    manifest_path: Path,
+    *,
+    control_min_seconds: float = 0.0,
+) -> tuple[int, dict[tuple[str, ...], int]]:
+    """Calibrate DRAM treatment/control once and lock both to identical ITER."""
+
+    groups: dict[tuple[str, ...], dict[str, dict[str, Any]]] = {}
+    for item in commands:
+        if item["mode"] not in DRAM_PAIR_MODES:
+            continue
+        groups.setdefault(tensor_pair_key(item), {})[str(item["mode"])] = item
+
+    rows: list[dict[str, Any]] = []
+    resolved: dict[tuple[str, ...], int] = {}
+    for key, by_mode in sorted(groups.items()):
+        missing = sorted(DRAM_PAIR_MODES - set(by_mode))
+        if missing:
+            print(
+                "DRAM pair-lock requires both dram_cg_load_only and "
+                f"global_addr_only; missing={','.join(missing)} key={key}",
+                file=sys.stderr,
+            )
+            return 2, resolved
+
+        treatment = by_mode["dram_cg_load_only"]
+        control = by_mode["global_addr_only"]
+        treatment_calibration_command = [*treatment["cmd"], "--calibrate-only"]
+        proc = subprocess.run(
+            treatment_calibration_command,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        if proc.returncode != 0:
+            print(
+                "DRAM treatment calibration failed before energy collection: "
+                f"key={key} return_code={proc.returncode}",
+                file=sys.stderr,
+            )
+            if proc.stdout:
+                print(proc.stdout.rstrip(), file=sys.stderr)
+            return proc.returncode, resolved
+        try:
+            treatment_iters = parse_calibrated_iters(proc.stdout)
+        except ValueError as exc:
+            print(f"DRAM treatment calibration failed: {exc}; key={key}", file=sys.stderr)
+            if proc.stdout:
+                print(proc.stdout.rstrip(), file=sys.stderr)
+            return 2, resolved
+
+        control_iters = 0
+        control_calibration_command: list[str] = []
+        if control_min_seconds > 0.0:
+            try:
+                control_calibration_command = replace_command_option(
+                    control["cmd"], "--seconds", str(control_min_seconds)
+                )
+            except ValueError as exc:
+                print(f"DRAM control calibration failed: {exc}; key={key}", file=sys.stderr)
+                return 2, resolved
+            control_calibration_command.append("--calibrate-only")
+            proc = subprocess.run(
+                control_calibration_command,
+                check=False,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            if proc.returncode != 0:
+                print(
+                    "DRAM control-min calibration failed before energy collection: "
+                    f"key={key} return_code={proc.returncode}",
+                    file=sys.stderr,
+                )
+                if proc.stdout:
+                    print(proc.stdout.rstrip(), file=sys.stderr)
+                return proc.returncode, resolved
+            try:
+                control_iters = parse_calibrated_iters(proc.stdout)
+            except ValueError as exc:
+                print(f"DRAM control-min calibration failed: {exc}; key={key}", file=sys.stderr)
+                if proc.stdout:
+                    print(proc.stdout.rstrip(), file=sys.stderr)
+                return 2, resolved
+
+        iters = max(treatment_iters, control_iters)
+        resolved[key] = iters
+        for item in by_mode.values():
+            item["cmd"].extend(["--iters", str(iters)])
+            item["resolved_iters"] = iters
+            item["measurement_policy"] = "dram_pair_locked_iters"
+        rows.append(
+            {
+                "target_profile": key[0],
+                "gpu_list": key[1],
+                "W_SM_KiB": key[2],
+                "blocks_per_SM": key[3],
+                "active_SM": key[4],
+                "reuse_factor": key[5],
+                "load_repeat": key[6],
+                "store_repeat": key[7],
+                "calibration_source_mode": "dram_cg_load_only",
+                "treatment_target_seconds": command_option_value(
+                    treatment["cmd"], "--seconds"
+                ),
+                "control_min_seconds": control_min_seconds,
+                "treatment_calibrated_iters": treatment_iters,
+                "control_min_calibrated_iters": (
+                    control_iters if control_min_seconds > 0.0 else ""
+                ),
+                "resolved_iters": iters,
+                "resolution_policy": (
+                    "max_treatment_and_control_min_iters"
+                    if control_min_seconds > 0.0
+                    else "treatment_iters_only"
+                ),
+                "status": "pair_locked",
+                "calibration_command": " ".join(treatment_calibration_command),
+                "treatment_calibration_command": " ".join(
+                    treatment_calibration_command
+                ),
+                "control_calibration_command": " ".join(
+                    control_calibration_command
+                ),
+            }
+        )
+        print(
+            "DRAM pair calibration: "
+            f"W={key[2]}KiB B={key[3]} SM={key[4]} LR={key[6]} "
+            f"treatment_ITER={treatment_iters} control_min_ITER={control_iters} "
+            f"resolved_ITER={iters}",
+            flush=True,
+        )
+
+    write_pair_calibration_manifest(manifest_path, rows)
+    return 0, resolved
+
+
 def run_self_test() -> None:
     import tempfile
     from unittest import mock
@@ -513,6 +659,57 @@ def run_self_test() -> None:
     assert all(
         item["cmd"][-2:] == ["--iters", "800"]
         for item in control_floor_commands
+    )
+
+    dram_base = {
+        **base,
+        "W_SM_KiB": 8192,
+        "load_repeat": 4,
+    }
+    dram_pair_commands = [
+        {
+            **dram_base,
+            "mode": "global_addr_only",
+            "cmd": ["fake", "--seconds", "10"],
+        },
+        {
+            **dram_base,
+            "mode": "dram_cg_load_only",
+            "cmd": ["fake", "--seconds", "10"],
+        },
+    ]
+    dram_treatment_completed = subprocess.CompletedProcess(
+        args=[], returncode=0, stdout="CALIBRATED_ITERS=400\n"
+    )
+    dram_control_completed = subprocess.CompletedProcess(
+        args=[], returncode=0, stdout="CALIBRATED_ITERS=120\n"
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manifest = Path(tmpdir) / "dram_pair_calibration.csv"
+        with mock.patch.object(
+            subprocess,
+            "run",
+            side_effect=[dram_treatment_completed, dram_control_completed],
+        ) as run_mock:
+            rc, resolved = resolve_dram_pair_iters(
+                dram_pair_commands,
+                manifest,
+                control_min_seconds=1.0,
+            )
+        assert rc == 0
+        assert list(resolved.values()) == [400]
+        assert run_mock.call_count == 2
+        with manifest.open(newline="") as f:
+            manifest_rows = list(csv.DictReader(f))
+        assert manifest_rows[0]["calibration_source_mode"] == "dram_cg_load_only"
+        assert manifest_rows[0]["resolved_iters"] == "400"
+        assert manifest_rows[0]["control_min_calibrated_iters"] == "120"
+    assert all(
+        item["cmd"][-2:] == ["--iters", "400"] for item in dram_pair_commands
+    )
+    assert all(
+        item["measurement_policy"] == "dram_pair_locked_iters"
+        for item in dram_pair_commands
     )
 
     second_key = {**base, "reuse_factor": 8}
@@ -648,6 +845,28 @@ def main() -> int:
         help="Tensor pair calibration manifest path; defaults beside --matrix-csv.",
     )
     parser.add_argument(
+        "--memory-pair-lock-iters",
+        action="store_true",
+        help=(
+            "For a global_addr_only/dram_cg_load_only sweep, calibrate the DRAM "
+            "treatment and run both modes with identical ITER."
+        ),
+    )
+    parser.add_argument(
+        "--memory-pair-control-min-seconds",
+        type=float,
+        default=0.0,
+        help=(
+            "Minimum global_addr_only calibration duration before choosing the "
+            "shared DRAM-pair ITER."
+        ),
+    )
+    parser.add_argument(
+        "--memory-pair-calibration-csv",
+        default="",
+        help="DRAM pair calibration manifest path; defaults beside --matrix-csv.",
+    )
+    parser.add_argument(
         "--execute",
         action="store_true",
         help="Run commands. Without this flag only the matrix CSV is written.",
@@ -668,6 +887,20 @@ def main() -> int:
     if args.tensor_pair_control_min_seconds > 0.0 and not args.tensor_pair_lock_iters:
         raise ValueError(
             "--tensor-pair-control-min-seconds requires --tensor-pair-lock-iters"
+        )
+    if args.memory_pair_control_min_seconds < 0.0:
+        raise ValueError("--memory-pair-control-min-seconds must be non-negative")
+    if args.memory_pair_control_min_seconds > 0.0 and not args.memory_pair_lock_iters:
+        raise ValueError(
+            "--memory-pair-control-min-seconds requires --memory-pair-lock-iters"
+        )
+    if (
+        args.memory_pair_lock_iters
+        and set(parse_str_list(args.modes, DEFAULT_MODES)) != DRAM_PAIR_MODES
+    ):
+        raise ValueError(
+            "--memory-pair-lock-iters currently requires exactly "
+            "--modes global_addr_only,dram_cg_load_only"
         )
 
     profile = PROFILES[args.target_profile]
@@ -762,6 +995,9 @@ def main() -> int:
                                                 else "tensor_pair_locked_pending"
                                                 if args.tensor_pair_lock_iters
                                                 and mode in TENSOR_PAIR_MODES
+                                                else "dram_pair_locked_pending"
+                                                if args.memory_pair_lock_iters
+                                                and mode in DRAM_PAIR_MODES
                                                 else "per_mode_duration_calibrated"
                                             ),
                                             "resolved_iters": str(args.iters) if args.iters else "",
@@ -805,6 +1041,28 @@ def main() -> int:
         if calibration_rc != 0:
             return calibration_rc
         update_matrix_with_resolved_iters(matrix_path, resolved)
+
+    if args.memory_pair_lock_iters and not args.iters:
+        calibration_path = (
+            Path(args.memory_pair_calibration_csv)
+            if args.memory_pair_calibration_csv
+            else matrix_path.with_name(
+                matrix_path.stem + "_dram_pair_calibration.csv"
+            )
+        )
+        calibration_rc, resolved = resolve_dram_pair_iters(
+            commands,
+            calibration_path,
+            control_min_seconds=args.memory_pair_control_min_seconds,
+        )
+        if calibration_rc != 0:
+            return calibration_rc
+        update_matrix_with_resolved_iters(
+            matrix_path,
+            resolved,
+            pair_modes=DRAM_PAIR_MODES,
+            measurement_policy="dram_pair_locked_iters",
+        )
 
     atomic_pairs: list[list[dict[str, Any]]] = []
     mode_pair = ATOMIC_MODE_PAIRS.get(frozenset(modes)) if len(modes) == 2 else None

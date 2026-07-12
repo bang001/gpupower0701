@@ -3,12 +3,18 @@ set -euo pipefail
 
 BIN="${BIN:-./build/a100_fp16_energy_v2}"
 NCU="${NCU:-ncu}"
-read -r -a NCU_CMD <<< "${NCU}"
+read -r -a NCU_BASE_CMD <<< "${NCU}"
+NCU_CMD=("${NCU_BASE_CMD[@]}")
 NCU_USE_SUDO="${NCU_USE_SUDO:-0}"
+NCU_AUTO_SUDO="${NCU_AUTO_SUDO:-1}"
 NCU_SUDO="${NCU_SUDO:-sudo -E}"
+NCU_IS_PRIVILEGED=0
 if [[ "${NCU_USE_SUDO}" == "1" ]]; then
   read -r -a NCU_SUDO_CMD <<< "${NCU_SUDO}"
-  NCU_CMD=("${NCU_SUDO_CMD[@]}" "${NCU_CMD[@]}")
+  NCU_CMD=("${NCU_SUDO_CMD[@]}" "${NCU_BASE_CMD[@]}")
+  NCU_IS_PRIVILEGED=1
+elif [[ "${NCU_BASE_CMD[0]##*/}" == "sudo" ]]; then
+  NCU_IS_PRIVILEGED=1
 fi
 GPU="${GPU:-0}"
 MODE="${MODE:-shared_mma}"
@@ -43,15 +49,49 @@ NCU evidence with unvalidated denominators in final component coefficients.
 EOF
 }
 
+enable_sudo_ncu() {
+  if [[ "${NCU_IS_PRIVILEGED}" == "1" ]]; then
+    return 0
+  fi
+  read -r -a NCU_SUDO_CMD <<< "${NCU_SUDO}"
+  if [[ "${#NCU_SUDO_CMD[@]}" -eq 0 ]] || ! command -v "${NCU_SUDO_CMD[0]}" >/dev/null 2>&1; then
+    echo "NCU automatic sudo fallback unavailable: '${NCU_SUDO}' was not found." >&2
+    return 1
+  fi
+  NCU_CMD=("${NCU_SUDO_CMD[@]}" "${NCU_BASE_CMD[@]}")
+  NCU_IS_PRIVILEGED=1
+  echo "Retrying NCU with elevated privileges after ERR_NVGPUCTRPERM: ${NCU_CMD[*]}" >&2
+}
+
 run_ncu_profile() {
   local log="$1"
   shift
+  local retry_log="${log%.log}_sudo_retry.log"
   set +e
   "${NCU_CMD[@]}" "$@" 2> >(tee "${log}" >&2)
   local rc=$?
   set -e
-  if [[ "${rc}" -ne 0 ]] && grep -q "ERR_NVGPUCTRPERM" "${log}" 2>/dev/null; then
+  if grep -q "ERR_NVGPUCTRPERM" "${log}" 2>/dev/null; then
+    local permission_rc="${rc}"
+    if [[ "${permission_rc}" -eq 0 ]]; then
+      permission_rc=13
+    fi
     print_ncu_permission_hint
+    if [[ "${NCU_AUTO_SUDO}" == "1" && "${NCU_IS_PRIVILEGED}" != "1" ]]; then
+      enable_sudo_ncu || return "${permission_rc}"
+      set +e
+      "${NCU_CMD[@]}" "$@" 2> >(tee "${retry_log}" >&2)
+      rc=$?
+      set -e
+      if [[ "${rc}" -eq 0 ]] && ! grep -q "ERR_NVGPUCTRPERM" "${retry_log}" 2>/dev/null; then
+        echo "NCU sudo retry succeeded." >&2
+      else
+        echo "NCU sudo retry failed; no counter evidence is accepted." >&2
+        return "${permission_rc}"
+      fi
+    else
+      return "${permission_rc}"
+    fi
   fi
   return "${rc}"
 }
@@ -99,6 +139,11 @@ run_ncu_profile "${REPORT}_ncu_stderr.log" \
     --seconds 1 \
     --output "results/raw/ncu_sidecar_runs.csv" \
     --verify-smid 1
+
+if [[ ! -s "${REPORT}.ncu-rep" ]]; then
+  echo "NCU produced no usable report: ${REPORT}.ncu-rep" >&2
+  exit 3
+fi
 
 "${NCU_CMD[@]}" --import "${REPORT}.ncu-rep" --page raw --csv \
   > "${REPORT}_raw_metrics.csv"

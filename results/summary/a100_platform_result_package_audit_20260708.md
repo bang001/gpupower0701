@@ -22,7 +22,7 @@ This package is not yet publishable as final component evidence. Fix missing/fai
 
 | status | checks |
 |---|---:|
-| `missing` | 13 |
+| `missing` | 15 |
 | `pass` | 2 |
 
 ## Checks
@@ -33,6 +33,8 @@ This package is not yet publishable as final component evidence. Fix missing/fai
 | `files` | `command_plan_present` | `pass` | file exists | exists | `results/summary/a100_component_finalplan_20260708_command_plan.md` | run the generated command package or copy the artifact from the node |
 | `files` | `preflight_present` | `missing` | file exists | missing | `results/summary/a100_component_finalplan_20260708_preflight.md` | run the generated command package or copy the artifact from the node |
 | `files` | `raw_present` | `missing` | all expected files exist | missing=results/raw/a100_component_finalplan_20260708_tensor.csv;results/raw/a100_component_finalplan_20260708_shared.csv;results/raw/a100_component_finalplan_20260708_l1.csv;results/raw/a100_component_finalplan_20260708_l2.csv;results/raw/a100_component_finalplan_20260708_dram.csv | `results/raw/a100_component_finalplan_20260708_tensor.csv;results/raw/a100_component_finalplan_20260708_shared.csv;results/raw/a100_component_finalplan_20260708_l1.csv;results/raw/a100_component_finalplan_20260708_l2.csv;results/raw/a100_component_finalplan_20260708_dram.csv` | copy the missing platform result files back from the target node |
+| `files` | `tensor_pair_calibration_present` | `missing` | file exists | missing | `results/raw/a100_component_finalplan_20260708_tensor_pair_calibration.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `dram_pair_calibration_present` | `missing` | file exists | missing | `results/raw/a100_component_finalplan_20260708_dram_pair_calibration.csv` | run the generated command package or copy the artifact from the node |
 | `files` | `power_api_present` | `missing` | file exists | missing | `results/summary/a100_component_finalplan_20260708_power_api_audit.csv` | run the generated command package or copy the artifact from the node |
 | `files` | `power_state_present` | `missing` | file exists | missing | `results/summary/a100_component_finalplan_20260708_power_state_audit.csv` | run the generated command package or copy the artifact from the node |
 | `files` | `ncu_summary_present` | `missing` | file exists | missing | `results/ncu/a100_component_finalplan_ncu_factor_20260708/ncu_cache_validation_summary.csv` | run the generated command package or copy the artifact from the node |
@@ -43,4 +45,4 @@ This package is not yet publishable as final component evidence. Fix missing/fai
 | `files` | `instability_present` | `missing` | file exists | missing | `results/summary/a100_component_finalplan_20260708_matched_control_instability_audit.csv` | run the generated command package or copy the artifact from the node |
 | `files` | `strict_summary_present` | `missing` | file exists | missing | `results/summary/a100_strict_scope_fresh_ncu_component_coefficients_20260708.csv` | run the generated command package or copy the artifact from the node |
 | `files` | `strict_audit_present` | `missing` | file exists | missing | `results/summary/a100_strict_scope_fresh_ncu_component_summary_audit_20260708.csv` | run the generated command package or copy the artifact from the node |
-| `raw` | `raw_energy_power_policy` | `missing` | raw rows use target profile metadata, target active SM, total-energy delta, GPU/device scope, explicit measurement_scope, profile power semantics, positive counter delta, elapsed time, and iteration count | no_raw_rows_read | `results/raw/a100_component_finalplan_20260708_tensor.csv;results/raw/a100_component_finalplan_20260708_shared.csv;results/raw/a100_component_finalplan_20260708_l1.csv;results/raw/a100_component_finalplan_20260708_l2.csv;results/raw/a100_component_finalplan_20260708_dram.csv` | copy raw energy CSVs from the target node |
+| `raw` | `raw_energy_power_policy` | `missing` | raw rows use target profile metadata, target active SM, total-energy delta, GPU/device scope, explicit measurement_scope, profile power semantics, positive counter delta, elapsed time, and iteration count; Tensor rows carry the matched-add/scalar-epilogue revision and CG rows carry the ld.global.cg warm-up policy | no_raw_rows_read | `results/raw/a100_component_finalplan_20260708_tensor.csv;results/raw/a100_component_finalplan_20260708_shared.csv;results/raw/a100_component_finalplan_20260708_l1.csv;results/raw/a100_component_finalplan_20260708_l2.csv;results/raw/a100_component_finalplan_20260708_dram.csv` | copy raw energy CSVs from the target node |

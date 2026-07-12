@@ -2,6 +2,7 @@
 set -euo pipefail
 
 TAG="${TAG:-20260708}"
+READINESS_TAG="${READINESS_TAG:-20260712}"
 NCU_BIN="${NCU:-}"
 
 if [[ -z "${NCU_BIN}" ]]; then
@@ -15,6 +16,7 @@ if [[ -z "${NCU_BIN}" ]]; then
 fi
 
 echo "[readiness] tag=${TAG}"
+echo "[readiness] report_tag=${READINESS_TAG}"
 echo "[readiness] ncu=${NCU_BIN}"
 
 echo "[readiness] python syntax"
@@ -37,6 +39,7 @@ python3 scripts/audit_power_api_measurements.py --self-test
 python3 scripts/build_strict_component_summary.py --self-test
 python3 scripts/audit_strict_component_summary.py --self-test
 python3 scripts/selftest_platform_package_gates.py
+bash scripts/selftest_ncu_permission_fallback.sh
 python3 scripts/audit_component_goal_readiness.py --self-test
 python3 scripts/write_platform_result_manifest.py --self-test
 python3 scripts/summarize_platform_package_gaps.py --self-test
@@ -85,18 +88,25 @@ for profile in a100 v100 h100; do
 done
 
 echo "[readiness] RTX 3090 strict summary audit"
+set +e
 python3 scripts/audit_strict_component_summary.py \
   --summary-csv "results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_${TAG}.csv" \
   --expected-power-semantics one_sec_average \
-  --out-csv "results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_${TAG}.csv" \
-  --out-md "results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_${TAG}.md" \
+  --require-path-specific-cache-evidence \
+  --out-csv "results/summary/rtx3090_current_protocol_reaudit_${READINESS_TAG}.csv" \
+  --out-md "results/summary/rtx3090_current_protocol_reaudit_${READINESS_TAG}.md" \
   --fail-on-fail
+RTX_AUDIT_RC=$?
+set -e
+if [[ "${RTX_AUDIT_RC}" -ne 0 ]]; then
+  echo "[readiness] RTX 3090 historical result fails the current protocol; continuing to write complete readiness reports" >&2
+fi
 
 echo "[readiness] goal readiness"
 python3 scripts/audit_component_goal_readiness.py \
   --ncu "${NCU_BIN}" \
-  --out-csv "results/summary/component_energy_goal_readiness_audit_${TAG}.csv" \
-  --out-md "results/summary/component_energy_goal_readiness_audit_${TAG}.md"
+  --out-csv "results/summary/component_energy_goal_readiness_audit_${READINESS_TAG}.csv" \
+  --out-md "results/summary/component_energy_goal_readiness_audit_${READINESS_TAG}.md"
 
 echo "[readiness] platform intake dashboard"
 python3 scripts/build_platform_intake_dashboard.py \
@@ -110,3 +120,4 @@ if [[ "${RUN_GIT_DIFF_CHECK:-1}" == "1" ]]; then
 fi
 
 echo "[readiness] done"
+exit "${RTX_AUDIT_RC}"

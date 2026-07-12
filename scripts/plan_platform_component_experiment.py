@@ -257,6 +257,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     binary = args.binary
     ncu = args.ncu
     tensor_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
+    dram_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
     # l2_load_only follows the normal global-load policy and therefore cannot
     # prove an L2-only path. Keep it out of strict packages; only CG loads are
     # eligible L2-path evidence.
@@ -268,6 +269,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     ncu_raw = f"results/raw/{args.target_profile}_component_finalplan_ncu_factor_{tag}.csv"
     ncu_summary = f"{ncu_dir}/ncu_cache_validation_summary.csv"
     tensor_pair_calibration_csv = f"{raw_prefix}_tensor_pair_calibration.csv"
+    dram_pair_calibration_csv = f"{raw_prefix}_dram_pair_calibration.csv"
     acceptance_csv = f"{summary_prefix}_ncu_acceptance.csv"
     acceptance_md = f"{summary_prefix}_ncu_acceptance.md"
     power_audit_csv = f"{summary_prefix}_power_api_audit.csv"
@@ -342,6 +344,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         schema_smoke_audit_csv,
         schema_smoke_audit_md,
         tensor_pair_calibration_csv,
+        dram_pair_calibration_csv,
         *energy_csvs,
         *matrix_csvs,
         ncu_raw,
@@ -378,12 +381,14 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         f"# {profile['note']}",
         "mkdir -p results/raw results/summary results/ncu",
         "",
-        "# NCU wrapper. If NCU fails with ERR_NVGPUCTRPERM, rerun this script with:",
-        "#   NCU_USE_SUDO=1 bash \"$0\"",
+        "# NCU wrapper. Counter access is probed before the long energy sweep.",
+        "# ERR_NVGPUCTRPERM triggers one sudo retry by default; set NCU_AUTO_SUDO=0 to disable.",
         f"NCU_BIN_DEFAULT={q(ncu)}",
         "NCU_BIN=\"${NCU_BIN:-${NCU_BIN_DEFAULT}}\"",
         "NCU_USE_SUDO=\"${NCU_USE_SUDO:-0}\"",
+        "NCU_AUTO_SUDO=\"${NCU_AUTO_SUDO:-1}\"",
         "NCU_SUDO=\"${NCU_SUDO:-sudo -E}\"",
+        "export NCU_USE_SUDO NCU_AUTO_SUDO NCU_SUDO",
         "NVCC_COMMAND=\"${NVCC:-nvcc}\"",
         "if [[ \"${NCU_USE_SUDO}\" == \"1\" ]]; then",
         "  NCU_COMMAND=\"${NCU_SUDO} ${NCU_BIN}\"",
@@ -391,6 +396,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         "  NCU_COMMAND=\"${NCU_BIN}\"",
         "fi",
         "echo \"Using NCU command: ${NCU_COMMAND}\"",
+        "echo \"NCU permission policy: use_sudo=${NCU_USE_SUDO} auto_sudo=${NCU_AUTO_SUDO}\"",
         "echo \"Using CUDA compiler: ${NVCC_COMMAND}\"",
         "",
         "# 1. Preflight",
@@ -424,6 +430,39 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
+        "# 1a. Actual hardware-counter permission probe before expensive energy sweeps.",
+        f"NCU_PROBE_DIR=\"${{TMPDIR:-/tmp}}/gpupower_ncu_probe_{args.target_profile}_${{UID}}_${{PPID}}\"",
+        "NCU_PROBE_RAW=\"${NCU_PROBE_DIR}/probe_raw.csv\"",
+        line(
+            [
+                "NCU_PERMISSION_PROBE_ONLY=1",
+                "NCU_EXPLICIT_METRICS_ONLY=1",
+                "NCU_METRICS=sm__cycles_elapsed.avg",
+                "NCU=\"${NCU_BIN}\"",
+                "NCU_USE_SUDO=\"${NCU_USE_SUDO}\"",
+                "NCU_AUTO_SUDO=\"${NCU_AUTO_SUDO}\"",
+                "NCU_SUDO=\"${NCU_SUDO}\"",
+                f"BIN={q(binary)}",
+                "OUTDIR=\"${NCU_PROBE_DIR}\"",
+                "RAW_OUT=\"${NCU_PROBE_RAW}\"",
+                f"TARGET_PROFILE={q(args.target_profile)}",
+                f"NCU_CHIP={q(profile['ncu_chip'])}",
+                "NCU_FILTER_UNAVAILABLE_METRICS=0",
+                f"GPU={q(args.gpu_ids.split(',')[0])}",
+                f"ACTIVE_SM={active_sm}",
+                f"BLOCKS_PER_SM={ncu_blocks}",
+                "bash",
+                "scripts/run_ncu_validation.sh",
+            ]
+        ),
+        "echo \"NCU hardware-counter permission probe passed: ${NCU_PROBE_DIR}\"",
+        "if [[ -f \"${NCU_PROBE_DIR}/ncu_permission_mode.txt\" ]] && grep -q '^mode=auto_sudo$' \"${NCU_PROBE_DIR}/ncu_permission_mode.txt\"; then",
+        "  NCU_USE_SUDO=1",
+        "  export NCU_USE_SUDO",
+        "  NCU_COMMAND=\"${NCU_SUDO} ${NCU_BIN}\"",
+        "  echo \"NCU permission probe selected sudo for the remaining NCU stages.\"",
+        "fi",
+        "",
         "# 2. Pipeline policy self-tests. Fail early if a gate is broken.",
         line(["python3", "scripts/run_component_regression_sweep.py", "--self-test"]),
         line(["python3", "scripts/summarize_ncu_cache_metrics.py", "--self-test"]),
@@ -435,6 +474,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         line(["python3", "scripts/audit_strict_component_summary.py", "--self-test"]),
         line(["python3", "scripts/write_platform_result_manifest.py", "--self-test"]),
         line(["python3", "scripts/selftest_platform_package_gates.py"]),
+        line(["bash", "scripts/selftest_ncu_permission_fallback.sh"]),
         "",
         "# 3. Move stale generated outputs aside before writing new CSV schemas.",
         "RUN_STAMP=$(date +%Y%m%d_%H%M%S)",
@@ -660,6 +700,13 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             load_repeats=profile["memory_energy_load_repeats"],
             output=energy_csvs[4],
             matrix=matrix_csvs[4],
+            extra_args=[
+                "--memory-pair-lock-iters",
+                "--memory-pair-control-min-seconds",
+                q(str(dram_control_calibration_min_seconds)),
+                "--memory-pair-calibration-csv",
+                q(dram_pair_calibration_csv),
+            ],
         ),
         "",
         "# 6. Power API audit before spending time on NCU.",
@@ -705,7 +752,10 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         line(
             [
                 f"NCU_EXPLICIT_METRICS_ONLY=1",
-                "NCU=\"${NCU_COMMAND}\"",
+                "NCU=\"${NCU_BIN}\"",
+                "NCU_USE_SUDO=\"${NCU_USE_SUDO}\"",
+                "NCU_AUTO_SUDO=\"${NCU_AUTO_SUDO}\"",
+                "NCU_SUDO=\"${NCU_SUDO}\"",
                 f"BIN={q(binary)}",
                 f"OUTDIR={q(ncu_dir)}",
                 f"RAW_OUT={q(ncu_raw)}",
@@ -785,6 +835,11 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "nearest-control",
                 "--tensor-pair-policy",
                 "matched-iters",
+                "--dram-pair-policy",
+                "matched-iters",
+                "--dram-control-min-elapsed-s",
+                q(str(0.8 * dram_control_calibration_min_seconds)),
+                "--require-control-ncu-acceptance",
                 "--min-delta-j",
                 q(str(max(2.0, args.seconds))),
                 "--min-delta-fraction",
@@ -1011,6 +1066,8 @@ def write_markdown(args: argparse.Namespace, profile: dict[str, Any], path: Path
     blocks = args.blocks_per_sm_values or profile["blocks"]
     ncu_blocks = args.ncu_blocks_per_sm
     tensor_control_min_seconds = max(1.0, args.seconds * 0.1)
+    dram_control_min_seconds = max(1.0, args.seconds * 0.1)
+    tensor_control_analysis_min_seconds = 0.8 * tensor_control_min_seconds
     out_sh = args.out_sh
     build_dir = str(Path(args.binary).parent)
     block_values = [int(value) for value in blocks.split(",") if value]
@@ -1082,8 +1139,11 @@ Generated: {dt.date.today().isoformat()}
 | seconds (s) | `{args.seconds}` |
 | repeats | `{args.repeats}` |
 | Tensor control calibration floor (s) | `{tensor_control_min_seconds}` |
+| DRAM address-control calibration floor (s) | `{dram_control_min_seconds}` |
 | binary | `{args.binary}` |
 | NCU | `{args.ncu}` |
+| NCU counter permission probe | baseline hardware-counter profile before energy sweep |
+| NCU automatic sudo retry | enabled by default with `NCU_AUTO_SUDO=1` |
 | NCU sudo fallback | `NCU_USE_SUDO=1 bash {out_sh}` |
 | generated shell | `{out_sh}` |
 
@@ -1116,7 +1176,7 @@ binary whose CSV header includes `measurement_scope`.
 | Shared scalar | `clocked_empty,shared_scalar_load_only` | {profile['shared_w']} | {profile['shared_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
 | Global L1 | `global_addr_only,global_l1_load_only` | {profile['l1_w']} | {profile['l1_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
 | L2 | `{profile['l2_modes']}` | {profile['l2_w']} | {profile.get('l2_ncu_w_values', profile['l2_ncu_w'])}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
-| DRAM sanity | `global_addr_only,dram_cg_load_only` | {profile['dram_w']} | {profile['dram_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU checks 1,4,8,16 |
+| DRAM sanity | `global_addr_only,dram_cg_load_only` | {profile['dram_w']} | {profile['dram_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; treatment/control-floor dual-calibrated pair-locked ITER; NCU checks 1,4,8,16 |
 
 The energy runner applies the same 1 KiB/block feasibility rule to treatment and
 matched control. Global L1 valid coordinates are
@@ -1131,6 +1191,12 @@ is also checked with the binary's `--dry-run` mode.
 The generated package is not valid from hit rate alone. Every target-profile
 run must keep the architecture-specific NCU sidecar and acceptance report with
 both cache-hit direction and traffic magnitude:
+
+The hard gates require path-specific L1 hit evidence and path-specific L2 read hit
+evidence; aggregate cache percentages are diagnostic context only.
+The matched-control analyzer also requires exact-coordinate accepted NCU rows
+for `reg_operand_only` and `global_addr_only`; a clean treatment cannot rescue
+an unvalidated or traffic-contaminated control.
 
 | evidence | required columns | unit / meaning |
 |---|---|---|
@@ -1163,10 +1229,11 @@ diagnostic-only rather than strict L2 evidence.
 bash {out_sh}
 ```
 
-If Nsight Compute fails with `ERR_NVGPUCTRPERM`, the account does not have GPU
-performance-counter permission. The preferred fix is administrator-side access
-to non-admin GPU performance counters. For a temporary target-node run, rerun
-only the NCU wrapper path through sudo:
+The generated shell performs a real baseline hardware-counter profile before
+the long energy sweep. If Nsight Compute reports `ERR_NVGPUCTRPERM`, the wrapper
+retries that case once through `sudo -E` by default. The preferred permanent fix
+is administrator-side access for non-admin GPU performance counters. Automatic
+retry can be disabled with `NCU_AUTO_SUDO=0`. To use sudo from the beginning:
 
 ```bash
 NCU_USE_SUDO=1 bash {out_sh}
@@ -1178,6 +1245,13 @@ binary explicit and preserve the environment:
 ```bash
 NCU_BIN="$(command -v ncu)" NCU_USE_SUDO=1 NCU_SUDO="sudo -E" bash {out_sh}
 ```
+
+For non-interactive scheduler jobs, pre-cache sudo credentials or request the
+administrator-side permission change; otherwise sudo may be unable to prompt.
+The wrapper writes `ncu_permission_mode.txt` as `unprivileged`, `explicit_sudo`,
+or `auto_sudo`.
+`--target-processes all` is used so kernels launched through child processes are
+not silently omitted.
 
 The generated shell keeps NVML energy sweeps detached from NCU. The sudo
 fallback is only for the NCU sidecar/preflight/goal-readiness commands; failed
@@ -1253,6 +1327,15 @@ analysis then uses `--tensor-pair-policy matched-iters` and directly subtracts
 the two idle-corrected net energies. An ITER mismatch is a hard-invalid Tensor
 detail row; the analysis no longer rescales a differently calibrated Tensor
 control by elapsed-time power.
+DRAM energy rows use `--memory-pair-lock-iters` together with
+`--memory-pair-control-min-seconds={dram_control_min_seconds}`. Each W/B/LR
+coordinate calibrates `dram_cg_load_only` for the treatment target and
+`global_addr_only` for the control-duration floor, then runs both with the
+larger identical ITER. Matched-control analysis uses
+`--dram-pair-policy matched-iters` and directly computes
+`net_E(dram_cg_load_only) - net_E(global_addr_only)`. An ITER mismatch is a
+hard-invalid DRAM detail row; duration-scaled DRAM coefficients are not final
+cross-platform evidence.
 The runner rotates complete control-treatment coordinate pairs between repeats;
 it never rotates a flat list by one command and split a pair across repeat
 boundaries. The same atomic pair ordering applies to the generated Shared,
@@ -1271,8 +1354,9 @@ rejects either missing marker so a stale binary with the same CSV schema cannot
 silently pass.
 Because the no-MMA control completes the same ITER much faster, dual calibration
 prevents it from falling below {tensor_control_min_seconds} s by construction. The
-analyzer still uses a separate `--tensor-control-min-elapsed-s=0.05` hard schema
-floor instead of the full treatment `--min-elapsed-s`; non-positive control net
+analyzer uses a separate
+`--tensor-control-min-elapsed-s={tensor_control_analysis_min_seconds}` floor
+instead of the full treatment `--min-elapsed-s`; non-positive control net
 energy remains rejected. The package audit cross-checks both candidate ITERs,
 the max-resolution policy, the raw ITER,
 matched-detail basis, ITER ratio, and control elapsed time.

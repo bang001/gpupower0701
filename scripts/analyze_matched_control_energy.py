@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Analyze component runs with matched treatment/control rows.
 
-Memory paths can use elapsed-aware control-power scaling. Tensor finalplan rows
-can instead require pair-locked ITER and directly subtract the two net energies,
-so different calibrated work counts cannot masquerade as Tensor energy.
+Memory paths can use elapsed-aware control-power scaling. Tensor and DRAM
+finalplan rows can instead require pair-locked ITER and directly subtract the
+two net energies, so different calibrated work counts cannot masquerade as
+component energy.
 
 The output is an effective microbenchmark energy estimate. It is not a pure
 physical SRAM/register/DRAM bitcell energy.
@@ -100,6 +101,7 @@ TENSOR_REGISTER_MODES = {
 
 
 CONTROL_MODES = {"clocked_empty"}
+NCU_VALIDATED_CONTROL_MODES = {"reg_operand_only", "global_addr_only"}
 LOGICAL_OPERAND_BITS_PER_REG_OP = 8192.0
 
 
@@ -189,7 +191,7 @@ def confidence_class(n: int, rel_iqr: float, rel_ci: float) -> str:
 
 
 def config_key(row: dict[str, str]) -> tuple[str, ...]:
-    """Key for duration-calibrated rows. ITER is intentionally excluded."""
+    """Pairing key; ITER is validated separately for pair-locked components."""
 
     return (
         row.get("profile_name") or row.get("target_profile") or "",
@@ -501,6 +503,7 @@ def make_detail_rows(
     same_working_set_ncu_scales: dict[tuple[str, ...], tuple[float, float]],
     min_elapsed_s: float,
     tensor_control_min_elapsed_s: float,
+    dram_control_min_elapsed_s: float,
     max_elapsed_ratio: float,
     min_delta_j: float,
     min_delta_fraction: float,
@@ -510,6 +513,8 @@ def make_detail_rows(
     exclude_power_state_rejects: bool,
     pairing: str,
     tensor_pair_policy: str,
+    dram_pair_policy: str,
+    require_control_ncu_acceptance: bool,
 ) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, ...], dict[str, list[dict[str, str]]]] = defaultdict(
         lambda: defaultdict(list)
@@ -546,6 +551,9 @@ def make_detail_rows(
                     tensor_control_min_elapsed_s
                     if spec["component"] == "tensor_mma_increment"
                     and tensor_pair_policy == "matched-iters"
+                    else dram_control_min_elapsed_s
+                    if spec["component"] == "dram_cg_stream_path"
+                    and dram_pair_policy == "matched-iters"
                     else min_elapsed_s
                 )
                 ok, _ = row_ok(
@@ -566,6 +574,20 @@ def make_detail_rows(
                     row for row in num_ok_rows if exact_config_key(row) in accepted_keys
                 ]
                 if not num_ok_rows:
+                    continue
+
+            control_acceptance_required = (
+                require_control_ncu_acceptance
+                and control_mode in NCU_VALIDATED_CONTROL_MODES
+            )
+            control_accepted_keys = accepted_keys_by_mode.get(control_mode, set())
+            if control_acceptance_required:
+                ctl_ok_rows = [
+                    row
+                    for row in ctl_ok_rows
+                    if exact_config_key(row) in control_accepted_keys
+                ]
+                if not ctl_ok_rows:
                     continue
 
             if pairing == "nearest-control":
@@ -601,10 +623,14 @@ def make_detail_rows(
                     control_energy / control_elapsed if control_elapsed > 0.0 else 0.0
                 )
                 pair_energy_basis = "duration_scaled_control_power"
-                if (
+                matched_iter_component = (
                     spec["component"] == "tensor_mma_increment"
                     and tensor_pair_policy == "matched-iters"
-                ):
+                ) or (
+                    spec["component"] == "dram_cg_stream_path"
+                    and dram_pair_policy == "matched-iters"
+                )
+                if matched_iter_component:
                     pair_energy_basis = "matched_iters_net_energy"
                     control_energy_scaled = control_energy
                 else:
@@ -652,7 +678,11 @@ def make_detail_rows(
                     ):
                         reasons.append("missing_pair_locked_iters")
                     elif int(numerator_iters) != int(control_iters):
-                        reasons.append("tensor_iter_mismatch")
+                        reasons.append(
+                            "tensor_iter_mismatch"
+                            if spec["component"] == "tensor_mma_increment"
+                            else "dram_iter_mismatch"
+                        )
                 if numerator.get("energy_source", "") != control.get("energy_source", ""):
                     reasons.append("energy_source_mismatch")
                 if numerator.get("energy_integration_method", "") != control.get(
@@ -716,6 +746,12 @@ def make_detail_rows(
                         "pair": spec["pair"],
                         "pairing": pairing,
                         "pair_energy_basis": pair_energy_basis,
+                        "ncu_control_acceptance_required": control_acceptance_required,
+                        "ncu_control_acceptance_exact": (
+                            exact_config_key(control) in control_accepted_keys
+                            if control_acceptance_required
+                            else ""
+                        ),
                         "numerator_mode": numerator_mode,
                         "control_mode": control_mode,
                         "numerator_run_id": numerator.get("run_id", ""),
@@ -963,10 +999,10 @@ def write_markdown(
         f.write("# Matched-Control Component Energy\n\n")
         f.write("## Method\n\n")
         f.write(
-            "Memory/default rows use `delta_E_J = E_mode_J - "
-            "(E_control_J / t_control_s) * t_mode_s`. Tensor rows use direct "
-            "`E_reg_mma_J - E_reg_operand_only_J` only when "
-            "`--tensor-pair-policy=matched-iters` and both ITER values match.\n\n"
+            "Default rows use `delta_E_J = E_mode_J - "
+            "(E_control_J / t_control_s) * t_mode_s`. Tensor and DRAM rows use "
+            "direct net-energy subtraction only when their pair policy is "
+            "`matched-iters` and both ITER values match.\n\n"
         )
         f.write(
             "Only rows passing elapsed, net-energy, SMID, and optional NCU "
@@ -986,6 +1022,15 @@ def write_markdown(
         f.write(
             "| Tensor control min elapsed (s) | "
             f"{args.tensor_control_min_elapsed_s:g} |\n"
+        )
+        f.write(
+            "| DRAM control min elapsed (s) | "
+            f"{args.dram_control_min_elapsed_s:g} |\n"
+        )
+        f.write(f"| DRAM pair policy | {args.dram_pair_policy} |\n")
+        f.write(
+            "| require exact control NCU acceptance | "
+            f"{args.require_control_ncu_acceptance} |\n"
         )
         f.write(f"| max elapsed ratio | {args.max_elapsed_ratio:g} |\n")
         f.write(f"| pairing | `{args.pairing}` |\n")
@@ -1157,6 +1202,7 @@ def run_self_test() -> None:
         same_working_set_ncu_scales={},
         min_elapsed_s=1.0,
         tensor_control_min_elapsed_s=0.05,
+        dram_control_min_elapsed_s=0.05,
         max_elapsed_ratio=3.0,
         min_delta_j=0.0,
         min_delta_fraction=0.0,
@@ -1165,6 +1211,8 @@ def run_self_test() -> None:
         expected_power_semantics="instant",
         exclude_power_state_rejects=False,
         pairing="nearest-control",
+        dram_pair_policy="duration-scaled",
+        require_control_ncu_acceptance=False,
     )
     matched = make_detail_rows(
         [treatment, control], tensor_pair_policy="matched-iters", **kwargs
@@ -1198,7 +1246,78 @@ def run_self_test() -> None:
     )
     assert not mismatched[0]["valid_component_estimate"]
     assert "tensor_iter_mismatch" in mismatched[0]["diagnostic"]
-    print("matched-control Tensor pair-policy self-test passed")
+
+    dram_common = {
+        **common,
+        "W_SM_KiB": "8192",
+        "load_repeat": "4",
+        "ITER": "200",
+    }
+    dram_treatment = {
+        **dram_common,
+        "mode": "dram_cg_load_only",
+        "run_id": "dram_cg_load_only_400_r0",
+        "elapsed_s": "10",
+        "net_E_J": "80",
+        "expected_dram_bytes": "1000000",
+    }
+    dram_control = {
+        **dram_common,
+        "mode": "global_addr_only",
+        "run_id": "global_addr_only_399_r0",
+        "elapsed_s": "3",
+        "net_E_J": "20",
+        "expected_dram_bytes": "0",
+    }
+    dram_matched = make_detail_rows(
+        [dram_treatment, dram_control],
+        tensor_pair_policy="duration-scaled",
+        dram_pair_policy="matched-iters",
+        **{k: v for k, v in kwargs.items() if k != "dram_pair_policy"},
+    )
+    assert len(dram_matched) == 1
+    assert dram_matched[0]["pair_energy_basis"] == "matched_iters_net_energy"
+    assert abs(float(dram_matched[0]["delta_E_J"]) - 60.0) < 1.0e-9
+    assert dram_matched[0]["valid_component_estimate"]
+    dram_mismatch = make_detail_rows(
+        [dram_treatment, {**dram_control, "ITER": "199"}],
+        tensor_pair_policy="duration-scaled",
+        dram_pair_policy="matched-iters",
+        **{k: v for k, v in kwargs.items() if k != "dram_pair_policy"},
+    )
+    assert not dram_mismatch[0]["valid_component_estimate"]
+    assert "dram_iter_mismatch" in dram_mismatch[0]["diagnostic"]
+
+    control_acceptance_kwargs = {
+        **kwargs,
+        "accepted_modes": {"reg_mma", "reg_operand_only"},
+        "accepted_keys_by_mode": {
+            "reg_mma": {exact_config_key(treatment)},
+            "reg_operand_only": {exact_config_key(control)},
+        },
+        "require_control_ncu_acceptance": True,
+    }
+    control_accepted = make_detail_rows(
+        [treatment, control],
+        tensor_pair_policy="matched-iters",
+        **control_acceptance_kwargs,
+    )
+    assert len(control_accepted) == 1
+    assert control_accepted[0]["ncu_control_acceptance_required"]
+    assert control_accepted[0]["ncu_control_acceptance_exact"]
+    control_rejected = make_detail_rows(
+        [treatment, control],
+        tensor_pair_policy="matched-iters",
+        **{
+            **control_acceptance_kwargs,
+            "accepted_keys_by_mode": {
+                "reg_mma": {exact_config_key(treatment)},
+                "reg_operand_only": set(),
+            },
+        },
+    )
+    assert control_rejected == []
+    print("matched-control Tensor/DRAM pair-policy self-test passed")
 
 
 def main() -> int:
@@ -1269,6 +1388,15 @@ def main() -> int:
             "control completes the same ITER much faster than reg_mma."
         ),
     )
+    parser.add_argument(
+        "--dram-control-min-elapsed-s",
+        type=float,
+        default=0.5,
+        help=(
+            "Minimum elapsed time for a matched-ITER global_addr_only DRAM "
+            "control."
+        ),
+    )
     parser.add_argument("--max-elapsed-ratio", type=float, default=1.35)
     parser.add_argument("--min-delta-j", type=float, default=0.0)
     parser.add_argument("--min-delta-fraction", type=float, default=0.0)
@@ -1289,6 +1417,23 @@ def main() -> int:
         help=(
             "Use matched-iters for Tensor finalplan rows. It requires equal ITER "
             "and subtracts net energies directly instead of scaling control power."
+        ),
+    )
+    parser.add_argument(
+        "--dram-pair-policy",
+        choices=["duration-scaled", "matched-iters"],
+        default="duration-scaled",
+        help=(
+            "Use matched-iters for dram_cg_load_only/global_addr_only rows. "
+            "It requires equal ITER and directly subtracts net energies."
+        ),
+    )
+    parser.add_argument(
+        "--require-control-ncu-acceptance",
+        action="store_true",
+        help=(
+            "Require exact-coordinate accepted NCU rows for reg_operand_only and "
+            "global_addr_only controls. Final component packages must enable this."
         ),
     )
     args = parser.parse_args()
@@ -1314,6 +1459,7 @@ def main() -> int:
         same_working_set_ncu_scales=same_working_set_ncu_scales,
         min_elapsed_s=args.min_elapsed_s,
         tensor_control_min_elapsed_s=args.tensor_control_min_elapsed_s,
+        dram_control_min_elapsed_s=args.dram_control_min_elapsed_s,
         max_elapsed_ratio=args.max_elapsed_ratio,
         min_delta_j=args.min_delta_j,
         min_delta_fraction=args.min_delta_fraction,
@@ -1323,6 +1469,8 @@ def main() -> int:
         exclude_power_state_rejects=args.exclude_power_state_rejects,
         pairing=args.pairing,
         tensor_pair_policy=args.tensor_pair_policy,
+        dram_pair_policy=args.dram_pair_policy,
+        require_control_ncu_acceptance=args.require_control_ncu_acceptance,
     )
     summary_rows = make_summary_rows(detail_rows)
 
@@ -1340,6 +1488,8 @@ def main() -> int:
         "pair",
         "pairing",
         "pair_energy_basis",
+        "ncu_control_acceptance_required",
+        "ncu_control_acceptance_exact",
         "numerator_mode",
         "control_mode",
         "numerator_run_id",
