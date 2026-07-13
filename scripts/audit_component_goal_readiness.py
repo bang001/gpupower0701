@@ -124,6 +124,7 @@ COMMAND_SHELL_TERMS = [
     "scripts/write_platform_result_manifest.py",
     "scripts/summarize_platform_package_gaps.py",
     "scripts/build_platform_intake_dashboard.py",
+    "--goal-readiness-csv",
     "scripts/audit_component_goal_readiness.py --self-test",
     "scripts/audit_component_goal_readiness.py",
     "PACKAGE_AUDIT_RC",
@@ -1630,6 +1631,8 @@ def validate_command_package(
     dashboard_pos = shell_text.find("scripts/build_platform_intake_dashboard.py")
     if goal_pos < 0 or dashboard_pos < 0 or dashboard_pos < goal_pos:
         problems.append("shell_dashboard_before_goal_readiness")
+    if "--goal-readiness-csv" not in shell_text:
+        problems.append("shell_dashboard_missing_goal_readiness_input")
     gap_tag_term = (
         "scripts/summarize_platform_package_gaps.py "
         f"--target-profile {profile} --tag"
@@ -1840,7 +1843,7 @@ def audit_intake_dashboard(repo: Path, rows: list[dict[str, str]]) -> None:
         required_terms = [
             "Platform Component Result Intake Dashboard",
             "profiles passing package + strict summary",
-            "local_strict_evidence",
+            "historical_local_evidence",
             "nvml_total_energy + total_energy_mj_delta + gpu_device_total_energy_counter",
         ]
         missing_terms = [term for term in required_terms if term not in text]
@@ -2714,11 +2717,11 @@ def main() -> int:
     parser.add_argument("--ncu", default="ncu")
     parser.add_argument(
         "--out-csv",
-        default="results/summary/component_energy_goal_readiness_audit_20260712.csv",
+        default="results/summary/component_energy_goal_readiness_audit_20260714.csv",
     )
     parser.add_argument(
         "--out-md",
-        default="results/summary/component_energy_goal_readiness_audit_20260712.md",
+        default="results/summary/component_energy_goal_readiness_audit_20260714.md",
     )
     parser.add_argument("--fail-on-fail", action="store_true")
     parser.add_argument("--fail-on-incomplete", action="store_true")

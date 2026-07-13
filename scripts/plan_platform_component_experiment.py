@@ -4,8 +4,8 @@
 The generated commands follow the acceptance-first flow:
 
 1. Run architecture/GPU preflight.
-2. Run memory paths with duration calibration and Tensor pairs with shared ITER,
-   without NCU attached.
+2. Tensor/L2/DRAM final pairs use matched ITER; Shared/Global-L1 use duration
+   calibration. Run all energy rows without NCU attached.
 3. Run a separate NCU sidecar validation.
 4. Classify NCU path acceptance.
 5. Analyze matched-control energy with NCU byte-denominator scaling.
@@ -326,6 +326,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     dashboard_md = f"results/summary/platform_component_intake_dashboard_{tag}.md"
     goal_readiness_csv = f"results/summary/component_energy_goal_readiness_audit_{tag}.csv"
     goal_readiness_md = f"results/summary/component_energy_goal_readiness_audit_{tag}.md"
+    documentation_audit_csv = f"{summary_prefix}_documentation_consistency_audit.csv"
+    documentation_audit_md = f"{summary_prefix}_documentation_consistency_audit.md"
 
     energy_csvs = [
         f"{raw_prefix}_tensor.csv",
@@ -476,6 +478,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         line(["python3", "scripts/build_strict_component_summary.py", "--self-test"]),
         line(["python3", "scripts/audit_strict_component_summary.py", "--self-test"]),
         line(["python3", "scripts/write_platform_result_manifest.py", "--self-test"]),
+        line(["python3", "scripts/audit_documentation_consistency.py", "--self-test"]),
         line(["python3", "scripts/selftest_platform_package_gates.py"]),
         line(
             [
@@ -488,6 +491,17 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "NCU_SUDO",
                 "bash",
                 "scripts/selftest_ncu_permission_fallback.sh",
+            ]
+        ),
+        line(
+            [
+                "python3",
+                "scripts/audit_documentation_consistency.py",
+                "--out-csv",
+                q(documentation_audit_csv),
+                "--out-md",
+                q(documentation_audit_md),
+                "--fail-on-error",
             ]
         ),
         "",
@@ -1054,6 +1068,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "scripts/build_platform_intake_dashboard.py",
                 "--tag",
                 q(tag),
+                "--goal-readiness-csv",
+                q(goal_readiness_csv),
                 "--out-csv",
                 q(dashboard_csv),
                 "--out-md",
@@ -1327,7 +1343,8 @@ summary self-tests. In particular,
 `scripts/audit_a100_tensor_l2_remediation.py --self-test`,
 `scripts/build_strict_component_summary.py --self-test`,
 `scripts/audit_strict_component_summary.py --self-test`,
-`scripts/write_platform_result_manifest.py --self-test`, and
+`scripts/write_platform_result_manifest.py --self-test`,
+`scripts/audit_documentation_consistency.py --self-test`, and
 `scripts/selftest_platform_package_gates.py` so Tensor pair-lock, A100 path-specific
 L2 semantics,
 fallback-numerator, explicit-scope, H100 module-scope, strict NCU artifact
@@ -1438,7 +1455,8 @@ before the result can be treated as final evidence. Hit rate alone is not enough
 accepted cache rows must also show path-relevant access/byte magnitude. The NCU
 summary must include
 `clocked_empty`, `reg_operand_only`, `reg_mma`, `shared_scalar_load_only`,
-`global_l1_load_only`, `l2_cg_load_only`, and `dram_cg_load_only` coverage.
+`global_addr_only`, `global_l1_load_only`, `l2_cg_load_only`, and
+`dram_cg_load_only` coverage.
 All generated platform packages use `l2_cg_load_only` as the strict L2 path;
 `l2_load_only` is diagnostic-only and is not required. Tensor pair NCU rows need at least three
 `reuse_factor` points, and memory-path rows need at

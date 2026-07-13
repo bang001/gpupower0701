@@ -86,6 +86,7 @@ python3 scripts/audit_component_goal_readiness.py \
   --out-md results/summary/component_energy_goal_readiness_audit_20260708.md
 python3 scripts/build_platform_intake_dashboard.py \
   --tag 20260708 \
+  --goal-readiness-csv results/summary/component_energy_goal_readiness_audit_20260708.csv \
   --out-csv results/summary/platform_component_intake_dashboard_20260708.csv \
   --out-md results/summary/platform_component_intake_dashboard_20260708.md
 ```

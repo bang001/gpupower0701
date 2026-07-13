@@ -1084,16 +1084,6 @@ def write_md(path: str | Path, rows: list[dict[str, str]], *, target_profile: st
                 )
                 + " |\n"
             )
-        if target_profile == "rtx3090":
-            f.write("\n## Report-Ready Figures\n\n")
-            f.write(
-                "![RTX 3090 strict component coefficient summary]"
-                "(../../docs/assets/component_energy_method/rtx3090_strict_scope_component_coefficients_summary.svg)\n\n"
-            )
-            f.write(
-                "![RTX 3090 strict NCU evidence]"
-                "(../../docs/assets/component_energy_method/rtx3090_strict_scope_ncu_evidence.svg)\n\n"
-            )
         f.write("\n## Report-Ready Table\n\n")
         f.write(
             "이 표는 백서/발표에 바로 옮길 수 있도록 수치, 단위, 실험 pair, "

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Generated for rtx3090 on 2026-07-13.
+# Generated for rtx3090 on 2026-07-14.
 # RTX 3090 / GA102 path. Use total-energy rows for final coefficients; GetPowerUsage fallback has one-second-average semantics.
 mkdir -p results/raw results/summary results/ncu
 
@@ -48,8 +48,10 @@ python3 scripts/audit_a100_tensor_l2_remediation.py --self-test
 python3 scripts/build_strict_component_summary.py --self-test
 python3 scripts/audit_strict_component_summary.py --self-test
 python3 scripts/write_platform_result_manifest.py --self-test
+python3 scripts/audit_documentation_consistency.py --self-test
 python3 scripts/selftest_platform_package_gates.py
 env -u NCU_USE_SUDO -u NCU_AUTO_SUDO -u NCU_SUDO bash scripts/selftest_ncu_permission_fallback.sh
+python3 scripts/audit_documentation_consistency.py --out-csv results/summary/rtx3090_component_finalplan_20260712_documentation_consistency_audit.csv --out-md results/summary/rtx3090_component_finalplan_20260712_documentation_consistency_audit.md --fail-on-error
 
 # 3. Move stale generated outputs aside before writing new CSV schemas.
 RUN_STAMP=$(date +%Y%m%d_%H%M%S)
@@ -169,7 +171,7 @@ set -e
 python3 scripts/summarize_platform_package_gaps.py --target-profile rtx3090 --tag 20260712 --audit-csv results/summary/rtx3090_platform_result_package_audit_20260712.csv --manifest-csv results/summary/rtx3090_component_finalplan_20260712_result_manifest.csv --out-csv results/summary/rtx3090_platform_result_package_gaps_20260712.csv --out-md results/summary/rtx3090_platform_result_package_gaps_20260712.md
 python3 scripts/audit_component_goal_readiness.py --self-test
 python3 scripts/audit_component_goal_readiness.py --ncu "${NCU_COMMAND}" --out-csv results/summary/component_energy_goal_readiness_audit_20260712.csv --out-md results/summary/component_energy_goal_readiness_audit_20260712.md
-python3 scripts/build_platform_intake_dashboard.py --tag 20260712 --out-csv results/summary/platform_component_intake_dashboard_20260712.csv --out-md results/summary/platform_component_intake_dashboard_20260712.md
+python3 scripts/build_platform_intake_dashboard.py --tag 20260712 --goal-readiness-csv results/summary/component_energy_goal_readiness_audit_20260712.csv --out-csv results/summary/platform_component_intake_dashboard_20260712.csv --out-md results/summary/platform_component_intake_dashboard_20260712.md
 
 echo 'Done. Review:'
 echo '  results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260712.md'

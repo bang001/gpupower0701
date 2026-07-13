@@ -6,18 +6,18 @@ This dashboard summarizes package audits and gap reports. It does not replace pa
 |---|---|
 | tag | `20260708` |
 | final numerator policy | `nvml_total_energy + total_energy_mj_delta + gpu_device_total_energy_counter` |
-| profiles passing package + strict summary | `1/4` |
-| goal readiness audit | `results/summary/component_energy_goal_readiness_audit_20260708.csv` |
-| goal readiness status | `incomplete` (pass=36, missing=6, fail=0, warning=0) |
+| profiles passing package + strict summary | `0/4` |
+| goal readiness audit | `results/summary/component_energy_goal_readiness_audit_20260714.csv` |
+| goal readiness status | `fail` (pass=32, missing=7, fail=4, warning=0) |
 
 ## Platform Status
 
 | profile | power semantics | package status | package pass/missing/fail | gap blockers | first open stage | strict summary | accepted components |
 |---|---|---|---:|---:|---|---|---:|
-| `rtx3090` | `one_sec_average` | `local_strict_evidence` | 0/0/0 | 0 | - | `pass` | 4 |
-| `v100` | `instant` | `missing_artifacts` | 2/15/0 | 15 | preflight | `missing_summary` | 0 |
-| `a100` | `instant` | `missing_artifacts` | 2/15/0 | 15 | preflight | `missing_summary` | 0 |
-| `h100` | `one_sec_average` | `missing_artifacts` | 2/15/0 | 15 | preflight | `missing_summary` | 0 |
+| `rtx3090` | `one_sec_average` | `historical_local_evidence` | 0/0/0 | 0 | - | `historical_pass` | 4 |
+| `v100` | `instant` | `missing_artifacts` | 2/16/0 | 16 | preflight | `missing_summary` | 0 |
+| `a100` | `instant` | `missing_artifacts` | 2/16/0 | 16 | preflight | `missing_summary` | 0 |
+| `h100` | `one_sec_average` | `missing_artifacts` | 2/16/0 | 16 | preflight | `missing_summary` | 0 |
 
 ## First Corrective Actions
 
@@ -30,4 +30,4 @@ This dashboard summarizes package audits and gap reports. It does not replace pa
 
 ## Interpretation
 
-A platform is not final merely because the command package exists. External platforms need a clean package audit, a strict component summary, and a strict summary audit. RTX 3090 is shown as local strict evidence when its strict summary and strict audit pass without an external package audit. Power-related rows must satisfy the power measurement matrix policy: `nvml_total_energy + total_energy_mj_delta + gpu_device_total_energy_counter` plus the profile-specific `nvml_power_usage_semantics`.
+A platform is not final merely because the command package exists. External platforms need a clean package audit, a strict component summary, and a strict summary audit. RTX 3090 evidence without a current package audit is shown as `historical_local_evidence`/`historical_pass`; it is context only and never counts as a current completed platform. Power-related rows must satisfy the power measurement matrix policy: `nvml_total_energy + total_energy_mj_delta + gpu_device_total_energy_counter` plus the profile-specific `nvml_power_usage_semantics`.

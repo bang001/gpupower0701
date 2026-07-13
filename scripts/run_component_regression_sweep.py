@@ -885,7 +885,14 @@ def main() -> int:
     parser.add_argument("--target-profile", default=DEFAULT_PROFILE, choices=sorted(PROFILES))
     parser.add_argument("--gpu-ids", default="0")
     parser.add_argument("--max-active-gpus", type=int, default=1)
-    parser.add_argument("--modes", default=",".join(DEFAULT_MODES))
+    parser.add_argument(
+        "--modes",
+        default="",
+        help=(
+            "Comma-separated modes. Matrix-only runs default to the broad diagnostic "
+            "set; --execute requires an explicit list so legacy modes are not run by accident."
+        ),
+    )
     parser.add_argument("--w-sm-kib-values", default="")
     parser.add_argument("--blocks-per-sm-values", default="")
     parser.add_argument("--active-sm-values", default="")
@@ -984,6 +991,12 @@ def main() -> int:
     if args.self_test:
         run_self_test()
         return 0
+
+    if args.execute and not args.modes.strip():
+        raise ValueError(
+            "--execute requires explicit --modes; use the generated finalplan or "
+            "select a documented treatment-control pair"
+        )
 
     if args.tensor_pair_control_min_seconds < 0.0:
         raise ValueError("--tensor-pair-control-min-seconds must be non-negative")

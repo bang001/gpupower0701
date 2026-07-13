@@ -9,7 +9,8 @@
 | preflight | `preflight_gpu_support.py` | GPU profile, NVML, CUDA compiler target, NCU, power scope, binary dry-run 확인. `--strict`는 profile/toolchain mismatch와 dry-run 실패를 nonzero로 막고 `--self-test`로 회귀 검증 |
 | command plan | `plan_platform_component_experiment.py` | 플랫폼별 finalplan 명령 생성 |
 | platform readiness | `audit_platform_power_readiness.py` | RTX 3090/V100/A100/H100 profile, power API 의미, 문서, 생성 plan 정합성 점검 |
-| energy sweep | `run_component_regression_sweep.py` | Python/C++ feasibility self-test와 unique-coordinate binary dry-run 후 NCU 없이 energy CSV 수집. 알려진 2-mode control-treatment는 pair 단위로 회전하고 Tensor/L2 CG/DRAM CG는 treatment 목표/control 최소시간의 dual calibration에서 큰 ITER를 두 mode에 동일 적용 |
+| documentation consistency | `audit_documentation_consistency.py` | active/archive Markdown 링크, canonical 문서, archive 경계, 현행 pair/ITER 정책, C++/Python 플랫폼 profile 상수를 교차 검사 |
+| energy sweep | `run_component_regression_sweep.py` | Python/C++ feasibility self-test와 unique-coordinate binary dry-run 후 NCU 없이 energy CSV 수집. `--execute`는 accidental legacy sweep을 막기 위해 explicit `--modes`를 요구한다. 알려진 2-mode control-treatment는 pair 단위로 회전하고 Tensor/L2 CG/DRAM CG는 treatment 목표/control 최소시간의 dual calibration에서 큰 ITER를 두 mode에 동일 적용 |
 | paired stability | `run_paired_component_stability.py` | drift-sensitive component를 explicit control-treatment-control 순서로 재측정. Global L1/L2/DRAM은 `global_addr_only`, Shared는 `clocked_empty`를 강제 |
 | power API audit | `audit_power_api_measurements.py` | raw energy CSV가 power measurement matrix 기준 final/provisional/reject인지 판정하고 새 finalplan에서는 explicit `measurement_scope`를 요구하며 `--self-test`로 A100 semantics, fallback numerator, H100 module scope 혼입 회귀를 검증 |
 | power-state audit | `audit_power_state_stability.py` | raw row의 평균 전력/endpoint power outlier를 찾아 측정 품질 문제와 weak-signal 문제를 분리 |
@@ -30,7 +31,7 @@
 | platform gate self-test | `selftest_platform_package_gates.py` | mock package로 L2/L1 역전, out-of-range coefficient, stale strict audit, preflight strict verdict 실패/driver/power-scope/NCU metadata 누락, strict summary/raw CSV의 profile power semantics 오류, fallback numerator, H100 module scope 혼입, power API audit의 non-final row, power-state evidence/reject 오류, matched summary component/median/NCU denominator 누락, reliability status/invalid rows/scope 오류, NCU cache/access 컬럼 누락, path counter 0, NCU path acceptance 후보 누락/rejected/evidence column 누락/accepted evidence 실패가 fail 처리되는지 검증 |
 | platform result manifest | `write_platform_result_manifest.py` | 외부 노드에서 복사해 와야 할 raw/audit/NCU/summary artifact 목록을 CSV/Markdown으로 생성 |
 | goal readiness audit | `audit_component_goal_readiness.py` | power matrix, RTX 3090 strict evidence, NCU availability, local readiness runner policy, A100/V100/H100 result package 누락 여부를 상위 목표 기준으로 점검하며 preflight/power API/strict summary/package/goal validator self-test 상태도 확인 |
-| local readiness runner | `run_local_readiness_checks.sh` | preflight/power API/strict summary/package/goal/manifest/gap/dashboard self-test, platform readiness, A100/V100/H100 manifest+package audit+gap report refresh, RTX 3090 strict audit, goal readiness, dashboard refresh, `git diff --check`를 한 번에 실행 |
+| local readiness runner | `run_local_readiness_checks.sh` | preflight/power API/matched-control/strict summary/package/goal/manifest/gap/dashboard/documentation self-test, active 문서 정합성, platform readiness, A100/V100/H100 manifest+package audit+gap report refresh, RTX 3090 strict audit, goal readiness, dashboard refresh, `git diff --check`를 한 번에 실행 |
 | historical evidence/figures | `archive/pre_current_protocol_20260712/scripts/` | 2026-07-08 reporting matrix와 그림 재현 전용; 현행 coefficient 생성에 사용하지 않음 |
 | superseded A100 L2 selector | `archive/superseded_a100_l2_policy_20260713/scripts/` | fixed B16 normal/persisting-only selector; 새 run은 active policy/layout/B selector 사용 |
 
@@ -41,13 +42,14 @@
 | `run_sweep.py` | 초기 feasibility/blocks/W_SM sweep 및 active runner helper |
 | `run_ncu.sh` | 단일 mode NCU profiling helper |
 | `plot_results.py` | raw sweep CSV용 일반 plot helper |
+| `summarize_matched_control_by_factor.py` | matched-control detail을 RF/LR별 min/median/max와 invalid diagnostics 표로 요약하는 선택적 sweep 보고 도구 |
 | `plot_platform_sweep_design.py` | planner profile에서 플랫폼별 blocks/SM, W_SM path, capacity-context 그래프 생성. `--self-test`로 좌표 feasibility와 용량 산술 검증 |
 | `plot_dram_reporting_policy.py` | RTX 3090 DRAM 26.709-28.409 pJ/bit provisional reporting band 시각화. strict 미채택과 pJ/byte-pJ/bit 환산을 `--self-test`로 검증 |
 | `build_gpu_component_energy_presentation.py` | sweep 그래프를 재생성하고 22장 기술백서 PPT/PDF와 렌더 검토 이미지를 빌드 |
 | `selftest_ncu_permission_fallback.sh` | 부모 sudo 환경을 격리하고 fake NCU/sudo로 동기식 stderr 판정, `ERR_NVGPUCTRPERM` 자동 재시도와 `NCU_AUTO_SUDO=0` hard-fail을 회귀 검증 |
 
 `run_ncu_validation.sh`는 기본적으로 `clocked_empty`, `reg_operand_only`,
-`reg_mma`, `shared_scalar_load_only`, `global_l1_load_only`,
+`reg_mma`, `shared_scalar_load_only`, `global_addr_only`, `global_l1_load_only`,
 `l2_cg_load_only`, `dram_cg_load_only`만 실행한다. A100/H100의 capacity L2
 비교가 필요하면 `INCLUDE_L2_CAPACITY_NCU=1`, 과거 sweep과의 비교가
 필요하면 `INCLUDE_DIAGNOSTIC_NCU=1`을 명시한다.
@@ -432,6 +434,7 @@ python3 scripts/summarize_platform_package_gaps.py \
 ```bash
 python3 scripts/build_platform_intake_dashboard.py \
   --tag YYYYMMDD \
+  --goal-readiness-csv results/summary/component_energy_goal_readiness_audit_YYYYMMDD.csv \
   --out-csv results/summary/platform_component_intake_dashboard_YYYYMMDD.csv \
   --out-md results/summary/platform_component_intake_dashboard_YYYYMMDD.md
 ```
@@ -444,9 +447,11 @@ goal readiness artifact를 남기고 마지막에 package audit exit code로 종
 로컬 저장소의 `scripts/run_local_readiness_checks.sh`도 A100/V100/H100 result manifest,
 package audit, gap report를 매번 다시 생성한 뒤 dashboard를 만들기 때문에, 외부 결과
 파일을 복사한 직후에는 이 wrapper만 실행해도 첫 open stage와 다음 명령이 최신 상태로
-정리된다.
+정리된다. 패키지 태그와 readiness 실행일이 다르면 `--goal-readiness-csv`에 실제 최신
+readiness CSV를 넘긴다. 패키지 audit이 없는 과거 RTX 3090 strict artifact는
+`historical_local_evidence`로만 표시되며 완료 플랫폼 수에 포함되지 않는다.
 기본 `TAG=20260708`은 기존 외부 command package/artifact tag이고,
-`READINESS_TAG=20260712`는 현행 protocol 재감사 보고서 tag다. 기존 RTX 3090 결과가
+`READINESS_TAG=20260714`는 현행 protocol 재감사 보고서 tag다. 기존 RTX 3090 결과가
 새 address-control/path-specific gate를 실패해도 wrapper는 나머지 보고서를 끝까지
 생성한 뒤 non-zero로 종료한다. 이는 실패를 우회한 것이 아니라 불완전 상태를 전체
 readiness report에 남기기 위한 동작이다.

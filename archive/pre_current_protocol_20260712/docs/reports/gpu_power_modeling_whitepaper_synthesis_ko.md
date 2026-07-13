@@ -90,9 +90,9 @@ direct/register-pressure와 DRAM streaming은 각각 control/proxy 또는 sanity
 final component row로 승격하지 않는다.
 
 상세 strict 결과는
-[rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md](../../results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md)에
+[rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md](../../../../results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md)에
 따로 고정했다. Fresh NCU reliability audit은
-[rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.md](../../results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.md)에
+[rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.md](../../../../results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.md)에
 남겼다. 첫 fresh NCU run은 Tensor `REG_BLOCKS_PER_SM=4`라 strict energy row의
 `blocks_per_SM=16`과 맞지 않았고, Tensor는 `REG_BLOCKS_PER_SM=16` sidecar를 추가로
 실행해 denominator/path를 맞췄다. Shared는 LR4/LR8 mixed strict row에서
@@ -344,9 +344,9 @@ NCU는 energy를 직접 측정하지 않는다. NCU의 역할은 treatment kerne
 | L2 CG | L1 hit rate near 0, L2 hit rate high | L1을 우회하고 L2 hit path가 지배적인지 확인 |
 | DRAM CG | DRAM bytes, L2 hit rate low | streaming traffic이 DRAM까지 내려가는지 확인 |
 
-![NCU hit-rate validation](../assets/component_energy_method/ncu_hit_rate_validation.png)
+![NCU hit-rate validation](../../../../docs/assets/component_energy_method/ncu_hit_rate_validation.png)
 
-![NCU traffic validation](../assets/component_energy_method/ncu_path_validation_bytes.png)
+![NCU traffic validation](../../../../docs/assets/component_energy_method/ncu_path_validation_bytes.png)
 
 2026-07-08에 RTX 3090 stability factor set을 직접 포함하는 NCU sidecar를 추가 실행했다.
 따라서 현재 대표 결과의 memory path는 `ncu_actual_exact` denominator를 사용한다.

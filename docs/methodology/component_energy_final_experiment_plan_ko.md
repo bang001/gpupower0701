@@ -1,6 +1,6 @@
 # Component Energy 최종 실험 계획
 
-작성일: 2026-07-05, updated 2026-07-13
+작성일: 2026-07-05, updated 2026-07-14
 
 ## 1. 실험 목표
 
@@ -313,7 +313,7 @@ combined L1/shared 구조와 NCU toolchain 지원 범위가 다르므로 별도 
 | shared | energy W_SM 32/64 KiB; strict NCU W32/B32. W64/B32는 96 KiB capacity 경계 stress point |
 | global L1 | energy W_SM 8/16/32 KiB; strict NCU W32/B32. 기존 W8/B16은 block당 1 KiB tile 미만이라 폐기 |
 | L2 final path | `l2_cg_load_only - global_addr_only`; strict W32/B32 = 2.5 MiB total, W64 = 5 MiB stress point |
-| Tensor | `reg_mma - reg_operand_only`, energy B=1-32, strict NCU B32, reuse 1-16 |
+| Tensor | `reg_mma - reg_operand_only`, energy B=4,16,32, strict NCU B32, reuse 1-16 |
 | NCU | 2024.3 GV100 지원 확인. `--list-chips`, `--query-metrics --chips gv100`, exact-coordinate hit/access/byte/stall/HMMA evidence 필수 |
 | power | `nvml_total_energy`, `total_energy_mj_delta`, device total-energy scope, `instant` semantics만 final candidate |
 

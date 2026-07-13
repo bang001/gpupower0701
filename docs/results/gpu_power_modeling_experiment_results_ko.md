@@ -1,11 +1,11 @@
 # GPU Power Modeling 실험 결과 상태
 
-갱신일: 2026-07-13
+갱신일: 2026-07-14
 
 ## 현재 결론
 
-현재 저장소에는 **Tensor, Shared, Global L1, L2를 모두 현행 protocol로
-재실행한 완전한 RTX 3090 component table은 없다**. 다만 2026-07-13에 Tensor
+현행 protocol을 통과한 **완전한 RTX 3090 component table은 없다**. Tensor,
+Shared, Global L1, L2를 모두 같은 현행 기준으로 재실행하지 않았기 때문이다. 다만 2026-07-13에 Tensor
 path는 fixed-RF v2 kernel로 재실행해 power API 70/70, NCU 10/10 및 33개
 matched pair gate를 통과했다. Shared/Global L1/L2는 아직 새 전체 package를
 실행해야 한다.
@@ -49,7 +49,7 @@ DRAM coefficient로 재사용하지 않는다. 상세 정책은
 `results/summary/rtx3090_dram_current_reporting_policy_20260712.md`를 따른다.
 
 과거 전체 표, sweep, 그래프, 해석은
-`archive/pre_current_protocol_20260712/docs/gpu_power_modeling_experiment_results_ko.md`에
+`archive/pre_current_protocol_20260712/docs/results/gpu_power_modeling_experiment_results_ko.md`에
 보존한다. 옛 DRAM 막대가 최신값처럼 보이지 않도록 historical coefficient 그림은
 active 결과 문서에서 제거했다.
 
@@ -63,8 +63,8 @@ active 결과 문서에서 제거했다.
 
 근거:
 
-- `results/summary/rtx3090_current_protocol_reaudit_20260712.md`
-- `results/summary/component_energy_goal_readiness_audit_20260712.md`
+- `results/summary/rtx3090_current_protocol_reaudit_20260714.md`
+- `results/summary/component_energy_goal_readiness_audit_20260714.md`
 - `docs/audits/current_goal_alignment_audit_ko.md`
 
 ## 보존된 RTX 3090 NCU 경로 검증 결과
@@ -198,7 +198,7 @@ Live run의 재검산 경로:
 | L2 CG | `global_addr_only,l2_cg_load_only` | 64 | 8,16 | 64/8 | LR 4,8,16; NCU 1,2,4,8,16 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 8,16 | 8192/8 | LR 4,8,16; NCU 1,4,8,16 |
 
-공통 energy 조건은 target 10 s, 5 repeats다. Tensor와 DRAM은 treatment/control-floor
+공통 energy 조건은 target 10 s, 5 repeats다. Tensor, L2 CG, DRAM CG는 treatment/control-floor
 dual calibration 후 큰 동일 ITER를 두 mode에 적용한다. Final analyzer는
 `--require-control-ncu-acceptance`를 사용한다.
 

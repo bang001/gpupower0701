@@ -1,6 +1,6 @@
 # NCU 검증과 pJ 계산 보고서
 
-작성일: 2026-07-07, updated 2026-07-13
+작성일: 2026-07-07, updated 2026-07-14
 
 ## 핵심 요약
 
@@ -367,9 +367,12 @@ reg_operand_only 대비 reg_mma의 effective MMA incremental cost
 순수 Tensor Core transistor-level energy
 ```
 
-## RTX 3090 finalplan 예시
+## 2026-07-08 RTX 3090 historical finalplan 예시
 
-현재 RTX 3090 finalplan matched-control 보고서의 요약은 다음과 같다.
+아래 표는 2026-07-08 protocol의 matched-control 요약이며 현행 component table이
+아니다. 현재 standalone Tensor 결과는 위 2026-07-13 fixed-RF v2 표를 사용한다.
+Shared/Global L1/L2는 current-protocol 전체 package를 재실행해야 하며, DRAM 행만
+현재 provisional reporting policy를 함께 표시한다.
 
 | Component/path | median | unit | median pJ/bit | 해석 |
 |---|---:|---|---:|---|
@@ -396,7 +399,7 @@ NCU denominator scale과 path acceptance는 GPU마다 다시 생성해야 한다
 | GPU | 반드시 다시 확인할 항목 |
 |---|---|
 | A100 | `sm_80`, `target_profile=a100`, `NCU_CHIP=ga100`, runtime active SM, L2 40 MiB, shared allocation 164 KiB/SM |
-| V100 | `sm_70`, `target_profile=v100`, energy B=1-32, strict NCU Shared/L1/L2 W32/B32, `NCU_CHIP=gv100`, 2024.3 또는 실제 metric query가 성공한 toolchain |
+| V100 | `sm_70`, `target_profile=v100`, energy B=4,16,32, strict NCU Shared/L1/L2 W32/B32, `NCU_CHIP=gv100`, 2024.3 또는 실제 metric query가 성공한 toolchain |
 | H100 | `sm_90`, `target_profile=h100`, `NCU_CHIP=gh100`, WMMA compatibility path와 Hopper-native WGMMA/TMA path 구분 |
 
 A100에서 결과가 좋지 않으면 먼저 다음을 확인한다.

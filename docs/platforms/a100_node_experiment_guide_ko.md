@@ -1,6 +1,6 @@
 # A100 노드 실험 실행 가이드
 
-작성일: 2026-07-08, updated 2026-07-11
+작성일: 2026-07-08, updated 2026-07-14
 
 ## 목적
 
@@ -256,6 +256,11 @@ archive로 옮긴 뒤 재실행한다. 구버전 CSV에 새 row를 append하면 
 | active SM | `108` | SMs |
 | final seconds | `10` 이상 권장 | s |
 | final repeats | `5` 이상 권장 | count |
+
+이 표는 원래 요청한 **broad diagnostic sweep**이다. 현행 acceptance-first final
+component package의 A100 energy 좌표는 11절의 `blocks/SM=16,32`와 component별
+선택 `W_SM`만 사용한다. 따라서 component coefficient 실험을 실행할 때 이 broad
+`run_sweep.py`를 표준 finalplan 대신 사용하지 않는다.
 
 Matrix만 먼저 생성:
 

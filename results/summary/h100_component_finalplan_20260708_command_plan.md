@@ -1,6 +1,6 @@
 # H100 Component Finalplan Command Plan
 
-Generated: 2026-07-13
+Generated: 2026-07-14
 
 | item | value |
 |---|---|
@@ -177,7 +177,8 @@ summary self-tests. In particular,
 `scripts/audit_a100_tensor_l2_remediation.py --self-test`,
 `scripts/build_strict_component_summary.py --self-test`,
 `scripts/audit_strict_component_summary.py --self-test`,
-`scripts/write_platform_result_manifest.py --self-test`, and
+`scripts/write_platform_result_manifest.py --self-test`,
+`scripts/audit_documentation_consistency.py --self-test`, and
 `scripts/selftest_platform_package_gates.py` so Tensor pair-lock, A100 path-specific
 L2 semantics,
 fallback-numerator, explicit-scope, H100 module-scope, strict NCU artifact
@@ -288,7 +289,8 @@ before the result can be treated as final evidence. Hit rate alone is not enough
 accepted cache rows must also show path-relevant access/byte magnitude. The NCU
 summary must include
 `clocked_empty`, `reg_operand_only`, `reg_mma`, `shared_scalar_load_only`,
-`global_l1_load_only`, `l2_cg_load_only`, and `dram_cg_load_only` coverage.
+`global_addr_only`, `global_l1_load_only`, `l2_cg_load_only`, and
+`dram_cg_load_only` coverage.
 All generated platform packages use `l2_cg_load_only` as the strict L2 path;
 `l2_load_only` is diagnostic-only and is not required. Tensor pair NCU rows need at least three
 `reuse_factor` points, and memory-path rows need at

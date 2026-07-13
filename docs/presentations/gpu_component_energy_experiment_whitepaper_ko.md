@@ -3,7 +3,7 @@
 ## Deck identity
 
 - Repository: `https://github.com/bang001/gpupower0701`
-- Generated from the current worktree on 2026-07-12.
+- Generated from the current worktree on 2026-07-14.
 - The title slide records the checked-out branch and HEAD SHA.
 - The deck has 22 slides and three generated technical illustrations.
 
@@ -37,7 +37,7 @@
 18. **Memory denominator** — `scripts/analyze_matched_control_energy.py:339-399,643-658`. `expected_no_ncu_match` is not eligible for strict memory coefficients.
 19. **NCU acceptance** — `scripts/analyze_ncu_path_acceptance.py`. Acceptance uses path-specific rates plus access/byte/local/stall evidence, not aggregate hit rate alone.
 20. **Audit states** — each audit script owns a distinct state vocabulary; states are not collapsed into one grade.
-21. **RTX 3090 snapshot and DRAM policy** — the historical strict snapshot contains four rows and fails the active control/schema reaudit. DRAM is now shown as the 26.709-28.409 pJ/bit `provisional_reference_aligned_range` from `rtx3090_dram_current_reporting_policy_20260712.csv`; no completed matched-ITER address-control raw pair exists, so the band is not strict measured evidence.
+21. **RTX 3090 current/historical boundary and DRAM policy** — fixed-RF v2 Tensor is the only current standalone component result at 2.2525 pJ/FLOP. Shared, Global L1, and L2 values are the historical strict snapshot; Global L1/L2 fail the active address-control/schema reaudit. DRAM is the 26.709-28.409 pJ/bit `provisional_reference_aligned_range`; no completed matched-ITER address-control raw pair exists.
 22. **Cross-platform state** — current readiness/package audits. A command package is not evidence that a target-node experiment completed.
 
 ## Corrected statements

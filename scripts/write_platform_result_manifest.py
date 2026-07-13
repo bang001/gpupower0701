@@ -397,6 +397,9 @@ def write_md(
         f.write("python3 scripts/build_platform_intake_dashboard.py \\\n")
         f.write(f"  --tag {tag} \\\n")
         f.write(
+            f"  --goal-readiness-csv results/summary/component_energy_goal_readiness_audit_{tag}.csv \\\n"
+        )
+        f.write(
             f"  --out-csv results/summary/platform_component_intake_dashboard_{tag}.csv \\\n"
         )
         f.write(

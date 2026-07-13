@@ -492,6 +492,7 @@ def audit_profiles(repo: Path) -> list[dict[str, str]]:
                     "permission probe selected sudo for the remaining NCU stages",
                     "env -u NCU_USE_SUDO -u NCU_AUTO_SUDO -u NCU_SUDO",
                     "scripts/selftest_ncu_permission_fallback.sh",
+                    "--goal-readiness-csv",
                 ]
                 if profile == "v100":
                     shell_terms.extend(

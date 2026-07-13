@@ -1,6 +1,6 @@
 # 현재 실험 목표 정합성 감사
 
-작성일: 2026-07-13
+작성일: 2026-07-13, 갱신일: 2026-07-14
 
 ## 감사 기준
 
@@ -31,9 +31,14 @@ workload-dependent effective microbenchmark coefficient다.
 | 6 | 기존 RTX 3090 strict CSV의 Global L1/L2 NCU evidence에 `global_addr_only`가 없음 | 현행 control gate를 소급 통과했다고 주장 불가 | 기존 숫자는 보존하되 현행 final에서 제외, 재실행 package 생성 | 재측정 필요 |
 | 7 | 문서는 새 `reg_operand_only` HMMA=0을 요구하지만 acceptance가 과거 fixed epilogue HMMA를 허용 | no-MMA control 정의와 코드 판정이 충돌 | 현행 `reg_operand_only`는 HMMA가 하나라도 있으면 reject; 완화는 legacy proxy mode에만 유지 | 수정 완료 |
 | 8 | V100 L2 treatment와 address control이 독립 duration calibration되어 control ITER가 약 2배 큼 | NCU path는 통과했지만 9개 energy 좌표가 모두 음수이며 동일 작업량 차분이 아님 | L2도 dual calibration의 최대 동일 ITER 적용, direct net-energy 차분, calibration/raw/detail package hard gate 추가 | 수정 완료; L2 재측정 필요 |
+| 9 | `SKILL.md`와 일부 active 문서가 분류 전 경로, legacy mode, 과거 L2 duration 정책을 함께 기술 | 작업자와 자동화가 서로 다른 실험 protocol을 선택할 수 있음 | canonical 문서 지도와 현행 pair/동일-ITER 정책으로 재작성하고 `audit_documentation_consistency.py`로 자동 검사 | 수정 완료 |
+| 10 | superseded A100 v2 설계와 current protocol 이전 그림/방법 비교 문서가 active `docs/`에 공존 | 과거 설계와 현재 실행 절차를 구분하기 어려움 | 원래 구조를 보존한 날짜별 archive로 이동하고 active 방법 비교 문서를 current protocol 기준으로 축약 | 수정 완료 |
+| 11 | strict summary 생성기가 RTX 3090이면 과거 정적 결과 그림을 무조건 삽입 | 새 측정 summary에도 다른 protocol의 수치와 NCU 증거가 표시될 수 있음 | 자동 정적 그림 삽입을 제거하고 summary 자체의 표와 artifact 경로만 생성 | 수정 완료 |
+| 12 | local readiness가 새 문서 감사기와 일부 핵심 분석기의 정적/self-test를 실행하지 않음 | 문서-코드 회귀가 통합 검사에서 누락됨 | 문서 감사, matched-control self-test, 주요 분석기 `py_compile`을 wrapper에 연결 | 수정 완료 |
+| 13 | intake dashboard가 package audit 없는 과거 RTX strict artifact를 현재 완료 플랫폼으로 집계하고 package tag 날짜의 오래된 readiness만 읽음 | 실제 현행 gate 실패가 `1/4 complete`로 가려질 수 있음 | 과거 증거를 `historical_local_evidence`/`historical_pass`로 강등하고, 완료 집계에서 제외하며 `--goal-readiness-csv`로 최신 감사 파일을 명시 | 수정 완료 |
 
 기존 RTX 3090 strict summary를 현행 audit로 다시 검사한 결과는
-`results/summary/rtx3090_current_protocol_reaudit_20260712.md`에 기록했다. 결과는
+`results/summary/rtx3090_current_protocol_reaudit_20260714.md`에 기록했다. 결과는
 189 checks 중 8 failures다. 과거 NCU summary의 path-specific schema 누락과
 Global L1/L2 address-control evidence 누락이 명시적으로 검출됐다.
 

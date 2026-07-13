@@ -1,6 +1,6 @@
 # Platform Guide Index
 
-작성일: 2026-07-08, updated 2026-07-13
+작성일: 2026-07-08, updated 2026-07-14
 
 이 문서는 RTX 3090, V100, A100, H100에서 component-energy finalplan 실험을 실행할 때 먼저 확인해야 하는 플랫폼 차이를 정리한다. 구현 전 계획 문서였던 `multi_gpu_support_plan_ko.md`의 핵심은 이 문서와 각 플랫폼 가이드에 반영했고, 원문은 `archive/legacy_20260707/docs/multi_gpu_support_plan_ko.md`에 보관한다.
 

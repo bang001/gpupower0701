@@ -19,9 +19,9 @@ The default runtime profile in this checkout targets GeForce RTX 3090
 V100, A100, and H100. Use `--target-profile auto` to select a profile from the
 runtime CUDA device when running on the target machine.
 
-This repository implements the v2 design in
-`docs/design/a100_fp16_energy_experiment_design_v2.md`.
-For component-energy claims, use the acceptance-first finalplan flow:
+The current implementation inherits the logical FP16 WMMA operation definition
+from the original v2 design, but the active experiment is the acceptance-first
+finalplan flow documented in:
 `docs/methodology/component_energy_final_experiment_plan_ko.md` and
 `docs/platforms/cross_platform_component_experiment_guide_ko.md`. Memory pJ/bit results
 must use NCU actual traffic counters and should be reported as transaction-path
@@ -47,7 +47,7 @@ Do not equate API visibility with coefficient validity: `power.draw.*`,
 or provisional fallbacks, but the current final denominator policy requires a
 GPU/device total-energy mJ delta plus NCU path validation.
 
-**Current protocol status (2026-07-12):** the RTX 3090 coefficients produced on
+**Current protocol status (2026-07-14):** the RTX 3090 coefficients produced on
 2026-07-08 are historical evidence, not current strict-final values. Their
 Global L1/L2 energy pairs use `clocked_empty` and do not carry same-coordinate
 `global_addr_only` NCU acceptance. The current protocol requires address
@@ -61,12 +61,12 @@ Historical RTX 3090 result artifacts:
 | artifact | path |
 |---|---|
 | current-protocol alignment audit | `docs/audits/current_goal_alignment_audit_ko.md` |
-| current-protocol reaudit of old strict result | `results/summary/rtx3090_current_protocol_reaudit_20260712.md` |
+| current-protocol reaudit of old strict result | `results/summary/rtx3090_current_protocol_reaudit_20260714.md` |
 | current-protocol rerun plan | `results/summary/rtx3090_component_finalplan_20260712_command_plan.md` |
-| strict + fresh NCU component summary | `results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md` |
-| strict + fresh NCU reliability audit | `results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.md` |
-| strict + fresh NCU acceptance CSV | `results/summary/rtx3090_strict_scope_fresh_ncu_combined_acceptance_20260708.csv` |
-| strict + fresh NCU summary audit | `results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_20260708.md` |
+| historical 2026-07-08 component summary | `results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md` |
+| historical 2026-07-08 reliability audit | `results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.md` |
+| historical 2026-07-08 NCU acceptance CSV | `results/summary/rtx3090_strict_scope_fresh_ncu_combined_acceptance_20260708.csv` |
+| historical 2026-07-08 summary audit | `results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_20260708.md` |
 | legacy explicit-scope component summary | `results/summary/rtx3090_strict_scope_component_coefficients_20260708.md` |
 | legacy explicit-scope component CSV | `results/summary/rtx3090_strict_scope_component_coefficients_20260708.csv` |
 | strict report | `results/summary/rtx3090_finalplan_stability_strict_report_20260708_ko.md` |
@@ -78,7 +78,7 @@ Historical RTX 3090 result artifacts:
 | component reliability audit | `results/summary/rtx3090_finalplan_stability_component_reliability_audit_20260708.md` |
 | matched-control instability audit | `results/summary/rtx3090_finalplan_stability_matched_control_instability_audit_20260708.md` |
 | platform power/readiness audit | `results/summary/platform_power_readiness_audit_20260708.md` |
-| current component-energy goal readiness audit | `results/summary/component_energy_goal_readiness_audit_20260712.md` |
+| current component-energy goal readiness audit | `results/summary/component_energy_goal_readiness_audit_20260714.md` |
 | Tensor targeted rerun | `results/summary/rtx3090_tensor_targeted_rf8_rf16_report_20260708_ko.md` |
 | Tensor fixed-ITER check | `results/summary/rtx3090_tensor_fixed_iter_rf8_rf16_report_20260708_ko.md` |
 | Tensor RF8 duration-scaling check | `results/summary/rtx3090_tensor_rf8_duration_scaling_report_20260708_ko.md` |
@@ -123,7 +123,7 @@ Experiment setup and method documents:
 | What power APIs are available by GPU generation, and which ones can be final numerators? | `docs/platforms/power_measurement_api_matrix_ko.md` |
 | How do I check profile/power readiness before a new platform run? | `results/summary/platform_power_readiness_audit_20260708.md` and `scripts/audit_platform_power_readiness.py` |
 | How do I refresh local audits, external package gap reports, and the dashboard? | `scripts/run_local_readiness_checks.sh` |
-| Is the broader multi-platform goal complete? | `results/summary/component_energy_goal_readiness_audit_20260712.md` and `scripts/audit_component_goal_readiness.py` |
+| Is the broader multi-platform goal complete? | `results/summary/component_energy_goal_readiness_audit_20260714.md` and `scripts/audit_component_goal_readiness.py` |
 | Where is the full documentation map? | `docs/README.md` |
 
 The goal readiness audit treats a platform result package as valid only when the
@@ -147,129 +147,26 @@ pure Tensor Core circuit energy, and it does not make the still-historical
 Shared/Global-L1/L2 rows current. See
 `results/summary/rtx3090_tensor_fixedrf_v2_report_20260713_ko.md`.
 
-Older inferred-scope RTX 3090 Tensor medians (`0.077-0.170 pJ/FLOP`) are retained
-only for method-sensitivity/history. They used superseded kernel/control/pair
-protocols and must not be compared numerically with fixed-RF v2 A100 results or
-reported as the current Tensor coefficient. Shared scalar primary is
-`0.149 pJ/bit`, Global L1 is `0.148 pJ/bit`, L2 CG is `1.017 pJ/bit`. DRAM은
-`26.709-28.409 pJ/bit`의 provisional reference-aligned cumulative-path band로만
-보고한다. 현행 matched-ITER `global_addr_only` raw pair가 아직 없으므로 accepted 실측
-coefficient가 아니며 V100/A100/H100에 전이하지 않는다. Memory path denominators use
-`ncu_actual_exact` for the current stability factor set. The broader Tensor
-factor exact-NCU sweep over RF=1,2,4,8,16 produced `0.170 pJ/FLOP` with low
-stability, so it is retained as history rather than the current Tensor
-reporting value. The current evidence matrix now marks Tensor, Shared, Global L1, and
-L2 as `strong_candidate`; DRAM은 strict component 표와 분리된 provisional reporting
-band다. The L2 targeted rerun remains auxiliary
-support because it is consistent with the paired primary but carries one
-traceability-only control temperature caution row. The current sanity audit has
-0 failures and 4 expected warnings: Tensor RF sensitivity, Shared method
-sensitivity, the requirement to report all values as workload-dependent
-effective coefficients, and an explicit-scope warning. The 2026-07-08 RTX 3090
-component raw rows mostly predate the explicit `measurement_scope` CSV column,
-so their GPU/device scope was inferred from `nvml_total_energy` +
-`total_energy_mj_delta`; new finalplan runs require explicit
-`measurement_scope=gpu_device_total_energy_counter`.
+Older RTX 3090 Tensor and memory experiments remain useful only as historical
+method-sensitivity and path evidence. They do not form a current full component
+table:
 
-Under the historical 2026-07-08 protocol, explicit measurement-scope + fresh
-NCU rerun values were stricter than the older inferred-scope table: Tensor
-`0.129 pJ/FLOP` (`accepted`), Shared scalar `0.171 pJ/bit` (`accepted`),
-Global L1 `0.173 pJ/bit` (`accepted`), and L2 CG `1.131 pJ/bit` (`accepted`).
-These rows all use `nvml_total_energy` with
-`total_energy_mj_delta` and `measurement_scope=gpu_device_total_energy_counter`.
-Shared uses an LR8-only follow-up to separate the previous LR4 weak row in the
-mixed LR4/LR8 run; Global L1 uses an LR4-only follow-up to separate the previous
-LR8 weak-signal behavior.
-The fresh NCU replay was run from a no-space WSL path (`/tmp/ncu2025/.../ncu`)
-because the Windows Nsight Compute install directory contains spaces. The
-historical combined fresh NCU reliability audit accepted Tensor, Shared,
-Global L1, and L2 under that version's treatment-focused NCU gate.
-The strict table is generated or cross-checked from accepted reliability evidence
-with `scripts/build_strict_component_summary.py` and then checked by
-`scripts/audit_strict_component_summary.py`;
-the fresh NCU 2026-07-08 audit had 169 pass checks, 0 failures, and 0 warnings
-under the older audit schema,
-including
-matched-control detail-row scope, power API audit artifact, energy-source,
-power-state reject, and exact NCU denominator checks.
+| Path | Historical observation | Current status |
+|---|---:|---|
+| Tensor v1 | `0.077-0.170 pJ/FLOP` | superseded by fixed-RF v2; do not average or compare directly |
+| Shared scalar | roughly `0.06-0.24 pJ/bit` across LR/order/control variants | historical and strongly method-sensitive; full current package rerun required |
+| Global L1 | roughly `0.11-0.17 pJ/bit` | historical/provisional; current `global_addr_only` control evidence is missing |
+| L2 CG | roughly `0.96-1.13 pJ/bit` | historical/provisional; current matched-ITER address control is missing |
+| DRAM cumulative path | `26.709-28.409 pJ/bit` | provisional reference-aligned band, not an accepted measured coefficient |
 
-Shared/L1 targeted rerun: Shared scalar remained consistent at `0.152 pJ/bit`
-with 29/30 valid rows. Global L1 measured `0.105 pJ/bit` with 26/30 valid rows
-but kept `accepted_with_caution` because LR=16 still produced negative
-matched-control rows. The targeted power-state audit identified two of those
-L1 LR=16 negative rows as average-power low outliers.
-Shared duration-scaling produced 15/15 valid rows with ratio median
-`0.198 pJ/bit`, but slope estimates with an intercept were `0.10-0.12 pJ/bit`.
-This is retained as historical method-sensitivity evidence; the former primary is the
-cleaner LR4/LR8 fixed-ITER focus result at `0.149 pJ/bit`.
-Shared LR=4 paired 30 s auxiliary produced `0.236 pJ/bit` with 6/6 valid rows,
-Shared LR=8 paired 30 s combined auxiliary produced `0.177 pJ/bit` with
-12/12 valid rows, 36/36 final power API rows, and 36/36 power-state ok rows.
-The combined Shared LR=16 paired 30 s auxiliary produced `0.064 pJ/bit`
-with 11/12 valid rows and medium confidence. This confirms Shared is
-LR/method-sensitive; it remains lower-bound evidence rather than replacing the
-clean LR4/LR8 fixed-ITER primary.
-Extending the same LR=16 paired check to 60 s produced `0.077 pJ/bit` with
-5/6 valid matched rows, 18/18 final power API rows, 18/18 power-state ok rows,
-and `accepted_low_stability`. This confirms the LR16 lower side persists, but
-it remains a lower-bound/method-sensitivity auxiliary rather than a primary.
-The interleaved LR=4/8/16 C-T-C 30 s run produced aggregate `0.145 pJ/bit`
-with 12/12 valid matched rows, 36/36 final power API rows, and 36/36
-power-state ok rows. Its factor split was LR4 `0.199`, LR8 `0.145`, and LR16
-`0.0618 pJ/bit`, so it supports the current Shared primary near `0.149 pJ/bit`, but the
-LR/method sensitivity is now confirmed inside one rotated run.
-The fixed-ITER Shared follow-up kept treatment ITER at `17,000,000`, making
-shared bytes scale by roughly 1x/2x/4x across LR4/LR8/LR16. It produced
-aggregate `0.140 pJ/bit` with 8/9 valid matched rows and 27/27 final power API
-rows. This supports the `0.145-0.149 pJ/bit` Shared primary range, but one
-LR16 weak-signal row keeps this mixed LR4/LR8/LR16 run as auxiliary evidence.
-The LR16 fixed-ITER focus rerun then produced `0.117 pJ/bit` with 6/6 valid
-matched rows, 18/18 final power API rows, and 18/18 power-state ok rows. This
-means the prior LR16 weak row was not persistent, although Shared remains
-method-sensitive and should not be described as a pure shared-memory circuit
-constant.
-The LR4/LR8 fixed-ITER focus rerun produced aggregate `0.149 pJ/bit` with
-10/10 valid matched rows, 30/30 final power API rows, and 30/30 power-state ok
-rows. Its LR4/LR8 split was `0.179`/`0.142 pJ/bit`, so it strongly supports the
-current Shared primary and is now the selected clean primary artifact while
-preserving the LR/factor sensitivity caveat.
-L1 duration-scaling with `load_repeat=4` and 10/20/30 s runs produced
-`0.156 pJ/bit` median, `0.147 pJ/bit` OLS slope, and `0.149 pJ/bit`
-Theil-Sen slope, supporting the `0.15 pJ/bit` L1 range as auxiliary evidence.
-The follow-up 30 s, 10-repeat L1 stability run reproduced this at
-`0.153 pJ/bit` with 9/10 valid matched rows and 20/20 power API/state gates ok;
-one weak-signal negative row remains, so that run is kept as auxiliary while the
-paired combined run is the clean Global L1 primary.
-The 60 s L1 auxiliary run produced `0.119 pJ/bit` after the one power-state
-reject treatment row was excluded before matched-control pairing. This is
-recorded as control-drift/thermal sensitivity evidence, not as a replacement
-primary value.
-The paired 30 s L1 auxiliary runs used a control-treatment-control sequence and
-the combined result produced `0.148 pJ/bit` with 12/12 valid matched rows,
-36/36 final power API rows, and 36/36 power-state ok rows. This supports the
-`~0.15 pJ/bit` L1 range, is now the current Global L1 primary, and shows why
-paired ordering is better for drift-sensitive paths.
-The additional L1 LR8 paired 30 s auxiliary produced `0.109 pJ/bit` with
-6/6 valid matched rows, 18/18 final power API rows, and 18/18 power-state ok
-rows. This does not replace the LR4 paired primary, but it narrows
-the honest interpretation to a method-sensitive Global L1 effective range around
-`0.11-0.16 pJ/bit`.
-The Shared/L2 LR4 30 s auxiliary run produced Shared `0.216 pJ/bit` and
-non-paired L2 `1.298 pJ/bit`. A follow-up L2 LR4 paired 30 s run produced
-`1.027 pJ/bit` with 6/6 valid rows, 18/18 final power API rows, and 18/18
-power-state ok rows. This supports the L2 primary near `0.98-1.03 pJ/bit` and
-reclassifies the older non-paired LR4 L2 value as drift/order-sensitive
-high-side evidence.
-The additional L2 LR8 paired 30 s auxiliary produced `0.960 pJ/bit` with
-6/6 valid rows, 18/18 final power API rows, and 18/18 power-state ok rows.
-NCU sidecar validation showed L1 hit `0.000003%`, L2 hit `99.9368%`, and
-DRAM bytes only about `0.12%` of L2 bytes. This reinforces L2 as the most
-stable current memory coefficient axis, while still limiting the claim to a
-board-level effective L2-hit microbenchmark coefficient.
-The combined L2 LR4/LR8 paired primary is `1.017 pJ/bit` with 12/12 valid rows,
-36/36 final power API rows, and 36/36 power-state ok rows. The previous targeted
-mixed-LR value `0.978 pJ/bit` is retained as auxiliary support because it is
-consistent but carries one traceability-only power-state caution row.
+The 2026-07-08 strict snapshot did use `nvml_total_energy`,
+`total_energy_mj_delta`, and explicit GPU/device scope, so it is retained as API
+and historical treatment-path evidence. It predates the current address-control,
+control-NCU, fixed-RF v2, and path-specific schema gates. Detailed historical
+sweeps and interpretations are preserved in
+`archive/pre_current_protocol_20260712/docs/results/gpu_power_modeling_experiment_results_ko.md`.
+The active status and allowed reporting language are in
+`docs/results/gpu_power_modeling_experiment_results_ko.md`.
 
 Platform guides:
 
@@ -390,8 +287,8 @@ Feasibility only:
 ```bash
 ./build/a100_fp16_energy_v2 \
   --gpu-list 0 \
-  --mode shared_mma \
-  --w-sm-kib 128 \
+  --mode shared_scalar_load_only \
+  --w-sm-kib 64 \
   --blocks-per-sm 16 \
   --target-profile rtx3090 \
   --active-sm 82 \
@@ -604,9 +501,9 @@ For short sanity runs, constrain the matrix:
 ```bash
 python3 scripts/run_sweep.py --execute \
   --gpu-ids 0 \
-  --modes reg_mma,shared_mma \
-  --w-sm-kib-values 32,128 \
-  --blocks-per-sm-values 1,8,16 \
+  --modes clocked_empty,shared_scalar_load_only \
+  --w-sm-kib-values 32,64 \
+  --blocks-per-sm-values 8,16 \
   --active-sm-values 82 \
   --seconds 2 \
   --repeats 1
@@ -769,8 +666,7 @@ elapsed-time-scaled `idle_baseline_J`. `net_E_J = delta_E_J - idle_baseline_J`.
 
 ## Included Reference Assets
 
-- `docs/design/a100_fp16_energy_experiment_design_v2.md`
-- `docs/assets/a100_v2_design/a100_v2_feasibility_matrix.csv`
-- `docs/assets/a100_v2_design/a100_v2_feasibility_heatmap.png`
-- `docs/assets/a100_v2_design/a100_v2_workingset_boundaries.png`
-- `docs/assets/a100_v2_design/a100_v2_ops_per_iteration.png`
+- Original v2 design and feasibility assets:
+  `archive/superseded_v2_design_20260714/`
+- Pre-current-protocol coefficient/sweep visualizations:
+  `archive/pre_current_protocol_20260712/docs/assets/component_energy_method/`

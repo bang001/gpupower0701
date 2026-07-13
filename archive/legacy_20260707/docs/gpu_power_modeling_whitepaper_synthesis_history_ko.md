@@ -215,7 +215,7 @@ GPU 전체 board power는 건물 전체 전기요금과 같다. Tensor Core, L1,
 
 ### Figure 1. GPU power modeling 전체 개념도
 
-![GPU power modeling overview](component_energy_method_assets/gpu_power_modeling_whitepaper_overview.svg)
+![GPU power modeling overview](../../pre_current_protocol_20260712/docs/assets/component_energy_method/gpu_power_modeling_whitepaper_overview.svg)
 
 Caption: GPU component energy breakdown is estimated from board-level power measurements, differential microbenchmarks, and NCU counter validation. The resulting coefficients represent workload-dependent effective board-level energy, not direct transistor-level measurements.
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TAG="${TAG:-20260708}"
-READINESS_TAG="${READINESS_TAG:-20260712}"
+READINESS_TAG="${READINESS_TAG:-20260714}"
 NCU_BIN="${NCU:-}"
 
 if [[ -z "${NCU_BIN}" ]]; then
@@ -29,15 +29,26 @@ python3 -m py_compile \
   scripts/audit_platform_power_readiness.py \
   scripts/preflight_gpu_support.py \
   scripts/audit_power_api_measurements.py \
+  scripts/audit_power_state_stability.py \
   scripts/summarize_ncu_cache_metrics.py \
   scripts/analyze_ncu_path_acceptance.py \
+  scripts/analyze_matched_control_energy.py \
+  scripts/summarize_matched_control_by_factor.py \
   scripts/run_component_regression_sweep.py \
+  scripts/run_paired_component_stability.py \
+  scripts/audit_component_reliability.py \
+  scripts/audit_matched_control_instability.py \
   scripts/audit_a100_ncu_precheck.py \
   scripts/audit_a100_tensor_l2_remediation.py \
   scripts/select_a100_l2_path_configuration.py \
   scripts/audit_component_goal_readiness.py \
+  scripts/build_strict_component_summary.py \
   scripts/audit_strict_component_summary.py \
-  scripts/plan_platform_component_experiment.py
+  scripts/plan_platform_component_experiment.py \
+  scripts/audit_documentation_consistency.py \
+  scripts/plot_platform_sweep_design.py \
+  scripts/plot_dram_reporting_policy.py \
+  scripts/build_gpu_component_energy_presentation.py
 
 echo "[readiness] package/gap/dashboard/manifest self-tests"
 python3 scripts/preflight_gpu_support.py --self-test
@@ -45,6 +56,7 @@ python3 scripts/audit_power_api_measurements.py --self-test
 python3 scripts/run_component_regression_sweep.py --self-test
 python3 scripts/summarize_ncu_cache_metrics.py --self-test
 python3 scripts/analyze_ncu_path_acceptance.py --self-test
+python3 scripts/analyze_matched_control_energy.py --self-test
 python3 scripts/audit_a100_ncu_precheck.py --self-test
 python3 scripts/audit_a100_tensor_l2_remediation.py --self-test
 python3 scripts/select_a100_l2_path_configuration.py --self-test
@@ -56,6 +68,9 @@ python3 scripts/audit_component_goal_readiness.py --self-test
 python3 scripts/write_platform_result_manifest.py --self-test
 python3 scripts/summarize_platform_package_gaps.py --self-test
 python3 scripts/build_platform_intake_dashboard.py --self-test
+python3 scripts/audit_documentation_consistency.py --self-test
+python3 scripts/plot_platform_sweep_design.py --self-test
+python3 scripts/plot_dram_reporting_policy.py --self-test
 
 echo "[readiness] generated command shell syntax"
 for profile in a100 v100 h100; do
@@ -64,6 +79,12 @@ for profile in a100 v100 h100; do
     bash -n "${shell_path}"
   fi
 done
+
+echo "[readiness] active documentation consistency"
+python3 scripts/audit_documentation_consistency.py \
+  --out-csv "results/summary/documentation_consistency_audit_${READINESS_TAG}.csv" \
+  --out-md "results/summary/documentation_consistency_audit_${READINESS_TAG}.md" \
+  --fail-on-error
 
 echo "[readiness] platform power readiness"
 python3 scripts/audit_platform_power_readiness.py \
@@ -123,6 +144,7 @@ python3 scripts/audit_component_goal_readiness.py \
 echo "[readiness] platform intake dashboard"
 python3 scripts/build_platform_intake_dashboard.py \
   --tag "${TAG}" \
+  --goal-readiness-csv "results/summary/component_energy_goal_readiness_audit_${READINESS_TAG}.csv" \
   --out-csv "results/summary/platform_component_intake_dashboard_${TAG}.csv" \
   --out-md "results/summary/platform_component_intake_dashboard_${TAG}.md"
 

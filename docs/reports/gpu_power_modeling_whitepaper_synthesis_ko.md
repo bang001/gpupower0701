@@ -1,6 +1,6 @@
 # GPU Power Modeling 백서용 종합 정리
 
-갱신일: 2026-07-13
+갱신일: 2026-07-14
 
 ## 핵심 주장
 
@@ -87,8 +87,8 @@ DRAM 범위는 strict coefficient가 아니다. 목표 pair는
 `dram_bytes * 8` 분모를 확보하기 전에는 범위로만 보고한다.
 
 과거 결과의 전체 분석과 시각화는
-`archive/pre_current_protocol_20260712/docs/gpu_power_modeling_whitepaper_synthesis_ko.md`와
-`archive/pre_current_protocol_20260712/docs/gpu_power_modeling_experiment_results_ko.md`에
+`archive/pre_current_protocol_20260712/docs/reports/gpu_power_modeling_whitepaper_synthesis_ko.md`와
+`archive/pre_current_protocol_20260712/docs/results/gpu_power_modeling_experiment_results_ko.md`에
 보존한다.
 
 ## 보고 원칙
@@ -120,4 +120,4 @@ DRAM 범위는 strict coefficient가 아니다. 목표 pair는
 4. 모든 strict/package gate가 통과한 플랫폼만 component table과 visualization을 만든다.
 
 현재 감사 근거는 `docs/audits/current_goal_alignment_audit_ko.md`와
-`results/summary/component_energy_goal_readiness_audit_20260712.md`다.
+`results/summary/component_energy_goal_readiness_audit_20260714.md`다.

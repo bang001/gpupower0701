@@ -1,6 +1,6 @@
 # V100 실험 전달용 프롬프트
 
-작성일: 2026-07-07, V100 toolchain/좌표 재검토: 2026-07-10
+작성일: 2026-07-07, V100 toolchain/좌표 재검토: 2026-07-14
 
 이 문서는 V100 노드에서 component energy microbenchmark를 다시 실행할 때 다른 작업자나 에이전트에게 전달할 프롬프트를 별도로 모아둔 것이다. 실행 절차의 기준 문서는 [v100_node_experiment_guide_ko.md](../v100_node_experiment_guide_ko.md)이고, cross-platform 해석 기준은 [cross_platform_component_experiment_guide_ko.md](../cross_platform_component_experiment_guide_ko.md)를 따른다.
 
@@ -216,7 +216,7 @@ V100 전용 기준:
 | Component | 권장 mode pair | V100 우선 좌표 | NCU 채택 기준 | 결과 단위 |
 |---|---|---|---|---|
 | Tensor | `reg_mma - reg_operand_only` | energy B4/16/32; strict W2048/B32, reuse sweep | treatment HMMA 존재, control HMMA=0, spill/local 0, 두 mode ITER 동일 | pJ/FLOP |
-| Shared/L1 | `shared_scalar_load_only - clocked_empty` | energy W32/64, B1-32; strict W32/B32 | shared bytes 존재, bank conflict 낮음 | pJ/bit, pJ/Byte |
+| Shared scalar | `shared_scalar_load_only - clocked_empty` | energy W32/64, B4/16/32; strict W32/B32 | shared bytes 존재, bank conflict 낮음 | pJ/bit, pJ/Byte |
 | Global L1 | `global_l1_load_only - global_addr_only` | energy W8/16/32, B4/16/32; strict W32/B32 | L1 hit >= 95%, L2/DRAM 낮음 | pJ/bit, pJ/Byte |
 | L2 | `l2_cg_load_only - global_addr_only` | energy W32/64, B4/16/32; strict W32/B32 | 두 mode 동일 ITER, L2 read path hit >=95%, L1 path hit와 hit/request bytes <=1%, DRAM 낮음 | pJ/bit, pJ/Byte |
 | DRAM sanity | `dram_cg_load_only - global_addr_only` | energy B4/16/32; strict W8192/B32 | 두 mode 동일 ITER, DRAM bytes 충분, capacity-bound L2 residual hit 허용 | pJ/bit, pJ/Byte 후보 |

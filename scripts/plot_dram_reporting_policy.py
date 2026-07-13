@@ -101,8 +101,19 @@ def plot(row: dict[str, str], output: Path) -> None:
     svg_output = output.with_suffix(".svg")
     fig.savefig(svg_output, bbox_inches="tight", facecolor="white")
     plt.close(fig)
-    normalized_svg = "\n".join(line.rstrip() for line in svg_output.read_text(encoding="utf-8").splitlines()) + "\n"
-    svg_output.write_text(normalized_svg, encoding="utf-8")
+    normalized_svg = (
+        "\n".join(
+            line.rstrip()
+            for line in svg_output.read_text(encoding="utf-8").splitlines()
+        )
+        + "\n"
+    )
+    temporary_svg = svg_output.with_name(svg_output.name + ".tmp")
+    try:
+        temporary_svg.write_text(normalized_svg, encoding="utf-8")
+        temporary_svg.replace(svg_output)
+    finally:
+        temporary_svg.unlink(missing_ok=True)
 
 
 def main() -> int:

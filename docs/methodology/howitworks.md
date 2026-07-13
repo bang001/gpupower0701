@@ -1,7 +1,7 @@
 # How It Works: Component Energy Microbenchmark
 
 작성일: 2026-07-02
-최종 업데이트: 2026-07-11
+최종 업데이트: 2026-07-14
 
 이 문서는 현재 코드 기준으로 GPU component energy 실험이 어떻게 동작하는지 설명한다. 예전 문서에는 `shared_mma`, `l2_mma`, `dram_mma` 중심의 초기 탐색 설명이 많이 섞여 있었지만, 현재 최종 해석은 **acceptance-first finalplan**을 기준으로 한다.
 
@@ -853,10 +853,11 @@ flowchart LR
 
   subgraph MemoryPairs[Memory path pairs]
     CE[clocked_empty<br/>baseline]
+    GA[global_addr_only<br/>address control]
     CE --> SH[shared_scalar_load_only<br/>shared path]
-    CE --> L1[global_l1_load_only<br/>L1-hit path]
-    CE --> L2[l2_cg_load_only<br/>L2-hit path]
-    CE --> DR[dram_cg_load_only<br/>DRAM sanity]
+    GA --> L1[global_l1_load_only<br/>L1-hit path]
+    GA --> L2[l2_cg_load_only<br/>L2-hit path]
+    GA --> DR[dram_cg_load_only<br/>DRAM sanity]
     SH --> SB[pJ/byte, pJ/bit]
     L1 --> L1B[pJ/byte, pJ/bit]
     L2 --> L2B[pJ/byte, pJ/bit]

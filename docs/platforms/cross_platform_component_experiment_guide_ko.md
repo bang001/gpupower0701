@@ -1,6 +1,6 @@
 # Cross-Platform Component Energy 실험 가이드
 
-작성일: 2026-07-06, updated 2026-07-11
+작성일: 2026-07-06, updated 2026-07-14
 
 ## 1. 현재 코드와 실험 내용 요약
 
@@ -285,13 +285,16 @@ python3 scripts/summarize_platform_package_gaps.py \
   --out-md results/summary/a100_platform_result_package_gaps_YYYYMMDD.md
 ```
 
-여러 플랫폼을 비교할 때는 dashboard를 생성한다. Dashboard는 RTX 3090 local strict
+여러 플랫폼을 비교할 때는 dashboard를 생성한다. Dashboard는 RTX 3090의 과거 local
 evidence와 V100/A100/H100 외부 package 상태를 한 표로 보여준다. 단, 이 문서도 승인
 gate가 아니라 package audit과 strict summary audit 결과를 읽기 쉽게 모은 것이다.
+현재 package audit이 없는 과거 결과는 `historical_local_evidence`로 표시하고 완료 수에
+포함하지 않는다.
 
 ```bash
 python3 scripts/build_platform_intake_dashboard.py \
   --tag YYYYMMDD \
+  --goal-readiness-csv results/summary/component_energy_goal_readiness_audit_YYYYMMDD.csv \
   --out-csv results/summary/platform_component_intake_dashboard_YYYYMMDD.csv \
   --out-md results/summary/platform_component_intake_dashboard_YYYYMMDD.md
 ```

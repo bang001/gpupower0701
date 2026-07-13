@@ -17,9 +17,9 @@
 
 ## Report-Ready Figures
 
-![RTX 3090 strict component coefficient summary](../../docs/assets/component_energy_method/rtx3090_strict_scope_component_coefficients_summary.svg)
+![RTX 3090 strict component coefficient summary](../../archive/pre_current_protocol_20260712/docs/assets/component_energy_method/rtx3090_strict_scope_component_coefficients_summary.svg)
 
-![RTX 3090 strict NCU evidence](../../docs/assets/component_energy_method/rtx3090_strict_scope_ncu_evidence.svg)
+![RTX 3090 strict NCU evidence](../../archive/pre_current_protocol_20260712/docs/assets/component_energy_method/rtx3090_strict_scope_ncu_evidence.svg)
 
 
 ## Report-Ready Table

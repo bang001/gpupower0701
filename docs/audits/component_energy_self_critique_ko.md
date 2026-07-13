@@ -1,69 +1,86 @@
 # Component Energy 실험 자가비판
 
-작성일: 2026-07-06, updated 2026-07-10
+갱신일: 2026-07-14
 
-## 1. 가장 큰 오류
+## 현재 판정
 
-| 오류 | 왜 문제였나 | 현재 수정 |
+완전한 current-protocol component table은 아직 없다. RTX 3090은 fixed-RF v2 Tensor
+standalone 결과만 현행 근거가 있고, Shared/Global-L1/L2는 새 address-control 및
+package gate로 다시 실행해야 한다. V100/A100/H100도 코드와 command package는 준비됐지만
+각 target node의 accepted 전체 package가 저장소에 반입되지 않았다.
+
+따라서 “코드가 구현됐다”, “NCU path가 통과했다”, “component coefficient가 확정됐다”를
+서로 다른 상태로 구분한다.
+
+## 발견한 주요 오류와 현재 조치
+
+| 과거 오류 | 왜 문제였나 | 현행 조치 | 남은 증거 |
+|---|---|---|---|
+| `W_SM`을 `reg_mma` register working set으로 설명 | register footprint는 ptxas registers/thread와 residency로 결정 | register mode에서 W_SM은 표준 좌표로만 보고 spill/local=0 확인 | 플랫폼별 ptxas/NCU resource 재확인 |
+| `reg_pressure` pJ/update를 RF energy로 해석 | scalar ALU, dependency, scheduler, clock가 함께 변함 | diagnostic/control proxy로만 유지 | pure RF 분리는 별도 ISA/control 설계 필요 |
+| 일반 `l2_load_only`를 L2-only로 간주 | RTX 3090에서 L1 hit가 높았음 | `l2_cg_load_only`와 path-specific counter 사용 | GPU별 exact-coordinate NCU 필요 |
+| `shared_load_only`를 clean shared path로 간주 | bank conflict가 커 경로가 오염됨 | `shared_scalar_load_only`를 primary로 선택 | bank conflict와 global leakage 계속 보고 |
+| expected bytes만으로 pJ/bit 계산 | 실제 transaction 수와 다를 수 있음 | strict memory row는 `ncu_actual_exact` 요구 | metric availability와 sector 단위 GPU별 확인 |
+| Global L1/L2에 `clocked_empty` control 사용 | 주소 생성과 global loop 비용이 treatment에만 남음 | `global_addr_only` exact-coordinate control로 변경 | RTX 3090 memory 전체 재실행 |
+| Tensor mode별 독립 ITER | control/treatment logical work가 달라질 수 있음 | RF별 dual calibration의 최대 동일 ITER | 플랫폼별 새 raw/calibration manifest |
+| V100 L2 mode별 독립 ITER | NCU L2 hit는 통과했지만 control ITER가 약 2배라 9개 음수 | L2 동일 ITER, direct net-energy 차분, mismatch hard reject | V100 L2 energy와 downstream package 재실행 |
+| DRAM duration-scaled pair | address control과 treatment work count가 다를 수 있음 | DRAM도 동일 ITER 직접 차분 | DRAM은 strict 4-component 표 밖 sanity로 유지 |
+| 음수 또는 작은 양수를 결과로 승격 | drift/noise/control mismatch 신호일 수 있음 | negative, minimum delta/fraction, power-state gate 적용 | 반복과 confidence interval 계속 필요 |
+| 문헌값에 맞춰 숫자 선택 | 측정 경계가 다른 값을 fitting하면 검증이 아님 | 문헌값은 order-of-magnitude sanity로만 사용 | path/device/board 경계 명시 |
+
+## 현재 신뢰할 수 있는 범위
+
+| 주장 | 신뢰 수준 | 근거와 제한 |
 |---|---|---|
-| `W_SM`을 `reg_mma` register working set처럼 설명 | register footprint는 `W_SM`이 아니라 ptxas register/thread, threads/block, blocks/SM로 결정된다. | register-mode에서 `W_SM`은 고정 좌표로만 취급한다. |
-| `reg_pressure` direct pJ/update를 register energy처럼 해석 | scalar ALU, dependency chain, scheduler/control, active power가 포함된다. | register 결과는 `register/control diagnostic only`로 격하했다. |
-| 일반 `l2_load_only`를 RTX 3090 L2로 해석 | NCU에서 L1 hit가 높아 L2-only가 아니었다. | RTX 3090/V100 L2는 `l2_cg_load_only`를 우선 사용한다. |
-| `shared_load_only`를 clean shared path로 사용 | NCU에서 bank conflict가 컸다. | `shared_scalar_load_only`를 primary shared path로 사용한다. |
-| static expected bytes로 pJ/bit 계산 | 실제 L1/L2/DRAM sector traffic과 다를 수 있다. | NCU actual-byte denominator를 분석에 반영했다. |
-| 음수 coefficient를 늦게 문제 삼음 | control mismatch와 power-state noise가 있다는 직접 증거다. | 음수 row는 final coefficient에서 제외한다. |
-| 작은 양수 coefficient를 무조건 채택 | `delta_E`가 board-level baseline 대비 너무 작으면 양수라도 noise floor 안의 값일 수 있다. | `nearest-control` pairing과 `--min-delta-j`, `--min-delta-fraction` gate를 추가했다. |
-| HBM2 physical pJ/bit와 RTX 3090 GDDR6X path를 섞어 비교 | device-level DRAM energy와 GPU transaction-path effective energy는 의미가 다르다. | DRAM은 streaming sanity로만 보고한다. |
-| GPU 세대별 power API 의미를 결과 gate에 늦게 반영 | `GetPowerUsage`가 instant인지 1초 평균인지, total energy counter인지에 따라 신뢰도가 달라진다. | `power_measurement_api_matrix_ko.md` 작성, analyzer에 `--require-total-energy`와 `--expected-power-semantics` gate 추가 |
+| 코드가 RTX 3090/V100/A100/H100 profile과 finalplan을 생성함 | 높음, 정적 구현 | profile/preflight/planner audit과 self-test 기준; target-node 실행 성공과는 다름 |
+| historical RTX 3090 NCU가 Shared/L1/L2/DRAM 방향의 path를 보여줌 | 높음, 역사적 path evidence | current control acceptance와 새 binary revision 전체를 보증하지 않음 |
+| RTX 3090 fixed-RF v2 Tensor median 2.252501 pJ/FLOP | 중간 이상, standalone | power/NCU pair gate 33/35 통과; pure Tensor 회로가 아니고 stability follow-up 필요 |
+| 과거 RTX 3090 Shared/L1/L2 coefficient | 낮음, current final로는 불가 | 과거 control/schema 사용; 현행 재실행 전 역사적 값 |
+| V100 L2 구형 음수 계수 | 무효 | NCU path 성공과 별개로 ITER mismatch |
+| DRAM 26.709-28.409 pJ/bit | provisional | reference-aligned reporting band이며 accepted raw pair가 아님 |
+| Register file pJ/access | 미확정 | 현재 kernel로 RF 단독 분리가 불가능 |
+| Physical HBM/GDDR energy | 미확정 | NVML GPU/device-level path delta의 경계 밖 |
 
-## 2. 현재 코드/분석에서 여전히 약한 부분
+## 현행 Hard Gate가 해결하는 것
 
-| 약점 | 영향 | 필요한 추가 실험 |
+| Gate | 방지하는 오류 | 해결하지 못하는 것 |
 |---|---|---|
-| 기존 RTX 3090 strict NCU sidecar가 representative LR=4 중심 | 모든 load_repeat/reuse row의 actual traffic을 직접 검증하지 못했다. | 2026-07-08 factor sidecar로 RTX 3090 stability factor set은 `ncu_actual_exact` 재산출 완료 |
-| Shared/L1 일부 row가 negative 또는 weak-signal | path는 NCU로 맞아도 board-level treatment-control delta가 작아 noise floor에 걸린다. | strict gate로 제외하고, 다음 단계에서 더 matched된 control 설계 |
-| Tensor acceptance threshold가 absolute byte 기준이었다 | SM 수와 reuse factor가 커질 때 정상적인 setup/cache traffic도 absolute byte만으로 커 보인다. | bytes/HMMA, bytes/register-op ratio gate를 추가 |
-| `clocked_empty` control이 모든 memory path에 완전 matched가 아님 | 일부 L1 row에서 음수/큰 분산이 발생한다. | address-only/control instruction mix를 더 맞춘 pair 추가 |
-| L1/shared의 board-level delta signal이 작음 | 긴 run에서도 일부 반복은 `delta_E`가 10 J 미만 또는 0.5% 미만이다. | strict report에서는 weak-signal row를 제외하고, 다음 단계에서 matched control을 개선 |
-| NVML energy source가 GPU별로 다름 | `GetPowerUsage` semantics와 energy counter support가 다르다. | 결과 표에 `energy_source`, `energy_integration_method`, `nvml_power_usage_semantics`를 포함하고, fallback row는 provisional로 제한 |
-| H100에서 Hopper-native 경로 미구현 | WGMMA/TMA/FP8 energy를 측정하지 않는다. | 별도 H100-native kernel set 설계 |
-| V100 NCU 지원 버전 이슈 | NCU hit/stall 검증이 실패할 수 있다. | 지원되는 NCU toolchain 명시, 실패 시 energy-only로 분리 보고 |
-| V100 build compiler를 target 검증 없이 사용 | CUDA 13은 Volta offline compilation을 제거해 `sm_70` configure가 실패한다. 기존 preflight는 compiler target을 검사하지 않았다. | CUDA 12.x를 권장하고 `nvcc --list-gpu-arch`의 `compute_70`을 strict preflight gate로 추가 |
-| 외부 package audit가 함수 인자 대신 CLI 전역 `args`를 참조 | self-test와 V100 결과 intake가 `NameError`로 중단될 수 있었다. | `audit_package()`의 `profile` 인자를 사용하도록 수정하고 package gate self-test에 CUDA compiler gate/NCU control-mode fixture를 보강 |
-| V100 Global L1 NCU를 W8/B16으로 생성 | block당 0.5 KiB라 harness의 최소 1 KiB tile 조건을 위반해 sidecar가 시작 전에 실패한다. | strict Global L1을 W32/B32로 변경하고 planner coordinate validation 추가 |
-| V100 L2를 W64=5 MiB 단일점으로 사용 | 6 MiB L2의 약 83%라 background traffic/set conflict에 민감하고 residency margin이 작다. | strict W32=2.5 MiB와 W64 stress point를 분리 |
+| strict preflight | 잘못된 GPU/profile/toolchain/NCU 실행 | target node의 장기 drift |
+| explicit total-energy scope | fallback/module/memory power 혼입 | GPU 내부 component 단독 측정 |
+| treatment/control exact NCU acceptance | 오염된 control 또는 잘못된 path | replay run과 energy run의 완전 동일성 |
+| NCU actual denominator | static byte 계산 오류 | metric 자체의 architecture 차이 |
+| Tensor/L2/DRAM matched ITER | 서로 다른 logical work 차분 | 두 mode의 elapsed/power-state 차이 |
+| min delta 및 power-state audit | noise floor와 throttling 일부 | 모든 thermal/order effect |
+| strict/package/goal audit | 누락 artifact와 stale 결과 승격 | gate가 모델의 물리적 순수성을 보증하지는 않음 |
 
-## 3. 현재 믿을 수 있는 것과 없는 것
+## 아직 약한 부분
 
-| 항목 | 현재 신뢰도 | 이유 |
+| 약점 | 영향 | 필요한 후속 작업 |
 |---|---|---|
-| NCU accepted path가 의도한 memory hierarchy를 탔다 | 높음 | hit rate, bytes, stall, bank conflict로 확인 가능 |
-| RTX 3090 finalplan의 계층 순서 L1/shared < L2 < DRAM | 중간 이상 | NCU actual-byte denominator, total-energy gate, nearest-control strict gate 기반 |
-| RTX 3090 finalplan energy numerator | 중간 이상 | 2026-07-07 재점검에서 final row와 smoke 모두 `nvml_total_energy` + `total_energy_mj_delta` 확인. 다만 board-level effective energy 한계는 남음 |
-| Tensor incremental pJ/FLOP | 낮음-중간 | HMMA와 no-MMA control은 있으나 pure Tensor 단독은 아니고, 2026-07-08 strict 반복에서 confidence_class가 low로 나왔다. |
-| L1/shared pJ/bit | 중간 | strict gate 후 hierarchy는 맞지만 board-level delta signal이 작고 confidence_class는 medium 수준이다. |
-| Register file pJ/access | 낮음 | 현재 구현은 pure RF isolation이 아니다 |
-| Physical DRAM device pJ/bit | 낮음 | NVML board-level streaming delta일 뿐이다 |
+| Shared/Global L1은 duration-scaled control power 사용 | instruction mix와 drift가 완전히 제거되지 않음 | bracketed/interleaved control과 더 긴 반복 비교 |
+| Tensor control도 scheduler/register/final-store가 완전히 같지 않음 | coefficient에 Tensor 외 증분이 남음 | SASS와 operation-proportional counter 비교 유지 |
+| L2/DRAM matched ITER에서 elapsed가 다름 | 같은 work여도 clock/temperature 상태가 다를 수 있음 | control floor, pair adjacency, repeats, power-state filtering |
+| A100 L2의 과거 약 60% hit | 단순 capacity 계산으로 L2 path를 보장하지 못함 | policy/layout/blocks sweep에서 95% path plateau가 없으면 energy 전에 중단 |
+| V100 NCU/CUDA 버전 제약 | permission/toolchain 실패가 coefficient 누락으로 이어짐 | CUDA 12.x `compute_70`, GV100 metric query, sudo fallback 확인 |
+| H100 native 경로 미구현 | WMMA 결과를 WGMMA/TMA/FP8로 확대 해석할 위험 | 별도 Hopper-native kernel/control/counter 설계 |
+| 여러 profile 정의가 C++/Python에 중복 | 수정 시 drift 가능 | `audit_documentation_consistency.py`와 platform readiness를 계속 gate로 사용 |
 
-## 4. 플랫폼 확장 시 원칙
+## 플랫폼 확장 원칙
 
 | 원칙 | 이유 |
 |---|---|
-| RTX 3090 결과를 A100/V100/H100에 이식하지 않는다. | cache/shared/L2/memory/NVML semantics가 다르다. |
-| 각 플랫폼에서 preflight와 NCU acceptance를 먼저 본다. | profile 가정과 실제 노드 상태가 다를 수 있다. |
-| `l2_load_only`는 NCU L1 hit가 낮을 때만 채택한다. | capacity 계산만으로는 L2-only가 보장되지 않는다. |
-| H100 결과는 WMMA compatibility path라고 명시한다. | H100 native WGMMA/TMA와 다르다. |
-| 최종 표에는 rejected row와 이유를 함께 남긴다. | 수치를 숨기면 설계 실패를 확인할 수 없다. |
-| `energy_source=legacy_get_power_usage_integral` row는 final coefficient에서 제외한다. | endpoint power fallback은 GPU 세대별 sampling semantics에 민감하다. |
+| RTX 3090 coefficient를 다른 GPU에 복사하지 않는다 | SM, cache/shared/L2, memory, NVML/NCU 의미가 다름 |
+| 각 GPU에서 strict preflight 후 실행한다 | profile/SKU/MIG/vGPU/toolchain을 정적으로 보장할 수 없음 |
+| Energy run과 NCU replay를 분리한다 | profiler overhead를 energy numerator에 넣지 않기 위해서 |
+| Sweep과 선택 좌표를 단위 포함 표로 남긴다 | 어떤 W/B/RF/LR가 채택됐는지 재현하기 위해서 |
+| rejected row와 이유를 결과에 포함한다 | 설계 실패를 숨기지 않기 위해서 |
+| 숫자 hierarchy가 그럴듯해도 gate를 우회하지 않는다 | plausible value가 valid measurement를 뜻하지 않음 |
 
-## 5. 다음 코드 개선 제안
+## 다음 우선순위
 
-| 우선순위 | 개선 | 목적 |
-|---:|---|---|
-| 1 | A100/V100/H100에서 bytes/HMMA, bytes/register-op ratio gate 검증 | RTX 3090에서 absolute threshold 왜곡을 완화했으므로 다른 GPU에도 적용 |
-| 2 | factor-list NCU sidecar로 A100/V100/H100 재실행 | RTX 3090과 같은 `ncu_actual_exact` 기준을 다른 architecture에 적용 |
-| 3 | L1/global control용 `global_addr_load_control` 추가 | `clocked_empty` mismatch 축소 |
-| 4 | bootstrap/CI-style confidence interval report 추가 | L1/shared처럼 산포가 큰 coefficient의 신뢰구간 명시 |
-| 5 | fallback power row 전용 polling/integration runner 추가 | total energy counter가 없는 플랫폼에서 provisional 분석 품질 개선 |
-| 6 | H100-native WGMMA/TMA mode 추가 | Hopper 구조 반영 |
-| 7 | report generator 추가 | 플랫폼별 결과 표준화 |
+1. V100 L2를 동일 ITER 정책으로 재실행하고 기존 NCU path evidence와 새 energy package를
+   구분한다.
+2. A100은 targeted L2 precheck에서 95% hit/byte-conservation plateau를 먼저 확보한다.
+3. RTX 3090은 Shared/Global-L1/L2 current-protocol full package를 재실행한다.
+4. 각 플랫폼에서 min/median/mean/max와 rejected 좌표를 단위 포함 표로 작성한다.
+5. H100 native WGMMA/TMA/FP8는 현재 WMMA 실험과 별도 연구 축으로 설계한다.

@@ -260,6 +260,20 @@ def read_strict_snapshot() -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
+def read_current_tensor_summary() -> dict[str, str]:
+    path = (
+        ROOT
+        / "results"
+        / "summary"
+        / "rtx3090_tensor_fixedrf_v2_20260713_matched_control_summary.csv"
+    )
+    with path.open(newline="") as f:
+        rows = list(csv.DictReader(f))
+    if len(rows) != 1 or rows[0].get("component") != "tensor_mma_increment":
+        raise ValueError(f"expected one current Tensor row in {path}")
+    return rows[0]
+
+
 def read_dram_reporting_policy() -> dict[str, str]:
     path = ROOT / "results" / "summary" / "rtx3090_dram_current_reporting_policy_20260712.csv"
     with path.open(newline="") as f:
@@ -281,6 +295,7 @@ def build_deck() -> Presentation:
     branch = git_value("branch", "--show-current")
     dirty = bool(git_value("status", "--porcelain"))
     snapshot = read_strict_snapshot()
+    current_tensor = read_current_tensor_summary()
 
     # 1. Title
     slide = prs.slides.add_slide(blank)
@@ -593,17 +608,17 @@ def build_deck() -> Presentation:
     add_box(slide, 1.1, 6.55, 11.1, 0.42, fill=RED_PALE, line=RED, text="서로 다른 단계의 상태를 하나의 ‘confidence’ 등급처럼 합치지 않는다.", size=13, color=RED, bold=True)
 
     # 21. RTX snapshot results and current DRAM reporting policy
-    slide = prs.slides.add_slide(blank); add_title(slide, "RTX 3090 snapshot과 DRAM 최신 보고 범위", "RESULTS · EVIDENCE BOUNDARY", 21, "source: strict snapshot; current-protocol reaudit; rtx3090_dram_current_reporting_policy_20260712.csv")
+    slide = prs.slides.add_slide(blank); add_title(slide, "RTX 3090 snapshot과 DRAM 최신 보고 범위", "RESULTS · EVIDENCE BOUNDARY", 21, "source: fixed-RF v2 Tensor summary; historical strict snapshot; current-protocol reaudit; DRAM reporting policy")
     strict = {row["component"]: row for row in snapshot}
     dram = read_dram_reporting_policy()
-    tensor_value = float(strict["Tensor MMA incremental"]["median"])
+    tensor_value = float(current_tensor["median"])
     shared_value = float(strict["Shared scalar path"]["median"])
     l1_value = float(strict["Global L1 hit path"]["median"])
     l2_value = float(strict["L2 CG hit path"]["median"])
     dram_low = float(dram["estimate_low"])
     dram_high = float(dram["estimate_high"])
-    add_status(slide, "2026-07-08 accepted strict snapshot: 4 rows", 0.68, 1.18, 3.25, status="historical", size=9.6)
-    add_status(slide, "2026-07-12 current-protocol reaudit: fail", 4.08, 1.18, 3.15, status="fail", size=9.6)
+    add_status(slide, "2026-07-13 current Tensor: standalone", 0.68, 1.18, 3.25, status="pass", size=9.6)
+    add_status(slide, "Current full component table: incomplete", 4.08, 1.18, 3.15, status="fail", size=9.6)
     add_box(slide, 7.42, 1.18, 5.15, 0.32, fill=PALE, line=LINE, text="all rows: nvml_total_energy · total_energy_mj_delta · gpu_device_total_energy_counter", size=7.7, color=MUTED)
     add_text(slide, "Tensor · pJ/FLOP", 0.75, 1.7, 2.5, 0.25, size=10.5, color=BLUE, bold=True)
     add_box(slide, 0.75, 2.02, 4.55, 0.48, fill=BLUE_PALE, line=BLUE, radius=False)
@@ -622,26 +637,26 @@ def build_deck() -> Presentation:
     add_text(slide, "DRAM provisional band", 10.18, 1.82, 2.0, 0.22, size=9.2, color=AMBER, bold=True, align=PP_ALIGN.CENTER)
     add_text(slide, f"{dram_low:.3f}-{dram_high:.3f}\npJ/bit", 10.18, 2.04, 2.0, 0.48, size=15, color=INK, bold=True, align=PP_ALIGN.CENTER)
     detail_rows = [
-        ["Result", "Snapshot pair → active pair", "Condition", "Denominator / NCU evidence", "Reliability / current"],
-        [f"Tensor\n{tensor_value:.3f} pJ/FLOP", "reg_mma - reg_operand_only\n→ same pair", "W2048 KiB · B16 · SM82\nRF8,16", "logical FLOP\nHMMA treatment · legacy control/spill schema", "accepted · medium\ncurrent rerun"],
-        [f"Shared\n{shared_value:.3f} pJ/bit", "shared_scalar - clocked_empty\n→ same pair", "W64 KiB · B16 · SM82\nLR8", "ncu_actual_exact\nshared bytes 1.0748e12", "accepted · medium\ncurrent rerun"],
-        [f"Global L1\n{l1_value:.3f} pJ/bit", "global_l1 - clocked_empty\n→ global_l1 - global_addr", "W16 KiB · B16 · SM82\nLR4", "ncu_actual_exact\nL1 hit 99.9995%", "accepted · medium\npair changed"],
-        [f"L2 CG\n{l2_value:.3f} pJ/bit", "l2_cg - clocked_empty\n→ l2_cg - global_addr", "W64 KiB · B16 · SM82\nLR4,8", "ncu_actual_exact\nL1 ≈0% · L2 hit ≈99.985%", "accepted · medium\npair changed"],
+        ["Result", "Pair / protocol transition", "Condition", "Denominator / NCU evidence", "Reliability / current"],
+        [f"Tensor\n{tensor_value:.3f} pJ/FLOP", "reg_mma - reg_operand_only\nmatched ITER", "W2048 KiB · B16 · SM82\nRF1,2,4,8,16", "logical FLOP\nHMMA/logical=2 · control=0 · local=0", "current standalone\nmedium-high · 33 pairs"],
+        [f"Shared\n{shared_value:.3f} pJ/bit", "shared_scalar - clocked_empty\n→ same pair", "W64 KiB · B16 · SM82\nLR8", "historical exact shared bytes\ncontrol schema predates current package", "historical\nfull rerun required"],
+        [f"Global L1\n{l1_value:.3f} pJ/bit", "global_l1 - clocked_empty\n→ global_l1 - global_addr", "W16 KiB · B16 · SM82\nLR4", "historical treatment L1 hit 99.9995%\naddress-control evidence missing", "provisional historical\npair changed"],
+        [f"L2 CG\n{l2_value:.3f} pJ/bit", "l2_cg - clocked_empty\n→ l2_cg - global_addr", "W64 KiB · B16 · SM82\nLR4,8", "historical treatment L2 hit ≈99.985%\naddress-control evidence missing", "provisional historical\npair changed"],
         [f"DRAM cumulative path\n{dram_low:.3f}-{dram_high:.3f} pJ/bit", "target: dram_cg - global_addr\nlegacy clocked_empty excluded", "W8192 KiB · matched ITER\ncurrent raw pair 없음", "target denominator\nexact NCU dram_bytes × 8", "provisional range\nstrict eligible = false"],
     ]
     add_table(slide, detail_rows, 0.55, 3.05, 12.2, 3.15, widths=[1.45,3.0,2.35,3.15,2.25], font_size=7.5, row_fills=[WHITE,PALE,WHITE,PALE,WHITE])
     add_box(slide, 0.75, 6.42, 11.55, 0.45, fill=RED_PALE, line=RED, text="DRAM 26.709-28.409 pJ/bit는 최신 provisional cumulative-path band다. matched-ITER address-control raw pair가 없으므로 accepted 실측값이나 physical GDDR6X energy로 쓰지 않는다.", size=9.8, color=RED, bold=True)
 
     # 22. Cross-platform state and checklist
-    slide = prs.slides.add_slide(blank); add_title(slide, "Cross-platform 상태 · 한계 · 재현 checklist", "STATUS & NEXT ACTION", 22, "source: component_energy_goal_readiness_audit_20260712.csv; platform package audits; official NVIDIA NVML docs")
+    slide = prs.slides.add_slide(blank); add_title(slide, "Cross-platform 상태 · 한계 · 재현 checklist", "STATUS & NEXT ACTION", 22, "source: component_energy_goal_readiness_audit_20260714.csv; platform package audits; official NVIDIA NVML docs")
     matrix = [
         ["Evidence stage", "RTX 3090", "V100", "A100", "H100"],
         ["Repository profile", "확인", "확인", "확인", "확인"],
         ["Command package", "확인", "확인", "확인", "확인"],
-        ["Raw energy artifact", "historical 있음", "missing", "missing", "missing"],
-        ["Fresh NCU acceptance", "current fail", "missing", "missing", "missing"],
-        ["Reliability audit", "historical 있음", "missing", "missing", "missing"],
-        ["Strict component summary", "historical 4-row", "missing", "missing", "missing"],
+        ["Raw energy artifact", "Tensor current + historical", "missing", "missing", "missing"],
+        ["Fresh NCU acceptance", "Tensor 10/10 only", "missing", "missing", "missing"],
+        ["Reliability audit", "Tensor standalone", "missing", "missing", "missing"],
+        ["Strict component summary", "current full table 없음", "missing", "missing", "missing"],
         ["Package audit complete", "아니오", "아니오", "아니오", "아니오"],
     ]
     add_table(slide,matrix,0.55,1.23,7.6,4.75,widths=[2.4,1.35,1.2,1.2,1.2],font_size=9.6,row_fills=[WHITE,PALE,WHITE,PALE,WHITE,PALE,WHITE])
@@ -662,7 +677,7 @@ SLIDE_NOTES = """# GPU Component Energy Experiment Presentation Evidence Notes
 ## Deck identity
 
 - Repository: `https://github.com/bang001/gpupower0701`
-- Generated from the current worktree on 2026-07-12.
+- Generated from the current worktree on 2026-07-14.
 - The title slide records the checked-out branch and HEAD SHA.
 - The deck has 22 slides and three generated technical illustrations.
 
@@ -696,7 +711,7 @@ SLIDE_NOTES = """# GPU Component Energy Experiment Presentation Evidence Notes
 18. **Memory denominator** — `scripts/analyze_matched_control_energy.py:339-399,643-658`. `expected_no_ncu_match` is not eligible for strict memory coefficients.
 19. **NCU acceptance** — `scripts/analyze_ncu_path_acceptance.py`. Acceptance uses path-specific rates plus access/byte/local/stall evidence, not aggregate hit rate alone.
 20. **Audit states** — each audit script owns a distinct state vocabulary; states are not collapsed into one grade.
-21. **RTX 3090 snapshot and DRAM policy** — the historical strict snapshot contains four rows and fails the active control/schema reaudit. DRAM is now shown as the 26.709-28.409 pJ/bit `provisional_reference_aligned_range` from `rtx3090_dram_current_reporting_policy_20260712.csv`; no completed matched-ITER address-control raw pair exists, so the band is not strict measured evidence.
+21. **RTX 3090 current/historical boundary and DRAM policy** — fixed-RF v2 Tensor is the only current standalone component result at 2.2525 pJ/FLOP. Shared, Global L1, and L2 values are the historical strict snapshot; Global L1/L2 fail the active address-control/schema reaudit. DRAM is the 26.709-28.409 pJ/bit `provisional_reference_aligned_range`; no completed matched-ITER address-control raw pair exists.
 22. **Cross-platform state** — current readiness/package audits. A command package is not evidence that a target-node experiment completed.
 
 ## Corrected statements

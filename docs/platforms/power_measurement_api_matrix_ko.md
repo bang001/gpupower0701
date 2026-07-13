@@ -1,6 +1,6 @@
 # GPU 세대별 Power/Energy 측정 API 기준
 
-작성일: 2026-07-09, updated 2026-07-10
+작성일: 2026-07-09, updated 2026-07-14
 공식 문서 확인일: 2026-07-10, NVIDIA NVML API Reference Guide vR610
 
 이 문서는 RTX 3090, V100, A100, H100에서 component-energy microbenchmark를
@@ -263,29 +263,32 @@ GPU 이름과 profile 확인
 Power API gate는 NCU path 검증을 대체하지 않는다. energy numerator가 final 후보여도
 NCU에서 L1/L2/DRAM path가 rejected이면 component coefficient로 채택하지 않는다.
 
-## 0.D RTX 3090 strict measurement-scope 적용 예시
+## 0.D RTX 3090 measurement-scope 역사 예시
 
-2026-07-08 새 binary 기준으로 raw CSV에 `measurement_scope`가 직접 기록되는 strict
-rerun을 수행했다. 이 run은 기존 inferred-scope row와 분리하며,
-`--require-explicit-measurement-scope` audit을 통과한 결과만 사용한다.
+2026-07-08 raw CSV는 `measurement_scope=gpu_device_total_energy_counter`,
+`energy_source=nvml_total_energy`, `energy_integration_method=total_energy_mj_delta`를
+명시했고 power API scope audit을 통과했다. 따라서 이 자료는 RTX 3090에서 endpoint
+power 적분 대신 total-energy counter delta를 사용해야 한다는 **API 경계 예시**로는
+유효하다.
 
-![RTX 3090 strict measurement-scope coefficients](../assets/component_energy_method/rtx3090_strict_scope_component_coefficients.png)
+그러나 당시 Global L1/L2 energy control은 `clocked_empty`였고, 현행
+`global_addr_only` exact-coordinate control NCU acceptance와 path-specific counter
+schema가 없었다. Tensor kernel/control revision도 현재 fixed-RF v2와 다르다. 따라서
+당시 component 숫자와 `accepted` 표시는 2026-07-08 protocol의 역사적 판정이며,
+현재 final coefficient로 인용하지 않는다.
 
-| Component/path | energy numerator | measurement scope | power semantics | median | unit | reliability | 해석 |
-|---|---|---|---|---:|---|---|---|
-| Tensor MMA incremental | `nvml_total_energy` + `total_energy_mj_delta` | `gpu_device_total_energy_counter` | `one_sec_average` | 0.129216 | pJ/FLOP | `accepted` | strict energy numerator 기준 Tensor 후보 |
-| Shared scalar path | `nvml_total_energy` + `total_energy_mj_delta` | `gpu_device_total_energy_counter` | `one_sec_average` | 0.170590 | pJ/bit | `accepted` | LR8-only strict follow-up. LR4/LR8 calibrated 0.161 pJ/bit는 보조 근거 |
-| Global L1 hit path | `nvml_total_energy` + `total_energy_mj_delta` | `gpu_device_total_energy_counter` | `one_sec_average` | 0.173483 | pJ/bit | `accepted` | LR4-only follow-up으로 LR8 weak-signal row를 분리 |
-| L2 CG hit path | `nvml_total_energy` + `total_energy_mj_delta` | `gpu_device_total_energy_counter` | `one_sec_average` | 1.131073 | pJ/bit | `accepted` | strict+fresh NCU 기준에서도 L1 < L2 계층 순서와 정합 |
+| 이 예시가 증명하는 것 | 증명하지 못하는 것 |
+|---|---|
+| raw energy numerator가 GPU/device total-energy mJ delta였음 | 현행 treatment-control과 NCU gate 통과 |
+| RTX 3090 fallback power semantics가 `one_sec_average`임 | 과거 component median의 현재 유효성 |
+| explicit measurement scope를 CSV와 audit에 남길 수 있음 | 순수 Tensor/L1/L2 회로 에너지 |
 
-상세 결과는
+역사적 산출물은
 [rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md](../../results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md)에
-정리했다. fresh NCU reliability audit은
-[rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.md](../../results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.md)이고,
-4개 component가 모두 `accepted`다. 이 예시는 RTX 3090의 `GetPowerUsage` fallback
-의미가 `one_sec_average`여도, 최종 coefficient의 분자는 endpoint power 적분이 아니라
-total-energy counter delta여야 한다는 점을 보여준다. 새 플랫폼 결과는 반드시 해당
-GPU에서 새 NCU sidecar까지 다시 수집해야 한다.
+보존하고, 현행 재판정은
+[current_goal_alignment_audit_ko.md](../audits/current_goal_alignment_audit_ko.md)를
+따른다. 새 플랫폼 결과는 해당 GPU에서 power API audit과 NCU sidecar를 모두 다시
+수집해야 한다.
 
 ## Power API audit 실행
 

@@ -102,11 +102,11 @@ def goal_readiness_path(tag: str) -> Path:
     return Path(f"results/summary/component_energy_goal_readiness_audit_{tag}.csv")
 
 
-def goal_readiness_status(repo: Path, tag: str) -> dict[str, str]:
-    path = repo / goal_readiness_path(tag)
-    rows = read_csv(path)
+def goal_readiness_status(repo: Path, path: Path) -> dict[str, str]:
+    resolved_path = path if path.is_absolute() else repo / path
+    rows = read_csv(resolved_path)
     counts = status_counts(rows)
-    if not path.exists():
+    if not resolved_path.exists():
         status = "missing_audit"
     elif counts.get("fail", 0):
         status = "fail"
@@ -117,7 +117,7 @@ def goal_readiness_status(repo: Path, tag: str) -> dict[str, str]:
     else:
         status = "pass"
     return {
-        "goal_readiness_audit": str(goal_readiness_path(tag)),
+        "goal_readiness_audit": str(path),
         "goal_readiness_status": status,
         "goal_readiness_pass": str(counts.get("pass", 0)),
         "goal_readiness_missing": str(counts.get("missing", 0)),
@@ -176,9 +176,18 @@ def first_open_gap(gap_rows: list[dict[str, str]]) -> dict[str, str]:
     )[0]
 
 
-def build_rows(repo: Path, profiles: list[str], tag: str) -> list[dict[str, str]]:
+def build_rows(
+    repo: Path,
+    profiles: list[str],
+    tag: str,
+    *,
+    goal_readiness_csv: Path | None = None,
+) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    goal_status = goal_readiness_status(repo, tag)
+    goal_status = goal_readiness_status(
+        repo,
+        goal_readiness_csv or goal_readiness_path(tag),
+    )
     for profile in profiles:
         package_path = repo / package_audit_path(profile, tag)
         gaps_path = repo / gap_report_path(profile, tag)
@@ -194,7 +203,8 @@ def build_rows(repo: Path, profiles: list[str], tag: str) -> list[dict[str, str]
         summary_status = strict_status(summary_rows, summary_audit_rows)
         pstatus = package_status(package_counts, package_path.exists())
         if profile == "rtx3090" and pstatus == "missing_audit" and summary_status == "pass":
-            pstatus = "local_strict_evidence"
+            pstatus = "historical_local_evidence"
+            summary_status = "historical_pass"
         row = {
             "profile": profile,
             "tag": tag,
@@ -270,13 +280,19 @@ def write_csv(path: Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
+def row_is_complete(row: dict[str, str]) -> bool:
+    return (
+        row["package_status"] == "pass"
+        and row["strict_summary_status"] == "pass"
+    )
+
+
 def write_md(path: Path, rows: list[dict[str, str]], *, tag: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     complete = [
         row
         for row in rows
-        if row["package_status"] in {"pass", "local_strict_evidence"}
-        and row["strict_summary_status"] == "pass"
+        if row_is_complete(row)
     ]
     with path.open("w", encoding="utf-8") as f:
         f.write("# Platform Component Result Intake Dashboard\n\n")
@@ -331,8 +347,9 @@ def write_md(path: Path, rows: list[dict[str, str]], *, tag: str) -> None:
         f.write(
             "A platform is not final merely because the command package exists. External "
             "platforms need a clean package audit, a strict component summary, and a strict "
-            "summary audit. RTX 3090 is shown as local strict evidence when its strict "
-            "summary and strict audit pass without an external package audit. "
+            "summary audit. RTX 3090 evidence without a current package audit is shown as "
+            "`historical_local_evidence`/`historical_pass`; it is context only and never "
+            "counts as a current completed platform. "
             "Power-related rows must satisfy the power measurement matrix policy: "
             f"`{FINAL_NUMERATOR_POLICY}` plus the profile-specific "
             "`nvml_power_usage_semantics`.\n"
@@ -440,6 +457,20 @@ def self_test() -> None:
         assert rows[0]["goal_readiness_status"] == "incomplete", rows
         assert rows[0]["goal_readiness_missing"] == "1", rows
 
+        rtx_summary = root / strict_summary_path("rtx3090", "test")
+        rtx_audit = root / strict_audit_path("rtx3090", "test")
+        rtx_summary.write_text(summary.read_text(encoding="utf-8"), encoding="utf-8")
+        rtx_audit.write_text(strict_audit.read_text(encoding="utf-8"), encoding="utf-8")
+        historical_rows = build_rows(
+            root,
+            ["rtx3090"],
+            "test",
+            goal_readiness_csv=goal_readiness_path("test"),
+        )
+        assert historical_rows[0]["package_status"] == "historical_local_evidence", historical_rows
+        assert historical_rows[0]["strict_summary_status"] == "historical_pass", historical_rows
+        assert not row_is_complete(historical_rows[0]), historical_rows
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -448,6 +479,13 @@ def main() -> int:
     parser.add_argument("--profiles", default=",".join(DEFAULT_PROFILES))
     parser.add_argument("--out-csv")
     parser.add_argument("--out-md")
+    parser.add_argument(
+        "--goal-readiness-csv",
+        help=(
+            "readiness audit to summarize; defaults to the package tag, but callers with "
+            "a separate readiness date must pass that current file explicitly"
+        ),
+    )
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
 
@@ -461,7 +499,14 @@ def main() -> int:
     if unknown:
         parser.error("unknown profiles: " + ",".join(unknown))
     repo = Path(args.repo)
-    rows = build_rows(repo, profiles, args.tag)
+    rows = build_rows(
+        repo,
+        profiles,
+        args.tag,
+        goal_readiness_csv=(
+            Path(args.goal_readiness_csv) if args.goal_readiness_csv else None
+        ),
+    )
     out_csv = Path(
         args.out_csv
         or f"results/summary/platform_component_intake_dashboard_{args.tag}.csv"
@@ -475,8 +520,7 @@ def main() -> int:
     complete = [
         row
         for row in rows
-        if row["package_status"] in {"pass", "local_strict_evidence"}
-        and row["strict_summary_status"] == "pass"
+        if row_is_complete(row)
     ]
     print(f"platform dashboard profiles={len(rows)} complete={len(complete)}")
     print(f"wrote {out_csv}")
