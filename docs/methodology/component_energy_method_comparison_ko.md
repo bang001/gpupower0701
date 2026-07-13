@@ -19,7 +19,7 @@
 
 위 2026-07-05/08 RTX 3090 산출물은 실험 발전 과정을 설명하는 **과거
 protocol 결과**다. 현행 protocol은 Global L1/L2/DRAM control을
-`global_addr_only`로 바꾸고, Tensor/DRAM 동일 ITER 및 treatment/control 동일 좌표
+`global_addr_only`로 바꾸고, Tensor/L2 CG/DRAM CG 동일 ITER 및 treatment/control 동일 좌표
 NCU acceptance를 요구한다. 따라서 과거 `clocked_empty` 기반 memory coefficient를
 새 cross-platform strict final 값으로 재사용하면 안 된다.
 

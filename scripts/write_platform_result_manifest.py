@@ -44,6 +44,11 @@ ARTIFACT_PURPOSES = {
         "proves reg_mma-calibrated ITER was applied identically to treatment and control",
         "tensor_pair_calibration_policy",
     ),
+    "l2_pair_calibration": (
+        "L2 pair calibration manifest",
+        "proves L2 treatment and address control used identical resolved ITER",
+        "l2_pair_calibration_policy",
+    ),
     "dram_pair_calibration": (
         "DRAM pair calibration manifest",
         "proves DRAM treatment and address control used identical resolved ITER",
@@ -214,8 +219,10 @@ def self_test(module: Any) -> None:
             raise AssertionError(
                 f"{profile}: manifest mismatch missing={missing} extra={extra}"
             )
-        if len(rows) != 20:
-            raise AssertionError(f"{profile}: expected 20 artifact rows, got {len(rows)}")
+        if len(rows) != len(expected_paths):
+            raise AssertionError(
+                f"{profile}: expected {len(expected_paths)} artifact rows, got {len(rows)}"
+            )
         required_groups = {
             "raw energy CSVs",
             "power API audit",

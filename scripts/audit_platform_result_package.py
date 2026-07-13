@@ -422,6 +422,7 @@ NCU_DRAM_L2_RATIO_MIN = 0.5
 NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX = 1.0
 NCU_REGISTER_MEMORY_BYTES_PER_OP_MAX = 1.0
 TENSOR_CONTROL_MIN_ELAPSED_S = 0.8
+L2_CONTROL_MIN_ELAPSED_S = 0.8
 DRAM_CONTROL_MIN_ELAPSED_S = 0.8
 CONTROL_NCU_REQUIRED_COMPONENTS = {
     "tensor_mma_increment",
@@ -500,6 +501,9 @@ def expected_paths(profile: str, tag: str) -> dict[str, Path | list[Path]]:
         "raw": [Path(f"results/raw/{base}_{suffix}.csv") for suffix in RAW_SUFFIXES],
         "tensor_pair_calibration": Path(
             f"results/raw/{base}_tensor_pair_calibration.csv"
+        ),
+        "l2_pair_calibration": Path(
+            f"results/raw/{base}_l2_pair_calibration.csv"
         ),
         "dram_pair_calibration": Path(
             f"results/raw/{base}_dram_pair_calibration.csv"
@@ -999,24 +1003,26 @@ def audit_tensor_pair_calibration(
     )
 
 
-def audit_dram_pair_calibration(
+def audit_memory_pair_calibration(
     repo: Path,
     rows: list[dict[str, str]],
     calibration_path: Path,
-    dram_raw_path: Path,
+    raw_path: Path,
     *,
     profile: str,
+    treatment_mode: str,
+    pair_label: str,
 ) -> None:
     calibration_full = rel(repo, calibration_path)
-    dram_full = rel(repo, dram_raw_path)
-    if not calibration_full.exists() or not dram_full.exists():
+    raw_full = rel(repo, raw_path)
+    if not calibration_full.exists() or not raw_full.exists():
         return
 
     with calibration_full.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         calibration_fields = set(reader.fieldnames or [])
         calibration_rows = list(reader)
-    with dram_full.open(newline="", encoding="utf-8") as f:
+    with raw_full.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         raw_fields = set(reader.fieldnames or [])
         raw_rows = list(reader)
@@ -1039,7 +1045,7 @@ def audit_dram_pair_calibration(
     if missing_calibration:
         problems.append("calibration_missing_columns=" + ",".join(missing_calibration))
     if missing_raw:
-        problems.append("dram_raw_missing_columns=" + ",".join(missing_raw))
+        problems.append(f"{pair_label}_raw_missing_columns=" + ",".join(missing_raw))
 
     calibration_by_coord: dict[tuple[str, ...], int] = {}
     if not missing_calibration:
@@ -1054,7 +1060,7 @@ def audit_dram_pair_calibration(
             control_min_seconds = parse_float(row.get("control_min_seconds", ""))
             if row.get("target_profile", "") != profile:
                 problems.append(f"calibration:{idx}:profile={row.get('target_profile', '')}")
-            if row.get("calibration_source_mode", "") != "dram_cg_load_only":
+            if row.get("calibration_source_mode", "") != treatment_mode:
                 problems.append(f"calibration:{idx}:source={row.get('calibration_source_mode', '')}")
             if row.get("status", "") != "pair_locked":
                 problems.append(f"calibration:{idx}:status={row.get('status', '')}")
@@ -1075,7 +1081,7 @@ def audit_dram_pair_calibration(
             treatment_command = row.get("treatment_calibration_command", "")
             control_command = row.get("control_calibration_command", "")
             if not (
-                "--mode dram_cg_load_only" in treatment_command
+                f"--mode {treatment_mode}" in treatment_command
                 and "--calibrate-only" in treatment_command
             ):
                 problems.append(f"calibration:{idx}:bad_treatment_calibration_command")
@@ -1103,57 +1109,81 @@ def audit_dram_pair_calibration(
     if not missing_raw:
         for idx, row in enumerate(raw_rows, start=2):
             mode = row.get("mode", "")
-            if mode not in {"global_addr_only", "dram_cg_load_only"}:
+            if mode not in {"global_addr_only", treatment_mode}:
                 continue
             coord = tensor_pair_coord(row)
             iters = parse_int(row.get("ITER", ""))
             if iters is None or iters <= 0:
-                problems.append(f"dram_raw:{idx}:ITER={row.get('ITER', '')}")
+                problems.append(f"{pair_label}_raw:{idx}:ITER={row.get('ITER', '')}")
                 continue
             raw_iters.setdefault(coord, {}).setdefault(mode, set()).add(iters)
 
     for coord, by_mode in sorted(raw_iters.items()):
-        missing_modes = {"global_addr_only", "dram_cg_load_only"} - set(by_mode)
+        missing_modes = {"global_addr_only", treatment_mode} - set(by_mode)
         if missing_modes:
             problems.append(
-                f"dram_raw:{coord}:missing_modes={','.join(sorted(missing_modes))}"
+                f"{pair_label}_raw:{coord}:missing_modes={','.join(sorted(missing_modes))}"
             )
             continue
-        combined = by_mode["global_addr_only"] | by_mode["dram_cg_load_only"]
+        combined = by_mode["global_addr_only"] | by_mode[treatment_mode]
         if len(combined) != 1:
-            problems.append(f"dram_raw:{coord}:ITER_sets={sorted(combined)}")
+            problems.append(f"{pair_label}_raw:{coord}:ITER_sets={sorted(combined)}")
             continue
         actual = next(iter(combined))
         resolved = calibration_by_coord.get(coord)
         if resolved is None:
-            problems.append(f"dram_raw:{coord}:missing_calibration")
+            problems.append(f"{pair_label}_raw:{coord}:missing_calibration")
         elif resolved != actual:
-            problems.append(f"dram_raw:{coord}:resolved={resolved}:actual={actual}")
+            problems.append(
+                f"{pair_label}_raw:{coord}:resolved={resolved}:actual={actual}"
+            )
     extra_calibration = sorted(set(calibration_by_coord) - set(raw_iters))
     if extra_calibration:
         problems.append(f"calibration_without_raw={extra_calibration[:3]}")
     if not raw_iters:
-        problems.append("no_dram_pair_rows")
+        problems.append(f"no_{pair_label}_pair_rows")
 
     add(
         rows,
         area="analysis",
-        check="dram_pair_calibration_policy",
+        check=f"{pair_label}_pair_calibration_policy",
         status="pass" if not problems else "fail",
         expected=(
-            "one dual calibration per DRAM coordinate, resolved ITER=max(candidate "
-            "ITERs), and identical positive ITER in dram_cg_load_only/global_addr_only"
+            f"one dual calibration per {pair_label.upper()} coordinate, resolved "
+            f"ITER=max(candidate ITERs), and identical positive ITER in "
+            f"{treatment_mode}/global_addr_only"
         ),
         actual=(
             f"coordinates={len(raw_iters)}, calibrations={len(calibration_by_coord)}"
             if not problems
             else ";".join(problems[:12])
         ),
-        evidence=f"{calibration_path};{dram_raw_path}",
+        evidence=f"{calibration_path};{raw_path}",
         action=(
-            "rerun the DRAM sweep with --memory-pair-lock-iters and do not append "
-            "duration-calibrated DRAM rows"
+            f"rerun the {pair_label.upper()} sweep with --memory-pair-lock-iters "
+            f"and do not append duration-calibrated {pair_label.upper()} rows"
         ),
+    )
+
+
+def audit_dram_pair_calibration(
+    repo: Path,
+    rows: list[dict[str, str]],
+    calibration_path: Path,
+    dram_raw_path: Path,
+    *,
+    profile: str,
+) -> None:
+    """Backward-compatible wrapper for the DRAM pair package gate."""
+
+    audit_memory_pair_calibration(
+        repo,
+        rows,
+        calibration_path,
+        dram_raw_path,
+        profile=profile,
+        treatment_mode="dram_cg_load_only",
+        pair_label="dram",
     )
 
 
@@ -1600,7 +1630,16 @@ def audit_matched_control(
         if component != "tensor_mma_increment":
             if row.get("denominator_source") != "ncu_actual_exact":
                 problems.append(f"{path}:{idx}:denominator={row.get('denominator_source')}")
-        if component in {"tensor_mma_increment", "dram_cg_stream_path"}:
+        if component in {
+            "tensor_mma_increment",
+            "l2_hit_cg_path",
+            "dram_cg_stream_path",
+        }:
+            component_label = {
+                "tensor_mma_increment": "tensor",
+                "l2_hit_cg_path": "l2",
+                "dram_cg_stream_path": "dram",
+            }[component]
             if row.get("pair_energy_basis", "") != "matched_iters_net_energy":
                 problems.append(
                     f"{path}:{idx}:pair_energy_basis={row.get('pair_energy_basis', '')}"
@@ -1616,7 +1655,7 @@ def audit_matched_control(
                 or int(numerator_iters) != int(control_iters)
             ):
                 problems.append(
-                    f"{path}:{idx}:{'tensor' if component == 'tensor_mma_increment' else 'dram'}_iters="
+                    f"{path}:{idx}:{component_label}_iters="
                     f"{row.get('numerator_ITER', '')}/{row.get('control_ITER', '')}"
                 )
             if iter_ratio is None or not math.isclose(iter_ratio, 1.0, rel_tol=1.0e-9):
@@ -1635,6 +1674,8 @@ def audit_matched_control(
                 < (
                     TENSOR_CONTROL_MIN_ELAPSED_S
                     if component == "tensor_mma_increment"
+                    else L2_CONTROL_MIN_ELAPSED_S
+                    if component == "l2_hit_cg_path"
                     else DRAM_CONTROL_MIN_ELAPSED_S
                 )
             ):
@@ -1673,7 +1714,7 @@ def audit_matched_control(
         check="matched_control_detail_policy",
         status="pass" if not problems else "fail",
         expected=(
-            "Tensor and DRAM rows use matched_iters_net_energy with identical "
+            "Tensor, L2, and DRAM rows use matched_iters_net_energy with identical "
             "positive ITER; Tensor/global-memory controls have exact-coordinate "
             "NCU acceptance; memory paths use exact NCU denominators; valid "
             "deltas are positive"
@@ -1681,8 +1722,8 @@ def audit_matched_control(
         actual=f"rows={len(csv_rows)}" if not problems else ";".join(problems[:12]),
         evidence=str(path),
         action=(
-            "rerun Tensor sweeps with --tensor-pair-lock-iters and DRAM sweeps with "
-            "--memory-pair-lock-iters; analyze with matched-iters pair policies and "
+            "rerun Tensor sweeps with --tensor-pair-lock-iters and L2/DRAM sweeps "
+            "with --memory-pair-lock-iters; analyze with matched-iters pair policies and "
             "--require-control-ncu-acceptance; retain exact NCU denominators, "
             "total-energy scope, and expected power semantics"
         ),
@@ -2025,6 +2066,15 @@ def audit_package(
             paths["tensor_pair_calibration"],  # type: ignore[arg-type]
             raw_paths[0],
             profile=profile,
+        )
+        audit_memory_pair_calibration(
+            repo,
+            rows,
+            paths["l2_pair_calibration"],  # type: ignore[arg-type]
+            raw_paths[3],
+            profile=profile,
+            treatment_mode="l2_cg_load_only",
+            pair_label="l2",
         )
         audit_dram_pair_calibration(
             repo,

@@ -1,6 +1,6 @@
 # GPU Power Modeling 백서용 종합 정리
 
-갱신일: 2026-07-12
+갱신일: 2026-07-13
 
 ## 핵심 주장
 
@@ -49,9 +49,10 @@ profile/preflight
   -> reliability + strict summary + package audit
 ```
 
-Tensor와 DRAM은 동일 ITER의 net energy를 직접 차분한다. Shared/Global L1/L2는
+Tensor, L2 CG, DRAM CG는 동일 ITER의 net energy를 직접 차분한다. Shared/Global L1만
 elapsed-aware control-power 차분을 사용한다. 모든 memory final row는 NCU actual bytes를
-분모로 사용한다.
+분모로 사용한다. V100 L2처럼 path acceptance가 성공했더라도 treatment/control ITER가
+다르면 같은 작업량 비교가 아니므로 coefficient를 폐기한다.
 
 ## 현재 결과 상태
 

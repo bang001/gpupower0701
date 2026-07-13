@@ -93,7 +93,7 @@ NCU_USE_SUDO=1 bash results/summary/a100_tensor_l2_remediation_20260710_commands
 | L2 path precheck | 사전 고정된 8개 policy/layout/B 후보 중 W16/W128 treatment/control이 모두 strict gate를 통과하는 첫 후보 선택. 전부 실패하면 energy sweep 미실행 |
 | Full NCU precheck | Tensor RF 5개와 L2 W x LR 20개 treatment/control이 모두 accepted이고 replay/cache/warm-up/policy/layout/B metadata 일치. L2는 native/derived hit, sector conservation, observed/expected traffic까지 일치해야 하며 한 row라도 실패하면 energy sweep 미실행 |
 | L2 각 W | application replay/cache-control none/선택 residency/layout/B/CG warm-up 4회. LR1/2/4/8/16 treatment/control 모두 accepted; control input L1 request=0 및 DRAM/expected<=0.1%; treatment L1 path hit<=1%, L1 hit/request<=1%, derived/native L2 read hit>=95%, 두 값 차이<=2 percentage points, hit+miss/read sectors=1+/-2%, observed/expected bytes=0.95-1.05, DRAM/L2<=2% |
-| L2 energy | LR4/8/16별 최소 5 valid repeats, 모든 delta_E>=10 J, positive pJ/bit, exact NCU denominator |
+| L2 energy | W/B/LR별 treatment/control dual calibration의 최대 동일 ITER, `*_l2_pair_calibration.csv`, `pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1`; LR4/8/16별 최소 5 valid repeats, 모든 delta_E>=10 J, positive pJ/bit, exact NCU denominator |
 | L2 plateau | 위 조건을 통과한 인접 W 두 개 이상의 median pJ/bit 상대 차이<=35% |
 
 35%는 A100 회로 특성에서 유도한 상수가 아니라, 이 targeted run에서 working-set 변화에
@@ -109,6 +109,10 @@ RF-independent pure Tensor energy를 증명하지는 않는다. 0.35-0.54 pJ/FLO
 scheduler/clock/register-fragment lifetime도 포함된다. 최종 audit의 RF별 treatment TFLOP/s,
 treatment/control elapsed time과 net power를 함께 비교하며, GPU 간 차이를 Tensor 회로
 차이만으로 해석하지 않는다.
+
+L2도 NCU path acceptance만으로 승인하지 않는다. NCU는 byte가 L2 hit 경로를 지났는지
+증명하고, pair calibration/raw ITER gate는 treatment와 control이 같은 횟수의 logical work를
+실행했는지 증명한다. 둘 중 하나라도 실패하면 L2 coefficient를 만들지 않는다.
 
 마지막 파일의 `remediation_verdict=pass` 전에는 A100 Tensor/L2 값을 보고하지 않는다.
 

@@ -257,6 +257,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     binary = args.binary
     ncu = args.ncu
     tensor_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
+    l2_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
     dram_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
     # l2_load_only follows the normal global-load policy and therefore cannot
     # prove an L2-only path. Keep it out of strict packages; only CG loads are
@@ -269,6 +270,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     ncu_raw = f"results/raw/{args.target_profile}_component_finalplan_ncu_factor_{tag}.csv"
     ncu_summary = f"{ncu_dir}/ncu_cache_validation_summary.csv"
     tensor_pair_calibration_csv = f"{raw_prefix}_tensor_pair_calibration.csv"
+    l2_pair_calibration_csv = f"{raw_prefix}_l2_pair_calibration.csv"
     dram_pair_calibration_csv = f"{raw_prefix}_dram_pair_calibration.csv"
     acceptance_csv = f"{summary_prefix}_ncu_acceptance.csv"
     acceptance_md = f"{summary_prefix}_ncu_acceptance.md"
@@ -344,6 +346,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         schema_smoke_audit_csv,
         schema_smoke_audit_md,
         tensor_pair_calibration_csv,
+        l2_pair_calibration_csv,
         dram_pair_calibration_csv,
         *energy_csvs,
         *matrix_csvs,
@@ -697,6 +700,13 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             load_repeats=profile["memory_energy_load_repeats"],
             output=energy_csvs[3],
             matrix=matrix_csvs[3],
+            extra_args=[
+                "--memory-pair-lock-iters",
+                "--memory-pair-control-min-seconds",
+                q(str(l2_control_calibration_min_seconds)),
+                "--memory-pair-calibration-csv",
+                q(l2_pair_calibration_csv),
+            ],
         ),
         run_component_command(
             binary=binary,
@@ -849,6 +859,10 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "nearest-control",
                 "--tensor-pair-policy",
                 "matched-iters",
+                "--l2-pair-policy",
+                "matched-iters",
+                "--l2-control-min-elapsed-s",
+                q(str(0.8 * l2_control_calibration_min_seconds)),
                 "--dram-pair-policy",
                 "matched-iters",
                 "--dram-control-min-elapsed-s",
@@ -1080,6 +1094,7 @@ def write_markdown(args: argparse.Namespace, profile: dict[str, Any], path: Path
     blocks = args.blocks_per_sm_values or profile["blocks"]
     ncu_blocks = args.ncu_blocks_per_sm
     tensor_control_min_seconds = max(1.0, args.seconds * 0.1)
+    l2_control_min_seconds = max(1.0, args.seconds * 0.1)
     dram_control_min_seconds = max(1.0, args.seconds * 0.1)
     tensor_control_analysis_min_seconds = 0.8 * tensor_control_min_seconds
     out_sh = args.out_sh
@@ -1189,7 +1204,7 @@ binary whose CSV header includes `measurement_scope`.
 | Tensor | `reg_operand_only,reg_mma` | 2048 | 2048/{ncu_blocks} | reuse 1,2,4,8,16; treatment/control-floor dual-calibrated pair-locked ITER |
 | Shared scalar | `clocked_empty,shared_scalar_load_only` | {profile['shared_w']} | {profile['shared_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
 | Global L1 | `global_addr_only,global_l1_load_only` | {profile['l1_w']} | {profile['l1_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
-| L2 | `{profile['l2_modes']}` | {profile['l2_w']} | {profile.get('l2_ncu_w_values', profile['l2_ncu_w'])}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
+| L2 | `{profile['l2_modes']}` | {profile['l2_w']} | {profile.get('l2_ncu_w_values', profile['l2_ncu_w'])}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; treatment/control-floor dual-calibrated pair-locked ITER; NCU also checks 1,2 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | {profile['dram_w']} | {profile['dram_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; treatment/control-floor dual-calibrated pair-locked ITER; NCU checks 1,4,8,16 |
 
 The energy runner applies the same 1 KiB/block feasibility rule to treatment and
@@ -1348,6 +1363,15 @@ analysis then uses `--tensor-pair-policy matched-iters` and directly subtracts
 the two idle-corrected net energies. An ITER mismatch is a hard-invalid Tensor
 detail row; the analysis no longer rescales a differently calibrated Tensor
 control by elapsed-time power.
+L2 CG energy rows use `--memory-pair-lock-iters` with
+`--memory-pair-control-min-seconds={l2_control_min_seconds}`. Each
+W/B/LR coordinate calibrates `l2_cg_load_only` for the treatment target and
+`global_addr_only` for the control-duration floor, then applies the larger
+identical ITER to both. Analysis uses `--l2-pair-policy matched-iters` and
+directly computes `net_E(l2_cg_load_only) - net_E(global_addr_only)`. This is
+required even when NCU reports a perfect L2-hit path: path acceptance proves
+where bytes traveled, while equal ITER proves that the energy numerator compares
+the same logical work. An ITER mismatch is a hard-invalid L2 row.
 DRAM energy rows use `--memory-pair-lock-iters` together with
 `--memory-pair-control-min-seconds={dram_control_min_seconds}`. Each W/B/LR
 coordinate calibrates `dram_cg_load_only` for the treatment target and

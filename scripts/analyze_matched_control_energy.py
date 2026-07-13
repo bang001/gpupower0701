@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Analyze component runs with matched treatment/control rows.
 
-Memory paths can use elapsed-aware control-power scaling. Tensor and DRAM
-finalplan rows can instead require pair-locked ITER and directly subtract the
-two net energies, so different calibrated work counts cannot masquerade as
-component energy.
+Shared/Global-L1 paths can use elapsed-aware control-power scaling. Tensor, L2,
+and DRAM finalplan rows can instead require pair-locked ITER and directly
+subtract the two net energies, so different calibrated work counts cannot
+masquerade as component energy.
 
 The output is an effective microbenchmark energy estimate. It is not a pure
 physical SRAM/register/DRAM bitcell energy.
@@ -503,6 +503,7 @@ def make_detail_rows(
     same_working_set_ncu_scales: dict[tuple[str, ...], tuple[float, float]],
     min_elapsed_s: float,
     tensor_control_min_elapsed_s: float,
+    l2_control_min_elapsed_s: float,
     dram_control_min_elapsed_s: float,
     max_elapsed_ratio: float,
     max_pair_start_distance_ms: float,
@@ -514,6 +515,7 @@ def make_detail_rows(
     exclude_power_state_rejects: bool,
     pairing: str,
     tensor_pair_policy: str,
+    l2_pair_policy: str,
     dram_pair_policy: str,
     require_control_ncu_acceptance: bool,
 ) -> list[dict[str, Any]]:
@@ -552,6 +554,9 @@ def make_detail_rows(
                     tensor_control_min_elapsed_s
                     if spec["component"] == "tensor_mma_increment"
                     and tensor_pair_policy == "matched-iters"
+                    else l2_control_min_elapsed_s
+                    if spec["component"] == "l2_hit_cg_path"
+                    and l2_pair_policy == "matched-iters"
                     else dram_control_min_elapsed_s
                     if spec["component"] == "dram_cg_stream_path"
                     and dram_pair_policy == "matched-iters"
@@ -628,6 +633,9 @@ def make_detail_rows(
                     spec["component"] == "tensor_mma_increment"
                     and tensor_pair_policy == "matched-iters"
                 ) or (
+                    spec["component"] == "l2_hit_cg_path"
+                    and l2_pair_policy == "matched-iters"
+                ) or (
                     spec["component"] == "dram_cg_stream_path"
                     and dram_pair_policy == "matched-iters"
                 )
@@ -691,11 +699,12 @@ def make_detail_rows(
                     ):
                         reasons.append("missing_pair_locked_iters")
                     elif int(numerator_iters) != int(control_iters):
-                        reasons.append(
-                            "tensor_iter_mismatch"
-                            if spec["component"] == "tensor_mma_increment"
-                            else "dram_iter_mismatch"
-                        )
+                        mismatch_reason = {
+                            "tensor_mma_increment": "tensor_iter_mismatch",
+                            "l2_hit_cg_path": "l2_iter_mismatch",
+                            "dram_cg_stream_path": "dram_iter_mismatch",
+                        }[spec["component"]]
+                        reasons.append(mismatch_reason)
                 if numerator.get("energy_source", "") != control.get("energy_source", ""):
                     reasons.append("energy_source_mismatch")
                 if numerator.get("energy_integration_method", "") != control.get(
@@ -1011,7 +1020,7 @@ def write_markdown(
         f.write("## Method\n\n")
         f.write(
             "Default rows use `delta_E_J = E_mode_J - "
-            "(E_control_J / t_control_s) * t_mode_s`. Tensor and DRAM rows use "
+            "(E_control_J / t_control_s) * t_mode_s`. Tensor, L2 CG, and DRAM rows use "
             "direct net-energy subtraction only when their pair policy is "
             "`matched-iters` and both ITER values match.\n\n"
         )
@@ -1035,10 +1044,15 @@ def write_markdown(
             f"{args.tensor_control_min_elapsed_s:g} |\n"
         )
         f.write(
+            "| L2 control min elapsed (s) | "
+            f"{args.l2_control_min_elapsed_s:g} |\n"
+        )
+        f.write(
             "| DRAM control min elapsed (s) | "
             f"{args.dram_control_min_elapsed_s:g} |\n"
         )
         f.write(f"| DRAM pair policy | {args.dram_pair_policy} |\n")
+        f.write(f"| L2 pair policy | {args.l2_pair_policy} |\n")
         f.write(
             "| require exact control NCU acceptance | "
             f"{args.require_control_ncu_acceptance} |\n"
@@ -1217,6 +1231,7 @@ def run_self_test() -> None:
         same_working_set_ncu_scales={},
         min_elapsed_s=1.0,
         tensor_control_min_elapsed_s=0.05,
+        l2_control_min_elapsed_s=0.05,
         dram_control_min_elapsed_s=0.05,
         max_elapsed_ratio=3.0,
         max_pair_start_distance_ms=30000.0,
@@ -1227,6 +1242,7 @@ def run_self_test() -> None:
         expected_power_semantics="instant",
         exclude_power_state_rejects=False,
         pairing="nearest-control",
+        l2_pair_policy="duration-scaled",
         dram_pair_policy="duration-scaled",
         require_control_ncu_acceptance=False,
     )
@@ -1272,6 +1288,47 @@ def run_self_test() -> None:
     )
     assert not mismatched[0]["valid_component_estimate"]
     assert "tensor_iter_mismatch" in mismatched[0]["diagnostic"]
+
+    l2_common = {
+        **common,
+        "W_SM_KiB": "32",
+        "load_repeat": "4",
+        "ITER": "400",
+    }
+    l2_treatment = {
+        **l2_common,
+        "mode": "l2_cg_load_only",
+        "run_id": "l2_cg_load_only_300_r0",
+        "elapsed_s": "10",
+        "net_E_J": "50",
+        "expected_l2_bytes": "1000000",
+    }
+    l2_control = {
+        **l2_common,
+        "mode": "global_addr_only",
+        "run_id": "global_addr_only_299_r0",
+        "elapsed_s": "4",
+        "net_E_J": "15",
+        "expected_l2_bytes": "0",
+    }
+    l2_matched = make_detail_rows(
+        [l2_treatment, l2_control],
+        tensor_pair_policy="duration-scaled",
+        l2_pair_policy="matched-iters",
+        **{k: v for k, v in kwargs.items() if k != "l2_pair_policy"},
+    )
+    assert len(l2_matched) == 1
+    assert l2_matched[0]["pair_energy_basis"] == "matched_iters_net_energy"
+    assert abs(float(l2_matched[0]["delta_E_J"]) - 35.0) < 1.0e-9
+    assert l2_matched[0]["valid_component_estimate"]
+    l2_mismatch = make_detail_rows(
+        [l2_treatment, {**l2_control, "ITER": "800"}],
+        tensor_pair_policy="duration-scaled",
+        l2_pair_policy="matched-iters",
+        **{k: v for k, v in kwargs.items() if k != "l2_pair_policy"},
+    )
+    assert not l2_mismatch[0]["valid_component_estimate"]
+    assert "l2_iter_mismatch" in l2_mismatch[0]["diagnostic"]
 
     dram_common = {
         **common,
@@ -1343,7 +1400,7 @@ def run_self_test() -> None:
         },
     )
     assert control_rejected == []
-    print("matched-control Tensor/DRAM pair-policy self-test passed")
+    print("matched-control Tensor/L2/DRAM pair-policy self-test passed")
 
 
 def main() -> int:
@@ -1415,6 +1472,14 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--l2-control-min-elapsed-s",
+        type=float,
+        default=0.5,
+        help=(
+            "Minimum elapsed time for a matched-ITER global_addr_only L2 control."
+        ),
+    )
+    parser.add_argument(
         "--dram-control-min-elapsed-s",
         type=float,
         default=0.5,
@@ -1457,6 +1522,15 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--l2-pair-policy",
+        choices=["duration-scaled", "matched-iters"],
+        default="matched-iters",
+        help=(
+            "L2 final rows require equal ITER and directly subtract net energies. "
+            "duration-scaled is retained only for explicit legacy diagnostics."
+        ),
+    )
+    parser.add_argument(
         "--dram-pair-policy",
         choices=["duration-scaled", "matched-iters"],
         default="duration-scaled",
@@ -1496,6 +1570,7 @@ def main() -> int:
         same_working_set_ncu_scales=same_working_set_ncu_scales,
         min_elapsed_s=args.min_elapsed_s,
         tensor_control_min_elapsed_s=args.tensor_control_min_elapsed_s,
+        l2_control_min_elapsed_s=args.l2_control_min_elapsed_s,
         dram_control_min_elapsed_s=args.dram_control_min_elapsed_s,
         max_elapsed_ratio=args.max_elapsed_ratio,
         max_pair_start_distance_ms=args.max_pair_start_distance_ms,
@@ -1507,6 +1582,7 @@ def main() -> int:
         exclude_power_state_rejects=args.exclude_power_state_rejects,
         pairing=args.pairing,
         tensor_pair_policy=args.tensor_pair_policy,
+        l2_pair_policy=args.l2_pair_policy,
         dram_pair_policy=args.dram_pair_policy,
         require_control_ncu_acceptance=args.require_control_ncu_acceptance,
     )

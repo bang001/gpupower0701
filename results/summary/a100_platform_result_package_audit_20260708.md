@@ -22,7 +22,7 @@ This package is not yet publishable as final component evidence. Fix missing/fai
 
 | status | checks |
 |---|---:|
-| `missing` | 15 |
+| `missing` | 16 |
 | `pass` | 2 |
 
 ## Checks
@@ -34,6 +34,7 @@ This package is not yet publishable as final component evidence. Fix missing/fai
 | `files` | `preflight_present` | `missing` | file exists | missing | `results/summary/a100_component_finalplan_20260708_preflight.md` | run the generated command package or copy the artifact from the node |
 | `files` | `raw_present` | `missing` | all expected files exist | missing=results/raw/a100_component_finalplan_20260708_tensor.csv;results/raw/a100_component_finalplan_20260708_shared.csv;results/raw/a100_component_finalplan_20260708_l1.csv;results/raw/a100_component_finalplan_20260708_l2.csv;results/raw/a100_component_finalplan_20260708_dram.csv | `results/raw/a100_component_finalplan_20260708_tensor.csv;results/raw/a100_component_finalplan_20260708_shared.csv;results/raw/a100_component_finalplan_20260708_l1.csv;results/raw/a100_component_finalplan_20260708_l2.csv;results/raw/a100_component_finalplan_20260708_dram.csv` | copy the missing platform result files back from the target node |
 | `files` | `tensor_pair_calibration_present` | `missing` | file exists | missing | `results/raw/a100_component_finalplan_20260708_tensor_pair_calibration.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `l2_pair_calibration_present` | `missing` | file exists | missing | `results/raw/a100_component_finalplan_20260708_l2_pair_calibration.csv` | run the generated command package or copy the artifact from the node |
 | `files` | `dram_pair_calibration_present` | `missing` | file exists | missing | `results/raw/a100_component_finalplan_20260708_dram_pair_calibration.csv` | run the generated command package or copy the artifact from the node |
 | `files` | `power_api_present` | `missing` | file exists | missing | `results/summary/a100_component_finalplan_20260708_power_api_audit.csv` | run the generated command package or copy the artifact from the node |
 | `files` | `power_state_present` | `missing` | file exists | missing | `results/summary/a100_component_finalplan_20260708_power_state_audit.csv` | run the generated command package or copy the artifact from the node |

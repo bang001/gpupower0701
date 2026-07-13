@@ -51,7 +51,7 @@ GPU/device total-energy mJ delta plus NCU path validation.
 2026-07-08 are historical evidence, not current strict-final values. Their
 Global L1/L2 energy pairs use `clocked_empty` and do not carry same-coordinate
 `global_addr_only` NCU acceptance. The current protocol requires address
-controls, exact control NCU acceptance, and pair-locked Tensor/DRAM work. See
+controls, exact control NCU acceptance, and pair-locked Tensor/L2/DRAM work. See
 `docs/audits/current_goal_alignment_audit_ko.md` and rerun
 `results/summary/rtx3090_component_finalplan_20260712_commands.sh` before
 publishing updated RTX 3090 coefficients.
@@ -761,9 +761,11 @@ elapsed-time-scaled `idle_baseline_J`. `net_E_J = delta_E_J - idle_baseline_J`.
   energy unless elapsed-time matching and NCU traffic validation pass. Large
   elapsed ratios or negative `*_mma - *_load_only` coefficients mean the pair is
   diagnostic-only.
-- V100/A100/H100 DRAM packages require `--memory-pair-lock-iters` and
-  `--dram-pair-policy matched-iters`. A duration-scaled DRAM row or `iter_ratio != 1`
-  is rejected even when NCU shows a DRAM-dominant path.
+- Current final packages require pair-locked identical ITER for Tensor, L2 CG,
+  and DRAM CG. L2/DRAM use `--memory-pair-lock-iters` plus their corresponding
+  `--l2-pair-policy matched-iters` or `--dram-pair-policy matched-iters` analyzer
+  gate. A duration-scaled L2/DRAM row or `iter_ratio != 1` is rejected even when
+  NCU shows the intended cache/memory path.
 
 ## Included Reference Assets
 

@@ -157,8 +157,8 @@ V100 전용 기준:
    - Tensor는 RF별로 reg_mma treatment 목표와 reg_operand_only control 최소시간을 각각 calibrate하고 두 ITER 중 큰 값을 두 mode에 적용한 뒤, duration scaling 없이 net-energy를 직접 차분한다. tensor_pair_calibration CSV의 두 candidate/max policy와 matched detail의 `pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1`을 확인한다.
    - shared scalar는 clocked_empty와 shared_scalar_load_only 차분으로 본다.
    - global L1은 global_addr_only와 global_l1_load_only 차분으로 본다.
-   - L2는 global_addr_only와 l2_cg_load_only 차분으로 본다.
-   - DRAM은 global_addr_only와 dram_cg_load_only를 sanity로 보고, W_SM은 8192 KiB 이상으로 시작한다.
+   - L2는 global_addr_only와 l2_cg_load_only를 W/B/LR별 dual-calibrate하고 두 candidate 중 큰 동일 ITER를 양쪽에 적용한 뒤 net-energy를 직접 차분한다. `*_l2_pair_calibration.csv`, raw ITER equality, `pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1`을 모두 확인한다.
+   - DRAM도 global_addr_only와 dram_cg_load_only에 동일 ITER를 적용해 sanity로 보고, W_SM은 8192 KiB 이상으로 시작한다.
 
 8. NCU sidecar
    - NCU_CHIP=gv100을 반드시 지정한다.
@@ -215,11 +215,11 @@ V100 전용 기준:
 
 | Component | 권장 mode pair | V100 우선 좌표 | NCU 채택 기준 | 결과 단위 |
 |---|---|---|---|---|
-| Tensor | `reg_mma - reg_operand_only` | energy B1-32; strict W2048/B32, reuse sweep | treatment HMMA 존재, control HMMA=0, spill/local 0, 두 mode ITER 동일 | pJ/FLOP |
+| Tensor | `reg_mma - reg_operand_only` | energy B4/16/32; strict W2048/B32, reuse sweep | treatment HMMA 존재, control HMMA=0, spill/local 0, 두 mode ITER 동일 | pJ/FLOP |
 | Shared/L1 | `shared_scalar_load_only - clocked_empty` | energy W32/64, B1-32; strict W32/B32 | shared bytes 존재, bank conflict 낮음 | pJ/bit, pJ/Byte |
-| Global L1 | `global_l1_load_only - global_addr_only` | energy W8/16/32, B1-32; strict W32/B32 | L1 hit >= 95%, L2/DRAM 낮음 | pJ/bit, pJ/Byte |
-| L2 | `l2_cg_load_only - global_addr_only` | energy W32/64, B1-32; strict W32/B32 | L2 read path hit >=95%, L1 path hit와 hit/request bytes <=1%, DRAM 낮음 | pJ/bit, pJ/Byte |
-| DRAM sanity | `dram_cg_load_only - global_addr_only` | energy B1-32; strict W8192/B32 | DRAM bytes 충분, capacity-bound L2 residual hit 허용 | pJ/bit, pJ/Byte 후보 |
+| Global L1 | `global_l1_load_only - global_addr_only` | energy W8/16/32, B4/16/32; strict W32/B32 | L1 hit >= 95%, L2/DRAM 낮음 | pJ/bit, pJ/Byte |
+| L2 | `l2_cg_load_only - global_addr_only` | energy W32/64, B4/16/32; strict W32/B32 | 두 mode 동일 ITER, L2 read path hit >=95%, L1 path hit와 hit/request bytes <=1%, DRAM 낮음 | pJ/bit, pJ/Byte |
+| DRAM sanity | `dram_cg_load_only - global_addr_only` | energy B4/16/32; strict W8192/B32 | 두 mode 동일 ITER, DRAM bytes 충분, capacity-bound L2 residual hit 허용 | pJ/bit, pJ/Byte 후보 |
 
 ## 해석 시 주의할 표현
 

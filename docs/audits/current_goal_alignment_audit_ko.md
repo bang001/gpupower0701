@@ -1,6 +1,6 @@
 # 현재 실험 목표 정합성 감사
 
-작성일: 2026-07-12
+작성일: 2026-07-13
 
 ## 감사 기준
 
@@ -30,6 +30,7 @@ workload-dependent effective microbenchmark coefficient다.
 | 5 | 방법 비교/백서/결과 문서가 2026-07-08 RTX 3090 `clocked_empty` 기반 L1/L2/DRAM 값을 현행 final처럼 표현 | 최신 address-control protocol과 결과 provenance가 충돌 | historical/provisional 경고 추가, 현행 pair 표와 구분 | 수정 완료 |
 | 6 | 기존 RTX 3090 strict CSV의 Global L1/L2 NCU evidence에 `global_addr_only`가 없음 | 현행 control gate를 소급 통과했다고 주장 불가 | 기존 숫자는 보존하되 현행 final에서 제외, 재실행 package 생성 | 재측정 필요 |
 | 7 | 문서는 새 `reg_operand_only` HMMA=0을 요구하지만 acceptance가 과거 fixed epilogue HMMA를 허용 | no-MMA control 정의와 코드 판정이 충돌 | 현행 `reg_operand_only`는 HMMA가 하나라도 있으면 reject; 완화는 legacy proxy mode에만 유지 | 수정 완료 |
+| 8 | V100 L2 treatment와 address control이 독립 duration calibration되어 control ITER가 약 2배 큼 | NCU path는 통과했지만 9개 energy 좌표가 모두 음수이며 동일 작업량 차분이 아님 | L2도 dual calibration의 최대 동일 ITER 적용, direct net-energy 차분, calibration/raw/detail package hard gate 추가 | 수정 완료; L2 재측정 필요 |
 
 기존 RTX 3090 strict summary를 현행 audit로 다시 검사한 결과는
 `results/summary/rtx3090_current_protocol_reaudit_20260712.md`에 기록했다. 결과는
@@ -44,7 +45,7 @@ Global L1/L2 address-control evidence 누락이 명시적으로 검출됐다.
 | Tensor | pair-locked 동일 ITER, `reg_mma` HMMA > 0, `reg_operand_only` no workload-proportional HMMA, spill/local 0 |
 | Shared | shared bytes/access/instruction > 0, expected bytes와 정합, bank conflict와 global leakage 제한 |
 | Global L1 | path-specific L1 hit >=95%, L2/DRAM leakage <=1% |
-| L2 CG | path-specific L2 read hit >=95%, L1 path hit/hit-byte ratio <=1%, DRAM/L2 read <=2% |
+| L2 CG | pair-locked 동일 ITER, `matched_iters_net_energy`, path-specific L2 read hit >=95%, L1 path hit/hit-byte ratio <=1%, DRAM/L2 read <=2% |
 | DRAM sanity | pair-locked 동일 ITER, L1 hit <=1%, capacity-aware L2 residual, DRAM bytes dominant |
 | Control | `reg_operand_only`/`global_addr_only`가 treatment와 동일 좌표에서 NCU accepted |
 | 반복 안정성 | positive signal, minimum delta/fraction, power-state reject 제외, sufficient valid rows |

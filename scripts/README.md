@@ -9,7 +9,7 @@
 | preflight | `preflight_gpu_support.py` | GPU profile, NVML, CUDA compiler target, NCU, power scope, binary dry-run 확인. `--strict`는 profile/toolchain mismatch와 dry-run 실패를 nonzero로 막고 `--self-test`로 회귀 검증 |
 | command plan | `plan_platform_component_experiment.py` | 플랫폼별 finalplan 명령 생성 |
 | platform readiness | `audit_platform_power_readiness.py` | RTX 3090/V100/A100/H100 profile, power API 의미, 문서, 생성 plan 정합성 점검 |
-| energy sweep | `run_component_regression_sweep.py` | Python/C++ feasibility self-test와 unique-coordinate binary dry-run 후 NCU 없이 energy CSV 수집. 알려진 2-mode control-treatment는 pair 단위로 회전하고 Tensor와 DRAM은 treatment 목표/control 최소시간의 dual calibration에서 큰 ITER를 두 mode에 동일 적용 |
+| energy sweep | `run_component_regression_sweep.py` | Python/C++ feasibility self-test와 unique-coordinate binary dry-run 후 NCU 없이 energy CSV 수집. 알려진 2-mode control-treatment는 pair 단위로 회전하고 Tensor/L2 CG/DRAM CG는 treatment 목표/control 최소시간의 dual calibration에서 큰 ITER를 두 mode에 동일 적용 |
 | paired stability | `run_paired_component_stability.py` | drift-sensitive component를 explicit control-treatment-control 순서로 재측정. Global L1/L2/DRAM은 `global_addr_only`, Shared는 `clocked_empty`를 강제 |
 | power API audit | `audit_power_api_measurements.py` | raw energy CSV가 power measurement matrix 기준 final/provisional/reject인지 판정하고 새 finalplan에서는 explicit `measurement_scope`를 요구하며 `--self-test`로 A100 semantics, fallback numerator, H100 module scope 혼입 회귀를 검증 |
 | power-state audit | `audit_power_state_stability.py` | raw row의 평균 전력/endpoint power outlier를 찾아 측정 품질 문제와 weak-signal 문제를 분리 |
@@ -364,8 +364,9 @@ hit-rate sanity를 만족해야 한다. 예를 들어 `global_l1_load_only`는 L
 `dram_cg_load_only`는 낮은 L1/L2 hit와 DRAM traffic 중심이어야 한다.
 `l2_load_only`는 capacity diagnostic이며 strict package 필수 mode가 아니다. Tensor pair는 `reuse_factor`가 최소 3개 이상,
 memory path는 `load_repeat`가 최소 3개 이상이어야 한다.
-DRAM raw pair는 `*_dram_pair_calibration.csv`의 resolved ITER와 일치해야 하며,
-`dram_cg_load_only`와 `global_addr_only`의 ITER가 다르면 package audit이 실패한다.
+L2/DRAM raw pair는 각각 `*_l2_pair_calibration.csv`,
+`*_dram_pair_calibration.csv`의 resolved ITER와 일치해야 하며 treatment와
+`global_addr_only`의 ITER가 다르면 package audit이 실패한다.
 Matched detail도 `pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1`을 요구한다.
 Strict summary는 양수/단위/power scope뿐 아니라 L2가 shared/global L1보다 커야 한다는
 broad hierarchy gate와, Tensor/Shared/L1/L2가 넓은 plausibility range 안에 들어오는지도

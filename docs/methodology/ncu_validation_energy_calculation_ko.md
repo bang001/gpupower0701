@@ -1,6 +1,6 @@
 # NCU 검증과 pJ 계산 보고서
 
-작성일: 2026-07-07, updated 2026-07-11
+작성일: 2026-07-07, updated 2026-07-13
 
 ## 핵심 요약
 
@@ -40,8 +40,8 @@ NCU가 측정한 L1 energy
    - 의도한 경로가 counter로 확인된 row만 accepted
 
 4. Matched-control 계산
-   - memory는 control energy rate를 treatment 시간으로 보정
-   - Tensor는 동일 ITER로 실행한 treatment-control net energy를 직접 차감
+   - Shared/Global L1은 control energy rate를 treatment 시간으로 보정
+   - Tensor/L2 CG/DRAM CG는 동일 ITER로 실행한 treatment-control net energy를 직접 차감
 
 5. pJ/FLOP, pJ/byte, pJ/bit 계산
    - Tensor는 logical FLOP denominator 사용
@@ -113,13 +113,28 @@ Memory path는 다음 pair를 사용한다.
 | L2 CG hit | `l2_cg_load_only` | `global_addr_only` | NCU L2 read bytes |
 | DRAM CG streaming | `dram_cg_load_only` | `global_addr_only` | NCU DRAM bytes |
 
-에너지 차분은 elapsed time 차이를 보정한다.
+Shared scalar와 Global L1 pair는 mode별 duration calibration을 사용하므로 elapsed time
+차이를 보정한다.
 
 ```text
 control_power_W = E_control_J / t_control_s
 control_energy_scaled_J = control_power_W * t_treatment_s
 delta_E_J = E_treatment_J - control_energy_scaled_J
 ```
+
+Tensor, L2 CG, DRAM CG final pair는 동일 ITER를 강제하고 elapsed-time scaling 없이
+idle-corrected net energy를 직접 뺀다.
+
+```text
+ITER_treatment = ITER_control = N
+delta_E_J = net_E_treatment_J(N) - net_E_control_J(N)
+```
+
+특히 L2 CG는 각 W_SM/blocks-per-SM/load-repeat 좌표에서 treatment 목표시간 ITER와
+control 최소시간 ITER를 각각 calibration한 뒤, 더 큰 ITER를 두 mode에 공통 적용한다.
+`*_l2_pair_calibration.csv`, raw CSV의 동일 `ITER`, matched detail의
+`pair_energy_basis=matched_iters_net_energy`와 `iter_ratio=1`이 모두 일치해야 한다.
+NCU hit rate가 통과해도 ITER가 다르면 path만 검증된 것이며 energy coefficient는 reject한다.
 
 그 다음 coefficient를 계산한다.
 

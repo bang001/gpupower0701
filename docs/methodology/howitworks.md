@@ -33,7 +33,7 @@ effective microbenchmark coefficient다.
 | 방법 | 역할 | 왜 필요한가 |
 |---|---|---|
 | Parameter sweep | `blocks/SM`, `W_SM`, `reuse_factor`, `load_repeat`를 바꿔 path가 분리되는 조건을 찾음 | GPU 구조마다 L1/shared/L2/DRAM 크기와 behavior가 다르기 때문 |
-| Matched-control 차분 | 기본 path는 treatment energy에서 control energy rate를 같은 시간만큼 빼고, Tensor/DRAM final pair는 동일 ITER의 net energy를 직접 뺀다 | scheduler/loop/idle 같은 공통 비용을 일부 제거하기 위해 |
+| Matched-control 차분 | Shared/Global L1은 control energy rate를 같은 시간만큼 빼고, Tensor/L2 CG/DRAM CG final pair는 동일 ITER의 net energy를 직접 뺀다 | scheduler/loop/idle 같은 공통 비용을 일부 제거하기 위해 |
 | NCU path validation | L1/L2/DRAM/shared bytes, hit rate, Tensor instruction, spill, stall을 확인 | mode 이름만으로는 실제 경로를 보장할 수 없기 때문 |
 
 ## 2. 현재 최종 실험 축
@@ -198,10 +198,18 @@ ptxas도 spill 0일 때 `spill_evidence_source=local_memory_bytes_zero_inference
 
 ### 6.1 Matched-control energy 차분
 
-Shared, Global L1, L2 path runner는 mode마다 목표 시간에 맞게 ITER를 따로 calibrate한다.
-따라서 이 세 memory pair는 control energy를 power rate로 바꾼 뒤 treatment elapsed
-time만큼 보정한다. DRAM final pair는 아래 Tensor pair와 마찬가지로 동일 ITER를 강제하므로
-이 duration scaling 방식을 쓰지 않는다.
+Shared와 Global L1 path runner는 mode마다 목표 시간에 맞게 ITER를 따로 calibrate한다.
+이 두 pair는 control energy를 power rate로 바꾼 뒤 treatment elapsed time만큼 보정한다.
+반면 Tensor, L2 CG, DRAM CG final pair는 treatment/control에 동일 ITER를 강제하고 두
+idle-corrected net energy를 직접 뺀다.
+
+| pair | final work policy | energy 차분 |
+|---|---|---|
+| Shared scalar - clocked empty | mode별 duration calibration | control power를 treatment 시간으로 보정 |
+| Global L1 - address control | mode별 duration calibration | control power를 treatment 시간으로 보정 |
+| Tensor MMA - register operand control | dual calibration 후 동일 ITER | `net_E_treatment - net_E_control` |
+| L2 CG - address control | dual calibration 후 동일 ITER | `net_E_treatment - net_E_control` |
+| DRAM CG - address control | dual calibration 후 동일 ITER | `net_E_treatment - net_E_control` |
 
 ```text
 control_power_W = E_control_J / t_control_s
@@ -222,6 +230,19 @@ Tensor final pair는 per-mode duration scaling의 예외다. `reg_mma`와
 calibration한 ITER를 각 mode에 그대로 쓰면 RF가 커질수록 서로 다른 work count를 비교하게
 된다. 현재 finalplan은 각 RF에서 treatment 목표시간의 `reg_mma` ITER와 control 최소시간의
 `reg_operand_only` ITER를 구하고, 둘 중 큰 ITER를 두 mode에 동일하게 적용한다.
+
+L2 CG도 같은 이유로 동일 ITER가 필수다. `global_addr_only`가 `l2_cg_load_only`보다
+빠르거나 느리다는 이유로 각 mode에 서로 다른 ITER를 주면, 주소 제어 작업과 L2 load
+작업의 실행 횟수 자체가 달라진다. 현행 finalplan은 각 W/B/LR 좌표에서
+`l2_cg_load_only`의 목표시간 candidate와 `global_addr_only`의 control 최소시간 candidate를
+구하고, 둘 중 큰 값을 양쪽에 적용한다. 산출물 `*_l2_pair_calibration.csv`, raw 두 mode의
+`ITER`, matched detail의 `pair_energy_basis=matched_iters_net_energy`와 `iter_ratio=1`이 모두
+일치해야 한다.
+
+2026-07-13 이전 V100 실행에서 NCU L2 read hit 약 99.9996%, L1 hit 0%를 얻었더라도,
+control ITER가 treatment보다 약 2배 많아 모든 좌표가 음수였던 결과는 L2 path 검증만
+성공한 것이다. 그 음수 `-12~-9 pJ/byte` 계수는 동일 작업량 차분이 아니므로 물리적
+L2 에너지나 유효 coefficient로 해석하지 않는다.
 
 ```text
 ITER_reg_mma = ITER_reg_operand_only
@@ -763,7 +784,7 @@ warp occupancy를 뜻하지 않는다.
 | Tensor | `reg_operand_only,reg_mma` | `reuse_factor=1,2,4,8,16` |
 | Shared scalar | `clocked_empty,shared_scalar_load_only` | energy `load_repeat=4,8,16`; NCU 1,2,4,8,16 |
 | Global L1 | `global_addr_only,global_l1_load_only` | energy `load_repeat=4,8,16`; NCU 1,2,4,8,16 |
-| L2 | `global_addr_only,l2_cg_load_only` | energy `load_repeat=4,8,16`; NCU 1,2,4,8,16 |
+| L2 | `global_addr_only,l2_cg_load_only` | energy `load_repeat=4,8,16`; dual calibration의 최대 동일 ITER; NCU 1,2,4,8,16 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | energy `load_repeat=4,8,16`; NCU 1,4,8,16 |
 
 권장 실행 기준:

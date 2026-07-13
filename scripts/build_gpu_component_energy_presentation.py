@@ -689,7 +689,7 @@ SLIDE_NOTES = """# GPU Component Energy Experiment Presentation Evidence Notes
 11. **Platform W_SM path sweep** — planner profiles, generated `*_command_plan.md`, and `platform_wsm_path_sweep.png`. Shared is a separate address-space path; only global-memory candidates are interpreted across L1/L2/DRAM after exact-coordinate NCU acceptance.
 12. **Host sequence** — `src/main.cu:628-650,919-1010`.
 13. **Raw energy** — `src/main.cu:417-425,692-720,950-978`.
-14. **Memory differential** — `scripts/analyze_matched_control_energy.py:620-658`. Shared/L1/L2 can use duration-scaled control power. Current DRAM finalplan requires matched ITER and direct net-energy subtraction.
+14. **Memory differential** — `scripts/analyze_matched_control_energy.py`. Shared/L1 use duration-scaled control power. Current L2 CG/DRAM CG finalplans require matched ITER and direct net-energy subtraction.
 15. **Tensor differential** — `scripts/run_component_regression_sweep.py:323-430`; matched-ITER fields in matched detail.
 16. **Energy vs NCU** — planner comments #5 and #8.
 17. **Tensor denominator** — `include/config.hpp:12-16`, `src/main.cu:781-791`. NCU HMMA is validation evidence, not the final FLOP denominator.
@@ -703,7 +703,7 @@ SLIDE_NOTES = """# GPU Component Energy Experiment Presentation Evidence Notes
 
 - The strict RTX 3090 snapshot has four historical components, not five. DRAM is displayed separately as a provisional cumulative-path reporting band.
 - Global L1 and L2 historical rows used `clocked_empty`; active finalplan uses `global_addr_only`.
-- Current DRAM finalplan uses pair-locked identical ITER; it is not duration-scaled.
+- Current L2 CG and DRAM CG finalplans use pair-locked identical ITER; they are not duration-scaled.
 - `l2_load_only` is a normal global-load capacity diagnostic, not automatic strict L2-only evidence.
 - The H100 implementation is FP16 WMMA compatibility code, not Hopper-native WGMMA/TMA.
 - NVML total-energy delta is labeled GPU/device scope. It is not represented as an external whole-board meter.

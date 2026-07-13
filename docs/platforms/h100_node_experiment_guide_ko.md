@@ -258,7 +258,7 @@ bash results/summary/h100_component_finalplan_$(date +%Y%m%d)_commands.sh
 | Tensor | `reg_operand_only,reg_mma` | 2048 | 16,32 | reuse 1,2,4,8,16 |
 | Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
 | Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
-| L2 CG | `global_addr_only,l2_cg_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| L2 CG | `global_addr_only,l2_cg_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; 동일 pair ITER; NCU 1,2,4,8,16 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 16,32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
 ### H100 sweep를 그래프로 해석하기
@@ -282,6 +282,12 @@ evidence가 필요하다.
 `reg_operand_only`와 `global_addr_only`가 treatment와 동일 좌표에서 NCU
 accepted여야 한다. 이 gate는 WMMA compatibility path의 control 검증이며 WGMMA/TMA
 지원 여부를 검증하는 것은 아니다.
+
+L2 CG energy sweep는 각 W/B/LR 좌표에서 `l2_cg_load_only` treatment와
+`global_addr_only` control을 dual-calibrate하고 동일 resolved ITER를 양쪽에 전달한다.
+분석은 `--l2-pair-policy matched-iters`로 net energy를 직접 차분한다.
+`*_l2_pair_calibration.csv`, raw ITER equality, `pair_energy_basis=matched_iters_net_energy`,
+`iter_ratio=1`이 필수다. 이는 NCU L2-hit acceptance와 별개의 작업량 정합성 gate다.
 
 DRAM energy sweep는 mode별 duration calibration을 사용하지 않는다. 각 W/B/LR
 좌표에서 treatment와 address control을 dual-calibrate하고 동일한 resolved ITER를

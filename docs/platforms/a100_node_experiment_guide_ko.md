@@ -454,7 +454,7 @@ python3 scripts/plot_results.py \
 | 단계 | script | 목적 |
 |---|---|---|
 | command plan | `scripts/plan_platform_component_experiment.py` | A100용 표준 energy/NCU/analyze 명령 생성 |
-| energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 memory mode는 duration-calibrated, Tensor pair는 treatment/control-floor dual calibration의 최대 ITER를 두 mode에 동일 적용해 energy row 수집 |
+| energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 energy 수집. Shared/Global L1은 duration-calibrated, Tensor/L2 CG/DRAM CG는 treatment/control-floor dual calibration의 최대 ITER를 양쪽에 동일 적용 |
 | NCU sidecar | `scripts/run_ncu_validation.sh` | path hit/access/stall/spill 검증 |
 | path acceptance | `scripts/analyze_ncu_path_acceptance.py` | accepted component 후보만 선별 |
 | matched-control | `scripts/analyze_matched_control_energy.py` | NCU actual-byte denominator로 pJ/bit 계산 |
@@ -521,7 +521,8 @@ miss라고 확정하지 않는다. 최신 summary에서 `l2_native_read_hit_rate
 RTX 3090/A100/V100의 전체 파라미터와 command 개수 비교는
 [cross-platform component experiment guide](cross_platform_component_experiment_guide_ko.md)의
 4.0-4.5절을 기준으로 한다. 현재 A100 표준 package는 유효 좌표 116개/1 repeat,
-`repeats=5` 적용 후 energy raw 580행, Tensor pair calibration 10 coordinates/20 commands, schema/revision smoke 3행,
+`repeats=5` 적용 후 energy raw 580행, Tensor pair calibration 10 coordinates/20 commands,
+L2 pair calibration 21 coordinates/42 commands, DRAM pair calibration 6 coordinates/12 commands, schema/revision smoke 3행,
 primary NCU 74 cases다.
 
 | Component | modes | W_SM (KiB) | blocks/SM | factor |
@@ -529,7 +530,7 @@ primary NCU 74 cases다.
 | Tensor | `reg_operand_only,reg_mma` | 2048 | 16,32 | reuse 1,2,4,8,16 |
 | Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
 | Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | valid W/B: 16/16, 32/16, 32/32 | energy load_repeat 4,8,16; strict NCU W16/B16, NCU factor 1,2,4,8,16 |
-| L2 CG | `global_addr_only,l2_cg_load_only` | 16,32,64,128 | valid W/B: 16/16, 32/16,32, 64/16,32, 128/16,32 | energy load_repeat 4,8,16; NCU는 네 W 모두에서 1,2,4,8,16 |
+| L2 CG | `global_addr_only,l2_cg_load_only` | 16,32,64,128 | valid W/B: 16/16, 32/16,32, 64/16,32, 128/16,32 | energy load_repeat 4,8,16; 동일 pair ITER; NCU는 네 W 모두에서 1,2,4,8,16 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 16,32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
 ### A100 sweep를 그래프로 해석하기
@@ -576,6 +577,13 @@ control duration floor를 먼저 보장한다. 표준 package analyzer는 calibr
 (1 s floor이면 0.8 s), targeted package는 2 s floor의 80%인 1.6 s를 요구한다. Control
 `net_E_J <= 0`이면 duration을 만족해도 energy counter/noise floor에서 식별되지 않은 것으로
 보고 reject한다.
+
+L2 CG도 각 `W_SM/blocks/SM/load_repeat` 좌표에서 `l2_cg_load_only` 목표시간과
+`global_addr_only` 최소 control 시간을 따로 calibration한 뒤, 두 candidate ITER의 최대값을
+양쪽에 동일하게 적용한다. 분석은 `--l2-pair-policy matched-iters`와 direct net-energy
+subtraction을 사용한다. `*_l2_pair_calibration.csv`, raw ITER equality,
+`pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1` 중 하나라도 없으면 NCU L2 hit가
+95% 이상이어도 energy coefficient를 reject한다.
 
 DRAM은 각 `W_SM/blocks/SM/load_repeat` 좌표에서 `dram_cg_load_only`를 목표
 측정시간으로, `global_addr_only`를 최소 control 시간으로 각각 calibration한 뒤 두

@@ -61,7 +61,7 @@ binary whose CSV header includes `measurement_scope`.
 | Tensor | `reg_operand_only,reg_mma` | 2048 | 2048/32 | reuse 1,2,4,8,16; treatment/control-floor dual-calibrated pair-locked ITER |
 | Shared scalar | `clocked_empty,shared_scalar_load_only` | 32,64 | 32/32 | energy load_repeat 4,8,16; NCU also checks 1,2 |
 | Global L1 | `global_addr_only,global_l1_load_only` | 8,16,32 | 32/32 | energy load_repeat 4,8,16; NCU also checks 1,2 |
-| L2 | `global_addr_only,l2_cg_load_only` | 32,64 | 32/32 | energy load_repeat 4,8,16; NCU also checks 1,2 |
+| L2 | `global_addr_only,l2_cg_load_only` | 32,64 | 32/32 | energy load_repeat 4,8,16; treatment/control-floor dual-calibrated pair-locked ITER; NCU also checks 1,2 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 8192/32 | energy load_repeat 4,8,16; treatment/control-floor dual-calibrated pair-locked ITER; NCU checks 1,4,8,16 |
 
 The energy runner applies the same 1 KiB/block feasibility rule to treatment and
@@ -224,6 +224,15 @@ analysis then uses `--tensor-pair-policy matched-iters` and directly subtracts
 the two idle-corrected net energies. An ITER mismatch is a hard-invalid Tensor
 detail row; the analysis no longer rescales a differently calibrated Tensor
 control by elapsed-time power.
+L2 CG energy rows use `--memory-pair-lock-iters` with
+`--memory-pair-control-min-seconds=1.0`. Each
+W/B/LR coordinate calibrates `l2_cg_load_only` for the treatment target and
+`global_addr_only` for the control-duration floor, then applies the larger
+identical ITER to both. Analysis uses `--l2-pair-policy matched-iters` and
+directly computes `net_E(l2_cg_load_only) - net_E(global_addr_only)`. This is
+required even when NCU reports a perfect L2-hit path: path acceptance proves
+where bytes traveled, while equal ITER proves that the energy numerator compares
+the same logical work. An ITER mismatch is a hard-invalid L2 row.
 DRAM energy rows use `--memory-pair-lock-iters` together with
 `--memory-pair-control-min-seconds=1.0`. Each W/B/LR
 coordinate calibrates `dram_cg_load_only` for the treatment target and

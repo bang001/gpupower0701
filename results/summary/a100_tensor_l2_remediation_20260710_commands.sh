@@ -27,6 +27,7 @@ TENSOR_MATRIX="${RAW_PREFIX}_tensor_matrix.csv"
 PAIR_CALIBRATION="${RAW_PREFIX}_tensor_pair_calibration.csv"
 L2_RAW="${RAW_PREFIX}_l2.csv"
 L2_MATRIX="${RAW_PREFIX}_l2_matrix.csv"
+L2_PAIR_CALIBRATION="${RAW_PREFIX}_l2_pair_calibration.csv"
 SCHEMA_SMOKE="${RAW_PREFIX}_schema_smoke.csv"
 NCU_RAW="${RAW_PREFIX}_ncu_sidecar.csv"
 POWER_AUDIT_CSV="${SUMMARY_PREFIX}_power_api_audit.csv"
@@ -87,6 +88,7 @@ STALE_PATHS=(
   "${PAIR_CALIBRATION}"
   "${L2_RAW}"
   "${L2_MATRIX}"
+  "${L2_PAIR_CALIBRATION}"
   "${NCU_RAW}"
   "${POWER_AUDIT_CSV}"
   "${POWER_AUDIT_MD}"
@@ -352,7 +354,10 @@ python3 scripts/run_component_regression_sweep.py \
   --l2-residency-policy "${L2_RESIDENCY_POLICY}" \
   --l2-address-layout "${L2_ADDRESS_LAYOUT}" \
   --output "${L2_RAW}" \
-  --matrix-csv "${L2_MATRIX}"
+  --matrix-csv "${L2_MATRIX}" \
+  --memory-pair-lock-iters \
+  --memory-pair-control-min-seconds 2 \
+  --memory-pair-calibration-csv "${L2_PAIR_CALIBRATION}"
 
 python3 scripts/audit_power_api_measurements.py "${TENSOR_RAW}" "${L2_RAW}" \
   --target-profile a100 \
@@ -384,6 +389,9 @@ python3 scripts/analyze_matched_control_energy.py "${TENSOR_RAW}" "${L2_RAW}" \
   --max-pair-start-distance-ms 60000 \
   --pairing nearest-control \
   --tensor-pair-policy matched-iters \
+  --l2-pair-policy matched-iters \
+  --l2-control-min-elapsed-s 1.6 \
+  --require-control-ncu-acceptance \
   --min-delta-j 10 \
   --min-delta-fraction 0.005 \
   --out-summary-csv "${MATCHED_SUMMARY}" \

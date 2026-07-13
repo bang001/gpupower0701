@@ -188,6 +188,7 @@ def audit_data(
             l2_raw,
             {
                 "mode",
+                "ITER",
                 "load_repeat",
                 "W_SM_KiB",
                 "blocks_per_SM",
@@ -265,6 +266,8 @@ def audit_data(
                 "W_SM_KiB",
                 "pair_energy_basis",
                 "iter_ratio",
+                "numerator_ITER",
+                "control_ITER",
                 "run_order_distance",
                 "pair_start_distance_ms",
                 "numerator_elapsed_s",
@@ -900,6 +903,13 @@ def audit_data(
         energy_ok &= all(delta >= config.min_delta_j for delta in deltas)
         energy_ok &= bool(pbit) and all(value > 0.0 for value in pbit)
         energy_ok &= all(
+            row.get("pair_energy_basis") == "matched_iters_net_energy"
+            and as_int(row, "numerator_ITER") > 0
+            and as_int(row, "numerator_ITER") == as_int(row, "control_ITER")
+            and abs(as_float(row, "iter_ratio") - 1.0) <= 1.0e-12
+            for row in rows
+        )
+        energy_ok &= all(
             row.get("denominator_source") == "ncu_actual_exact" for row in rows
         )
         pbit_median = median(pbit)
@@ -913,7 +923,8 @@ def audit_data(
                 energy_ok,
                 (
                     f"{expected_rows} rows; >= {config.min_valid_repeats} valid/LR; "
-                    f"every delta_E >= {config.min_delta_j:g} J; exact NCU denominator"
+                    f"every delta_E >= {config.min_delta_j:g} J; matched identical "
+                    "ITER direct subtraction; exact NCU denominator"
                 ),
                 (
                     f"rows={len(rows)}, valid_by_LR="
@@ -1150,6 +1161,8 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "W_SM_KiB": "2048",
                     "pair_energy_basis": "matched_iters_net_energy",
                     "iter_ratio": "1",
+                    "numerator_ITER": "1000",
+                    "control_ITER": "1000",
                     "run_order_distance": "1",
                     "pair_start_distance_ms": "1",
                     "control_elapsed_s": str(
@@ -1257,7 +1270,10 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     l2_raw.append(
                         {
                             "mode": mode,
+                            "ITER": "1000",
+                            "reuse_factor": "1",
                             "load_repeat": str(lr),
+                            "store_repeat": "1",
                             "W_SM_KiB": str(w_sm_kib),
                             "blocks_per_SM": str(config.l2_blocks_per_sm),
                             "active_SM": str(config.active_sm),
@@ -1284,8 +1300,10 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                         "reuse_factor": "1",
                         "load_repeat": str(lr),
                         "W_SM_KiB": str(w_sm_kib),
-                        "pair_energy_basis": "duration_scaled_control_power",
+                        "pair_energy_basis": "matched_iters_net_energy",
                         "iter_ratio": "1",
+                        "numerator_ITER": "1000",
+                        "control_ITER": "1000",
                         "run_order_distance": "1",
                         "pair_start_distance_ms": "1",
                         "numerator_elapsed_s": "20",
@@ -1366,6 +1384,32 @@ def run_self_test() -> None:
     assert any(
         row["coordinate"] == "B16/RF4"
         and row["check"] == "positive_matched_energy"
+        and row["status"] == "fail"
+        for row in rows
+    )
+
+    bad_l2_iters = [dict(row) for row in data[4]]
+    bad = next(
+        row
+        for row in bad_l2_iters
+        if row["component"] == "l2_hit_cg_path"
+        and row["W_SM_KiB"] == "32"
+        and row["load_repeat"] == "4"
+    )
+    bad["control_ITER"] = "2000"
+    bad["iter_ratio"] = "0.5"
+    rows = audit_data(
+        config,
+        tensor_raw=data[0],
+        l2_raw=data[1],
+        calibration=data[2],
+        ncu_acceptance=data[3],
+        matched_detail=bad_l2_iters,
+        evidence=evidence,
+    )
+    assert any(
+        row["coordinate"] == "W32/B16"
+        and row["check"] == "positive_ncu_denominated_energy"
         and row["status"] == "fail"
         for row in rows
     )

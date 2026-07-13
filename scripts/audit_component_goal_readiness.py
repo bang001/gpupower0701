@@ -96,6 +96,9 @@ COMMAND_SHELL_TERMS = [
     "--tensor-control-min-elapsed-s",
     "_tensor_pair_calibration.csv",
     "--memory-pair-lock-iters",
+    "--l2-pair-policy matched-iters",
+    "--l2-control-min-elapsed-s",
+    "_l2_pair_calibration.csv",
     "--dram-pair-policy matched-iters",
     "--dram-control-min-elapsed-s",
     "_dram_pair_calibration.csv",
@@ -497,7 +500,8 @@ def expected_intake_artifacts(profile: str, tag: str) -> list[tuple[str, str, st
         ),
         (
             "pair calibration manifests",
-            f"results/raw/{base}_tensor_pair_calibration.csv, _dram_pair_calibration.csv",
+            f"results/raw/{base}_tensor_pair_calibration.csv, "
+            "_l2_pair_calibration.csv, _dram_pair_calibration.csv",
             "resolved treatment/control ITER and identical-work policy evidence",
         ),
         (

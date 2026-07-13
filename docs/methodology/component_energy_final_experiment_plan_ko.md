@@ -80,13 +80,14 @@ NCU 보고 표에는 반드시 단위를 적는다.
 
 ### 4.2 Energy coefficient
 
-Energy run은 NCU 없이 실행한다. Shared/L1/L2의 legacy/default pair는 nearest
-control의 power rate를 treatment elapsed에 맞춘다. Tensor pair는 각 RF에서 `reg_mma`의 treatment 목표시간과
+Energy run은 NCU 없이 실행한다. Shared/L1 pair는 nearest control의 power rate를
+treatment elapsed에 맞춘다. Tensor pair는 각 RF에서 `reg_mma`의 treatment 목표시간과
 `reg_operand_only`의 control 최소시간을 각각 calibrate하고, 두 ITER 중 큰 값을 treatment와
 control에 동일하게 적용한 뒤 net energy를 직접 차분한다.
 `reg_mma`와 `reg_operand_only`는 RF당 dependent register integer add 1개를 공통으로
 실행하고, control의 기존 FP32 FMA/checksum/memory는 제거한다.
-DRAM pair도 동일하게 `dram_cg_load_only` treatment와 `global_addr_only` control을
+L2와 DRAM pair도 동일하게 각각 `l2_cg_load_only`/`dram_cg_load_only` treatment와
+`global_addr_only` control을
 dual-calibrate하고 동일 ITER를 적용한 뒤 두 net energy를 직접 차분한다.
 
 Matched-control 분석은 다음 gate를 켠다.
@@ -98,6 +99,7 @@ Matched-control 분석은 다음 gate를 켠다.
 | `--expected-power-semantics <profile>` | V100/A100 `instant`, RTX 3090/H100 `one_sec_average` metadata 확인 |
 | `--pairing nearest-control` | 반복 run에서 treatment를 실행 순서상 가장 가까운 control과 비교해 thermal/clock drift 완화 |
 | `--tensor-pair-policy matched-iters` | Tensor의 동일 ITER를 확인하고 `E_reg_mma - E_reg_operand_only` 직접 차분 |
+| `--l2-pair-policy matched-iters` | L2 CG와 address control의 동일 ITER를 확인하고 net energy 직접 차분 |
 | `--dram-pair-policy matched-iters` | DRAM treatment/control의 동일 ITER를 확인하고 `net_E_dram - net_E_addr` 직접 차분 |
 | `--require-control-ncu-acceptance` | treatment뿐 아니라 no-MMA/address control도 동일 좌표 NCU acceptance를 요구 |
 | `--min-delta-j`, `--min-delta-fraction` | `delta_E`가 noise floor 안에 있는 양수 row를 최종 summary에서 제외 |
@@ -170,13 +172,13 @@ energy sweep과 같은 `reuse_factor`/`load_repeat` list를 NCU sidecar에서도
 | L2 hit | `global_addr_only`, `l2_cg_load_only` | 16 | 64 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 | 5 | 3 |
 | DRAM sanity | `global_addr_only`, `dram_cg_load_only` | 16 | 8192 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 | 5 | 3 |
 
-주의: Shared/L1/L2 primary runner는 현재 duration-calibrated 방식이다. 따라서 `load_repeat`를
+주의: Shared/L1 primary runner는 현재 duration-calibrated 방식이다. 따라서 `load_repeat`를
 2배로 늘리면 `ITER`가 줄어 목표 실행 시간을 맞추기 때문에 총 byte denominator가
 반드시 2배로 늘지는 않는다. `load_repeat` sweep은 path의 instruction mix/rate 안정성을
 보는 축이고, 총 denominator scaling을 확인하려면 같은 `load_repeat`에서 duration sweep
 또는 fixed-ITER 보조 실험을 별도로 수행한다. RTX 3090 L1에서는 `load_repeat=4`,
 10/20/30초 duration-scaling check가 기존 0.15 pJ/bit 결과와 정합했다.
-DRAM은 이 예외에서 제외하며, treatment와 address control에 동일 ITER를 강제한다.
+L2 CG와 DRAM CG는 이 예외에서 제외하며, treatment와 address control에 동일 ITER를 강제한다.
 과거 RTX 3090 Tensor duration-scaling `0.077-0.170 pJ/FLOP`는 새
 pair-lock/fixed-RF v2 이전의 역사적 민감도 분석이다. 현행 finalplan에서는 그대로
 재사용하지 않는다. 2026-07-13 RTX 3090 fixed-RF v2는 RF1/2/4/8/16, B16,
@@ -289,6 +291,7 @@ Tensor calibration, NCU sidecar는 서로 다른 단계이므로 energy raw rows
 | feasibility 제외 | 6 rows | 12 rows | 18 rows | 6 rows | treatment/control과 LR를 포함한 최소 tile 위반 row |
 | schema/revision smoke | 3 rows | 3 rows | 3 rows | 3 rows | full sweep 전 CSV schema와 kernel marker 확인 |
 | Tensor pair calibration | 10 coordinates / 20 commands | 10 coordinates / 20 commands | 15 coordinates / 30 commands | 10 coordinates / 20 commands | B x RF 좌표마다 treatment/control-floor calibration 2회; 큰 ITER를 두 mode에 함께 적용 |
+| L2 pair calibration | 6 coordinates / 12 commands | 21 coordinates / 42 commands | 18 coordinates / 36 commands | 12 coordinates / 24 commands | 유효 W/B/LR 좌표마다 treatment/control-floor calibration 2회; 큰 ITER를 두 mode에 함께 적용 |
 | DRAM pair calibration | 6 coordinates / 12 commands | 6 coordinates / 12 commands | 9 coordinates / 18 commands | 6 coordinates / 12 commands | B x LR 좌표마다 treatment/control-floor calibration 2회; 큰 ITER를 두 mode에 함께 적용 |
 | primary NCU sidecar | 44 cases | 74 cases | 44 cases | 44 cases | A100만 L2 W 4개에서 treatment/control을 모두 profiling; H100 strict sidecar는 W64 사용 |
 | nominal energy kernel time | 4,300 s | 5,800 s | 7,800 s | 4,900 s | raw rows x 10 s의 기준값; dual calibration에서 control candidate가 크면 Tensor treatment가 10 s보다 길어질 수 있으며 calibration/launch/cooling/NCU 시간도 별도 |

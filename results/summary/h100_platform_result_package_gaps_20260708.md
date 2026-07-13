@@ -9,13 +9,13 @@ It is not a replacement for the package audit; it is a debugging guide.
 | result manifest CSV | `results/summary/h100_component_finalplan_20260708_result_manifest.csv` |
 | expected power semantics | `one_sec_average` |
 | final numerator policy | `nvml_total_energy + total_energy_mj_delta + gpu_device_total_energy_counter` |
-| open gaps | `15` |
+| open gaps | `16` |
 
 ## Severity Counts
 
 | severity | gaps |
 |---|---:|
-| `blocker` | 15 |
+| `blocker` | 16 |
 
 ## Next Actions
 
@@ -35,6 +35,7 @@ It is not a replacement for the package audit; it is a debugging guide.
 | strict summary | `blocker` | `missing` | missing | `results/summary/h100_strict_scope_fresh_ncu_component_coefficients_20260708.csv (strict component coefficient summary)` | Generate or copy the missing artifact listed in the package audit and manifest. | `python3 scripts/build_strict_component_summary.py ...` |
 | strict summary audit | `blocker` | `missing` | missing | `results/summary/h100_strict_scope_fresh_ncu_component_summary_audit_20260708.csv (strict component summary audit)` | Run `scripts/audit_strict_component_summary.py --fail-on-fail` after building the strict summary. | `python3 scripts/audit_strict_component_summary.py ... --fail-on-fail` |
 | other | `blocker` | `missing` | missing | `results/raw/h100_component_finalplan_20260708_dram_pair_calibration.csv (DRAM pair calibration manifest)` | Generate or copy the missing artifact listed in the package audit and manifest. | `` |
+| other | `blocker` | `missing` | missing | `results/raw/h100_component_finalplan_20260708_l2_pair_calibration.csv (L2 pair calibration manifest)` | Generate or copy the missing artifact listed in the package audit and manifest. | `` |
 | other | `blocker` | `missing` | missing | `results/raw/h100_component_finalplan_20260708_tensor_pair_calibration.csv (Tensor pair calibration manifest)` | Generate or copy the missing artifact listed in the package audit and manifest. | `` |
 
 ## Power API Interpretation

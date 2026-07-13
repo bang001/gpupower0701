@@ -1,6 +1,6 @@
 # V100 노드 실험 실행 가이드
 
-작성일: 2026-07-02, V100 좌표 재검토: 2026-07-11
+작성일: 2026-07-02, V100 L2 동일-ITER 정책 재검토: 2026-07-13
 
 ## 목적
 
@@ -605,7 +605,7 @@ python3 scripts/plot_results.py \
 | 단계 | script | 목적 |
 |---|---|---|
 | command plan | `scripts/plan_platform_component_experiment.py` | V100용 표준 energy/NCU/analyze 명령 생성 |
-| energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 memory mode는 duration-calibrated, Tensor pair는 treatment/control-floor dual calibration의 최대 ITER를 두 mode에 동일 적용해 energy row 수집 |
+| energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 energy 수집. Shared/Global L1은 duration-calibrated, Tensor/L2 CG/DRAM CG는 treatment/control-floor dual calibration의 최대 ITER를 두 mode에 동일 적용 |
 | NCU sidecar | `scripts/run_ncu_validation.sh` | path hit/access/stall/spill 검증 |
 | path acceptance | `scripts/analyze_ncu_path_acceptance.py` | accepted component 후보만 선별 |
 | matched-control | `scripts/analyze_matched_control_energy.py` | NCU actual-byte denominator로 pJ/bit 계산 |
@@ -660,7 +660,8 @@ V100 추천 finalplan 좌표:
 RTX 3090/A100/V100의 전체 파라미터와 command 개수 비교는
 [cross-platform component experiment guide](cross_platform_component_experiment_guide_ko.md)의
 4.0-4.5절을 기준으로 한다. 현재 V100 표준 package는 유효 좌표 156개/1 repeat,
-`repeats=5` 적용 후 energy raw 780행, Tensor pair calibration 15 coordinates/30 commands, schema/revision smoke 3행,
+`repeats=5` 적용 후 energy raw 780행, Tensor pair calibration 15 coordinates/30 commands,
+L2 pair calibration 18 coordinates/36 commands, DRAM pair calibration 9 coordinates/18 commands, schema/revision smoke 3행,
 primary NCU 44 cases다.
 
 `seconds=10 s` 기준 nominal energy kernel 시간은 `780 x 10 s = 7,800 s`, 즉 약
@@ -673,7 +674,7 @@ primary NCU 44 cases다.
 | Tensor | `reg_operand_only,reg_mma` | 2048 | 4,16,32 | 2048/32 | reuse 1,2,4,8,16 |
 | Shared scalar | `clocked_empty,shared_scalar_load_only` | 32,64 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
 | Global L1 | `global_addr_only,global_l1_load_only` | 8,16,32 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
-| L2 CG | `global_addr_only,l2_cg_load_only` | 32,64 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| L2 CG | `global_addr_only,l2_cg_load_only` | 32,64 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; 동일 pair ITER; NCU 1,2,4,8,16 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 4,16,32 | 8192/32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
 ### V100 sweep를 그래프로 해석하기
@@ -704,6 +705,18 @@ control floor 1 s를 사용한다. `*_tensor_pair_calibration.csv`, 두 raw mode
 matched detail의 `pair_energy_basis=matched_iters_net_energy`와 `iter_ratio=1`이 모두
 일치해야 final Tensor 후보가 된다. 이 정책은 A100 RF4 이상에서 드러난 mode별 duration
 calibration mismatch를 V100에서도 예방한다.
+L2 CG pair도 같은 정책을 사용한다. 각 W/B/LR 좌표에서 `l2_cg_load_only` 목표시간
+ITER와 `global_addr_only` 최소 control 시간 ITER를 각각 구하고, 두 candidate 중 큰 값을
+양쪽에 전달한다. 분석은 `--l2-pair-policy matched-iters`로
+`net_E(l2_cg_load_only) - net_E(global_addr_only)`를 직접 계산한다.
+`*_l2_pair_calibration.csv`, raw 두 mode의 동일 `ITER`, matched detail의
+`pair_energy_basis=matched_iters_net_energy`와 `iter_ratio=1`이 모두 필수다.
+
+2026-07-13 이전 실행에서 L2 NCU acceptance가 L2 read hit 약 99.9996%, L1 hit 0%로
+통과했지만 `global_addr_only` ITER가 `l2_cg_load_only`보다 약 2배 많아 9개 좌표가 모두
+음수였던 결과는 폐기한다. NCU 결과는 경로가 L2였다는 증거일 뿐, 서로 다른 작업량을 뺀
+energy numerator를 정당화하지 않는다. 이 경우 L2 energy sweep과 matched-control 이후
+단계를 다시 실행해야 하며, 기존 음수 `-12~-9 pJ/byte`를 L2 계수로 보고하면 안 된다.
 DRAM pair도 동일한 원칙을 사용한다. 각 B/LR 좌표에서 `dram_cg_load_only`의 목표
 시간 ITER와 `global_addr_only`의 최소 control 시간 ITER를 구하고, 그중 큰 동일
 ITER를 양쪽에 전달한다. 분석은 `--dram-pair-policy matched-iters`로 두
