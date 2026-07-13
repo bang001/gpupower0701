@@ -31,7 +31,7 @@ EXPECTED: dict[str, dict[str, Any]] = {
         "cuda_arch": "70",
         "active_sm": 80,
         "ncu_chip": "gv100",
-        "blocks": "1,2,4,8,16,32",
+        "blocks": "4,16,32",
         "ncu_blocks": 32,
         "shared_ncu_w": 32,
         "l1_ncu_w": 32,
@@ -490,7 +490,7 @@ def audit_profiles(repo: Path) -> list[dict[str, str]]:
                 if profile == "v100":
                     shell_terms.extend(
                         [
-                            "--blocks-per-sm-values 1,2,4,8,16,32",
+                            "--blocks-per-sm-values 4,16,32",
                             "NCU_CHIP=gv100",
                             "NCU_FILTER_UNAVAILABLE_METRICS=1",
                             "BLOCKS_PER_SM=32",

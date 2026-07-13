@@ -7,7 +7,7 @@ Generated: 2026-07-13
 | target profile | `v100` |
 | CUDA arch | `sm_70` |
 | active_SM (SMs) | `80` |
-| energy sweep blocks/SM | `1,2,4,8,16,32` |
+| energy sweep blocks/SM | `4,16,32` |
 | strict NCU blocks/SM | `32` |
 | expected power semantics | `instant` |
 | minimum visible device memory (MiB) | `30000` |
@@ -66,7 +66,7 @@ binary whose CSV header includes `measurement_scope`.
 
 The energy runner applies the same 1 KiB/block feasibility rule to treatment and
 matched control. Global L1 valid coordinates are
-`W8/B1,W8/B2,W8/B4,W8/B8,W16/B1,W16/B2,W16/B4,W16/B8,W16/B16,W32/B1,W32/B2,W32/B4,W32/B8,W32/B16,W32/B32`. Coordinates omitted before execution because
+`W8/B4,W16/B4,W16/B16,W32/B4,W32/B16,W32/B32`. Coordinates omitted before execution because
 `W_SM < blocks/SM` are `W8/B16,W8/B32,W16/B32`. The
 generated matrix retains rejected rows with `valid=false`, but no rejected row
 is sent to the binary. Before collecting energy, every unique valid coordinate
@@ -95,7 +95,7 @@ an unvalidated or traffic-contaminated control.
 | launch/resource context | `achieved_occupancy_pct`, `registers_per_thread`, `shared_mem_per_block_static`, `shared_mem_per_block_dynamic` | requested B value가 실제 residency로 이어졌는지 해석하는 보조 evidence |
 
 V100 uses `NCU_CHIP=gv100` and `l2_cg_load_only` as the L2
-final path. Its energy sweep covers blocks/SM=1,2,4,8,16,32; the generated strict
+final path. Its energy sweep covers blocks/SM=4,16,32; the generated strict
 anchor is B32, L2 W_SM=32 KiB. L2
 W_SM=64 KiB is retained as a capacity-stress point.
 The NCU binary must explicitly support GV100.

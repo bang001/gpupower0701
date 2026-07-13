@@ -104,7 +104,7 @@ def plot_blocks_per_sm(out_dir: Path) -> Path:
     ax.text(
         0,
         1.02,
-        "V100 B1-B16은 utilization 진단을 넓히는 선택이며 architecture 필수조건이 아니다. "
+        "V100 B4/B16은 utilization 민감도 진단이며 strict anchor는 B32다. "
         "요청 B는 실제 residency를 보장하지 않으므로 NCU occupancy/resource로 검증한다.",
         transform=ax.transAxes,
         fontsize=10,

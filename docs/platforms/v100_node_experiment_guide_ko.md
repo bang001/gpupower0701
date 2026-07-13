@@ -348,7 +348,7 @@ component별 좌표를 사용한다. broad sweep의 모든 mode/row가 final 후
 
 | sweep | 값 | 단위 |
 |---|---|---|
-| Sweep 1 | `blocks/SM = 1, 2, 4, 8, 16, 32` | blocks/SM |
+| Sweep 1 | `blocks/SM = 4, 16, 32` | blocks/SM |
 | Sweep 2 | `W_SM = 1 KiB`부터 `128 MiB`까지 2배 증가 | KiB/MiB |
 | active SM | `80` | SMs |
 | final seconds | `10` 이상 권장 | s |
@@ -649,26 +649,30 @@ V100 추천 finalplan 좌표:
 
 RTX 3090/A100/V100의 전체 파라미터와 command 개수 비교는
 [cross-platform component experiment guide](cross_platform_component_experiment_guide_ko.md)의
-4.0-4.5절을 기준으로 한다. 현재 V100 표준 package는 유효 좌표 330개/1 repeat,
-`repeats=5` 적용 후 energy raw 1,650행, Tensor pair calibration 30 coordinates/60 commands, schema/revision smoke 3행,
+4.0-4.5절을 기준으로 한다. 현재 V100 표준 package는 유효 좌표 156개/1 repeat,
+`repeats=5` 적용 후 energy raw 780행, Tensor pair calibration 15 coordinates/30 commands, schema/revision smoke 3행,
 primary NCU 44 cases다.
+
+`seconds=10 s` 기준 nominal energy kernel 시간은 `780 x 10 s = 7,800 s`, 즉 약
+2시간 10분이다. calibration, launch, audit와 44-case NCU replay를 포함한 노드 전체
+예상시간은 보통 약 3~4.5시간이며 NCU metric replay 횟수와 노드 부하에 따라 달라진다.
+기존 1,650-row package보다 energy 측정량은 약 52.7% 감소한다.
 
 | Component | modes | energy W_SM (KiB) | energy blocks/SM | strict NCU W_SM/B | factor |
 |---|---|---:|---:|---:|---|
-| Tensor | `reg_operand_only,reg_mma` | 2048 | 1,2,4,8,16,32 | 2048/32 | reuse 1,2,4,8,16 |
-| Shared scalar | `clocked_empty,shared_scalar_load_only` | 32,64 | 1,2,4,8,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
-| Global L1 | `global_addr_only,global_l1_load_only` | 8,16,32 | 1,2,4,8,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
-| L2 CG | `global_addr_only,l2_cg_load_only` | 32,64 | 1,2,4,8,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
-| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 1,2,4,8,16,32 | 8192/32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
+| Tensor | `reg_operand_only,reg_mma` | 2048 | 4,16,32 | 2048/32 | reuse 1,2,4,8,16 |
+| Shared scalar | `clocked_empty,shared_scalar_load_only` | 32,64 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| Global L1 | `global_addr_only,global_l1_load_only` | 8,16,32 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| L2 CG | `global_addr_only,l2_cg_load_only` | 32,64 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 4,16,32 | 8192/32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
 ### V100 sweep를 그래프로 해석하기
 
 ![플랫폼별 blocks/SM sweep](../presentations/assets/platform_blocks_per_sm_sweep.png)
 
-V100 B1/B2/B4/B8/B16은 low-density utilization 진단이며 GV100에서만 필요한 규칙이
-아니다. strict anchor는 B32이고, 다른 B를 final로 쓰려면 exact-coordinate NCU가 필요하다.
-플랫폼 공통 final 비교가 목적이면 B16/B32를 기본으로 보고 B1-B8은 optional diagnostic으로
-분리한다.
+V100 B4는 저밀도, B16은 중간 밀도 utilization 진단이며 strict anchor는 B32다.
+B1/B2/B8은 실행시간 대비 추가 식별력이 제한적이어서 기본 package에서 제외했다. B4나
+B16을 final로 쓰려면 해당 좌표의 exact-coordinate NCU가 추가로 필요하다.
 
 ![플랫폼별 W_SM path sweep](../presentations/assets/platform_wsm_path_sweep.png)
 
@@ -700,8 +704,8 @@ reject한다.
 두 kernel은 RF당 dependent register integer add 1개를 공통으로 실행하므로 control
 liveness instruction 비용은 direct 차분에서 상쇄된다.
 
-Energy sweep의 B1/B2/B4/B8/B16은 utilization 변화와 min/median/max 추세를 보는
-diagnostic이다. 현재 generated sidecar는 strict 대표점 B32만 exact NCU로 검증하므로,
+Energy sweep의 B4/B16은 utilization 변화와 추세를 보는 diagnostic이다. 현재 generated
+sidecar는 strict 대표점 B32만 exact NCU로 검증하므로,
 B32가 아닌 row를 final coefficient로 채택하려면 같은 W/blocks/factor의 NCU sidecar를
 추가 수집해야 한다.
 

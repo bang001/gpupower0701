@@ -53,7 +53,7 @@ PROFILES: dict[str, dict[str, Any]] = {
     "v100": {
         "cuda_arch": "70",
         "active_sm": 80,
-        "blocks": "1,2,4,8,16,32",
+        "blocks": "4,16,32",
         "ncu_blocks": 32,
         "shared_w": "32,64",
         "shared_ncu_w": 32,

@@ -33,7 +33,7 @@
 | GPU | Register file / SM | L1/shared / SM | L2 | Memory | 실험 설계 영향 |
 |---|---:|---:|---:|---|---|
 | RTX 3090, GA102 | 256 KiB | 128 KiB combined | 6 MiB | GDDR6X | L2/SM이 작고 L1/shared와 겹치므로 W_SM만으로 L2-only를 만들기 어렵다. L2는 `l2_cg_load_only`를 우선 사용한다. |
-| V100, GV100 | 256 KiB급 | 128 KiB combined, shared allocation 96 KiB profile | 6 MiB | HBM2 | B1-B32 utilization diagnostic을 제공하지만 strict anchor는 B32다. Volta 지원 CUDA/NCU 조합을 별도로 확인한다. |
+| V100, GV100 | 256 KiB급 | 128 KiB combined, shared allocation 96 KiB profile | 6 MiB | HBM2 | B4/B16 utilization 민감도와 strict B32 anchor를 측정한다. Volta 지원 CUDA/NCU 조합을 별도로 확인한다. |
 | A100, GA100 | 256 KiB | 192 KiB combined, shared allocation 최대 164 KiB | 40 MiB | HBM2 | 큰 L2라도 normal global load는 L1과 섞인다. strict L2는 `l2_cg_load_only`와 path-specific L1 hit/L2 read 검증을 사용한다. |
 | H100, GH100 | 256 KiB급 | 256 KiB combined, shared allocation 228 KiB profile | 50 MiB | HBM2e/HBM3, SKU별 상이 | 현재 kernel은 WMMA compatibility path이며 Hopper-native WGMMA/TMA 계수로 해석하지 않는다. |
 
@@ -220,7 +220,7 @@ energy 측정과 NCU profiling은 분리한다. 개수는 2026-07-10에
 | 파라미터 | RTX 3090 / GA102 | A100 / GA100 | V100 / GV100 | H100 / GH100 | 단위/조건 |
 |---|---|---|---|---|---|
 | CUDA arch / active SM | `sm_86` / 82 | `sm_80` / 108 | `sm_70` / 80 | `sm_90` / 132 | SM count는 full-GPU profile 기준이며 runtime preflight와 다르면 중단 |
-| energy blocks/SM | 8,16 | 16,32 | 1,2,4,8,16,32 | 16,32 | blocks/SM; V100은 utilization 범위를 보기 위해 저밀도 조건 포함 |
+| energy blocks/SM | 8,16 | 16,32 | 4,16,32 | 16,32 | blocks/SM; V100은 저밀도 B4, 중간 B16, strict B32를 비교 |
 | strict NCU blocks/SM | 8 | 16 | 32 | 16 | blocks/SM; 다른 B의 energy row를 채택하려면 exact-coordinate NCU 추가 필요 |
 | Tensor W_SM / RF | 2048 / 1,2,4,8,16 | 동일 | 동일 | 동일 | W_SM: KiB/SM 고정 좌표, RF: reuse factor count; W_SM은 register footprint가 아님 |
 | Shared scalar W_SM | 32,64 | 64,128 | 32,64 | 64,128 | KiB/SM; shared allocation/residency 조건 통과 필요 |
@@ -237,11 +237,10 @@ energy 측정과 NCU profiling은 분리한다. 개수는 2026-07-10에
 
 ![플랫폼별 blocks/SM sweep](../presentations/assets/platform_blocks_per_sm_sweep.png)
 
-현재 V100 B1-B32는 low-to-high utilization diagnostic이고 strict anchor는 B32다. 이는
-V100 architecture가 B1-B8을 반드시 요구해서가 아니다. RTX 3090은 max 16 blocks/SM
-profile에서 B8/B16, A100/H100은 max 32 profile에서 B16/B32를 기본으로 삼아 실행비용을
-줄였다. 따라서 architecture 비교용 기본값은 RTX B8/B16, V100/A100/H100 B16/B32로
-정렬하고, V100 B1-B8은 optional diagnostic으로 해석하는 것이 더 대칭적이다.
+현재 V100은 B4를 저밀도 민감도 점, B16을 중간 밀도 점, B32를 strict anchor로 사용한다.
+B1/B2/B8은 실행시간 대비 추가 식별력이 제한적이어서 기본 package에서 제외했다. 요청
+blocks/SM은 실제 동시 residency를 보장하지 않으므로 세 점 모두 SMID와 NCU
+occupancy/resource evidence로 검증한다.
 
 ![플랫폼별 W_SM path sweep](../presentations/assets/platform_wsm_path_sweep.png)
 
@@ -271,8 +270,8 @@ Memory-backed mode는 block당 최소 1 KiB tile을 요구하므로
 
 | Path | RTX 3090 유효 W/B | A100 유효 W/B | V100 유효 W/B | H100 유효 W/B | 제외 조건 |
 |---|---|---|---|---|---|
-| Global L1 | W8/B8; W16/B8,16 | W16/B16; W32/B16,32 | W8/B1,2,4,8; W16/B1,2,4,8,16; W32/B1,2,4,8,16,32 | W16/B16; W32/B16,32 | RTX W8/B16, A100/H100 W16/B32, V100 W8/B16,32와 W16/B32는 tile < 1 KiB/block |
-| L2 CG | W64/B8,16 | W16/B16; W32,64,128/B16,32 | W32,64/B1,2,4,8,16,32 | W64,128/B16,32 | A100 W16/B32만 tile = 0.5 KiB/block이라 제외 |
+| Global L1 | W8/B8; W16/B8,16 | W16/B16; W32/B16,32 | W8/B4; W16/B4,16; W32/B4,16,32 | W16/B16; W32/B16,32 | RTX W8/B16, A100/H100 W16/B32, V100 W8/B16,32와 W16/B32는 tile < 1 KiB/block |
+| L2 CG | W64/B8,16 | W16/B16; W32,64,128/B16,32 | W32,64/B4,16,32 | W64,128/B16,32 | A100 W16/B32만 tile = 0.5 KiB/block이라 제외 |
 
 아래 `유효 좌표`는 treatment와 control command를 모두 포함한 1회 반복 기준이다.
 `energy raw rows`는 이 값에 `repeats=5`를 곱한 값이다. Schema smoke,
@@ -280,22 +279,22 @@ Tensor calibration, NCU sidecar는 서로 다른 단계이므로 energy raw rows
 
 | Component/path | RTX 3090 유효 좌표 / raw rows | A100 유효 좌표 / raw rows | V100 유효 좌표 / raw rows | H100 유효 좌표 / raw rows | 좌표 계산 |
 |---|---:|---:|---:|---:|---|
-| Tensor | 20 / 100 | 20 / 100 | 60 / 300 | 20 / 100 | 2 modes x B x RF 5개 |
-| Shared scalar | 24 / 120 | 24 / 120 | 72 / 360 | 24 / 120 | 2 modes x W x B x LR 3개 |
-| Global L1 | 18 / 90 | 18 / 90 | 90 / 450 | 18 / 90 | 2 modes x 유효 W/B x LR 3개 |
-| L2 CG | 12 / 60 | 42 / 210 | 72 / 360 | 24 / 120 | 2 modes x 유효 W/B x LR 3개 |
-| DRAM sanity | 12 / 60 | 12 / 60 | 36 / 180 | 12 / 60 | 2 modes x B x LR 3개 |
-| **합계** | **86 / 430** | **116 / 580** | **330 / 1,650** | **98 / 490** | 유효 commands / expected CSV rows |
+| Tensor | 20 / 100 | 20 / 100 | 30 / 150 | 20 / 100 | 2 modes x B x RF 5개 |
+| Shared scalar | 24 / 120 | 24 / 120 | 36 / 180 | 24 / 120 | 2 modes x W x B x LR 3개 |
+| Global L1 | 18 / 90 | 18 / 90 | 36 / 180 | 18 / 90 | 2 modes x 유효 W/B x LR 3개 |
+| L2 CG | 12 / 60 | 42 / 210 | 36 / 180 | 24 / 120 | 2 modes x 유효 W/B x LR 3개 |
+| DRAM sanity | 12 / 60 | 12 / 60 | 18 / 90 | 12 / 60 | 2 modes x B x LR 3개 |
+| **합계** | **86 / 430** | **116 / 580** | **156 / 780** | **98 / 490** | 유효 commands / expected CSV rows |
 
 | 별도 실행 단계 | RTX 3090 | A100 | V100 | H100 | 의미 |
 |---|---:|---:|---:|---:|---|
-| feasibility 전 candidate matrix | 92 rows | 128 rows | 348 rows | 104 rows | mode x W x B x RF/LR의 전체 조합 |
+| feasibility 전 candidate matrix | 92 rows | 128 rows | 174 rows | 104 rows | mode x W x B x RF/LR의 전체 조합 |
 | feasibility 제외 | 6 rows | 12 rows | 18 rows | 6 rows | treatment/control과 LR를 포함한 최소 tile 위반 row |
 | schema/revision smoke | 3 rows | 3 rows | 3 rows | 3 rows | full sweep 전 CSV schema와 kernel marker 확인 |
-| Tensor pair calibration | 10 coordinates / 20 commands | 10 coordinates / 20 commands | 30 coordinates / 60 commands | 10 coordinates / 20 commands | B x RF 좌표마다 treatment/control-floor calibration 2회; 큰 ITER를 두 mode에 함께 적용 |
-| DRAM pair calibration | 6 coordinates / 12 commands | 6 coordinates / 12 commands | 18 coordinates / 36 commands | 6 coordinates / 12 commands | B x LR 좌표마다 treatment/control-floor calibration 2회; 큰 ITER를 두 mode에 함께 적용 |
+| Tensor pair calibration | 10 coordinates / 20 commands | 10 coordinates / 20 commands | 15 coordinates / 30 commands | 10 coordinates / 20 commands | B x RF 좌표마다 treatment/control-floor calibration 2회; 큰 ITER를 두 mode에 함께 적용 |
+| DRAM pair calibration | 6 coordinates / 12 commands | 6 coordinates / 12 commands | 9 coordinates / 18 commands | 6 coordinates / 12 commands | B x LR 좌표마다 treatment/control-floor calibration 2회; 큰 ITER를 두 mode에 함께 적용 |
 | primary NCU sidecar | 44 cases | 74 cases | 44 cases | 44 cases | A100만 L2 W 4개에서 treatment/control을 모두 profiling; H100 strict sidecar는 W64 사용 |
-| nominal energy kernel time | 4,300 s | 5,800 s | 16,500 s | 4,900 s | raw rows x 10 s의 기준값; dual calibration에서 control candidate가 크면 Tensor treatment가 10 s보다 길어질 수 있으며 calibration/launch/cooling/NCU 시간도 별도 |
+| nominal energy kernel time | 4,300 s | 5,800 s | 7,800 s | 4,900 s | raw rows x 10 s의 기준값; dual calibration에서 control candidate가 크면 Tensor treatment가 10 s보다 길어질 수 있으며 calibration/launch/cooling/NCU 시간도 별도 |
 
 상세 계산식, generated strict anchor와 기존 RTX 3090 accepted B16 결과의 구분은
 [cross-platform component experiment guide](../platforms/cross_platform_component_experiment_guide_ko.md)의
@@ -310,7 +309,7 @@ combined L1/shared 구조와 NCU toolchain 지원 범위가 다르므로 별도 
 | Step | V100 확인 내용 |
 |---|---|
 | preflight | profile `v100`, CUDA 12.x 권장 compiler의 `compute_70` 지원, `sm_70`, runtime 80 SM, 32GB reference memory >= 30,000 MiB, NVML total energy support |
-| blocks sweep | energy B=1,2,4,8,16,32; strict NCU 대표 B=32. one warp/block이라 이론상 64 warps/SM의 50%이며, 실제 residency는 achieved occupancy/registers/shared-block NCU evidence로 확인 |
+| blocks sweep | energy B=4,16,32; strict NCU 대표 B=32. one warp/block이라 이론상 64 warps/SM의 50%이며, 실제 residency는 achieved occupancy/registers/shared-block NCU evidence로 확인 |
 | shared | energy W_SM 32/64 KiB; strict NCU W32/B32. W64/B32는 96 KiB capacity 경계 stress point |
 | global L1 | energy W_SM 8/16/32 KiB; strict NCU W32/B32. 기존 W8/B16은 block당 1 KiB tile 미만이라 폐기 |
 | L2 final path | `l2_cg_load_only - global_addr_only`; strict W32/B32 = 2.5 MiB total, W64 = 5 MiB stress point |

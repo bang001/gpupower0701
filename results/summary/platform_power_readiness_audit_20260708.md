@@ -3,7 +3,7 @@
 이 보고서는 RTX 3090, V100, A100, H100 profile의 power API 의미, preflight profile, finalplan 생성 스크립트, 플랫폼 문서가 서로 맞는지 정적으로 점검한다. 실제 GPU 측정 결과가 아니라, 새 노드에서 실험하기 전 RTX 3090 기준이 섞이지 않도록 확인하는 readiness gate다.
 
 - detail CSV: `results/summary/platform_power_readiness_audit_20260708.csv`
-- checks: 84
+- checks: 85
 - failures: 0
 
 ## Verdict
@@ -15,7 +15,7 @@
 | profile | pass | fail |
 |---|---:|---:|
 | `a100` | 19 | 0 |
-| `all` | 2 | 0 |
+| `all` | 3 | 0 |
 | `h100` | 19 | 0 |
 | `rtx3090` | 19 | 0 |
 | `v100` | 25 | 0 |
@@ -50,6 +50,7 @@
 |---|---|---|---|
 | `power_matrix_exists` | `pass` | `exists` | `True` |
 | `power_matrix_core_terms` | `pass` | `all core API/scope/gate terms` | `ok` |
+| `ncu_permission_fallback_policy` | `pass` | `counter probe, exact-error sudo retry, child-process coverage` | `ok` |
 
 ## h100
 
@@ -109,7 +110,7 @@
 | `plan_active_sm` | `pass` | `80` | `80` |
 | `plan_ncu_chip` | `pass` | `gv100` | `gv100` |
 | `plan_power_semantics` | `pass` | `instant` | `instant` |
-| `plan_blocks` | `pass` | `1,2,4,8,16,32` | `1,2,4,8,16,32` |
+| `plan_blocks` | `pass` | `4,16,32` | `4,16,32` |
 | `plan_ncu_blocks` | `pass` | `32` | `32` |
 | `plan_shared_ncu_w` | `pass` | `32` | `32` |
 | `plan_l1_ncu_w` | `pass` | `32` | `32` |

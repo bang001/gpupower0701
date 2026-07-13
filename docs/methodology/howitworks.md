@@ -614,9 +614,8 @@ row를 final로 채택하려면 그 B와 정확히 같은 좌표의 NCU acceptan
 | B 증가와 함께 coefficient 증가 | contention, bank conflict, scoreboard stall 또는 clock 변화 가능성 | long scoreboard, bank conflict, clock, temperature 확인 |
 | requested B와 achieved occupancy가 함께 증가하지 않음 | register/shared/resource limit로 실제 residency가 제한됨 | registers/thread, shared bytes/block 확인 |
 
-V100의 B1-B16은 저밀도에서 B32까지 변화를 넓게 보는 diagnostic 선택이지 GV100에서만
-필요한 architecture 규칙이 아니다. 공통 final 비교만 필요하면 V100도 B16/B32를 기본으로
-보고 B1-B8은 선택 진단으로 분리하는 편이 실행비용과 플랫폼 대칭성 측면에서 낫다.
+V100의 B4/B16은 저밀도와 중간 밀도 민감도를 보는 diagnostic 선택이고 strict anchor는
+B32다. B1/B2/B8은 실행시간 대비 추가 식별력이 제한적이어서 기본 package에서 제외했다.
 
 ### 9.3 `reuse_factor`
 
@@ -701,7 +700,7 @@ GPU architecture가 다르면 같은 `W_SM`이라도 의미가 달라진다.
 | GPU | Tensor W_SM (KiB) | Shared W_SM (KiB) | L1 W_SM (KiB) | L2 W_SM (KiB) | DRAM W_SM (KiB) | blocks/SM |
 |---|---:|---:|---:|---:|---:|---|
 | RTX 3090 | 2048 | 32,64 | 8,16 | 64 with `l2_cg_load_only` | 8192 | energy 8,16; strict NCU 8 |
-| V100 | 2048 | 32,64 | 8,16,32 | 32,64 with `l2_cg_load_only` | 8192 | energy 1,2,4,8,16,32; strict NCU 32 |
+| V100 | 2048 | 32,64 | 8,16,32 | 32,64 with `l2_cg_load_only` | 8192 | energy 4,16,32; strict NCU 32 |
 | A100 | 2048 | 64,128 | 16,32 | 16,32,64,128 with `l2_cg_load_only` | 8192 | energy 16,32; strict NCU B16에서 네 W 모두 검증 |
 | H100 | 2048 | 64,128 | 16,32 | 64,128 with `l2_cg_load_only` | 8192 | 16,32 |
 

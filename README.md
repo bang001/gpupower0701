@@ -301,7 +301,7 @@ Prompt templates:
 - 1 logical op input footprint = A+B FP16 = 1KiB = 8192 bits.
 - `threads/block = 32`, so `blocks/SM = resident warps/SM`.
 
-For V100, the energy diagnostic sweep uses `blocks/SM=1,2,4,8,16,32` and the
+For V100, the energy diagnostic sweep uses `blocks/SM=4,16,32` and the
 strict NCU sidecar uses B32 with Shared/Global-L1/L2 `W_SM=32 KiB`. Because the
 kernel has one warp per block, B32 requests at most 32 warps/SM, or 50% of
 GV100's 64-warp limit. Register/shared-memory limits can reduce actual

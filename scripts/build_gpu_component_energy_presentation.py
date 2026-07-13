@@ -439,7 +439,7 @@ def build_deck() -> Presentation:
     ]
     add_table(slide, profile_rows, 0.48, 1.22, 12.35, 1.82, widths=[1.55,0.65,1.55,1.85,1.1,2.2,1.7], font_size=8.7, row_fills=[WHITE,PALE,WHITE,PALE])
     slide.shapes.add_picture(str(ASSET_DIR / "platform_blocks_per_sm_sweep.png"), Inches(0.72), Inches(3.18), width=Inches(11.9), height=Inches(3.55))
-    add_text(slide, "V100 B1-B16은 진단 범위이며 architecture 필수조건이 아니다. 요청 B/SM은 실제 동시 residency가 아니므로 NCU occupancy/resource로 확인한다.", 0.78, 6.78, 11.8, 0.3, size=10.5, color=INK, bold=True, align=PP_ALIGN.CENTER)
+    add_text(slide, "V100은 B4/B16 민감도와 strict B32를 측정한다. 요청 B/SM은 실제 동시 residency가 아니므로 NCU occupancy/resource로 확인한다.", 0.78, 6.78, 11.8, 0.3, size=10.5, color=INK, bold=True, align=PP_ALIGN.CENTER)
 
     # 11. Platform-specific W_SM path sweep
     slide = prs.slides.add_slide(blank); add_title(slide, "Platform별 W_SM path sweep", "EXPERIMENT MATRIX", 11, "source: planner profiles; exact-coordinate NCU acceptance decides the path")
@@ -685,7 +685,7 @@ SLIDE_NOTES = """# GPU Component Energy Experiment Presentation Evidence Notes
 7. **Active pairs** — `scripts/analyze_matched_control_energy.py:25-81`, `scripts/build_strict_component_summary.py:34-62`.
 8. **Core pipeline** — generated command packages.
 9. **Actual pipeline** — `scripts/plan_platform_component_experiment.py:430-1016`.
-10. **Profiles and blocks/SM sweep** — `include/config.hpp:18-135`, planner profiles, and `platform_blocks_per_sm_sweep.png`. V100 B1-B16 is diagnostic breadth, not an architecture requirement; requested blocks/SM still needs NCU occupancy/resource validation.
+10. **Profiles and blocks/SM sweep** — `include/config.hpp:18-135`, planner profiles, and `platform_blocks_per_sm_sweep.png`. V100 uses B4/B16 sensitivity points and the strict B32 anchor; requested blocks/SM still needs NCU occupancy/resource validation.
 11. **Platform W_SM path sweep** — planner profiles, generated `*_command_plan.md`, and `platform_wsm_path_sweep.png`. Shared is a separate address-space path; only global-memory candidates are interpreted across L1/L2/DRAM after exact-coordinate NCU acceptance.
 12. **Host sequence** — `src/main.cu:628-650,919-1010`.
 13. **Raw energy** — `src/main.cu:417-425,692-720,950-978`.

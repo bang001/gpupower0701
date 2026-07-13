@@ -26,7 +26,7 @@
 7. **Active pairs** — `scripts/analyze_matched_control_energy.py:25-81`, `scripts/build_strict_component_summary.py:34-62`.
 8. **Core pipeline** — generated command packages.
 9. **Actual pipeline** — `scripts/plan_platform_component_experiment.py:430-1016`.
-10. **Profiles and blocks/SM sweep** — `include/config.hpp:18-135`, planner profiles, and `platform_blocks_per_sm_sweep.png`. V100 B1-B16 is diagnostic breadth, not an architecture requirement; requested blocks/SM still needs NCU occupancy/resource validation.
+10. **Profiles and blocks/SM sweep** — `include/config.hpp:18-135`, planner profiles, and `platform_blocks_per_sm_sweep.png`. V100 uses B4/B16 sensitivity points and the strict B32 anchor; requested blocks/SM still needs NCU occupancy/resource validation.
 11. **Platform W_SM path sweep** — planner profiles, generated `*_command_plan.md`, and `platform_wsm_path_sweep.png`. Shared is a separate address-space path; only global-memory candidates are interpreted across L1/L2/DRAM after exact-coordinate NCU acceptance.
 12. **Host sequence** — `src/main.cu:628-650,919-1010`.
 13. **Raw energy** — `src/main.cu:417-425,692-720,950-978`.

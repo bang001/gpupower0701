@@ -17,7 +17,7 @@
 | L2 기준 | 6 MiB |
 | L1/shared 기준 | 128 KiB/SM combined, 96 KiB/SM shared allocation |
 | max blocks/SM | 32 |
-| energy blocks/SM sweep | `1,2,4,8,16,32` |
+| energy blocks/SM sweep | `4,16,32` |
 | strict NCU blocks/SM | `32` |
 | Tensor baseline | FP16 WMMA baseline |
 | 결과 의미 | 순수 회로 에너지가 아니라 NCU로 경로를 검증한 effective microbenchmark coefficient |
@@ -42,7 +42,7 @@ V100 기준을 강제해:
 - L2: 6 MiB
 - L1/shared: 128 KiB/SM combined, 96 KiB/SM shared allocation
 - max blocks/SM: 32
-- energy sweep blocks/SM: 1,2,4,8,16,32
+- energy sweep blocks/SM: 4,16,32
 - strict NCU coordinate: blocks/SM=32, Shared/L1/L2 W_SM=32 KiB
 
 RTX 3090 값(sm_86, active_SM=82, blocks/SM max 16)이나 A100 값(sm_80, L2=40 MiB, shared=164 KiB/SM)이 섞인 row는 최종 coefficient에서 제외해.
@@ -152,7 +152,7 @@ V100 전용 기준:
 7. energy sweep
    - scripts/plan_platform_component_experiment.py --target-profile v100으로 표준 명령을 생성한다.
    - seconds는 최종 실험에서 10 이상, repeats는 5 이상을 권장한다.
-   - blocks/SM은 1,2,4,8,16,32를 energy diagnostic sweep으로 모두 수행한다.
+   - blocks/SM은 4,16,32를 energy sweep으로 수행한다. B4/B16은 utilization 민감도, B32는 strict anchor다.
    - strict coefficient는 generated sidecar의 exact NCU 좌표 B32와 일치하는 row만 우선 채택한다.
    - Tensor는 RF별로 reg_mma treatment 목표와 reg_operand_only control 최소시간을 각각 calibrate하고 두 ITER 중 큰 값을 두 mode에 적용한 뒤, duration scaling 없이 net-energy를 직접 차분한다. tensor_pair_calibration CSV의 두 candidate/max policy와 matched detail의 `pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1`을 확인한다.
    - shared scalar는 clocked_empty와 shared_scalar_load_only 차분으로 본다.

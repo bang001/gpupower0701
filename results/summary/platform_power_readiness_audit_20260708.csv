@@ -1,6 +1,7 @@
 profile,check,status,expected,actual,evidence
 all,power_matrix_exists,pass,exists,True,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/power_measurement_api_matrix_ko.md
 all,power_matrix_core_terms,pass,all core API/scope/gate terms,ok,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/power_measurement_api_matrix_ko.md
+all,ncu_permission_fallback_policy,pass,"counter probe, exact-error sudo retry, child-process coverage",ok,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/scripts/run_ncu_validation.sh
 rtx3090,plan_profile_present,pass,present,True,scripts/plan_platform_component_experiment.py
 rtx3090,preflight_profile_present,pass,present,True,scripts/preflight_gpu_support.py
 rtx3090,plan_cuda_arch,pass,86,86,scripts/plan_platform_component_experiment.py
@@ -13,7 +14,7 @@ rtx3090,preflight_ncu_chip,pass,ga102,ga102,scripts/preflight_gpu_support.py
 rtx3090,preflight_power_semantics,pass,one_sec_average,one_sec_average,scripts/preflight_gpu_support.py
 rtx3090,guide_exists,pass,exists,True,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/README.md
 rtx3090,guide_power_and_platform_terms,pass,all required guide terms,ok,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/README.md
-rtx3090,generated_plan_runs,pass,return code 0,0,wrote shell: /tmp/platform_readiness_yvrw7vhh/rtx3090_plan.sh | wrote markdown: /tmp/platform_readiness_yvrw7vhh/rtx3090_plan.md
+rtx3090,generated_plan_runs,pass,return code 0,0,wrote shell: /tmp/platform_readiness_pjj2ebec/rtx3090_plan.sh | wrote markdown: /tmp/platform_readiness_pjj2ebec/rtx3090_plan.md
 rtx3090,generated_shell_final_gates,pass,power/ncu/matched/reliability gates,ok,plan_platform_component_experiment generated shell
 rtx3090,generated_shell_goal_dashboard_order,pass,goal readiness audit before dashboard refresh,ok,plan_platform_component_experiment generated shell
 rtx3090,generated_gap_report_tagged,pass,gap report command carries target profile and tag,ok,plan_platform_component_experiment generated shell
@@ -26,7 +27,7 @@ v100,plan_cuda_arch,pass,70,70,scripts/plan_platform_component_experiment.py
 v100,plan_active_sm,pass,80,80,scripts/plan_platform_component_experiment.py
 v100,plan_ncu_chip,pass,gv100,gv100,scripts/plan_platform_component_experiment.py
 v100,plan_power_semantics,pass,instant,instant,scripts/plan_platform_component_experiment.py
-v100,plan_blocks,pass,"1,2,4,8,16,32","1,2,4,8,16,32",scripts/plan_platform_component_experiment.py
+v100,plan_blocks,pass,"4,16,32","4,16,32",scripts/plan_platform_component_experiment.py
 v100,plan_ncu_blocks,pass,32,32,scripts/plan_platform_component_experiment.py
 v100,plan_shared_ncu_w,pass,32,32,scripts/plan_platform_component_experiment.py
 v100,plan_l1_ncu_w,pass,32,32,scripts/plan_platform_component_experiment.py
@@ -38,7 +39,7 @@ v100,preflight_ncu_chip,pass,gv100,gv100,scripts/preflight_gpu_support.py
 v100,preflight_power_semantics,pass,instant,instant,scripts/preflight_gpu_support.py
 v100,guide_exists,pass,exists,True,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/v100_node_experiment_guide_ko.md
 v100,guide_power_and_platform_terms,pass,all required guide terms,ok,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/v100_node_experiment_guide_ko.md
-v100,generated_plan_runs,pass,return code 0,0,wrote shell: /tmp/platform_readiness_yvrw7vhh/v100_plan.sh | wrote markdown: /tmp/platform_readiness_yvrw7vhh/v100_plan.md
+v100,generated_plan_runs,pass,return code 0,0,wrote shell: /tmp/platform_readiness_pjj2ebec/v100_plan.sh | wrote markdown: /tmp/platform_readiness_pjj2ebec/v100_plan.md
 v100,generated_shell_final_gates,pass,power/ncu/matched/reliability gates,ok,plan_platform_component_experiment generated shell
 v100,generated_shell_goal_dashboard_order,pass,goal readiness audit before dashboard refresh,ok,plan_platform_component_experiment generated shell
 v100,generated_gap_report_tagged,pass,gap report command carries target profile and tag,ok,plan_platform_component_experiment generated shell
@@ -57,7 +58,7 @@ a100,preflight_ncu_chip,pass,ga100,ga100,scripts/preflight_gpu_support.py
 a100,preflight_power_semantics,pass,instant,instant,scripts/preflight_gpu_support.py
 a100,guide_exists,pass,exists,True,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/a100_node_experiment_guide_ko.md
 a100,guide_power_and_platform_terms,pass,all required guide terms,ok,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/a100_node_experiment_guide_ko.md
-a100,generated_plan_runs,pass,return code 0,0,wrote shell: /tmp/platform_readiness_yvrw7vhh/a100_plan.sh | wrote markdown: /tmp/platform_readiness_yvrw7vhh/a100_plan.md
+a100,generated_plan_runs,pass,return code 0,0,wrote shell: /tmp/platform_readiness_pjj2ebec/a100_plan.sh | wrote markdown: /tmp/platform_readiness_pjj2ebec/a100_plan.md
 a100,generated_shell_final_gates,pass,power/ncu/matched/reliability gates,ok,plan_platform_component_experiment generated shell
 a100,generated_shell_goal_dashboard_order,pass,goal readiness audit before dashboard refresh,ok,plan_platform_component_experiment generated shell
 a100,generated_gap_report_tagged,pass,gap report command carries target profile and tag,ok,plan_platform_component_experiment generated shell
@@ -76,7 +77,7 @@ h100,preflight_ncu_chip,pass,gh100,gh100,scripts/preflight_gpu_support.py
 h100,preflight_power_semantics,pass,one_sec_average,one_sec_average,scripts/preflight_gpu_support.py
 h100,guide_exists,pass,exists,True,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/h100_node_experiment_guide_ko.md
 h100,guide_power_and_platform_terms,pass,all required guide terms,ok,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/h100_node_experiment_guide_ko.md
-h100,generated_plan_runs,pass,return code 0,0,wrote shell: /tmp/platform_readiness_yvrw7vhh/h100_plan.sh | wrote markdown: /tmp/platform_readiness_yvrw7vhh/h100_plan.md
+h100,generated_plan_runs,pass,return code 0,0,wrote shell: /tmp/platform_readiness_pjj2ebec/h100_plan.sh | wrote markdown: /tmp/platform_readiness_pjj2ebec/h100_plan.md
 h100,generated_shell_final_gates,pass,power/ncu/matched/reliability gates,ok,plan_platform_component_experiment generated shell
 h100,generated_shell_goal_dashboard_order,pass,goal readiness audit before dashboard refresh,ok,plan_platform_component_experiment generated shell
 h100,generated_gap_report_tagged,pass,gap report command carries target profile and tag,ok,plan_platform_component_experiment generated shell

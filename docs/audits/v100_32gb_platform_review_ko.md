@@ -37,7 +37,7 @@ strict preflight에서 확인한다.
 | default visible SMs | 80 SMs | `--active-sm 80`; partition이면 runtime 값으로 plan 재생성 |
 | L2 capacity | 6 MiB | strict L2 CG: `80 x 32 KiB = 2.5 MiB`; W64=5 MiB stress point |
 | shared allocation | 96 KiB/SM, 96 KiB/block | profile feasibility check에 반영 |
-| blocks/SM | energy 1,2,4,8,16,32; strict NCU 32 | 저점유-고점유 diagnostic과 exact-NCU final 좌표 분리 |
+| blocks/SM | energy 4,16,32; strict NCU 32 | 저밀도 B4, 중간 B16, exact-NCU B32 좌표 분리 |
 | HBM capacity | 32 GB HBM2 reference | strict preflight: visible `memory.total >= 30,000 MiB` |
 | DRAM sanity working set | `80 x 8192 KiB = 640 MiB` | 6 MiB L2를 넘고 32 GB device capacity보다 작음 |
 | power numerator | NVML total-energy delta only | `GetPowerUsage` instantaneous fallback은 final coefficient에서 제외 |
