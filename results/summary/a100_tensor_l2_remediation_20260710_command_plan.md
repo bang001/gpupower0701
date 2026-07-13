@@ -17,8 +17,8 @@ package로 다시 생성해야 한다.
 
 | 항목 | 관측 | 판정 | 다음 검증 |
 |---|---|---|---|
-| Tensor dual calibration v1 | RF1-16 모두 양수, 약 0.35-0.54 pJ/FLOP | **stale/reject**. 음수 차분 문제는 해소됐지만 dynamic RF loop가 교정된 `fixed_rf_v2` marker 이전 결과여서 final로 승격하거나 새 결과와 결합하지 않음 | fixed-RF v2 clean rebuild 후 RF별 `HMMA/logical MMA` 상대 spread <=10%, control HMMA=0, spill/local=0, RF coefficient 상대 range <=75% |
-| L2 normal `.cg` | W_SM 16/32/64/128 KiB에서 path-specific L2 read hit 약 58.5-60.1% | **strict reject**. 95% 기준을 충족하지 않으므로 pJ/bit를 보고하지 않음 | NCU application replay + 동일 CG warm-up으로 재검사하고, 실패할 때만 persisting-L2 policy 진단 |
+| Tensor dual calibration v1 | RF1-16 모두 양수, 약 0.35-0.54 pJ/FLOP | **stale/reject**. 음수 차분 문제는 해소됐지만 local raw/NCU artifact와 `fixed_rf_v2` marker 증거가 없어 final로 승격하지 않음. 비교 대상인 현행 RTX v2 median은 2.2525 pJ/FLOP이며 과거 0.129-0.146은 protocol이 다른 historical 값 | fixed-RF v2 clean rebuild 후 RF별 `HMMA/logical MMA` 상대 spread <=10%, control HMMA=0, spill/local=0, RF coefficient 상대 range <=75% |
+| L2 normal `.cg` | W_SM 16/32/64/128 KiB에서 path-specific L2 read hit 약 58.5-60.1% | **strict reject**. 95% 기준을 충족하지 않으므로 pJ/bit를 보고하지 않음 | application replay + CG warm-up에서 policy/layout/B 후보를 순서대로 재검사. hit 기준은 유지 |
 
 Tensor coefficient는 board-level treatment-control 증분이다. 논리 FLOP 수는 WMMA
 `m16n16k16=8192 FLOP`로 계산하지만, 하나의 logical WMMA가 몇 개의 HMMA 계열 SASS로
@@ -38,7 +38,9 @@ lowering되는지는 GPU 아키텍처에 따라 다를 수 있다. 따라서 절
 | L2 58.5-60.1%를 단일 derived ratio로만 판정 | native op-read hit ratio, lookup hit/miss-derived ratio, total read sector, DRAM read bytes, persisting window 크기를 함께 수집 | derived/native hit 모두 >=95%, 차이 <=2 percentage points, `(hit+miss)/read sectors=1+/-2%`; miss bytes와 DRAM read bytes는 원인 진단에 기록 |
 | normal warm-up의 L1 오염 | CG treatment의 warm-up도 `ld.global.cg` 사용 | raw `global_warmup_policy=ld_global_cg` marker |
 | NCU kernel replay에서 warm-up cache 상태가 pass마다 재현되지 않음 | `--replay-mode application --cache-control none`으로 각 metric pass마다 application setup과 CG warm-up을 다시 실행 | case manifest의 replay/cache policy와 path-specific hit counter |
-| A100 normal L2 residency가 95%에 미달 | W16/W128, LR4를 먼저 normal policy로 진단하고, 실패할 때만 CUDA persisting-L2 access-policy window로 같은 좌표를 재검사 | `l2_policy_selection.{csv,md,env}`; normal 우선, 둘 다 실패하면 긴 sweep 전에 중단 |
+| A100 normal L2 residency가 95%에 미달 | W16/W128, LR4에서 normal의 block-address layout/B를 먼저 진단한 뒤 모든 normal이 실패할 때 persisting 후보를 같은 순서로 검사. `contiguous`와 128 B guard의 `sm_interleaved`, B16/8/4 비교 | `l2_path_selection.{csv,md,env}`; 95% gate를 낮추지 않고 첫 완전 통과 후보만 선택, 전부 실패하면 긴 sweep 전에 중단 |
+| persisting counter가 수집되지 않음 | `launch__persisting_l2_cache_size`를 NCU 기본 metric 목록에 추가 | metric unavailable/drop이면 persisting 후보 reject; selector가 실제 size>0을 요구 |
+| hit ratio 분모 오판 가능성 | observed L2 read bytes를 논리 expected bytes와 비교 | `L2 read / (active_SM * B * ITER * LR * 1024 B)=0.95-1.05` hard gate |
 | full NCU reject를 energy 후에 발견 | 선택 policy로 Tensor 10 cases와 L2 40 cases를 energy 전에 실행하고 전용 precheck를 hard gate로 사용 | `*_ncu_precheck.{csv,md}`가 pass해야 20 s x 7 repeats energy 시작 |
 | 단일 L2 좌표의 우연한 통과 | W16/32/64/128을 모두 검증하고 인접한 두 W의 pJ/bit plateau 요구 | NCU+energy 통과 W 두 개 이상, 상대 차이 <=35% |
 
@@ -48,12 +50,12 @@ lowering되는지는 GPU 아키텍처에 따라 다를 수 있다. 따라서 절
 
 | 단계 | 고정 조건 | sweep | 1회당 좌표 | 반복/총 행 또는 case |
 |---|---|---|---:|---:|
-| L2 policy precheck | A100, 108 SM, blocks/SM=16, LR4, application replay, cache-control none, CG warm-up 4회 | normal W_SM 16/128 KiB; 실패 시 persisting에서 동일 W 재검사 | policy당 mode 2개 x W 2개 | normal 4 NCU cases, 필요 시 persisting 4 cases |
+| L2 path precheck | A100, 108 SM, LR4, application replay, cache-control none, CG warm-up 4회, hit gate 95% 고정 | ordered candidate: normal contiguous/B16, normal sm_interleaved/B16/B8/B4, 이후 persisting을 같은 순서로 검사; 각 후보 W_SM 16/128 KiB | 후보당 mode 2개 x W 2개 | 첫 통과에서 중단: 최소 4, 최대 32 NCU cases |
 | Tensor NCU | W_SM=2048 KiB, blocks/SM=16, ITER=100,000, application replay | mode 2개 x RF 1,2,4,8,16 | 10 cases | 10 NCU cases |
-| L2 NCU | blocks/SM=16, ITER=100,000, 선택된 residency policy, CG warm-up 4회 | mode 2개 x W_SM 16,32,64,128 KiB x LR 1,2,4,8,16 | 40 cases | 40 NCU cases |
+| L2 NCU | selected blocks/SM=16/8/4, ITER=100,000, 선택된 residency/layout, CG warm-up 4회 | mode 2개 x W_SM 16,32,64,128 KiB x LR 1,2,4,8,16 | 40 cases | 40 NCU cases |
 | Tensor calibration | A100, 108 SM, W_SM=2048 KiB, blocks/SM=16 | RF별 treatment target 20 s + control floor 2 s | RF 5개 x calibration 2 modes | 10 calibration commands, raw energy 행 아님 |
 | Tensor energy | A100, 108 SM, W_SM=2048 KiB, blocks/SM=16, pair-locked ITER | mode 2개 x RF 1,2,4,8,16 | 10 commands | 7 repeats, 70 raw rows |
-| L2 energy | A100, 108 SM, blocks/SM=16, 20 s/mode | mode 2개 x W_SM 16,32,64,128 KiB x LR 4,8,16 | 24 commands | 7 repeats, 168 raw rows |
+| L2 energy | A100, 108 SM, selected blocks/SM/layout/policy, 20 s/mode | mode 2개 x W_SM 16,32,64,128 KiB x LR 4,8,16 | 24 commands | 7 repeats, 168 raw rows |
 | schema/revision smoke | active SM=1, ITER=1 | `clocked_empty`, `reg_operand_only`, `l2_cg_load_only` | 3 commands | 3 raw rows |
 
 `W_SM=2048 KiB`는 Tensor register 용량이 아니다. Tensor mode의 기존 CLI 좌표이며 실제
@@ -88,9 +90,9 @@ NCU_USE_SUDO=1 bash results/summary/a100_tensor_l2_remediation_20260710_commands
 | Tensor 각 RF | calibration candidate 2개와 max resolved ITER, raw mode별 7행, 동일 ITER, current marker, total-energy/device scope |
 | Tensor NCU | `reg_mma` HMMA>0, `reg_operand_only` HMMA=0, 두 mode local read/write bytes=0 및 spill=0, acceptance pass; RF1-16의 `HMMA/logical MMA` 상대 spread<=10% |
 | Tensor energy | 7개 pair 모두 `delta_E>=10 J`, coefficient>0, pair timestamp distance<=60,000 ms, median 0.01-5 pJ/FLOP; RF median 상대 range<=75%. 범위가 크면 단일 평균 대신 RF range로 보고 |
-| L2 policy precheck | normal W16/W128가 모두 통과하면 normal 선택. 아니면 persisting W16/W128를 검사. 둘 다 실패하면 energy sweep 미실행 |
-| Full NCU precheck | Tensor RF 5개와 L2 W x LR 20개 treatment/control이 모두 accepted이고 replay/cache/warm-up/policy metadata 일치. L2는 native/derived hit와 sector conservation까지 일치해야 하며 한 row라도 실패하면 energy sweep 미실행 |
-| L2 각 W | application replay/cache-control none/선택 residency/CG warm-up 4회. LR1/2/4/8/16 treatment/control 모두 accepted; control input L1 request=0 및 DRAM/expected<=0.1%; treatment L1 path hit<=1%, L1 hit/request<=1%, derived/native L2 read hit>=95%, 두 값 차이<=2 percentage points, hit+miss/read sectors=1+/-2%, DRAM/L2<=2% |
+| L2 path precheck | 사전 고정된 8개 policy/layout/B 후보 중 W16/W128 treatment/control이 모두 strict gate를 통과하는 첫 후보 선택. 전부 실패하면 energy sweep 미실행 |
+| Full NCU precheck | Tensor RF 5개와 L2 W x LR 20개 treatment/control이 모두 accepted이고 replay/cache/warm-up/policy/layout/B metadata 일치. L2는 native/derived hit, sector conservation, observed/expected traffic까지 일치해야 하며 한 row라도 실패하면 energy sweep 미실행 |
+| L2 각 W | application replay/cache-control none/선택 residency/layout/B/CG warm-up 4회. LR1/2/4/8/16 treatment/control 모두 accepted; control input L1 request=0 및 DRAM/expected<=0.1%; treatment L1 path hit<=1%, L1 hit/request<=1%, derived/native L2 read hit>=95%, 두 값 차이<=2 percentage points, hit+miss/read sectors=1+/-2%, observed/expected bytes=0.95-1.05, DRAM/L2<=2% |
 | L2 energy | LR4/8/16별 최소 5 valid repeats, 모든 delta_E>=10 J, positive pJ/bit, exact NCU denominator |
 | L2 plateau | 위 조건을 통과한 인접 W 두 개 이상의 median pJ/bit 상대 차이<=35% |
 
@@ -128,12 +130,13 @@ results/summary/a100_tensor_l2_remediation_<TAG>_audit.md
   검증한 effective coefficient다. Tensor Core 또는 L2 SRAM의 순수 회로 에너지가 아니다.
 - 기존 RF1/2 결과와 새 RF4 이상 결과를 섞지 않는다. control과 pair 실행 정책이 바뀌었기
   때문에 RF1-16 전체가 같은 새 package에서 다시 측정되어야 한다.
-- normal policy가 통과하면 일반 `.cg` L2-hit effective coefficient다. persisting policy가
+- normal policy가 통과하면 일반 `.cg` L2-hit effective coefficient다. `sm_interleaved`가
+  선택되면 해당 주소 배치에서의 coefficient이며 default contiguous workload로 일반화하지 않는다. persisting policy가
   선택되면 CUDA access-policy window와 L2 set-aside가 포함된 **residency-managed L2 path**
   coefficient다. 이를 모든 A100 workload의 기본 L2 energy로 일반화하면 안 된다.
 - persisting cache는 line을 절대적으로 고정하는 보장이 아니다. 최종 승인은 여전히 NCU
   path-specific/native L2 hit>=95%와 sector conservation 교차검증이 결정한다. MIG에서는 set-aside가 비활성화될 수 있으므로
-  normal도 실패하고 persisting API도 사용할 수 없으면 `none`으로 종료하는 것이 정상이다.
+  모든 normal 후보도 실패하고 persisting API도 사용할 수 없으면 `none`으로 종료하는 것이 정상이다.
 - `--replay-mode kernel --cache-control none`으로 수집한 이전 L2 metric은 warm-up cache
   상태가 metric pass마다 동일하다는 보장이 없다. 새 package는 application replay로
   application과 warm-up을 pass마다 다시 실행한다.
@@ -155,7 +158,7 @@ results/summary/a100_tensor_l2_remediation_<TAG>_audit.md
 | L2 raw/matrix | `results/raw/a100_tensor_l2_remediation_<TAG>_l2*.csv` |
 | power audits | `results/summary/a100_tensor_l2_remediation_<TAG>_power_*.{csv,md}` |
 | NCU reports and summary | `results/ncu/a100_tensor_l2_remediation_<TAG>/` 전체 |
-| L2 policy evidence | `results/summary/a100_tensor_l2_remediation_<TAG>_l2_policy_*` |
+| L2 후보 NCU/선택 근거 | `results/ncu/a100_tensor_l2_remediation_<TAG>/l2_candidate_*`, `results/summary/a100_tensor_l2_remediation_<TAG>_l2_candidate_*`, `*_l2_path_selection.*` |
 | NCU acceptance | `results/summary/a100_tensor_l2_remediation_<TAG>_ncu_acceptance.{csv,md}` |
 | pre-energy NCU gate | `results/summary/a100_tensor_l2_remediation_<TAG>_ncu_precheck.{csv,md}` |
 | matched-control | `results/summary/a100_tensor_l2_remediation_<TAG>_matched_control_*` |

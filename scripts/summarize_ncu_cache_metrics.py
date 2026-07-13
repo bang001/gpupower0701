@@ -621,6 +621,20 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         if dram_read_bytes is not None:
             dram_read_to_l2_miss_bytes_ratio = dram_read_bytes / l2_read_miss_bytes
 
+    expected_l2_read_bytes = None
+    l2_read_to_expected_ratio = None
+    if manifest.get("mode", "") == "l2_cg_load_only":
+        geometry = [
+            parse_float(manifest.get(name, ""))
+            for name in ("active_SM", "blocks_per_SM", "ITER", "load_repeat")
+        ]
+        if all(value is not None and value > 0.0 for value in geometry):
+            expected_l2_read_bytes = (
+                math.prod(value for value in geometry if value is not None) * 1024.0
+            )
+            if l2_read_bytes is not None and expected_l2_read_bytes > 0.0:
+                l2_read_to_expected_ratio = l2_read_bytes / expected_l2_read_bytes
+
     tensor_hmma_inst = metrics.sum_names(["sm__inst_executed_pipe_tensor_op_hmma.sum"])
     expected_logical_mma = None
     tensor_hmma_per_logical_mma = None
@@ -785,6 +799,7 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "ncu_cache_control": manifest.get("ncu_cache_control", ""),
         "global_warmup_passes": manifest.get("global_warmup_passes", ""),
         "l2_residency_policy": manifest.get("l2_residency_policy", ""),
+        "l2_address_layout": manifest.get("l2_address_layout", "contiguous"),
         "status": status,
         "shared_accesses": fmt(shared_accesses),
         "shared_bytes": fmt(shared_bytes),
@@ -825,6 +840,8 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "l1_miss_bytes": fmt(l1_miss_bytes),
         "l2_bytes": fmt(l2_bytes),
         "l2_read_bytes": fmt(l2_read_bytes),
+        "expected_l2_read_bytes": fmt(expected_l2_read_bytes),
+        "l2_read_to_expected_ratio": fmt(l2_read_to_expected_ratio),
         "l2_read_hit_sectors": fmt(l2_read_hit_sectors),
         "l2_read_miss_sectors": fmt(l2_read_miss_sectors),
         "l2_read_miss_bytes": fmt(l2_read_miss_bytes),
@@ -931,11 +948,12 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
             "L2 native read hit (%) | Native-derived delta (pp) | L2 aggregate hit (%) | "
             "L2 hit source | L2 read hit sectors | L2 read miss sectors | "
             "L2 read sectors conservation | L2 miss bytes | DRAM read bytes | "
-            "DRAM read/L2 miss ratio | L2 read bytes |\n"
+            "DRAM read/L2 miss ratio | L2 read bytes | expected L2 read bytes | "
+            "observed/expected |\n"
         )
         f.write(
             "|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|"
-            "---:|---:|---:|---:|---:|---:|---:|\n"
+            "---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
         )
         for row in rows:
             f.write(
@@ -951,7 +969,8 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
                 f"{row['l2_read_sector_conservation_ratio']} | "
                 f"{row['l2_read_miss_bytes']} | {row['dram_read_bytes']} | "
                 f"{row['dram_read_to_l2_miss_bytes_ratio']} | "
-                f"{row['l2_read_bytes']} |\n"
+                f"{row['l2_read_bytes']} | {row['expected_l2_read_bytes']} | "
+                f"{row['l2_read_to_expected_ratio']} |\n"
             )
         f.write("\n")
         f.write("## NCU Replay And Residency Policy\n\n")
@@ -961,15 +980,16 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
             "explicit CUDA access-policy window.\n\n"
         )
         f.write(
-            "| label | mode | replay | cache control | warm-up passes | L2 residency | "
+            "| label | mode | replay | cache control | warm-up passes | L2 residency | L2 layout | "
             "persisting L2 size (bytes) | HMMA inst | logical MMA | HMMA/logical MMA |\n"
         )
-        f.write("|---|---|---|---|---:|---|---:|---:|---:|---:|\n")
+        f.write("|---|---|---|---|---:|---|---|---:|---:|---:|---:|\n")
         for row in rows:
             f.write(
                 f"| {row['label']} | {row['mode']} | {row['ncu_replay_mode']} | "
                 f"{row['ncu_cache_control']} | {row['global_warmup_passes']} | "
                 f"{row['l2_residency_policy']} | "
+                f"{row['l2_address_layout']} | "
                 f"{row['launch_persisting_l2_cache_size_bytes']} | "
                 f"{row['tensor_hmma_inst']} | "
                 f"{row['expected_logical_mma']} | "
@@ -1053,6 +1073,7 @@ def main() -> int:
         "ncu_cache_control",
         "global_warmup_passes",
         "l2_residency_policy",
+        "l2_address_layout",
         "status",
         "shared_accesses",
         "shared_bytes",
@@ -1091,6 +1112,8 @@ def main() -> int:
         "l1_miss_bytes",
         "l2_bytes",
         "l2_read_bytes",
+        "expected_l2_read_bytes",
+        "l2_read_to_expected_ratio",
         "l2_read_hit_sectors",
         "l2_read_miss_sectors",
         "l2_read_miss_bytes",

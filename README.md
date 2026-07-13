@@ -147,15 +147,10 @@ pure Tensor Core circuit energy, and it does not make the still-historical
 Shared/Global-L1/L2 rows current. See
 `results/summary/rtx3090_tensor_fixedrf_v2_report_20260713_ko.md`.
 
-Older inferred-scope RTX 3090 reporting medians retained for
-method-sensitivity/history: Tensor targeted RF=8/16 is
-`0.107 pJ/FLOP`, the fixed-ITER auxiliary check is `0.146 pJ/FLOP`, and
-the RF=8 duration-scaling auxiliary check is `0.143 pJ/FLOP` with slope
-estimates around `0.144-0.156 pJ/FLOP`. The RF=16 duration-scaling check is
-`0.077 pJ/FLOP` with slope estimates around `0.053-0.071 pJ/FLOP`. Therefore
-Tensor should be reported as RF-dependent: RF16 lower side around
-`0.06-0.09 pJ/FLOP`, RF8 upper side around `0.14-0.15 pJ/FLOP`, not as a pure
-circuit constant. Shared scalar primary is
+Older inferred-scope RTX 3090 Tensor medians (`0.077-0.170 pJ/FLOP`) are retained
+only for method-sensitivity/history. They used superseded kernel/control/pair
+protocols and must not be compared numerically with fixed-RF v2 A100 results or
+reported as the current Tensor coefficient. Shared scalar primary is
 `0.149 pJ/bit`, Global L1 is `0.148 pJ/bit`, L2 CG is `1.017 pJ/bit`. DRAM은
 `26.709-28.409 pJ/bit`의 provisional reference-aligned cumulative-path band로만
 보고한다. 현행 matched-ITER `global_addr_only` raw pair가 아직 없으므로 accepted 실측
@@ -299,11 +294,13 @@ rerun the power API, power-state, NCU, reliability, strict-summary, and goal
 readiness audits.
 
 The A100 Tensor/L2 remediation package is the required first step after the
-observed 58.5-60.1% L2 path-hit failure. It now runs an application-replay NCU
-precheck, prefers normal `.cg` caching, and tries an explicit persisting-L2
-policy only when normal caching fails. It stops before the long energy sweep if
-neither policy reaches the strict 95% L2 read-hit gate. A persisting result is a
-residency-managed effective path coefficient, not a universal default-L2 value.
+observed 58.5-60.1% L2 path-hit failure. It runs application-replay NCU prechecks
+over an ordered policy/address-layout/blocks-per-SM candidate list while keeping
+the strict 95% L2 read-hit gate. It also requires observed L2 bytes to match
+logical expected traffic and verifies the persisting-cache size counter. It
+stops before the long energy sweep if no candidate passes. A persisting or
+`sm_interleaved` result is configuration-specific effective path evidence, not a
+universal default-L2 value.
 
 Prompt templates:
 

@@ -20,7 +20,7 @@ from typing import Any, Iterable
 
 TENSOR_MARKER = "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2"
 CG_MARKER = "global_warmup_policy=ld_global_cg"
-L2_REVISION_MARKER = "l2_residency_revision=explicit_policy_warmup_v1"
+L2_REVISION_MARKER = "l2_residency_revision=topology_policy_warmup_v2"
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,7 @@ class AuditConfig:
     ncu_load_repeats: tuple[int, ...]
     energy_load_repeats: tuple[int, ...]
     blocks_per_sm: int
+    l2_blocks_per_sm: int
     active_sm: int
     expected_repeats: int
     min_valid_repeats: int
@@ -44,6 +45,7 @@ class AuditConfig:
     ncu_replay_mode: str
     ncu_cache_control: str
     l2_residency_policy: str
+    l2_address_layout: str
     global_warmup_passes: int
     l1_path_hit_max_pct: float
     l1_hit_bytes_ratio_max: float
@@ -227,6 +229,7 @@ def audit_data(
                 "ncu_cache_control",
                 "global_warmup_passes",
                 "l2_residency_policy",
+                "l2_address_layout",
                 "tensor_hmma_inst",
                 "expected_logical_mma",
                 "tensor_hmma_per_logical_mma",
@@ -241,6 +244,7 @@ def audit_data(
                 "l2_native_read_hit_rate_pct",
                 "l2_native_vs_derived_hit_delta_pct",
                 "l2_read_sector_conservation_ratio",
+                "l2_read_bytes_to_expected",
                 "l1_request_bytes",
                 "l1_hit_bytes",
                 "l2_read_bytes",
@@ -663,12 +667,12 @@ def audit_data(
 
     l2_ncu_pass_by_w: dict[int, bool] = {}
     for w_sm_kib in config.expected_l2_w:
-        coord = f"W{w_sm_kib}/B{config.blocks_per_sm}"
+        coord = f"W{w_sm_kib}/B{config.l2_blocks_per_sm}"
         raw_by_mode_lr = {
             (mode, lr): select(
                 l2_raw,
                 mode=mode,
-                blocks_per_sm=config.blocks_per_sm,
+                blocks_per_sm=config.l2_blocks_per_sm,
                 active_sm=config.active_sm,
                 load_repeat=lr,
                 w_sm_kib=w_sm_kib,
@@ -686,6 +690,7 @@ def audit_data(
             and row.get("measurement_scope") == "gpu_device_total_energy_counter"
             and f"global_warmup_passes={config.global_warmup_passes}" in row.get("notes", "")
             and f"l2_residency_policy={config.l2_residency_policy}" in row.get("notes", "")
+            and f"l2_address_layout={config.l2_address_layout}" in row.get("notes", "")
             and (
                 row.get("mode") != "l2_cg_load_only"
                 or (
@@ -719,14 +724,14 @@ def audit_data(
         rows = select(
             ncu_acceptance,
             mode="l2_cg_load_only",
-            blocks_per_sm=config.blocks_per_sm,
+            blocks_per_sm=config.l2_blocks_per_sm,
             active_sm=config.active_sm,
             w_sm_kib=w_sm_kib,
         )
         control_rows = select(
             ncu_acceptance,
             mode="global_addr_only",
-            blocks_per_sm=config.blocks_per_sm,
+            blocks_per_sm=config.l2_blocks_per_sm,
             active_sm=config.active_sm,
             w_sm_kib=w_sm_kib,
         )
@@ -741,6 +746,7 @@ def audit_data(
         native_path_rates: list[float] = []
         native_derived_deltas: list[float] = []
         sector_conservation_ratios: list[float] = []
+        traffic_expected_ratios: list[float] = []
         persisting_sizes: list[float] = []
         l1_rates: list[float] = []
         hit_byte_ratios: list[float] = []
@@ -759,6 +765,7 @@ def audit_data(
             sector_conservation = as_float(
                 row, "l2_read_sector_conservation_ratio"
             )
+            traffic_expected_ratio = as_float(row, "l2_read_bytes_to_expected")
             persisting_size = as_float(
                 row, "launch_persisting_l2_cache_size_bytes", 0.0
             )
@@ -772,6 +779,7 @@ def audit_data(
             native_path_rates.append(l2_native_path)
             native_derived_deltas.append(native_derived_delta)
             sector_conservation_ratios.append(sector_conservation)
+            traffic_expected_ratios.append(traffic_expected_ratio)
             persisting_sizes.append(persisting_size)
             l1_rates.append(l1_path)
             hit_byte_ratios.append(hit_ratio)
@@ -782,6 +790,7 @@ def audit_data(
                 and row.get("ncu_cache_control") == config.ncu_cache_control
                 and row.get("l2_residency_policy")
                 == config.l2_residency_policy
+                and row.get("l2_address_layout") == config.l2_address_layout
                 and as_int(row, "global_warmup_passes")
                 == config.global_warmup_passes
                 and 0.0 <= l1_path <= config.l1_path_hit_max_pct
@@ -793,6 +802,7 @@ def audit_data(
                 and 1.0 - config.l2_sector_conservation_tolerance
                 <= sector_conservation
                 <= 1.0 + config.l2_sector_conservation_tolerance
+                and 0.95 <= traffic_expected_ratio <= 1.05
                 and dram_ratio <= config.dram_to_l2_bytes_max
                 and (
                     config.l2_residency_policy != "persisting"
@@ -816,6 +826,7 @@ def audit_data(
                 and control.get("ncu_cache_control") == config.ncu_cache_control
                 and control.get("l2_residency_policy")
                 == config.l2_residency_policy
+                and control.get("l2_address_layout") == config.l2_address_layout
                 and as_int(control, "global_warmup_passes")
                 == config.global_warmup_passes
                 and as_float(control, "l1_request_bytes", -1.0) == 0.0
@@ -836,7 +847,8 @@ def audit_data(
                     f"delta <= {config.l2_native_derived_hit_delta_max_pct:g}pp, "
                     f"sector conservation=1+/-{100 * config.l2_sector_conservation_tolerance:g}%; "
                     f"NCU={config.ncu_replay_mode}/{config.ncu_cache_control}; "
-                    f"residency={config.l2_residency_policy}; warm-up={config.global_warmup_passes}"
+                    f"residency={config.l2_residency_policy}; layout={config.l2_address_layout}; "
+                    f"traffic/expected=1+/-5%; warm-up={config.global_warmup_passes}"
                 ),
                 (
                     f"treatment_LR_rows={','.join(f'{lr}:{len(items)}' for lr, items in by_lr.items())}; "
@@ -849,6 +861,8 @@ def audit_data(
                     f"native_delta_max={fmt(max(native_derived_deltas, default=float('nan')))}pp; "
                     f"sector_conservation_min/max={fmt(min(sector_conservation_ratios, default=float('nan')))}/"
                     f"{fmt(max(sector_conservation_ratios, default=float('nan')))}; "
+                    f"traffic/expected_min/max={fmt(min(traffic_expected_ratios, default=float('nan')))}/"
+                    f"{fmt(max(traffic_expected_ratios, default=float('nan')))}; "
                     f"persisting_size_min={fmt(min(persisting_sizes, default=float('nan')))}B; "
                     f"DRAM/L2_max={fmt(100 * max(dram_ratios, default=float('nan')))}%"
                 ),
@@ -859,11 +873,11 @@ def audit_data(
 
     l2_energy_candidates: dict[int, float] = {}
     for w_sm_kib in config.expected_l2_w:
-        coord = f"W{w_sm_kib}/B{config.blocks_per_sm}"
+        coord = f"W{w_sm_kib}/B{config.l2_blocks_per_sm}"
         rows = select(
             matched_detail,
             component="l2_hit_cg_path",
-            blocks_per_sm=config.blocks_per_sm,
+            blocks_per_sm=config.l2_blocks_per_sm,
             active_sm=config.active_sm,
             w_sm_kib=w_sm_kib,
         )
@@ -1094,6 +1108,7 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "ncu_cache_control": config.ncu_cache_control,
                     "global_warmup_passes": str(config.global_warmup_passes),
                     "l2_residency_policy": "normal",
+                    "l2_address_layout": "contiguous",
                     "tensor_hmma_inst": (
                         str(4 * logical_mma) if mode == "reg_mma" else "0"
                     ),
@@ -1114,6 +1129,7 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "l2_native_read_hit_rate_pct": "",
                     "l2_native_vs_derived_hit_delta_pct": "",
                     "l2_read_sector_conservation_ratio": "",
+                    "l2_read_bytes_to_expected": "",
                     "l1_request_bytes": "0",
                     "l1_hit_bytes": "0",
                     "l2_read_bytes": "0",
@@ -1155,14 +1171,14 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
         pbit = 0.8 * (1.0 + 0.05 * index)
         for lr in config.ncu_load_repeats:
             expected_bytes = (
-                config.active_sm * config.blocks_per_sm * 100000 * lr * 1024
+                config.active_sm * config.l2_blocks_per_sm * 100000 * lr * 1024
             )
             ncu.append(
                 {
                     "mode": "global_addr_only",
                     "acceptance": "accepted",
                     "W_SM_KiB": str(w_sm_kib),
-                    "blocks_per_SM": str(config.blocks_per_sm),
+                    "blocks_per_SM": str(config.l2_blocks_per_sm),
                     "active_SM": str(config.active_sm),
                     "ITER": "100000",
                     "reuse_factor": "1",
@@ -1171,6 +1187,7 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "ncu_cache_control": config.ncu_cache_control,
                     "global_warmup_passes": str(config.global_warmup_passes),
                     "l2_residency_policy": config.l2_residency_policy,
+                    "l2_address_layout": config.l2_address_layout,
                     "tensor_hmma_inst": "0",
                     "expected_logical_mma": "",
                     "tensor_hmma_per_logical_mma": "",
@@ -1185,6 +1202,7 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "l2_native_read_hit_rate_pct": "0",
                     "l2_native_vs_derived_hit_delta_pct": "0",
                     "l2_read_sector_conservation_ratio": "1",
+                    "l2_read_bytes_to_expected": "1",
                     "l1_request_bytes": "0",
                     "l1_hit_bytes": "0",
                     "l2_read_bytes": "0",
@@ -1199,7 +1217,7 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "mode": "l2_cg_load_only",
                     "acceptance": "accepted",
                     "W_SM_KiB": str(w_sm_kib),
-                    "blocks_per_SM": str(config.blocks_per_sm),
+                    "blocks_per_SM": str(config.l2_blocks_per_sm),
                     "active_SM": str(config.active_sm),
                     "ITER": "100000",
                     "reuse_factor": "1",
@@ -1208,6 +1226,7 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "ncu_cache_control": config.ncu_cache_control,
                     "global_warmup_passes": str(config.global_warmup_passes),
                     "l2_residency_policy": config.l2_residency_policy,
+                    "l2_address_layout": config.l2_address_layout,
                     "tensor_hmma_inst": "0",
                     "expected_logical_mma": "",
                     "tensor_hmma_per_logical_mma": "",
@@ -1222,6 +1241,7 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "l2_native_read_hit_rate_pct": "99.2",
                     "l2_native_vs_derived_hit_delta_pct": "0.2",
                     "l2_read_sector_conservation_ratio": "1",
+                    "l2_read_bytes_to_expected": "1",
                     "l1_request_bytes": "100000",
                     "l1_hit_bytes": "0",
                     "l2_read_bytes": "100000",
@@ -1239,11 +1259,12 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                             "mode": mode,
                             "load_repeat": str(lr),
                             "W_SM_KiB": str(w_sm_kib),
-                            "blocks_per_SM": str(config.blocks_per_sm),
+                            "blocks_per_SM": str(config.l2_blocks_per_sm),
                             "active_SM": str(config.active_sm),
                             "notes": (
                                 f"global_warmup_passes={config.global_warmup_passes};"
                                 f"l2_residency_policy={config.l2_residency_policy};"
+                                f"l2_address_layout={config.l2_address_layout};"
                                 + (
                                     f"{CG_MARKER};{L2_REVISION_MARKER};"
                                     if mode == "l2_cg_load_only"
@@ -1258,7 +1279,7 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                 detail.append(
                     {
                         "component": "l2_hit_cg_path",
-                        "blocks_per_SM": str(config.blocks_per_sm),
+                        "blocks_per_SM": str(config.l2_blocks_per_sm),
                         "active_SM": str(config.active_sm),
                         "reuse_factor": "1",
                         "load_repeat": str(lr),
@@ -1288,6 +1309,7 @@ def run_self_test() -> None:
         ncu_load_repeats=(1, 4, 16),
         energy_load_repeats=(4, 8, 16),
         blocks_per_sm=16,
+        l2_blocks_per_sm=16,
         active_sm=108,
         expected_repeats=2,
         min_valid_repeats=2,
@@ -1302,6 +1324,7 @@ def run_self_test() -> None:
         ncu_replay_mode="application",
         ncu_cache_control="none",
         l2_residency_policy="persisting",
+        l2_address_layout="sm_interleaved",
         global_warmup_passes=4,
         l1_path_hit_max_pct=1.0,
         l1_hit_bytes_ratio_max=0.01,
@@ -1529,7 +1552,9 @@ def main() -> int:
     parser.add_argument("--expected-l2-w", default="16,32,64,128")
     parser.add_argument("--ncu-load-repeats", default="1,2,4,8,16")
     parser.add_argument("--energy-load-repeats", default="4,8,16")
-    parser.add_argument("--blocks-per-sm", type=int, default=16)
+    parser.add_argument("--blocks-per-sm", type=int, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--tensor-blocks-per-sm", type=int, default=16)
+    parser.add_argument("--l2-blocks-per-sm", type=int, default=16)
     parser.add_argument("--active-sm", type=int, default=108)
     parser.add_argument("--expected-repeats", type=int, default=7)
     parser.add_argument("--min-valid-repeats", type=int, default=5)
@@ -1557,6 +1582,11 @@ def main() -> int:
         "--l2-residency-policy",
         choices=("normal", "persisting"),
         default="persisting",
+    )
+    parser.add_argument(
+        "--l2-address-layout",
+        choices=("contiguous", "sm_interleaved"),
+        default="contiguous",
     )
     parser.add_argument("--global-warmup-passes", type=int, default=4)
     parser.add_argument("--l1-path-hit-max-pct", type=float, default=1.0)
@@ -1614,7 +1644,16 @@ def main() -> int:
         expected_l2_w=parse_ints(args.expected_l2_w),
         ncu_load_repeats=parse_ints(args.ncu_load_repeats),
         energy_load_repeats=parse_ints(args.energy_load_repeats),
-        blocks_per_sm=args.blocks_per_sm,
+        blocks_per_sm=(
+            args.blocks_per_sm
+            if args.blocks_per_sm is not None
+            else args.tensor_blocks_per_sm
+        ),
+        l2_blocks_per_sm=(
+            args.blocks_per_sm
+            if args.blocks_per_sm is not None
+            else args.l2_blocks_per_sm
+        ),
         active_sm=args.active_sm,
         expected_repeats=args.expected_repeats,
         min_valid_repeats=args.min_valid_repeats,
@@ -1635,6 +1674,7 @@ def main() -> int:
         ncu_replay_mode=args.ncu_replay_mode,
         ncu_cache_control=args.ncu_cache_control,
         l2_residency_policy=args.l2_residency_policy,
+        l2_address_layout=args.l2_address_layout,
         global_warmup_passes=args.global_warmup_passes,
         l1_path_hit_max_pct=args.l1_path_hit_max_pct,
         l1_hit_bytes_ratio_max=args.l1_hit_bytes_ratio_max,

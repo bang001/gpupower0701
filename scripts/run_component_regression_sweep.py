@@ -123,6 +123,8 @@ def build_command(
         str(args.global_warmup_passes),
         "--l2-residency-policy",
         args.l2_residency_policy,
+        "--l2-address-layout",
+        args.l2_address_layout,
         "--output",
         args.output,
         "--verify-smid",
@@ -150,6 +152,7 @@ def tensor_pair_key(item: dict[str, Any]) -> tuple[str, ...]:
         str(item["reuse_factor"]),
         str(item["load_repeat"]),
         str(item["store_repeat"]),
+        str(item.get("l2_address_layout", "contiguous")),
     )
 
 
@@ -823,6 +826,15 @@ def main() -> int:
             "for an l2_cg_load_only/global_addr_only pair on supported GPUs."
         ),
     )
+    parser.add_argument(
+        "--l2-address-layout",
+        choices=("contiguous", "sm_interleaved"),
+        default="contiguous",
+        help=(
+            "L2 block-address topology. sm_interleaved transposes block-private "
+            "regions and inserts a 128-byte guard to diagnose A100 set/slice camping."
+        ),
+    )
     parser.add_argument("--seconds", type=float, default=10.0)
     parser.add_argument(
         "--iters",
@@ -917,6 +929,13 @@ def main() -> int:
             "--l2-residency-policy persisting requires exactly "
             "--modes global_addr_only,l2_cg_load_only"
         )
+    if args.l2_address_layout == "sm_interleaved" and set(
+        parse_str_list(args.modes, DEFAULT_MODES)
+    ) != {"global_addr_only", "l2_cg_load_only"}:
+        raise ValueError(
+            "--l2-address-layout sm_interleaved requires exactly "
+            "--modes global_addr_only,l2_cg_load_only"
+        )
     if (
         args.memory_pair_lock_iters
         and set(parse_str_list(args.modes, DEFAULT_MODES)) != DRAM_PAIR_MODES
@@ -961,6 +980,7 @@ def main() -> int:
                 "store_repeat",
                 "global_warmup_passes",
                 "l2_residency_policy",
+                "l2_address_layout",
                 "n_gpu_active",
                 "gpu_list",
                 "valid",
@@ -1007,6 +1027,7 @@ def main() -> int:
                                             "store_repeat": store_repeat,
                                             "global_warmup_passes": args.global_warmup_passes,
                                             "l2_residency_policy": args.l2_residency_policy,
+                                            "l2_address_layout": args.l2_address_layout,
                                             "n_gpu_active": n_gpu,
                                             "gpu_list": gpu_list,
                                             "valid": valid,

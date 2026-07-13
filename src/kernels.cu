@@ -103,6 +103,21 @@ __device__ __forceinline__ std::uint64_t select_tile(std::uint64_t load_index,
   return tile;
 }
 
+__device__ __forceinline__ std::uint64_t select_physical_block(
+    std::uint64_t logical_block, std::uint64_t block_count,
+    int logical_blocks_per_sm) {
+  if (logical_blocks_per_sm <= 1 || block_count <= 1 ||
+      block_count % static_cast<std::uint64_t>(logical_blocks_per_sm) != 0) {
+    return logical_block;
+  }
+  // Transpose [virtual SM][block rank] into [block rank][virtual SM]. This is
+  // bijective for every supported grid and dephases power-of-two block strides.
+  const std::uint64_t group_count = logical_blocks_per_sm;
+  const std::uint64_t group_width = block_count / group_count;
+  return (logical_block % group_count) * group_width +
+         logical_block / group_count;
+}
+
 __global__ void init_half_kernel(half* input, std::size_t half_count,
                                  std::uint64_t seed) {
   const std::size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -469,7 +484,10 @@ __global__ void shared_mma_kernel(std::uint64_t iters,
   }
 }
 
-__global__ void global_mma_kernel(const half* input, std::uint64_t w_block_bytes,
+__global__ void global_mma_kernel(const half* input,
+                                  std::uint64_t global_block_stride_bytes,
+                                  int skew_global_block_layout,
+                                  std::uint64_t w_block_bytes,
                                   std::uint64_t tiles_per_block,
                                   std::uint64_t iters,
                                   std::uint64_t reuse_factor,
@@ -486,8 +504,10 @@ __global__ void global_mma_kernel(const half* input, std::uint64_t w_block_bytes
   float load_checksum = 0.0f;
   const bool consume_repeated_loads = load_repeat > 1;
 
+  const std::uint64_t physical_block = select_physical_block(
+      blockIdx.x, gridDim.x, skew_global_block_layout);
   const std::uint64_t block_half_offset =
-      (static_cast<std::uint64_t>(blockIdx.x) * w_block_bytes) / sizeof(half);
+      (physical_block * global_block_stride_bytes) / sizeof(half);
   const half* block_base = input + block_half_offset;
 
   for (std::uint64_t i = 0; i < iters; ++i) {
@@ -517,6 +537,8 @@ __global__ void global_mma_kernel(const half* input, std::uint64_t w_block_bytes
 }
 
 __global__ void global_load_only_kernel(const half* input,
+                                        std::uint64_t global_block_stride_bytes,
+                                        int skew_global_block_layout,
                                         std::uint64_t w_block_bytes,
                                         std::uint64_t tiles_per_block,
                                         std::uint64_t iters,
@@ -532,8 +554,10 @@ __global__ void global_load_only_kernel(const half* input,
   fragment<accumulator, 16, 16, 16, float> c;
   float checksum = 0.0f;
 
+  const std::uint64_t physical_block = select_physical_block(
+      blockIdx.x, gridDim.x, skew_global_block_layout);
   const std::uint64_t block_half_offset =
-      (static_cast<std::uint64_t>(blockIdx.x) * w_block_bytes) / sizeof(half);
+      (physical_block * global_block_stride_bytes) / sizeof(half);
   const half* block_base = input + block_half_offset;
 
   for (std::uint64_t i = 0; i < iters; ++i) {
@@ -570,6 +594,8 @@ __device__ __forceinline__ std::uint32_t load_global_ca_u32(
 }
 
 __global__ void global_ca_load_only_kernel(const half* input,
+                                           std::uint64_t global_block_stride_bytes,
+                                           int skew_global_block_layout,
                                            std::uint64_t w_block_bytes,
                                            std::uint64_t tiles_per_block,
                                            std::uint64_t iters,
@@ -580,8 +606,10 @@ __global__ void global_ca_load_only_kernel(const half* input,
                                            int sm_count_capacity) {
   record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
 
+  const std::uint64_t physical_block = select_physical_block(
+      blockIdx.x, gridDim.x, skew_global_block_layout);
   const std::uint64_t block_half_offset =
-      (static_cast<std::uint64_t>(blockIdx.x) * w_block_bytes) / sizeof(half);
+      (physical_block * global_block_stride_bytes) / sizeof(half);
   const half* block_base = input + block_half_offset;
   std::uint32_t checksum =
       static_cast<std::uint32_t>(threadIdx.x + 1) * 2654435761u;
@@ -610,6 +638,8 @@ __global__ void global_ca_load_only_kernel(const half* input,
 }
 
 __global__ void global_cg_load_only_kernel(const half* input,
+                                           std::uint64_t global_block_stride_bytes,
+                                           int skew_global_block_layout,
                                            std::uint64_t w_block_bytes,
                                            std::uint64_t tiles_per_block,
                                            std::uint64_t iters,
@@ -620,8 +650,10 @@ __global__ void global_cg_load_only_kernel(const half* input,
                                            int sm_count_capacity) {
   record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
 
+  const std::uint64_t physical_block = select_physical_block(
+      blockIdx.x, gridDim.x, skew_global_block_layout);
   const std::uint64_t block_half_offset =
-      (static_cast<std::uint64_t>(blockIdx.x) * w_block_bytes) / sizeof(half);
+      (physical_block * global_block_stride_bytes) / sizeof(half);
   const half* block_base = input + block_half_offset;
   std::uint32_t checksum =
       static_cast<std::uint32_t>(threadIdx.x + 1) * 2654435761u;
@@ -688,15 +720,18 @@ __global__ void global_addr_only_kernel(std::uint64_t w_block_bytes,
 // same block/tile/index arithmetic and checksum shape as global_cg_load_only,
 // but consumes addresses rather than issuing global-memory loads.
 __global__ void global_scalar_addr_only_kernel(
-    const half* input, std::uint64_t w_block_bytes,
+    const half* input, std::uint64_t global_block_stride_bytes,
+    int skew_global_block_layout, std::uint64_t w_block_bytes,
     std::uint64_t tiles_per_block, std::uint64_t iters,
     std::uint64_t load_repeat, int streaming, float* output,
     int* smid_by_block, int* rank_by_block, int* sm_counts,
     int sm_count_capacity) {
   record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
 
+  const std::uint64_t physical_block = select_physical_block(
+      blockIdx.x, gridDim.x, skew_global_block_layout);
   const std::uint64_t block_half_offset =
-      (static_cast<std::uint64_t>(blockIdx.x) * w_block_bytes) / sizeof(half);
+      (physical_block * global_block_stride_bytes) / sizeof(half);
   const half* block_base = input + block_half_offset;
   std::uint32_t checksum =
       static_cast<std::uint32_t>(threadIdx.x + 1) * 2654435761u;
@@ -936,13 +971,17 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
       break;
     case Mode::global_addr_only:
       global_scalar_addr_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
-          cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
+          cfg.input, cfg.global_block_stride_bytes,
+          cfg.skew_global_block_layout, cfg.w_block_bytes,
+          cfg.tiles_per_block, cfg.iters,
           cfg.load_repeat, cfg.streaming, cfg.output, cfg.smid_by_block,
           cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
       break;
     case Mode::global_l1_load_only:
       global_ca_load_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
-          cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
+          cfg.input, cfg.global_block_stride_bytes,
+          cfg.skew_global_block_layout, cfg.w_block_bytes,
+          cfg.tiles_per_block, cfg.iters,
           cfg.load_repeat, cfg.output, cfg.smid_by_block, cfg.rank_by_block,
           cfg.sm_counts, cfg.sm_count_capacity);
       break;
@@ -972,37 +1011,49 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
       break;
     case Mode::l2_load_only:
       global_load_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
-          cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
+          cfg.input, cfg.global_block_stride_bytes,
+          cfg.skew_global_block_layout, cfg.w_block_bytes,
+          cfg.tiles_per_block, cfg.iters,
           cfg.load_repeat, 0, cfg.output, cfg.smid_by_block,
           cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
       break;
     case Mode::l2_cg_load_only:
       global_cg_load_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
-          cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
+          cfg.input, cfg.global_block_stride_bytes,
+          cfg.skew_global_block_layout, cfg.w_block_bytes,
+          cfg.tiles_per_block, cfg.iters,
           cfg.load_repeat, 0, cfg.output, cfg.smid_by_block,
           cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
       break;
     case Mode::l2_mma:
       global_mma_kernel<<<grid_dim, block, 0, cfg.stream>>>(
-          cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
+          cfg.input, cfg.global_block_stride_bytes,
+          cfg.skew_global_block_layout, cfg.w_block_bytes,
+          cfg.tiles_per_block, cfg.iters,
           cfg.reuse_factor, cfg.load_repeat, 0, cfg.output, cfg.smid_by_block,
           cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
       break;
     case Mode::dram_load_only:
       global_load_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
-          cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
+          cfg.input, cfg.global_block_stride_bytes,
+          cfg.skew_global_block_layout, cfg.w_block_bytes,
+          cfg.tiles_per_block, cfg.iters,
           cfg.load_repeat, 1, cfg.output, cfg.smid_by_block,
           cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
       break;
     case Mode::dram_cg_load_only:
       global_cg_load_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
-          cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
+          cfg.input, cfg.global_block_stride_bytes,
+          cfg.skew_global_block_layout, cfg.w_block_bytes,
+          cfg.tiles_per_block, cfg.iters,
           cfg.load_repeat, 1, cfg.output, cfg.smid_by_block,
           cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
       break;
     case Mode::dram_mma:
       global_mma_kernel<<<grid_dim, block, 0, cfg.stream>>>(
-          cfg.input, cfg.w_block_bytes, cfg.tiles_per_block, cfg.iters,
+          cfg.input, cfg.global_block_stride_bytes,
+          cfg.skew_global_block_layout, cfg.w_block_bytes,
+          cfg.tiles_per_block, cfg.iters,
           cfg.reuse_factor, cfg.load_repeat, 1, cfg.output, cfg.smid_by_block,
           cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
       break;

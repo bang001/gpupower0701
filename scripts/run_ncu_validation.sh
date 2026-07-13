@@ -77,6 +77,7 @@ NCU_REPLAY_MODE="${NCU_REPLAY_MODE:-application}"
 NCU_CACHE_CONTROL="${NCU_CACHE_CONTROL:-none}"
 GLOBAL_WARMUP_PASSES="${GLOBAL_WARMUP_PASSES:-1}"
 L2_RESIDENCY_POLICY="${L2_RESIDENCY_POLICY:-normal}"
+L2_ADDRESS_LAYOUT="${L2_ADDRESS_LAYOUT:-contiguous}"
 INCLUDE_L2_CAPACITY_NCU="${INCLUDE_L2_CAPACITY_NCU:-0}"
 INCLUDE_DIAGNOSTIC_NCU="${INCLUDE_DIAGNOSTIC_NCU:-0}"
 DRY_RUN_NCU="${DRY_RUN_NCU:-0}"
@@ -103,11 +104,15 @@ case "${L2_RESIDENCY_POLICY}" in
   normal|persisting) ;;
   *) echo "L2_RESIDENCY_POLICY must be normal or persisting" >&2; exit 2 ;;
 esac
+case "${L2_ADDRESS_LAYOUT}" in
+  contiguous|sm_interleaved) ;;
+  *) echo "L2_ADDRESS_LAYOUT must be contiguous or sm_interleaved" >&2; exit 2 ;;
+esac
 if ! [[ "${GLOBAL_WARMUP_PASSES}" =~ ^[1-9][0-9]*$ ]]; then
   echo "GLOBAL_WARMUP_PASSES must be a positive integer" >&2
   exit 2
 fi
-printf "label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,ncu_replay_mode,ncu_cache_control,global_warmup_passes,l2_residency_policy,report\n" > "${CASE_MANIFEST}"
+printf "label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,ncu_replay_mode,ncu_cache_control,global_warmup_passes,l2_residency_policy,l2_address_layout,report\n" > "${CASE_MANIFEST}"
 
 print_ncu_permission_hint() {
   cat >&2 <<'EOF'
@@ -272,7 +277,7 @@ COMMON_SECTIONS=(
   --section WarpStateStats
   --section MemoryWorkloadAnalysis
 )
-DEFAULT_NCU_METRICS="l1tex__t_sector_hit_rate,l1tex__t_sectors_pipe_lsu_mem_global_op_ld,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_global_op_ld,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_local_op_ld,l1tex__t_bytes_pipe_lsu_mem_local_op_st,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st,smsp__sass_data_bytes_mem_shared,smsp__sass_data_bytes_mem_shared_op_ld,smsp__sass_data_bytes_mem_shared_op_ldsm,smsp__sass_data_bytes_mem_shared_op_st,smsp__sass_inst_executed_op_shared,smsp__sass_inst_executed_op_shared_ld,smsp__sass_inst_executed_op_shared_st,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ld,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ldsm,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_st,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_ldsm,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_st,lts__t_sector_hit_rate,lts__t_sector_op_read_hit_rate,lts__t_sectors_srcunit_tex_op_read,lts__t_sectors_srcunit_tex_op_read_lookup_hit,lts__t_sectors_srcunit_tex_op_read_lookup_miss,lts__t_bytes,lts__t_bytes_equiv_l1sectormiss_pipe_lsu_mem_global_op_ld,dram__bytes,dram__bytes_read,dram__sectors,dram__sectors_read,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_wait_per_issue_active,smsp__average_warps_issue_stalled_not_selected_per_issue_active,sm__warps_active.avg.pct_of_peak_sustained_active,launch__registers_per_thread,launch__shared_mem_per_block_static,launch__shared_mem_per_block_dynamic,sm__inst_executed_pipe_tensor_op_hmma,sass__inst_executed_register_spilling_mem_local_op_read,sass__inst_executed_register_spilling_mem_local_op_write"
+DEFAULT_NCU_METRICS="l1tex__t_sector_hit_rate,l1tex__t_sectors_pipe_lsu_mem_global_op_ld,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_global_op_ld,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_local_op_ld,l1tex__t_bytes_pipe_lsu_mem_local_op_st,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st,smsp__sass_data_bytes_mem_shared,smsp__sass_data_bytes_mem_shared_op_ld,smsp__sass_data_bytes_mem_shared_op_ldsm,smsp__sass_data_bytes_mem_shared_op_st,smsp__sass_inst_executed_op_shared,smsp__sass_inst_executed_op_shared_ld,smsp__sass_inst_executed_op_shared_st,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ld,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ldsm,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_st,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_ldsm,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_st,lts__t_sector_hit_rate,lts__t_sector_op_read_hit_rate,lts__t_sectors_srcunit_tex_op_read,lts__t_sectors_srcunit_tex_op_read_lookup_hit,lts__t_sectors_srcunit_tex_op_read_lookup_miss,lts__t_bytes,lts__t_bytes_equiv_l1sectormiss_pipe_lsu_mem_global_op_ld,dram__bytes,dram__bytes_read,dram__sectors,dram__sectors_read,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_wait_per_issue_active,smsp__average_warps_issue_stalled_not_selected_per_issue_active,sm__warps_active.avg.pct_of_peak_sustained_active,launch__registers_per_thread,launch__shared_mem_per_block_static,launch__shared_mem_per_block_dynamic,launch__persisting_l2_cache_size,sm__inst_executed_pipe_tensor_op_hmma,sass__inst_executed_register_spilling_mem_local_op_read,sass__inst_executed_register_spilling_mem_local_op_write"
 NCU_METRICS="${NCU_METRICS:-${DEFAULT_NCU_METRICS}}"
 
 filter_unavailable_ncu_metrics() {
@@ -336,18 +341,21 @@ run_case() {
   local load_repeat="${9:-${LOAD_REPEAT}}"
   local store_repeat="${10:-${STORE_REPEAT}}"
   local case_l2_residency_policy="normal"
+  local case_l2_address_layout="contiguous"
   if [[ "${label}" == l2_cg_load_only_* ||
         "${label}" == global_addr_only_l2_* ]]; then
     case_l2_residency_policy="${L2_RESIDENCY_POLICY}"
+    case_l2_address_layout="${L2_ADDRESS_LAYOUT}"
   fi
   local report="${OUTDIR}/${label}"
 
   echo "== ${label}: mode=${mode} W=${w_sm_kib}KiB B=${blocks_per_sm} iters=${iters} reuse=${reuse_factor} load_repeat=${load_repeat}"
-  printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" \
+  printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" \
     "${label}" "${kernel_regex}" "${mode}" "${w_sm_kib}" "${blocks_per_sm}" \
     "${ACTIVE_SM}" "${iters}" "${reuse_factor}" "${load_repeat}" \
     "${store_repeat}" "${NCU_REPLAY_MODE}" "${NCU_CACHE_CONTROL}" \
     "${GLOBAL_WARMUP_PASSES}" "${case_l2_residency_policy}" \
+    "${case_l2_address_layout}" \
     "${report}" >> "${CASE_MANIFEST}"
   if [[ "${DRY_RUN_NCU}" == "1" ]]; then
     return 0
@@ -378,6 +386,7 @@ run_case() {
       --store-repeat "${store_repeat}" \
       --global-warmup-passes "${GLOBAL_WARMUP_PASSES}" \
       --l2-residency-policy "${case_l2_residency_policy}" \
+      --l2-address-layout "${case_l2_address_layout}" \
       --reg-payload-bytes "${reg_payload_bytes}" \
       --repeats 1 \
       --seconds 1 \

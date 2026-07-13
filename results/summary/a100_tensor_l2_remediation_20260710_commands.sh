@@ -29,8 +29,6 @@ L2_RAW="${RAW_PREFIX}_l2.csv"
 L2_MATRIX="${RAW_PREFIX}_l2_matrix.csv"
 SCHEMA_SMOKE="${RAW_PREFIX}_schema_smoke.csv"
 NCU_RAW="${RAW_PREFIX}_ncu_sidecar.csv"
-L2_NORMAL_NCU_RAW="${RAW_PREFIX}_l2_policy_normal_ncu_sidecar.csv"
-L2_PERSISTING_NCU_RAW="${RAW_PREFIX}_l2_policy_persisting_ncu_sidecar.csv"
 POWER_AUDIT_CSV="${SUMMARY_PREFIX}_power_api_audit.csv"
 POWER_AUDIT_MD="${SUMMARY_PREFIX}_power_api_audit.md"
 POWER_STATE_CSV="${SUMMARY_PREFIX}_power_state_audit.csv"
@@ -39,13 +37,9 @@ NCU_ACCEPTANCE_CSV="${SUMMARY_PREFIX}_ncu_acceptance.csv"
 NCU_ACCEPTANCE_MD="${SUMMARY_PREFIX}_ncu_acceptance.md"
 NCU_PRECHECK_CSV="${SUMMARY_PREFIX}_ncu_precheck.csv"
 NCU_PRECHECK_MD="${SUMMARY_PREFIX}_ncu_precheck.md"
-L2_NORMAL_ACCEPTANCE_CSV="${SUMMARY_PREFIX}_l2_policy_normal_acceptance.csv"
-L2_NORMAL_ACCEPTANCE_MD="${SUMMARY_PREFIX}_l2_policy_normal_acceptance.md"
-L2_PERSISTING_ACCEPTANCE_CSV="${SUMMARY_PREFIX}_l2_policy_persisting_acceptance.csv"
-L2_PERSISTING_ACCEPTANCE_MD="${SUMMARY_PREFIX}_l2_policy_persisting_acceptance.md"
-L2_POLICY_CSV="${SUMMARY_PREFIX}_l2_policy_selection.csv"
-L2_POLICY_MD="${SUMMARY_PREFIX}_l2_policy_selection.md"
-L2_POLICY_ENV="${SUMMARY_PREFIX}_l2_policy_selection.env"
+L2_PATH_SELECTION_CSV="${SUMMARY_PREFIX}_l2_path_selection.csv"
+L2_PATH_SELECTION_MD="${SUMMARY_PREFIX}_l2_path_selection.md"
+L2_PATH_SELECTION_ENV="${SUMMARY_PREFIX}_l2_path_selection.env"
 MATCHED_SUMMARY="${SUMMARY_PREFIX}_matched_control_summary.csv"
 MATCHED_DETAIL="${SUMMARY_PREFIX}_matched_control_detail.csv"
 MATCHED_MD="${SUMMARY_PREFIX}_matched_control_report.md"
@@ -80,7 +74,7 @@ python3 scripts/analyze_matched_control_energy.py --self-test
 python3 scripts/audit_power_api_measurements.py --self-test
 python3 scripts/audit_a100_tensor_l2_remediation.py --self-test
 python3 scripts/audit_a100_ncu_precheck.py --self-test
-python3 scripts/select_a100_l2_residency_policy.py --self-test
+python3 scripts/select_a100_l2_path_configuration.py --self-test
 
 RUN_STAMP="$(date +%Y%m%d_%H%M%S)"
 STALE_DIR="results/archive/${PREFIX}_stale_${RUN_STAMP}"
@@ -94,8 +88,6 @@ STALE_PATHS=(
   "${L2_RAW}"
   "${L2_MATRIX}"
   "${NCU_RAW}"
-  "${L2_NORMAL_NCU_RAW}"
-  "${L2_PERSISTING_NCU_RAW}"
   "${POWER_AUDIT_CSV}"
   "${POWER_AUDIT_MD}"
   "${POWER_STATE_CSV}"
@@ -104,13 +96,9 @@ STALE_PATHS=(
   "${NCU_ACCEPTANCE_MD}"
   "${NCU_PRECHECK_CSV}"
   "${NCU_PRECHECK_MD}"
-  "${L2_NORMAL_ACCEPTANCE_CSV}"
-  "${L2_NORMAL_ACCEPTANCE_MD}"
-  "${L2_PERSISTING_ACCEPTANCE_CSV}"
-  "${L2_PERSISTING_ACCEPTANCE_MD}"
-  "${L2_POLICY_CSV}"
-  "${L2_POLICY_MD}"
-  "${L2_POLICY_ENV}"
+  "${L2_PATH_SELECTION_CSV}"
+  "${L2_PATH_SELECTION_MD}"
+  "${L2_PATH_SELECTION_ENV}"
   "${MATCHED_SUMMARY}"
   "${MATCHED_DETAIL}"
   "${MATCHED_MD}"
@@ -125,6 +113,15 @@ for path in "${STALE_PATHS[@]}"; do
     mv "${path}" "${STALE_DIR}/${path}"
   fi
 done
+shopt -s nullglob
+for path in \
+  ${RAW_PREFIX}_l2_candidate_*_ncu_sidecar.csv \
+  ${SUMMARY_PREFIX}_l2_candidate_*_acceptance.csv \
+  ${SUMMARY_PREFIX}_l2_candidate_*_acceptance.md; do
+  mkdir -p "${STALE_DIR}/$(dirname "${path}")"
+  mv "${path}" "${STALE_DIR}/${path}"
+done
+shopt -u nullglob
 if [[ -e "${NCU_DIR}" ]]; then
   mkdir -p "${STALE_DIR}/$(dirname "${NCU_DIR}")"
   mv "${NCU_DIR}" "${STALE_DIR}/${NCU_DIR}"
@@ -156,14 +153,16 @@ python3 scripts/audit_power_api_measurements.py "${SCHEMA_SMOKE}" \
   l2_cg_load_only=global_warmup_policy=ld_global_cg
 
 # Fail fast on the original L2 problem before running the long energy sweep.
-# The same W/LR points are first profiled with ordinary .cg caching. An explicit
-# CUDA persisting-L2 access-policy window is tried only if normal caching fails.
-run_l2_policy_diagnostic() {
+# Keep the 95% gate fixed while changing one explicit topology/policy axis.
+run_l2_path_candidate() {
   local policy="$1"
-  local outdir="$2"
-  local raw_out="$3"
-  local acceptance_csv="$4"
-  local acceptance_md="$5"
+  local layout="$2"
+  local blocks_per_sm="$3"
+  local candidate="${policy}_${layout}_B${blocks_per_sm}"
+  local outdir="${NCU_DIR}/l2_candidate_${candidate}"
+  local raw_out="${RAW_PREFIX}_l2_candidate_${candidate}_ncu_sidecar.csv"
+  local acceptance_csv="${SUMMARY_PREFIX}_l2_candidate_${candidate}_acceptance.csv"
+  local acceptance_md="${SUMMARY_PREFIX}_l2_candidate_${candidate}_acceptance.md"
 
   NCU_COMPONENTS=l2 \
   NCU_EXPLICIT_METRICS_ONLY=1 \
@@ -178,14 +177,15 @@ run_l2_policy_diagnostic() {
   NCU_CACHE_CONTROL=none \
   GLOBAL_WARMUP_PASSES=4 \
   L2_RESIDENCY_POLICY="${policy}" \
+  L2_ADDRESS_LAYOUT="${layout}" \
   GPU="${GPU}" \
   ACTIVE_SM="${ACTIVE_SM}" \
-  BLOCKS_PER_SM=16 \
+  BLOCKS_PER_SM="${blocks_per_sm}" \
   L2_W_SM_KIB_VALUES=16,128 \
   MEMORY_LOAD_REPEATS=4 \
   INCLUDE_L2_CAPACITY_NCU=0 \
   INCLUDE_DIAGNOSTIC_NCU=0 \
-  bash scripts/run_ncu_validation.sh
+  bash scripts/run_ncu_validation.sh || return 2
 
   python3 scripts/analyze_ncu_path_acceptance.py \
     "${outdir}/ncu_cache_validation_summary.csv" \
@@ -194,45 +194,60 @@ run_l2_policy_diagnostic() {
     --out-md "${acceptance_md}" \
     --require-ncu-replay-mode application \
     --require-ncu-cache-control none \
-    --require-l2-residency-policy "${policy}"
-}
+    --require-l2-residency-policy "${policy}" \
+    --require-l2-address-layout "${layout}" || return 2
 
-run_l2_policy_diagnostic normal \
-  "${NCU_DIR}/l2_policy_normal" \
-  "${L2_NORMAL_NCU_RAW}" \
-  "${L2_NORMAL_ACCEPTANCE_CSV}" \
-  "${L2_NORMAL_ACCEPTANCE_MD}"
-
-# Prefer normal caching. Persisting controls are attempted only after that
-# strict normal diagnostic fails.
-if python3 scripts/select_a100_l2_residency_policy.py \
-  --normal-acceptance "${L2_NORMAL_ACCEPTANCE_CSV}" \
-  --expected-w 16,128 \
-  --load-repeat 4 \
-  --out-csv "${L2_POLICY_CSV}" \
-  --out-md "${L2_POLICY_MD}" \
-  --out-env "${L2_POLICY_ENV}"; then
-  source "${L2_POLICY_ENV}"
-else
-  run_l2_policy_diagnostic persisting \
-    "${NCU_DIR}/l2_policy_persisting" \
-    "${L2_PERSISTING_NCU_RAW}" \
-    "${L2_PERSISTING_ACCEPTANCE_CSV}" \
-    "${L2_PERSISTING_ACCEPTANCE_MD}"
-
-  python3 scripts/select_a100_l2_residency_policy.py \
-    --normal-acceptance "${L2_NORMAL_ACCEPTANCE_CSV}" \
-    --persisting-acceptance "${L2_PERSISTING_ACCEPTANCE_CSV}" \
+  L2_CANDIDATE_ARGS+=(
+    --candidate "${policy}:${layout}:${blocks_per_sm}:${acceptance_csv}"
+  )
+  local selector_rc=0
+  python3 scripts/select_a100_l2_path_configuration.py \
+    "${L2_CANDIDATE_ARGS[@]}" \
     --expected-w 16,128 \
     --load-repeat 4 \
-    --out-csv "${L2_POLICY_CSV}" \
-    --out-md "${L2_POLICY_MD}" \
-    --out-env "${L2_POLICY_ENV}"
-  source "${L2_POLICY_ENV}"
-fi
+    --out-csv "${L2_PATH_SELECTION_CSV}" \
+    --out-md "${L2_PATH_SELECTION_MD}" \
+    --out-env "${L2_PATH_SELECTION_ENV}" || selector_rc=$?
+  if [[ "${selector_rc}" == "0" ]]; then
+    source "${L2_PATH_SELECTION_ENV}"
+    return 0
+  fi
+  # Exit 2 means the measured candidate set is valid but no candidate has
+  # passed yet. Any other code is a selector/infrastructure failure.
+  [[ "${selector_rc}" == "2" ]] && return 1
+  return 2
+}
 
-if [[ -z "${L2_RESIDENCY_POLICY}" ]]; then
-  echo "No A100 L2 residency policy passed the strict path gates" >&2
+L2_CANDIDATE_ARGS=()
+L2_PATH_SELECTED=0
+L2_CANDIDATES=(
+  "normal contiguous 16"
+  "normal sm_interleaved 16"
+  "normal sm_interleaved 8"
+  "normal sm_interleaved 4"
+  "persisting contiguous 16"
+  "persisting sm_interleaved 16"
+  "persisting sm_interleaved 8"
+  "persisting sm_interleaved 4"
+)
+for candidate in "${L2_CANDIDATES[@]}"; do
+  read -r candidate_policy candidate_layout candidate_blocks <<< "${candidate}"
+  if run_l2_path_candidate \
+    "${candidate_policy}" "${candidate_layout}" "${candidate_blocks}"; then
+    L2_PATH_SELECTED=1
+    break
+  else
+    candidate_rc=$?
+    if [[ "${candidate_rc}" != "1" ]]; then
+      echo "A100 L2 candidate profiling failed before a path verdict" >&2
+      exit "${candidate_rc}"
+    fi
+  fi
+done
+
+if [[ "${L2_PATH_SELECTED}" != "1" || -z "${L2_RESIDENCY_POLICY:-}" ||
+      -z "${L2_ADDRESS_LAYOUT:-}" || -z "${L2_BLOCKS_PER_SM:-}" ]]; then
+  echo "No A100 L2 topology/policy candidate passed the strict path gates" >&2
   exit 2
 fi
 
@@ -251,9 +266,10 @@ NCU_REPLAY_MODE=application \
 NCU_CACHE_CONTROL=none \
 GLOBAL_WARMUP_PASSES=4 \
 L2_RESIDENCY_POLICY="${L2_RESIDENCY_POLICY}" \
+L2_ADDRESS_LAYOUT="${L2_ADDRESS_LAYOUT}" \
 GPU="${GPU}" \
 ACTIVE_SM="${ACTIVE_SM}" \
-BLOCKS_PER_SM=16 \
+BLOCKS_PER_SM="${L2_BLOCKS_PER_SM}" \
 REG_BLOCKS_PER_SM=16 \
 REG_W_SM_KIB=2048 \
 L2_W_SM_KIB_VALUES=16,32,64,128 \
@@ -274,18 +290,21 @@ python3 scripts/analyze_ncu_path_acceptance.py \
   --register-memory-bytes-per-op-max 1.0 \
   --require-ncu-replay-mode application \
   --require-ncu-cache-control none \
-  --require-l2-residency-policy "${L2_RESIDENCY_POLICY}"
+  --require-l2-residency-policy "${L2_RESIDENCY_POLICY}" \
+  --require-l2-address-layout "${L2_ADDRESS_LAYOUT}"
 
 python3 scripts/audit_a100_ncu_precheck.py "${NCU_ACCEPTANCE_CSV}" \
   --expected-rf 1,2,4,8,16 \
   --expected-w 16,32,64,128 \
   --expected-lr 1,2,4,8,16 \
-  --blocks-per-sm 16 \
+  --tensor-blocks-per-sm 16 \
+  --l2-blocks-per-sm "${L2_BLOCKS_PER_SM}" \
   --active-sm "${ACTIVE_SM}" \
   --ncu-replay-mode application \
   --ncu-cache-control none \
   --global-warmup-passes 4 \
   --l2-residency-policy "${L2_RESIDENCY_POLICY}" \
+  --l2-address-layout "${L2_ADDRESS_LAYOUT}" \
   --hmma-ratio-spread-max 0.10 \
   --out-csv "${NCU_PRECHECK_CSV}" \
   --out-md "${NCU_PRECHECK_MD}" \
@@ -322,7 +341,7 @@ python3 scripts/run_component_regression_sweep.py \
   --max-active-gpus 1 \
   --modes global_addr_only,l2_cg_load_only \
   --w-sm-kib-values 16,32,64,128 \
-  --blocks-per-sm-values 16 \
+  --blocks-per-sm-values "${L2_BLOCKS_PER_SM}" \
   --active-sm-values "${ACTIVE_SM}" \
   --reuse-factors 1 \
   --load-repeats 4,8,16 \
@@ -331,6 +350,7 @@ python3 scripts/run_component_regression_sweep.py \
   --repeats 7 \
   --global-warmup-passes 4 \
   --l2-residency-policy "${L2_RESIDENCY_POLICY}" \
+  --l2-address-layout "${L2_ADDRESS_LAYOUT}" \
   --output "${L2_RAW}" \
   --matrix-csv "${L2_MATRIX}"
 
@@ -384,7 +404,8 @@ python3 scripts/audit_a100_tensor_l2_remediation.py \
   --expected-l2-w 16,32,64,128 \
   --ncu-load-repeats 1,2,4,8,16 \
   --energy-load-repeats 4,8,16 \
-  --blocks-per-sm 16 \
+  --tensor-blocks-per-sm 16 \
+  --l2-blocks-per-sm "${L2_BLOCKS_PER_SM}" \
   --active-sm "${ACTIVE_SM}" \
   --expected-repeats 7 \
   --min-valid-repeats 5 \
@@ -395,6 +416,7 @@ python3 scripts/audit_a100_tensor_l2_remediation.py \
   --ncu-replay-mode application \
   --ncu-cache-control none \
   --l2-residency-policy "${L2_RESIDENCY_POLICY}" \
+  --l2-address-layout "${L2_ADDRESS_LAYOUT}" \
   --global-warmup-passes 4 \
   --address-control-dram-ratio-max 0.001 \
   --out-csv "${REMEDIATION_CSV}" \

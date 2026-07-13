@@ -14,12 +14,14 @@
 | power API audit | `audit_power_api_measurements.py` | raw energy CSV가 power measurement matrix 기준 final/provisional/reject인지 판정하고 새 finalplan에서는 explicit `measurement_scope`를 요구하며 `--self-test`로 A100 semantics, fallback numerator, H100 module scope 혼입 회귀를 검증 |
 | power-state audit | `audit_power_state_stability.py` | raw row의 평균 전력/endpoint power outlier를 찾아 측정 품질 문제와 weak-signal 문제를 분리 |
 | NCU sidecar | `run_ncu_validation.sh` | chip별 metric availability를 확인한 뒤 primary finalplan mode의 hit/access/byte/stall/spill/occupancy/launch-resource counter 수집. `NCU_COMPONENTS=tensor,l2`처럼 targeted subset 선택 가능 |
-| NCU summary | `summarize_ncu_cache_metrics.py` | NCU raw export를 cache/path, native-vs-derived L2 hit, sector conservation, DRAM read traffic, achieved occupancy/register/shared-block summary로 정리 |
-| path acceptance | `analyze_ncu_path_acceptance.py` | accepted/provisional/rejected path 판정 |
+| NCU summary | `summarize_ncu_cache_metrics.py` | NCU raw export를 cache/path, native-vs-derived L2 hit, sector conservation, observed/expected L2 traffic, DRAM read traffic, achieved occupancy/register/shared-block summary로 정리 |
+| path acceptance | `analyze_ncu_path_acceptance.py` | accepted/provisional/rejected path 판정. A100 L2는 selected address layout과 observed/expected byte gate를 강제할 수 있음 |
 | matched-control | `analyze_matched_control_energy.py` | NCU byte denominator 기반 pJ/FLOP, pJ/byte, pJ/bit 계산 |
 | component reliability | `audit_component_reliability.py` | power/NCU/matched-control 결과를 결합해 component별 최종 verdict 생성 |
 | instability audit | `audit_matched_control_instability.py` | invalid/weak-signal matched-control row 원인과 follow-up 실험 조건 요약 |
-| A100 Tensor/L2 remediation audit | `audit_a100_tensor_l2_remediation.py` | RF별 dual-calibration max ITER, 실제 control duration, 동일 ITER/HMMA/spill/양수 delta와 W별 native/derived L2 hit 및 sector conservation, exact NCU denominator, 인접-W pJ/bit plateau를 검증 |
+| A100 L2 path selector | `select_a100_l2_path_configuration.py` | 사전 순서의 policy/layout/blocks-SM 후보 중 W16/W128 strict NCU gate를 모두 통과한 첫 후보를 선택하고 energy sweep에 env로 전달 |
+| A100 Tensor/L2 NCU precheck | `audit_a100_ncu_precheck.py` | energy 전에 Tensor RF 선형성과 selected L2 policy/layout/B의 전체 W/LR path evidence를 hard gate |
+| A100 Tensor/L2 remediation audit | `audit_a100_tensor_l2_remediation.py` | RF별 dual-calibration max ITER, 실제 control duration, 동일 ITER/HMMA/spill/양수 delta와 W별 native/derived L2 hit, sector/traffic 보존, exact NCU denominator, 인접-W pJ/bit plateau를 검증 |
 | strict summary build | `build_strict_component_summary.py` | accepted reliability, matched-control, NCU acceptance artifact에서 보고용 strict component coefficient summary 생성. 여러 NCU summary artifact가 입력되면 component별 strict detail 좌표를 덮는 artifact만 row에 연결하고, path-relevant NCU hit/access/byte/stall evidence를 summary row에 직접 노출하며 `--self-test`로 Tensor B4/B16 artifact 선택 회귀를 검증 |
 | strict summary audit | `audit_strict_component_summary.py` | strict component summary가 reliability artifact, matched-control detail row, power API scope, NCU denominator, 계층 순서, broad plausibility range, NCU counter schema, coordinate alignment, `ncu_evidence_summary_fields`에 일치하는지 검증하고, `--self-test`로 strict detail 좌표 mismatch를 잡는지 검증 |
 | platform package audit | `audit_platform_result_package.py` | 외부 노드에서 복사해 온 단일 profile/tag 결과 패키지의 raw profile metadata, active SM, power, NCU, reliability, strict summary gate를 검수 |
@@ -30,6 +32,7 @@
 | goal readiness audit | `audit_component_goal_readiness.py` | power matrix, RTX 3090 strict evidence, NCU availability, local readiness runner policy, A100/V100/H100 result package 누락 여부를 상위 목표 기준으로 점검하며 preflight/power API/strict summary/package/goal validator self-test 상태도 확인 |
 | local readiness runner | `run_local_readiness_checks.sh` | preflight/power API/strict summary/package/goal/manifest/gap/dashboard self-test, platform readiness, A100/V100/H100 manifest+package audit+gap report refresh, RTX 3090 strict audit, goal readiness, dashboard refresh, `git diff --check`를 한 번에 실행 |
 | historical evidence/figures | `archive/pre_current_protocol_20260712/scripts/` | 2026-07-08 reporting matrix와 그림 재현 전용; 현행 coefficient 생성에 사용하지 않음 |
+| superseded A100 L2 selector | `archive/superseded_a100_l2_policy_20260713/scripts/` | fixed B16 normal/persisting-only selector; 새 run은 active policy/layout/B selector 사용 |
 
 ## Supporting Tools
 
@@ -93,8 +96,9 @@ pairing의 시간/온도 거리를 줄인다. Global L1/L2/DRAM은 `global_addr_
 
 표준 component sweep runner도 현재 알려진 2-mode pair를 원자적으로 회전하므로 반복
 경계에서 control/treatment가 분리되지 않는다. A100 Tensor/L2 targeted 결과는
+`select_a100_l2_path_configuration.py`로 strict policy/layout/B 후보를 먼저 선택하고,
 `audit_a100_tensor_l2_remediation.py`로 RF별 동일 ITER/HMMA/spill/양수 차분과 L2
-path-specific/native hit, sector conservation 및 인접 W plateau를 함께 검사한다.
+path-specific/native hit, sector/expected-traffic conservation 및 인접 W plateau를 함께 검사한다.
 
 ```bash
 python3 scripts/run_paired_component_stability.py \

@@ -52,6 +52,7 @@ struct Options {
   std::uint64_t reg_payload_bytes_per_block = 0;
   int global_warmup_passes = 1;
   std::string l2_residency_policy = "normal";
+  std::string l2_address_layout = "contiguous";
   int repeats = 5;
   std::filesystem::path output = "results/raw/a100_fp16_energy_v2_raw.csv";
   bool verify_smid = true;
@@ -65,6 +66,8 @@ struct DeviceState {
   cudaStream_t stream = nullptr;
   half* input = nullptr;
   std::size_t input_bytes = 0;
+  std::size_t logical_input_bytes = 0;
+  std::size_t global_block_stride_bytes = 0;
   std::size_t input_half_count = 0;
   float* output = nullptr;
   std::size_t output_float_count = 0;
@@ -128,6 +131,7 @@ void print_usage(const char* argv0) {
       << "  --reg-payload-bytes <int>    register payload target per block for reg_pressure; default 256 for reg_pressure, 0 otherwise\n"
       << "  --global-warmup-passes <int> repeat the untimed global-input warm-up; default 1\n"
       << "  --l2-residency-policy <name> normal or persisting; persisting is for L2 CG treatment/control only\n"
+      << "  --l2-address-layout <name>  contiguous or sm_interleaved; the latter transposes block regions and adds a 128B guard\n"
       << "  --repeats <int>              default 5\n"
       << "  --output <csv>               default results/raw/a100_fp16_energy_v2_raw.csv\n"
       << "  --verify-smid 0|1            default 1\n"
@@ -187,6 +191,8 @@ Options parse_args(int argc, char** argv) {
       opts.global_warmup_passes = std::stoi(need_value(arg));
     } else if (arg == "--l2-residency-policy") {
       opts.l2_residency_policy = need_value(arg);
+    } else if (arg == "--l2-address-layout") {
+      opts.l2_address_layout = need_value(arg);
     } else if (arg == "--repeats") {
       opts.repeats = std::stoi(need_value(arg));
     } else if (arg == "--output") {
@@ -227,6 +233,17 @@ Options parse_args(int argc, char** argv) {
       opts.mode != Mode::global_addr_only) {
     throw std::invalid_argument(
         "persisting L2 residency is limited to l2_cg_load_only and its global_addr_only control");
+  }
+  if (opts.l2_address_layout != "contiguous" &&
+      opts.l2_address_layout != "sm_interleaved") {
+    throw std::invalid_argument(
+        "--l2-address-layout must be contiguous or sm_interleaved");
+  }
+  if (opts.l2_address_layout == "sm_interleaved" &&
+      opts.mode != Mode::l2_cg_load_only &&
+      opts.mode != Mode::global_addr_only) {
+    throw std::invalid_argument(
+        "sm_interleaved L2 address layout is limited to l2_cg_load_only and its global_addr_only control");
   }
   if (opts.mode == Mode::reg_pressure && opts.reg_payload_bytes_per_block == 0) {
     opts.reg_payload_bytes_per_block = 256;
@@ -416,6 +433,14 @@ void print_dry_run(const Options& opts, const Feasibility& f, bool allowed,
   std::cout << "store_repeat=" << opts.store_repeat << "\n";
   std::cout << "global_warmup_passes=" << opts.global_warmup_passes << "\n";
   std::cout << "l2_residency_policy=" << opts.l2_residency_policy << "\n";
+  std::cout << "l2_address_layout=" << opts.l2_address_layout << "\n";
+  const std::uint64_t dry_run_stride =
+      f.w_block_bytes + (opts.l2_address_layout == "sm_interleaved" ? 128ull : 0ull);
+  std::cout << "global_block_stride_bytes=" << dry_run_stride << "\n";
+  std::cout << "physical_global_allocation_bytes="
+            << dry_run_stride * static_cast<std::uint64_t>(opts.active_sm) *
+                   static_cast<std::uint64_t>(opts.blocks_per_sm)
+            << "\n";
   std::cout << "reg_payload_bytes_per_block="
             << opts.reg_payload_bytes_per_block << "\n";
   std::cout << "reg_payload_regs_per_thread="
@@ -542,9 +567,13 @@ DeviceState setup_device(int gpu_id, const Options& opts,
       static_cast<std::size_t>(state.sm_count_capacity) * sizeof(int);
 
   if (is_global_operand_mode(opts.mode)) {
-    state.input_bytes =
+    state.logical_input_bytes =
         static_cast<std::size_t>(opts.active_sm) *
         static_cast<std::size_t>(opts.w_sm_kib) * 1024ull;
+    state.global_block_stride_bytes =
+        static_cast<std::size_t>(f.w_block_bytes) +
+        (opts.l2_address_layout == "sm_interleaved" ? 128ull : 0ull);
+    state.input_bytes = grid_blocks * state.global_block_stride_bytes;
     state.input_half_count = state.input_bytes / sizeof(half);
     requested_bytes += state.input_bytes;
   }
@@ -622,6 +651,19 @@ DeviceState setup_device(int gpu_id, const Options& opts,
   } else {
     state.notes += "l2_residency_policy=normal;";
   }
+  {
+    std::ostringstream oss;
+    oss << "l2_address_layout=" << opts.l2_address_layout
+        << ";logical_input_bytes=" << state.logical_input_bytes
+        << ";physical_input_bytes=" << state.input_bytes
+        << ";global_block_stride_bytes=" << state.global_block_stride_bytes
+        << ";global_block_stride_guard_bytes="
+        << (state.global_block_stride_bytes >= f.w_block_bytes
+                ? state.global_block_stride_bytes - f.w_block_bytes
+                : 0)
+        << ";";
+    state.notes += oss.str();
+  }
 
   CUDA_CHECK(configure_kernel_attributes(opts.mode,
                                          static_cast<std::size_t>(f.w_block_bytes)));
@@ -677,6 +719,7 @@ double launch_all(const Options& opts, const Feasibility& f,
     cfg.active_sm = opts.active_sm;
     cfg.blocks_per_sm = opts.blocks_per_sm;
     cfg.w_block_bytes = f.w_block_bytes;
+    cfg.global_block_stride_bytes = state.global_block_stride_bytes;
     cfg.tiles_per_block = f.tiles_per_block;
     cfg.iters = iters;
     cfg.reuse_factor = opts.reuse_factor;
@@ -686,6 +729,8 @@ double launch_all(const Options& opts, const Feasibility& f,
     cfg.streaming =
         is_dram_operand_mode(opts.mode) ||
         (is_address_control_mode(opts.mode) && f.dram_candidate);
+    cfg.skew_global_block_layout =
+        opts.l2_address_layout == "sm_interleaved" ? opts.blocks_per_sm : 0;
     cfg.input = state.input;
     cfg.output = state.output;
     cfg.smid_by_block = state.d_smid;
@@ -936,6 +981,7 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
         << ";store_repeat=" << opts.store_repeat
         << ";global_warmup_passes=" << opts.global_warmup_passes
         << ";l2_residency_policy=" << opts.l2_residency_policy
+        << ";l2_address_layout=" << opts.l2_address_layout
         << ";reg_payload_bytes_per_block="
         << row.reg_payload_bytes_per_block
         << ";reg_payload_regs_per_thread="
@@ -1084,7 +1130,7 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
               (opts.mode == Mode::global_addr_only &&
                opts.l2_residency_policy == "persisting")) {
             extra +=
-                "l2_residency_revision=explicit_policy_warmup_v1;";
+                "l2_residency_revision=topology_policy_warmup_v2;";
           }
         }
         if (is_register_operand_mode(opts.mode)) {

@@ -493,27 +493,30 @@ NCU_USE_SUDO=1 bash results/summary/a100_tensor_l2_remediation_20260710_commands
 2026-07-13 A100 후속 실행에서 Tensor는 dual calibration 후 RF1-16 모두 양수
 0.35-0.54 pJ/FLOP였지만, L2 path-specific hit는 W16/32/64/128에서 58.5-60.1%로
 strict 95% 기준을 통과하지 못했다. 이 수치는 final component table에 넣지 않는다.
-Tensor 값도 dynamic RF2에서 `HMMA/logical MMA` 비선형이 확인되기 전 v1 binary 결과이므로
-새 `fixed_rf_v2` package로 RF1-16 전체를 재측정해야 한다.
+Tensor 값도 local raw/NCU artifact와 `fixed_rf_v2` marker 증거가 없으므로 새 package로
+RF1-16 전체를 재측정해야 한다. 현행 동일 protocol RTX 3090 median은 2.2525 pJ/FLOP이며,
+과거 0.129-0.146 pJ/FLOP를 비교 기준으로 사용하면 안 된다.
 최신 targeted script는 긴 energy sweep 전에 다음 순서로 fail-fast한다.
 
 | 순서 | 조건 | 통과 의미 |
 |---:|---|---|
-| 1 | normal `.cg`, W_SM 16/128 KiB, B16, LR4, NCU application replay, CG warm-up 4회 | 두 W 모두 L2 read hit>=95%이면 normal 선택 |
-| 2 | 1이 실패한 경우에만 같은 좌표에 CUDA persisting-L2 access-policy window 적용 | 통과하면 `persisting` 선택. 결과 의미는 residency-managed L2 path |
-| 3 | 선택된 policy로 W16/32/64/128, LR1/2/4/8/16 full NCU | derived/native L2 read hit, sector conservation, DRAM read traffic를 포함한 모든 path/control gate 재검증 |
-| 4 | 선택된 policy로 LR4/8/16 energy sweep | exact NCU denominator와 양수 차분으로 pJ/bit 계산 |
+| 1 | normal/contiguous/B16, W_SM 16/128 KiB, LR4, NCU application replay, CG warm-up 4회 | 두 W treatment/control이 모두 strict gate를 통과하면 기본 layout 선택 |
+| 2 | normal `sm_interleaved` B16, B8, B4 | 128 B guard와 virtual-grid block-region 전치, 동시 blocks/SM 변경으로 address-topology conflict 진단 |
+| 3 | 모든 normal 실패 시 persisting contiguous/B16과 sm_interleaved B16/B8/B4 | residency policy 효과 진단. API/metric unavailable이면 strict 미선정 |
+| 4 | 선택된 policy/layout/B로 W16/32/64/128, LR1/2/4/8/16 full NCU | derived/native hit, sector conservation, observed/expected traffic, DRAM traffic 재검증 |
+| 5 | 같은 구성으로 LR4/8/16 energy sweep | exact NCU denominator와 양수 차분으로 pJ/bit 계산 |
 
-normal과 persisting이 모두 실패하면 script가 energy sweep 전에 종료되는 것이 정상이다.
-MIG에서는 persisting L2 set-aside를 사용할 수 없을 수 있으므로 normal도 실패하면 해당
-partition에서는 strict L2 coefficient가 없다고 보고한다.
+8개 후보가 모두 실패하면 script가 energy sweep 전에 종료되는 것이 정상이다.
+MIG에서는 persisting L2 set-aside를 사용할 수 없을 수 있으므로 모든 normal 후보도
+실패하면 해당 partition에서는 strict L2 coefficient가 없다고 보고한다.
 
 특히 기존 58.5-60.1%는 lookup hit/miss에서 계산한 비율만으로 실제 capacity/residency
 miss라고 확정하지 않는다. 최신 summary에서 `l2_native_read_hit_rate_pct`,
 `l2_native_vs_derived_hit_delta_pct`, `l2_read_sector_conservation_ratio`,
-`l2_read_miss_bytes`, `dram_read_bytes`, `launch_persisting_l2_cache_size_bytes`를 함께 확인한다.
+`l2_read_bytes_to_expected`, `l2_read_miss_bytes`, `dram_read_bytes`,
+`launch_persisting_l2_cache_size_bytes`를 함께 확인한다.
 두 hit rate가 95% 이상, 차이가 2 percentage points 이하, sector conservation이
-0.98-1.02여야 strict precheck를 통과한다.
+0.98-1.02, observed/expected traffic이 0.95-1.05여야 strict precheck를 통과한다.
 
 RTX 3090/A100/V100의 전체 파라미터와 command 개수 비교는
 [cross-platform component experiment guide](cross_platform_component_experiment_guide_ko.md)의
@@ -597,7 +600,7 @@ CG raw row의 `notes`에는 `global_warmup_policy=ld_global_cg`가 있어야 하
 | NCU 기준 | 통과 조건 |
 |---|---:|
 | Global L1 | path-specific L1 hit >= 95%, L1 request bytes 존재, L2/L1 request bytes <= 1% |
-| L2 CG | NCU application replay/cache-control none, 선택 residency policy와 warm-up 4회 metadata 일치, derived/native L2 read hit >=95%, 두 값 차이<=2 percentage points, hit+miss/read sectors=1+/-2%, L2 read bytes 존재, L1 path hit<=1%, L1 hit/L1 request bytes<=1%, DRAM/L2 read bytes<=2% |
+| L2 CG | NCU application replay/cache-control none, 선택 residency/layout/B와 warm-up 4회 metadata 일치, derived/native L2 read hit >=95%, 두 값 차이<=2 percentage points, hit+miss/read sectors=1+/-2%, observed/expected L2 bytes=0.95-1.05, L1 path hit<=1%, L1 hit/L1 request bytes<=1%, DRAM/L2 read bytes<=2% |
 | Shared scalar | shared access/bytes 존재, bank conflict 0 또는 매우 낮음 |
 | Tensor | treatment HMMA > 0, control HMMA=0, spill/local 0, treatment-control ITER 동일, RF1-16의 `HMMA/logical MMA` 상대 spread<=10%. legacy epilogue 완화는 과거 결과 설명용이며 새 final run에는 사용하지 않음 |
 

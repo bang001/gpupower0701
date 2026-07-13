@@ -65,6 +65,7 @@ def policy_ok(
     cache_control: str,
     warmup_passes: int,
     residency_policy: str,
+    address_layout: str,
 ) -> bool:
     return (
         row.get("acceptance") == "accepted"
@@ -72,6 +73,7 @@ def policy_ok(
         and row.get("ncu_cache_control") == cache_control
         and as_int(row, "global_warmup_passes") == warmup_passes
         and row.get("l2_residency_policy") == residency_policy
+        and row.get("l2_address_layout", "contiguous") == address_layout
     )
 
 
@@ -97,12 +99,14 @@ def audit_rows(
     expected_rf: tuple[int, ...],
     expected_w: tuple[int, ...],
     expected_lr: tuple[int, ...],
-    blocks_per_sm: int,
+    tensor_blocks_per_sm: int,
+    l2_blocks_per_sm: int,
     active_sm: int,
     replay_mode: str,
     cache_control: str,
     warmup_passes: int,
     l2_residency_policy: str,
+    l2_address_layout: str,
     hmma_ratio_spread_max: float,
 ) -> list[dict[str, str]]:
     checks: list[dict[str, str]] = []
@@ -112,7 +116,7 @@ def audit_rows(
         treatment_rows = select(
             rows,
             mode="reg_mma",
-            blocks_per_sm=blocks_per_sm,
+            blocks_per_sm=tensor_blocks_per_sm,
             active_sm=active_sm,
             reuse_factor=rf,
             w_sm_kib=2048,
@@ -120,7 +124,7 @@ def audit_rows(
         control_rows = select(
             rows,
             mode="reg_operand_only",
-            blocks_per_sm=blocks_per_sm,
+            blocks_per_sm=tensor_blocks_per_sm,
             active_sm=active_sm,
             reuse_factor=rf,
             w_sm_kib=2048,
@@ -132,7 +136,7 @@ def audit_rows(
         hmma_ratio = as_float(treatment, "tensor_hmma_per_logical_mma")
         expected_logical_mma = (
             active_sm
-            * blocks_per_sm
+            * tensor_blocks_per_sm
             * as_int(treatment, "ITER", 0)
             * rf
         )
@@ -145,6 +149,7 @@ def audit_rows(
                 cache_control=cache_control,
                 warmup_passes=warmup_passes,
                 residency_policy="normal",
+                address_layout="contiguous",
             )
             and policy_ok(
                 control,
@@ -152,6 +157,7 @@ def audit_rows(
                 cache_control=cache_control,
                 warmup_passes=warmup_passes,
                 residency_policy="normal",
+                address_layout="contiguous",
             )
             and hmma > 0.0
             and logical_mma == expected_logical_mma
@@ -170,7 +176,7 @@ def audit_rows(
         checks.append(
             check_row(
                 "tensor",
-                f"B{blocks_per_sm}/RF{rf}",
+                f"B{tensor_blocks_per_sm}/RF{rf}",
                 passed,
                 "one accepted treatment/control row, control HMMA=0, spill/local=0, valid logical-MMA ratio",
                 (
@@ -202,7 +208,7 @@ def audit_rows(
             treatment_rows = select(
                 rows,
                 mode="l2_cg_load_only",
-                blocks_per_sm=blocks_per_sm,
+                blocks_per_sm=l2_blocks_per_sm,
                 active_sm=active_sm,
                 load_repeat=load_repeat,
                 w_sm_kib=w_sm_kib,
@@ -210,7 +216,7 @@ def audit_rows(
             control_rows = select(
                 rows,
                 mode="global_addr_only",
-                blocks_per_sm=blocks_per_sm,
+                blocks_per_sm=l2_blocks_per_sm,
                 active_sm=active_sm,
                 load_repeat=load_repeat,
                 w_sm_kib=w_sm_kib,
@@ -230,12 +236,13 @@ def audit_rows(
             sector_conservation = as_float(
                 treatment, "l2_read_sector_conservation_ratio"
             )
+            traffic_ratio = as_float(treatment, "l2_read_bytes_to_expected")
             persisting_size = as_float(
                 treatment, "launch_persisting_l2_cache_size_bytes", 0.0
             )
             control_expected = (
                 active_sm
-                * blocks_per_sm
+                * l2_blocks_per_sm
                 * as_int(control, "ITER", 0)
                 * load_repeat
                 * 1024
@@ -254,6 +261,7 @@ def audit_rows(
                     cache_control=cache_control,
                     warmup_passes=warmup_passes,
                     residency_policy=l2_residency_policy,
+                    address_layout=l2_address_layout,
                 )
                 and policy_ok(
                     control,
@@ -261,6 +269,7 @@ def audit_rows(
                     cache_control=cache_control,
                     warmup_passes=warmup_passes,
                     residency_policy=l2_residency_policy,
+                    address_layout=l2_address_layout,
                 )
                 and 0.0 <= as_float(treatment, "l1_path_hit_rate_pct") <= 1.0
                 and l1_request > 0.0
@@ -269,6 +278,7 @@ def audit_rows(
                 and native_l2_hit >= 95.0
                 and native_derived_delta <= 2.0
                 and 0.98 <= sector_conservation <= 1.02
+                and 0.95 <= traffic_ratio <= 1.05
                 and l2_read > 0.0
                 and dram / l2_read <= 0.02
                 and (
@@ -281,15 +291,16 @@ def audit_rows(
             checks.append(
                 check_row(
                     "l2",
-                    f"W{w_sm_kib}/B{blocks_per_sm}/LR{load_repeat}",
+                    f"W{w_sm_kib}/B{l2_blocks_per_sm}/LR{load_repeat}",
                     passed,
-                    "accepted treatment/control, L1 path<=1%, derived/native L2 read hit>=95%, native delta<=2pp, sector conservation=1+/-2%, DRAM/L2<=2%",
+                    "accepted treatment/control, L1 path<=1%, derived/native L2 read hit>=95%, native delta<=2pp, sector conservation=1+/-2%, traffic/expected=1+/-5%, DRAM/L2<=2%",
                     (
                         f"rows={len(treatment_rows)}/{len(control_rows)}; "
                         f"L1={as_float(treatment, 'l1_path_hit_rate_pct'):g}%; "
                         f"L2={as_float(treatment, 'l2_path_hit_rate_pct'):g}%/"
                         f"native={native_l2_hit:g}%; delta={native_derived_delta:g}pp; "
                         f"sector_conservation={sector_conservation:g}; "
+                        f"traffic/expected={traffic_ratio:g}; "
                         f"DRAM/L2={100 * dram / l2_read if l2_read > 0.0 else math.inf:g}%; "
                         f"persisting_size={persisting_size:g}B"
                     ),
@@ -346,6 +357,7 @@ def self_test() -> None:
                     "ncu_cache_control": "none",
                     "global_warmup_passes": "4",
                     "l2_residency_policy": "normal",
+                    "l2_address_layout": "contiguous",
                     "tensor_hmma_inst": str(2 * logical if mode == "reg_mma" else 0),
                     "expected_logical_mma": str(logical if mode == "reg_mma" else ""),
                     "tensor_hmma_per_logical_mma": "2" if mode == "reg_mma" else "",
@@ -369,11 +381,13 @@ def self_test() -> None:
                     "ncu_cache_control": "none",
                     "global_warmup_passes": "4",
                     "l2_residency_policy": "persisting",
+                    "l2_address_layout": "sm_interleaved",
                     "l1_path_hit_rate_pct": "0",
                     "l2_path_hit_rate_pct": "99",
                     "l2_native_read_hit_rate_pct": "99.2",
                     "l2_native_vs_derived_hit_delta_pct": "0.2",
                     "l2_read_sector_conservation_ratio": "1",
+                    "l2_read_bytes_to_expected": "1",
                     "launch_persisting_l2_cache_size_bytes": "34603008",
                     "l1_request_bytes": "100000" if mode == "l2_cg_load_only" else "0",
                     "l1_hit_bytes": "0",
@@ -386,12 +400,14 @@ def self_test() -> None:
         expected_rf=(1, 16),
         expected_w=(16, 128),
         expected_lr=(4,),
-        blocks_per_sm=16,
+        tensor_blocks_per_sm=16,
+        l2_blocks_per_sm=16,
         active_sm=108,
         replay_mode="application",
         cache_control="none",
         warmup_passes=4,
         l2_residency_policy="persisting",
+        l2_address_layout="sm_interleaved",
         hmma_ratio_spread_max=0.10,
     )
     assert checks[-1]["status"] == "pass", checks[-1]
@@ -406,12 +422,14 @@ def self_test() -> None:
         expected_rf=(1, 16),
         expected_w=(16, 128),
         expected_lr=(4,),
-        blocks_per_sm=16,
+        tensor_blocks_per_sm=16,
+        l2_blocks_per_sm=16,
         active_sm=108,
         replay_mode="application",
         cache_control="none",
         warmup_passes=4,
         l2_residency_policy="persisting",
+        l2_address_layout="sm_interleaved",
         hmma_ratio_spread_max=0.10,
     )
     assert checks[-1]["status"] == "fail", checks[-1]
@@ -424,13 +442,20 @@ def main() -> int:
     parser.add_argument("--expected-rf", default="1,2,4,8,16")
     parser.add_argument("--expected-w", default="16,32,64,128")
     parser.add_argument("--expected-lr", default="1,2,4,8,16")
-    parser.add_argument("--blocks-per-sm", type=int, default=16)
+    parser.add_argument("--blocks-per-sm", type=int, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--tensor-blocks-per-sm", type=int, default=16)
+    parser.add_argument("--l2-blocks-per-sm", type=int, default=16)
     parser.add_argument("--active-sm", type=int, default=108)
     parser.add_argument("--ncu-replay-mode", default="application")
     parser.add_argument("--ncu-cache-control", default="none")
     parser.add_argument("--global-warmup-passes", type=int, default=4)
     parser.add_argument(
         "--l2-residency-policy", choices=("normal", "persisting"), required=False
+    )
+    parser.add_argument(
+        "--l2-address-layout",
+        choices=("contiguous", "sm_interleaved"),
+        default="contiguous",
     )
     parser.add_argument("--hmma-ratio-spread-max", type=float, default=0.10)
     parser.add_argument("--out-csv", default="results/summary/a100_ncu_precheck.csv")
@@ -450,12 +475,22 @@ def main() -> int:
         expected_rf=parse_ints(args.expected_rf),
         expected_w=parse_ints(args.expected_w),
         expected_lr=parse_ints(args.expected_lr),
-        blocks_per_sm=args.blocks_per_sm,
+        tensor_blocks_per_sm=(
+            args.blocks_per_sm
+            if args.blocks_per_sm is not None
+            else args.tensor_blocks_per_sm
+        ),
+        l2_blocks_per_sm=(
+            args.blocks_per_sm
+            if args.blocks_per_sm is not None
+            else args.l2_blocks_per_sm
+        ),
         active_sm=args.active_sm,
         replay_mode=args.ncu_replay_mode,
         cache_control=args.ncu_cache_control,
         warmup_passes=args.global_warmup_passes,
         l2_residency_policy=args.l2_residency_policy,
+        l2_address_layout=args.l2_address_layout,
         hmma_ratio_spread_max=args.hmma_ratio_spread_max,
     )
     write_outputs(checks, Path(args.out_csv), Path(args.out_md))

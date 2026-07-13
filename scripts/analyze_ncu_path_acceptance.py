@@ -169,17 +169,29 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
     elif mode == "l2_cg_load_only":
         component = "l2_hit_path"
         required_l2_policy = getattr(args, "require_l2_residency_policy", "")
+        required_l2_layout = getattr(args, "require_l2_address_layout", "")
         if (
             required_l2_policy
             and row.get("l2_residency_policy", "") != required_l2_policy
         ):
             reasons.append("l2_residency_policy_mismatch")
+        if required_l2_layout and row.get("l2_address_layout", "") != required_l2_layout:
+            reasons.append("l2_address_layout_mismatch")
         if not has_l2_path_hit:
             reasons.append("missing_l2_path_hit_rate")
         elif l2_path_hit < args.l2_hit_min_pct:
             reasons.append("l2_hit_below_threshold")
         if not has_l2_read_bytes or l2_read_bytes <= 0.0:
             reasons.append("missing_l2_read_bytes")
+        else:
+            expected_l2_bytes = expected_shared_bytes(row)
+            observed_expected = ratio(l2_read_bytes, expected_l2_bytes)
+            if not (
+                args.l2_expected_ratio_min
+                <= observed_expected
+                <= args.l2_expected_ratio_max
+            ):
+                reasons.append("l2_read_bytes_expected_mismatch")
         if not has_l1_request_bytes or l1_request_bytes <= 0.0:
             reasons.append("missing_l1_request_bytes_for_l2_cg")
         if not has_l1_path_hit:
@@ -342,6 +354,11 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
             ),
             "l2_to_l1_bytes": f"{ratio(l2_read_bytes, l1_request_bytes):.6g}" if l1_request_bytes > 0.0 else "",
             "dram_to_l2_bytes": f"{ratio(dram_bytes, l2_read_bytes):.6g}" if l2_read_bytes > 0.0 else "",
+            "l2_read_bytes_to_expected": (
+                f"{ratio(l2_read_bytes, expected_shared_bytes(row)):.6g}"
+                if mode == "l2_cg_load_only" and l2_read_bytes > 0.0
+                else ""
+            ),
             "l1_hit_to_request_bytes": (
                 f"{ratio(l1_hit_bytes, l1_request_bytes):.6g}"
                 if l1_request_bytes > 0.0 and has_l1_hit_bytes
@@ -423,15 +440,15 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
 
         out.write("\n")
         out.write(
-            "| mode | component | acceptance | reason | L1 path hit (%) | L2 derived read hit (%) | "
+            "| mode | component | acceptance | reason | L2 layout | L1 path hit (%) | L2 derived read hit (%) | "
             "L2 native read hit (%) | native-derived delta (pp) | L2 sector conservation | "
             "L1 accesses | L2 accesses | DRAM accesses | shared bytes | "
             "L1 request bytes | L1 hit bytes | L2 read bytes | L2 miss bytes | "
-            "DRAM read bytes | DRAM bytes | persisting L2 size (bytes) | long SB (%) |\n"
+            "DRAM read bytes | DRAM bytes | L2 observed/expected | persisting L2 size (bytes) | long SB (%) |\n"
         )
         out.write(
-            "|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
-            "---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
+            "|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"
+            "---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
         )
         for row in rows:
             l1_accesses = row.get("l1_accesses", "")
@@ -446,6 +463,7 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
             out.write(
                 f"| {row.get('mode','')} | {row['component_candidate']} | "
                 f"{row['acceptance']} | {row['acceptance_reason']} | "
+                f"{row.get('l2_address_layout','')} | "
                 f"{row.get('l1_path_hit_rate_pct','')} | {row.get('l2_path_hit_rate_pct','')} | "
                 f"{row.get('l2_native_read_hit_rate_pct','')} | "
                 f"{row.get('l2_native_vs_derived_hit_delta_pct','')} | "
@@ -456,6 +474,7 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
                 f"{row.get('l2_read_miss_bytes','')} | "
                 f"{row.get('dram_read_bytes','')} | "
                 f"{row.get('dram_bytes','')} | "
+                f"{row.get('l2_read_bytes_to_expected','')} | "
                 f"{row.get('launch_persisting_l2_cache_size_bytes','')} | "
                 f"{row.get('stall_long_scoreboard_pct','')} |\n"
             )
@@ -480,6 +499,8 @@ def self_test_args() -> argparse.Namespace:
         l2_l1_hit_max_pct=1.0,
         l2_l1_bytes_ratio_max=0.01,
         l2_hit_min_pct=95.0,
+        l2_expected_ratio_min=0.95,
+        l2_expected_ratio_max=1.05,
         l2_dram_ratio_max=0.02,
         shared_expected_ratio_min=0.5,
         shared_expected_ratio_max=2.0,
@@ -500,6 +521,7 @@ def self_test_args() -> argparse.Namespace:
         require_ncu_replay_mode="",
         require_ncu_cache_control="",
         require_l2_residency_policy="",
+        require_l2_address_layout="",
     )
 
 
@@ -520,10 +542,10 @@ def run_self_test() -> None:
         "l2_bytes": "1e12",
         # Path-specific evidence proves L1 bypass and an L2 read hit.
         "l1_path_hit_rate_pct": "0",
-        "l1_request_bytes": "1e12",
+        "l1_request_bytes": "7.077888e11",
         "l1_hit_bytes": "0",
         "l2_path_hit_rate_pct": "99.5",
-        "l2_read_bytes": "1e12",
+        "l2_read_bytes": "7.077888e11",
         "dram_bytes": "1e9",
         "local_read_bytes": "0",
         "local_write_bytes": "0",
@@ -657,6 +679,8 @@ def main() -> int:
         ),
     )
     parser.add_argument("--l2-hit-min-pct", type=float, default=95.0)
+    parser.add_argument("--l2-expected-ratio-min", type=float, default=0.95)
+    parser.add_argument("--l2-expected-ratio-max", type=float, default=1.05)
     parser.add_argument(
         "--require-ncu-replay-mode",
         choices=("", "application", "kernel"),
@@ -670,6 +694,11 @@ def main() -> int:
     parser.add_argument(
         "--require-l2-residency-policy",
         choices=("", "normal", "persisting"),
+        default="",
+    )
+    parser.add_argument(
+        "--require-l2-address-layout",
+        choices=("", "contiguous", "sm_interleaved"),
         default="",
     )
     parser.add_argument("--l2-dram-ratio-max", type=float, default=0.02)
