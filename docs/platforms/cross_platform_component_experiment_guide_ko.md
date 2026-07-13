@@ -363,6 +363,11 @@ non-admin counter 접근을 열어 달라고 요청하는 것이 장기적으로
 끄려면 `NCU_AUTO_SUDO=0`, 처음부터 sudo를 사용하려면 아래와 같이 실행한다. 이 옵션은
 NCU 경로에만 적용되며 NVML energy sweep은 분리된다.
 
+Wrapper는 stderr를 동기식 `tee` pipeline으로 기록하고 종료 status와 완성된 로그를 함께
+확인한다. Generated package의 permission fallback self-test는 외부
+`NCU_USE_SUDO/NCU_AUTO_SUDO/NCU_SUDO`를 제거한 별도 환경에서 실행되므로, package를
+처음부터 sudo mode로 실행해도 self-test의 unprivileged-to-sudo 시나리오가 오염되지 않는다.
+
 ```bash
 NCU_USE_SUDO=1 bash results/summary/a100_component_finalplan_$(date +%Y%m%d)_commands.sh
 NCU_USE_SUDO=1 bash results/summary/v100_component_finalplan_$(date +%Y%m%d)_commands.sh

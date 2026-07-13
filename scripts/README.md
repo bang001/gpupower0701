@@ -41,7 +41,7 @@
 | `plot_platform_sweep_design.py` | planner profile에서 플랫폼별 blocks/SM, W_SM path, capacity-context 그래프 생성. `--self-test`로 좌표 feasibility와 용량 산술 검증 |
 | `plot_dram_reporting_policy.py` | RTX 3090 DRAM 26.709-28.409 pJ/bit provisional reporting band 시각화. strict 미채택과 pJ/byte-pJ/bit 환산을 `--self-test`로 검증 |
 | `build_gpu_component_energy_presentation.py` | sweep 그래프를 재생성하고 22장 기술백서 PPT/PDF와 렌더 검토 이미지를 빌드 |
-| `selftest_ncu_permission_fallback.sh` | fake NCU/sudo로 `ERR_NVGPUCTRPERM` 자동 재시도와 `NCU_AUTO_SUDO=0` hard-fail을 회귀 검증 |
+| `selftest_ncu_permission_fallback.sh` | 부모 sudo 환경을 격리하고 fake NCU/sudo로 동기식 stderr 판정, `ERR_NVGPUCTRPERM` 자동 재시도와 `NCU_AUTO_SUDO=0` hard-fail을 회귀 검증 |
 
 `run_ncu_validation.sh`는 기본적으로 `clocked_empty`, `reg_operand_only`,
 `reg_mma`, `shared_scalar_load_only`, `global_l1_load_only`,

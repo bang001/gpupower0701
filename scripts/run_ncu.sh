@@ -63,14 +63,44 @@ enable_sudo_ncu() {
   echo "Retrying NCU with elevated privileges after ERR_NVGPUCTRPERM: ${NCU_CMD[*]}" >&2
 }
 
+run_ncu_once_logged() {
+  local log="$1"
+  shift
+  local -a pipeline_status=()
+  local command_rc=1
+  local tee_rc=1
+  local stdout_fd
+
+  : > "${log}"
+  exec {stdout_fd}>&1
+  if "${NCU_CMD[@]}" "$@" 2>&1 1>&${stdout_fd} | tee "${log}" >&2; then
+    pipeline_status=("${PIPESTATUS[@]}")
+  else
+    pipeline_status=("${PIPESTATUS[@]}")
+  fi
+  exec {stdout_fd}>&-
+
+  command_rc="${pipeline_status[0]:-1}"
+  tee_rc="${pipeline_status[1]:-1}"
+  if [[ "${tee_rc}" -ne 0 ]]; then
+    echo "Failed to write complete NCU stderr log: ${log} (tee rc=${tee_rc})" >&2
+    if [[ "${command_rc}" -eq 0 ]]; then
+      return "${tee_rc}"
+    fi
+  fi
+  return "${command_rc}"
+}
+
 run_ncu_profile() {
   local log="$1"
   shift
   local retry_log="${log%.log}_sudo_retry.log"
-  set +e
-  "${NCU_CMD[@]}" "$@" 2> >(tee "${log}" >&2)
-  local rc=$?
-  set -e
+  local rc=0
+  if run_ncu_once_logged "${log}" "$@"; then
+    rc=0
+  else
+    rc=$?
+  fi
   if grep -q "ERR_NVGPUCTRPERM" "${log}" 2>/dev/null; then
     local permission_rc="${rc}"
     if [[ "${permission_rc}" -eq 0 ]]; then
@@ -79,10 +109,11 @@ run_ncu_profile() {
     print_ncu_permission_hint
     if [[ "${NCU_AUTO_SUDO}" == "1" && "${NCU_IS_PRIVILEGED}" != "1" ]]; then
       enable_sudo_ncu || return "${permission_rc}"
-      set +e
-      "${NCU_CMD[@]}" "$@" 2> >(tee "${retry_log}" >&2)
-      rc=$?
-      set -e
+      if run_ncu_once_logged "${retry_log}" "$@"; then
+        rc=0
+      else
+        rc=$?
+      fi
       if [[ "${rc}" -eq 0 ]] && ! grep -q "ERR_NVGPUCTRPERM" "${retry_log}" 2>/dev/null; then
         echo "NCU sudo retry succeeded." >&2
       else

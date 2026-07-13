@@ -49,7 +49,7 @@ python3 scripts/build_strict_component_summary.py --self-test
 python3 scripts/audit_strict_component_summary.py --self-test
 python3 scripts/write_platform_result_manifest.py --self-test
 python3 scripts/selftest_platform_package_gates.py
-bash scripts/selftest_ncu_permission_fallback.sh
+env -u NCU_USE_SUDO -u NCU_AUTO_SUDO -u NCU_SUDO bash scripts/selftest_ncu_permission_fallback.sh
 
 # 3. Move stale generated outputs aside before writing new CSV schemas.
 RUN_STAMP=$(date +%Y%m%d_%H%M%S)

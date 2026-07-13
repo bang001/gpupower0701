@@ -474,7 +474,19 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         line(["python3", "scripts/audit_strict_component_summary.py", "--self-test"]),
         line(["python3", "scripts/write_platform_result_manifest.py", "--self-test"]),
         line(["python3", "scripts/selftest_platform_package_gates.py"]),
-        line(["bash", "scripts/selftest_ncu_permission_fallback.sh"]),
+        line(
+            [
+                "env",
+                "-u",
+                "NCU_USE_SUDO",
+                "-u",
+                "NCU_AUTO_SUDO",
+                "-u",
+                "NCU_SUDO",
+                "bash",
+                "scripts/selftest_ncu_permission_fallback.sh",
+            ]
+        ),
         "",
         "# 3. Move stale generated outputs aside before writing new CSV schemas.",
         "RUN_STAMP=$(date +%Y%m%d_%H%M%S)",
@@ -1250,6 +1262,13 @@ For non-interactive scheduler jobs, pre-cache sudo credentials or request the
 administrator-side permission change; otherwise sudo may be unable to prompt.
 The wrapper writes `ncu_permission_mode.txt` as `unprivileged`, `explicit_sudo`,
 or `auto_sudo`.
+NCU stderr is streamed through a synchronous `tee` pipeline and the wrapper
+checks `PIPESTATUS` only after the complete log is written, so the permission
+decision cannot race the log writer. The generated pipeline invokes the
+permission fallback self-test with `NCU_USE_SUDO`, `NCU_AUTO_SUDO`, and
+`NCU_SUDO` removed through `env -u`; the self-test also clears those variables
+internally. Therefore
+an outer `NCU_USE_SUDO=1` policy cannot make the self-test start privileged.
 `--target-processes all` is used so kernels launched through child processes are
 not silently omitted.
 

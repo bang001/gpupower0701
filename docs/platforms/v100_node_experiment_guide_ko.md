@@ -463,6 +463,12 @@ bash scripts/run_ncu_validation.sh
 `unprivileged`, `explicit_sudo`, `auto_sudo` 중 실제 mode를 기록한다. 자동 retry를 끄려면
 `NCU_AUTO_SUDO=0`을 사용한다.
 
+권한 오류 문자열은 동기식 `tee` pipeline이 stderr 로그 기록을 끝낸 뒤 판정한다. 따라서
+로그 writer와 `grep ERR_NVGPUCTRPERM` 사이의 race가 없다. 또한 generated package의
+permission fallback self-test는 `NCU_USE_SUDO`, `NCU_AUTO_SUDO`, `NCU_SUDO`를 제거한
+환경에서 실행되고 self-test 내부에서도 같은 변수를 초기화한다. 전체 package를
+`NCU_USE_SUDO=1`로 실행해도 self-test는 의도대로 unprivileged 실패에서 시작한다.
+
 관리자가 non-admin GPU performance counter 접근을 허용하는 것이 가장 좋다. NVIDIA
 공식 안내는 Linux에서 sudo/CAP_SYS_ADMIN, R565 이상에서는 CAP_PERFMON, 또는 driver
 permission 설정을 제시한다. Legacy regkey 상태는 다음처럼 확인한다.

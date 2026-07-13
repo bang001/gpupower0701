@@ -311,11 +311,16 @@ def audit_profiles(repo: Path) -> list[dict[str, str]]:
         "NCU_AUTO_SUDO=\"${NCU_AUTO_SUDO:-1}\"",
         "ERR_NVGPUCTRPERM",
         "enable_sudo_ncu",
+        "run_ncu_once_logged",
+        "PIPESTATUS",
         "--target-processes all",
         "NCU_PERMISSION_PROBE_ONLY",
         "ncu_permission_mode.txt",
     ]
     ok, missing = text_contains_all(ncu_wrapper_text, ncu_wrapper_terms)
+    if "2> >(tee" in ncu_wrapper_text:
+        ok = False
+        missing.append("race-prone process-substitution stderr logger removed")
     add_row(
         rows,
         profile="all",
@@ -485,6 +490,7 @@ def audit_profiles(repo: Path) -> list[dict[str, str]]:
                     "NCU_PERMISSION_PROBE_ONLY=1",
                     "NCU_AUTO_SUDO=\"${NCU_AUTO_SUDO:-1}\"",
                     "permission probe selected sudo for the remaining NCU stages",
+                    "env -u NCU_USE_SUDO -u NCU_AUTO_SUDO -u NCU_SUDO",
                     "scripts/selftest_ncu_permission_fallback.sh",
                 ]
                 if profile == "v100":
