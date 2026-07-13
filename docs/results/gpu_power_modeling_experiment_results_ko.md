@@ -1,6 +1,6 @@
 # GPU Power Modeling 실험 결과 상태
 
-갱신일: 2026-07-12
+갱신일: 2026-07-13
 
 ## 현재 결론
 
@@ -48,6 +48,127 @@ active 결과 문서에서 제거했다.
 - `results/summary/rtx3090_current_protocol_reaudit_20260712.md`
 - `results/summary/component_energy_goal_readiness_audit_20260712.md`
 - `docs/audits/current_goal_alignment_audit_ko.md`
+
+## 보존된 RTX 3090 NCU 경로 검증 결과
+
+아래 내용은 2026-07-08 factor sidecar와 2026-07-09 **실제 RTX 3090 live
+NCU run**에서 얻은 historical path evidence다. 원본 NCU CSV와 `.ncu-rep`가 저장소에
+남아 있어 재검산할 수 있으므로, 현행 결과 문서에도 보존한다.
+
+다만 여기서 `accepted`는 **당시 treatment kernel의 경로 판정 기준을 통과했다**는
+뜻이다. Global L1/L2/DRAM의 동일 좌표 `global_addr_only` control acceptance까지
+요구하는 2026-07-12 현행 protocol의 final coefficient 승인을 뜻하지 않는다.
+
+| 증거 층 | 실행일 | 검증한 내용 | 재사용 가능한 결론 | 재사용하면 안 되는 결론 |
+|---|---|---|---|---|
+| factor sidecar | 2026-07-08 | RF/LR별 treatment path, hit rate, access/byte traffic, stall | 당시 선택한 kernel이 Tensor/Shared/L1/L2/DRAM 방향으로 동작했는지 | 현행 control gate까지 통과한 최종 pJ/FLOP 또는 pJ/bit |
+| live evidence run | 2026-07-09 | 실제 NCU output에서 필수 필드가 채워지는지 | access count, bytes, shared bytes, stall/status counter의 실재와 대표 경로 | 반복 energy run과 결합된 새 coefficient 또는 순수 회로 에너지 |
+
+### NCU 검증 이미지
+
+![RTX 3090 NCU hit-rate, access, byte 및 status 검증](../assets/component_energy_method/ncu_hit_rate_validation.png)
+
+![RTX 3090 live NCU evidence fields](../assets/component_energy_method/ncu_live_evidence_fields.png)
+
+![RTX 3090 NCU path별 byte traffic](../assets/component_energy_method/ncu_path_validation_bytes.png)
+
+첫 그림은 2026-07-08 factor sidecar의 대표 RF/LR=4 row와 reject 예시를 함께
+보여준다. 두 번째 그림은 2026-07-09 live run 6개 대표 row에서 요청한 evidence
+field가 실제로 채워졌는지를 보여준다. 세 번째 그림은 Shared/L1/L2/DRAM byte
+traffic의 크기 차이를 log scale로 비교한다. 이 그림들은 energy coefficient 그래프가
+아니며, NCU 경로 증거 시각화다.
+
+### 확인 필드와 단위
+
+| 확인 항목 | NCU 요약 열 | 단위/해석 |
+|---|---|---|
+| L1 access count | `l1_accesses` | 이 RTX 3090 run에서는 sector. 다른 metric set에서는 request일 수 있어 `l1_access_unit`을 함께 확인 |
+| L2 access count | `l2_accesses` | sector |
+| DRAM access count | `dram_accesses` | sector |
+| Shared traffic | `shared_bytes` | byte (B), SASS shared data byte counter 기반 |
+| L1/L2/DRAM traffic | `l1_bytes`, `l2_bytes`, `dram_bytes` | byte (B) |
+| Long scoreboard | `stall_long_scoreboard_pct` | `%` 표기의 NCU `per_issue_active` 파생 신호. 단순 시간 점유율이 아님 |
+| Path 판정 | `acceptance`, `acceptance_reason` | 당시 path gate의 accepted/rejected와 이유 |
+| Evidence 완전성 | `status`, `reason` | 필수 열이 실제 live NCU 결과에 존재하는지 |
+
+`stall_long_scoreboard_pct`는 이름에 `%`가 있지만 active issue당 stall된 warp 수를
+정규화한 파생 metric이므로 100을 넘을 수 있다. 예를 들어 L2/DRAM의 864.97와
+1784.08을 각각 실행 시간의 864.97%, 1784.08%로 읽으면 안 된다. 여기서는 memory
+dependency가 강한 path인지 비교하는 **percent-like stall signal**로만 사용한다.
+
+### 2026-07-08 factor sidecar 대표 결과
+
+아래 표는 RF/LR=4 treatment/control 대표 row다. `l2_cg_load_only`와
+`dram_cg_load_only`에서 L1 access가 커도 L1 hit가 거의 0이므로, 그 수는 L1에
+데이터가 머물렀다는 뜻이 아니라 L1TEX request-side sector traffic으로 해석한다.
+
+| mode | 좌표 | 당시 acceptance | L1 hit (%) | L2 hit (%) | L1 accesses | L2 accesses | DRAM accesses | shared bytes (B) | L1 bytes (B) | L2 bytes (B) | DRAM bytes (B) | long SB signal (%) | field status |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `reg_mma` | RF=4 | accepted | 34.9586 | 77.5795 | 0 sectors | 0 sectors | 1.99776e6 sectors | 0 | 0 | 8.02851e7 | 6.39284e7 | 0.010039 | pass |
+| `reg_operand_only` | RF=4 | accepted | 31.1890 | 26.0331 | 0 sectors | 9.03367e5 sectors | 3.19101e6 sectors | 0 | 0 | 1.87625e8 | 1.47636e8 | 0.009723 | pass |
+| `shared_scalar_load_only` | LR=4 | accepted | 21.0747 | 42.0761 | 0 sectors | 4.14979e6 sectors | 5.72894e6 sectors | 5.37401e11 | 0 | 4.05844e8 | 3.02841e8 | 0.002106 | pass |
+| `global_l1_load_only` | LR=4 | accepted | 99.9982 | 66.9942 | 3.35872e10 sectors | 5.66108e6 sectors | 7.19713e6 sectors | 0 | 1.07479e12 | 5.92794e8 | 4.52661e8 | 17.4469 | pass |
+| `l2_cg_load_only` | LR=4 | accepted | 0.000006 | 99.8978 | 1.67936e10 sectors | 1.67970e10 sectors | 1.19183e7 sectors | 0 | 5.37395e11 | 5.37997e11 | 5.40672e8 | 867.454 | pass |
+| `dram_cg_load_only` | LR=4 | accepted | 0.000006 | 0.104067 | 1.67936e10 sectors | 1.68016e10 sectors | 1.68197e10 sectors | 0 | 5.37395e11 | 5.38836e11 | 5.38608e11 | 1747.88 | pass |
+
+당시 reject된 비교 후보도 path 선정 근거로 남긴다.
+
+| mode | 좌표 | 당시 acceptance | L1 hit (%) | L2 hit (%) | shared bytes (B) | L1 bytes (B) | L2 bytes (B) | DRAM bytes (B) | long SB signal (%) | reject reason |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `l2_load_only` | W_SM=64 KiB, B=16 | rejected | 88.3689 | 99.7936 | 0 | 1.07479e12 | 1.25376e11 | 2.95498e8 | 70.7279 | L1 hit가 너무 높아 L2-only 후보가 아님 |
+| `shared_load_only` | W_SM=64 KiB, B=16 | rejected | 26.8489 | 57.6059 | 5.37401e11 | 0 | 4.56121e8 | 3.19504e8 | 0.000554 | shared bank conflict 4.1984e9가 검출됨 |
+
+이 두 row는 capacity와 mode 이름만으로 path를 확정할 수 없고, hit/access/byte 및 bank
+conflict counter를 함께 봐야 한다는 근거로만 사용한다.
+
+원본 요약은
+[factor stability acceptance CSV](../../results/summary/rtx3090_finalplan_ncu_factor_stability_acceptance_20260708.csv)와
+[evidence field check](../../results/summary/rtx3090_ncu_evidence_field_check_20260709.md)에
+있다. 전체 factor sidecar는 Tensor RF=1,2,4,8,16과 memory LR=4,8,16을 포함한다.
+
+### 2026-07-09 실제 live NCU run
+
+이 run은 coefficient를 다시 계산하기 위한 power 반복 실험이 아니라, 보고서에 쓰는
+필드가 실제 NCU output에서 수집되는지 double-check한 실험이다. 공통 조건은 RTX 3090
+82 active SM과 blocks/SM=16이며, 각 mode의 상세 좌표는 다음과 같다.
+
+| mode | W_SM (KiB/SM) | ITER (count) | RF (unitless) | LR (count) |
+|---|---:|---:|---:|---:|
+| `reg_mma` | 2048 | 100,000 | 4 | 1 |
+| `reg_operand_only` | 2048 | 100,000 | 4 | 1 |
+| `shared_scalar_load_only` | 64 | 100,000 | 1 | 4 |
+| `global_l1_load_only` | 16 | 100,000 | 1 | 4 |
+| `l2_cg_load_only` | 64 | 100,000 | 1 | 4 |
+| `dram_cg_load_only` | 8192 | 100,000 | 1 | 4 |
+
+| mode | 당시 acceptance | L1 hit (%) | L2 hit (%) | L1 accesses | L2 accesses | DRAM accesses | shared bytes (B) | L1 bytes (B) | L2 bytes (B) | DRAM bytes (B) | long SB signal (%) | live field status |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `reg_mma` | accepted | 36.2957 | 32.3856 | 0 sectors | 431,231 sectors | 2.16480e6 sectors | 0 | 0 | 1.20292e8 | 9.38189e7 | 0.010564 | pass |
+| `reg_operand_only` | accepted | 31.7291 | 63.2529 | 0 sectors | 427,908 sectors | 2.11342e6 sectors | 0 | 0 | 1.21160e8 | 9.01961e7 | 0.009671 | pass |
+| `shared_scalar_load_only` | accepted | 20.8079 | 15.0719 | 0 sectors | 724,793 sectors | 3.04068e6 sectors | 5.37401e11 | 0 | 1.55649e8 | 1.19054e8 | 0.001967 | pass |
+| `global_l1_load_only` | accepted | 99.9998 | 57.2715 | 3.35872e10 sectors | 41,984 sectors | 4.38920e6 sectors | 0 | 1.07479e12 | 1.79393e8 | 1.40454e8 | 17.4343 | pass |
+| `l2_cg_load_only` | accepted | 0.000007 | 99.9066 | 1.67936e10 sectors | 1.67994e10 sectors | 1.40017e7 sectors | 0 | 5.37395e11 | 5.38188e11 | 7.19515e8 | 864.970 | pass |
+| `dram_cg_load_only` | accepted | 0.000007 | 0.038381 | 1.67936e10 sectors | 1.67998e10 sectors | 1.68180e10 sectors | 0 | 5.37395e11 | 5.38663e11 | 5.38470e11 | 1784.08 | pass |
+
+필수 evidence field는 6/6 대표 row에서 모두 `pass`였다. 해석 가능한 핵심은 다음과
+같다.
+
+| path | live NCU에서 확인된 사실 | 현재 사용할 때의 제한 |
+|---|---|---|
+| Tensor treatment/control | `reg_mma`에 HMMA 1.0496e9, `reg_operand_only`에 HMMA 0; 두 mode 모두 당시 spill/local counter 0 | 현행 kernel revision과 treatment-control pair lock으로 재실행 필요 |
+| Shared scalar | shared 5.37401e11 B, shared bank conflict 0, global traffic은 shared traffic보다 매우 작음 | Shared SRAM bitcell 단독 에너지가 아니라 scalar shared load path 증거 |
+| Global L1 | L1 hit 99.9998%, L1 1.07479e12 B, L2/DRAM leakage는 훨씬 작음 | 당시 energy control이 `clocked_empty`; 현행 `global_addr_only` control 재실행 필요 |
+| L2 CG | L1 hit 약 0%, L2 hit 99.9066%, DRAM/L2 bytes 약 0.134% | stall-heavy effective path이며 pure L2 SRAM energy가 아님 |
+| DRAM CG | L1/L2 hit가 거의 0%, DRAM 5.38470e11 B | streaming sanity path 증거이며 현행 DRAM coefficient 자체는 아님 |
+
+Live run의 재검산 경로:
+
+| artifact | 경로와 역할 |
+|---|---|
+| NCU summary CSV | [ncu_cache_validation_summary.csv](../../results/ncu/rtx3090_ncu_evidence_check_20260709/ncu_cache_validation_summary.csv): live raw metric을 mode별 열로 정규화 |
+| NCU path acceptance | [rtx3090_ncu_evidence_check_acceptance_20260709.md](../../results/summary/rtx3090_ncu_evidence_check_acceptance_20260709.md): 당시 path gate 결과 |
+| Evidence field audit | [rtx3090_ncu_evidence_live_field_check_20260709.md](../../results/summary/rtx3090_ncu_evidence_live_field_check_20260709.md): 요청 필드 6/6 pass 확인 |
+| NCU details/raw metrics | [live NCU directory](../../results/ncu/rtx3090_ncu_evidence_check_20260709/): mode별 `.ncu-rep`, `_details.csv`, `_raw_metrics.csv` |
 
 ## RTX 3090 재실행 조건
 
