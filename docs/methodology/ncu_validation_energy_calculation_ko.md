@@ -62,11 +62,25 @@ NCU가 측정한 L1 energy
 구현 기준은 hit rate만으로 통과시키지 않는 것이다. `ncu_cache_validation_summary.csv`와
 `analyze_ncu_path_acceptance.py` 결과에는 `l1_accesses`, `l2_accesses`,
 `dram_accesses`, `l1_request_bytes`, `l1_hit_bytes`, `l2_read_bytes`,
-`l2_read_hit_sectors`, `l2_read_miss_sectors`, `dram_bytes`가 함께 있어야 한다.
+`l2_read_hit_sectors`, `l2_read_miss_sectors`, `l2_native_read_hit_rate_pct`,
+`l2_read_sector_conservation_ratio`, `l2_read_miss_bytes`, `dram_read_bytes`,
+`dram_bytes`가 함께 있어야 한다.
 L1 access는 NCU가 request counter를 제공하면 request를 쓰고, 없으면 sector로
 fallback한다. L2/DRAM access는 sector counter다. byte counter가 없으면 sector를
 32 bytes로 환산하지만, 보고서에는 이 값이 NCU-derived effective denominator임을
 명시한다.
+
+`lts__t_sector_op_read_hit_rate` native ratio는 확인한 GA100/GA102/GH100 NCU catalog에는
+있지만 GV100 catalog에는 없다. 따라서 native-vs-derived L2 교차 gate는 A100 targeted
+remediation에서 필수다. V100에서는 unavailable metric을 95% 통과로 간주하지 않으며,
+path-specific hit/miss-derived ratio와 DRAM traffic으로 별도 판정한다.
+
+현재 NCU sidecar는 기본적으로 `application replay + cache-control none`을 사용한다.
+metric pass마다 application setup과 kernel 전 warm-up을 다시 실행하기 위한 선택이다.
+summary에는 `ncu_replay_mode`, `ncu_cache_control`, `global_warmup_passes`,
+`l2_residency_policy`를 남긴다. A100 targeted L2 결과는 이 네 필드가 선택된 energy
+policy와 정확히 일치하지 않으면 reject한다. persisting policy가 선택되면 그 값은
+일반 L2가 아니라 residency-managed L2 effective path coefficient다.
 
 ## Path acceptance 기준
 
@@ -78,7 +92,7 @@ fallback한다. L2/DRAM access는 sector counter다. byte counter가 없으면 s
 | Tensor control | `reg_operand_only`에서 Tensor/HMMA instruction = 0, spill/local 0 |
 | Shared scalar | shared bytes/accesses > 0, shared instruction 존재, bank conflict ratio 낮음, global/L2/DRAM traffic 낮음 |
 | Global L1 | path-specific L1 hit >=95%, L1 request/hit bytes 존재, L2 read/L1 request <=1%, DRAM/L1 request <=1% |
-| L2 CG | path-specific L2 read hit >=95%, L1 path hit <=1%, L1 hit/request bytes <=1%, DRAM/L2 read <=2%. aggregate hit rate는 진단값 |
+| L2 CG | hit/miss-derived 및 native op-read L2 hit 모두 >=95%, 두 값 차이 <=2 percentage points, `(hit+miss)/total read sectors=1+/-2%`, L1 path hit <=1%, L1 hit/request bytes <=1%, DRAM/L2 read <=2%. aggregate hit rate는 진단값 |
 | DRAM sanity | path-specific L1 hit <=1%, DRAM bytes dominant, path-specific L2 read hit은 `max(5%, 2 x L2_capacity/full_working_set + 2%)` 이하 |
 
 L2 CG mode은 measurement 전 warm-up도 `ld.global.cg.u32`를 쓰는
@@ -245,6 +259,12 @@ floor를 둔다. 표준 10 s package는 1 s floor와 0.8 s analyzer gate, A100 t
 package는 2 s floor와 1.6 s gate를 사용한다. Gate 미만 또는 non-positive control net
 energy는 식별 불충분으로 reject한다.
 
+여기서 direct energy 차분은 pure Tensor 회로 energy가 아니다. 동일 ITER라도 treatment와
+control의 elapsed time은 다르며, 더 긴 treatment의 active scheduler/clock/register lifetime
+비용이 `delta_E_J`에 포함된다. 따라서 플랫폼 비교 시 coefficient와 함께 treatment
+TFLOP/s, treatment/control elapsed time, 두 mode의 net power를 보고해야 한다. duration을
+강제로 맞춘 control-power scaling도 work equivalence를 깨므로 이 문제를 제거하지 못한다.
+
 FLOP denominator는 logical MMA 정의에서 나온다.
 
 ```text
@@ -264,7 +284,7 @@ FLOP  = N_MMA * 8192
 pJ/FLOP = delta_E_J * 1e12 / FLOP
 ```
 
-예시 row:
+과거 protocol 예시 row:
 
 | 항목 | 값 |
 |---|---:|
@@ -279,16 +299,29 @@ pJ/FLOP = delta_E_J * 1e12 / FLOP
 53.2879 * 1e12 / 3.63176e14 = 0.1467 pJ/FLOP
 ```
 
-RTX 3090 broad reuse sweep에서는 여러 reuse row의 accepted candidate를 요약해 Tensor
-median을 약 `0.170 pJ/FLOP`로 기록했지만 confidence가 low였다. 이후 RF=8/16만
-20초, 6회 반복으로 targeted rerun한 결과는 12/12 valid, median `0.107 pJ/FLOP`,
-medium-high confidence로 갱신됐다. 같은 RF=8/16에서 fixed `ITER=8000000` 보조실험은
-10/10 valid, median `0.146 pJ/FLOP`였다. RF=8 duration-scaling check는
-10/20/30초 sweep에서 15/15 valid, median `0.143 pJ/FLOP`, slope
-`0.144-0.156 pJ/FLOP`였다. RF=16 duration-scaling check는 15/15 valid,
-median `0.077 pJ/FLOP`, slope `0.053-0.071 pJ/FLOP`였다. 따라서 현재 RTX 3090
-Tensor는 단일값이 아니라 RF-dependent effective coefficient로 보고한다. 요약하면
-RF16 lower는 약 `0.06-0.09 pJ/FLOP`, RF8 upper는 약 `0.14-0.15 pJ/FLOP`다.
+이 `0.1467 pJ/FLOP`와 broad/targeted duration-scaling에서 얻은
+`0.077-0.170 pJ/FLOP` 범위는 현재 fixed-RF v2 커널 이전의 historical
+method-sensitivity 자료다. v1 dynamic loop는 GA102 RF2에서 `HMMA/logical MMA=3`,
+다른 primary RF에서 2를 보여 logical FLOP과 issued HMMA의 비례가 깨졌다. 따라서
+이 과거 값을 현행 Tensor coefficient로 인용하거나 v2와 평균하지 않는다.
+
+2026-07-13 RTX 3090 fixed-RF v2 재실행 결과는 다음과 같다.
+
+| 항목 | 현행 결과 |
+|---|---:|
+| RF sweep | 1, 2, 4, 8, 16 |
+| treatment/control NCU acceptance | 10/10 |
+| treatment `HMMA/logical MMA` | 모든 RF에서 2.0 |
+| control HMMA | 모든 RF에서 0 |
+| local read/write | 모든 row에서 0 B / 0 B |
+| valid energy pair | 33/35 |
+| coefficient median | 2.252501 pJ/FLOP |
+| coefficient min-max | 1.945385-2.369221 pJ/FLOP |
+
+이 크게 달라진 값은 과거가 pure circuit energy였고 v2가 틀렸다는 뜻이
+아니다. v2는 동일 ITER의 더 긴 treatment active time을 직접 energy 차분에
+포함하는 현행 board-level effective protocol이다. 따라서 coefficient와 함께 RF,
+treatment/control elapsed, net power, throughput을 보고해야 한다.
 
 ## Tensor에서 NCU의 역할
 
@@ -300,6 +333,12 @@ Tensor pJ/FLOP의 분모는 NCU byte가 아니라 logical FLOP다. 따라서 Ten
 | `reg_operand_only`에서 Tensor/HMMA instruction = 0 | control이 no-MMA control인지 확인 |
 | spill/local memory = 0 | register spill로 L2/DRAM traffic이 섞이는 것을 방지 |
 | L1/L2/DRAM traffic이 작음 | Tensor coefficient가 memory traffic에 오염되지 않았는지 확인 |
+
+RF sweep에서는 각 row의 HMMA 존재만으로 부족하다. `expected_logical_mma = active_SM x
+blocks/SM x ITER x RF`를 계산하고 `HMMA/logical MMA` 비율이 RF1/2/4/8/16에서 일정한지
+확인한다. GA102의 기존 runtime loop는 RF2에서 3, 나머지 primary RF에서 2를 보여 strict
+선형성을 깨뜨렸다. 현재 RF1 dynamic + RF2/4/8/16 fixed-trip kernel 조합에서는 다섯 RF
+모두 2로 확인됐으며, target GPU에서도 상대 spread 10% 이하를 다시 요구한다.
 
 따라서 Tensor 결과는 다음처럼 써야 한다.
 

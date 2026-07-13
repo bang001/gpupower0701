@@ -29,6 +29,12 @@ python3 -m py_compile \
   scripts/audit_platform_power_readiness.py \
   scripts/preflight_gpu_support.py \
   scripts/audit_power_api_measurements.py \
+  scripts/summarize_ncu_cache_metrics.py \
+  scripts/analyze_ncu_path_acceptance.py \
+  scripts/run_component_regression_sweep.py \
+  scripts/audit_a100_ncu_precheck.py \
+  scripts/audit_a100_tensor_l2_remediation.py \
+  scripts/select_a100_l2_residency_policy.py \
   scripts/audit_component_goal_readiness.py \
   scripts/audit_strict_component_summary.py \
   scripts/plan_platform_component_experiment.py
@@ -36,6 +42,12 @@ python3 -m py_compile \
 echo "[readiness] package/gap/dashboard/manifest self-tests"
 python3 scripts/preflight_gpu_support.py --self-test
 python3 scripts/audit_power_api_measurements.py --self-test
+python3 scripts/run_component_regression_sweep.py --self-test
+python3 scripts/summarize_ncu_cache_metrics.py --self-test
+python3 scripts/analyze_ncu_path_acceptance.py --self-test
+python3 scripts/audit_a100_ncu_precheck.py --self-test
+python3 scripts/audit_a100_tensor_l2_remediation.py --self-test
+python3 scripts/select_a100_l2_residency_policy.py --self-test
 python3 scripts/build_strict_component_summary.py --self-test
 python3 scripts/audit_strict_component_summary.py --self-test
 python3 scripts/selftest_platform_package_gates.py

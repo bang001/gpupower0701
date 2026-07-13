@@ -620,9 +620,9 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--fail-on-provisional",
                 "--require-explicit-measurement-scope",
                 "--require-mode-notes-marker",
-                "reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1",
+                "reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
                 "--require-mode-notes-marker",
-                "reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1",
+                "reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
                 "--require-mode-notes-marker",
                 "l2_cg_load_only=global_warmup_policy=ld_global_cg",
                 "--require-mode-notes-marker",
@@ -737,9 +737,9 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--fail-on-provisional",
                 "--require-explicit-measurement-scope",
                 "--require-mode-notes-marker",
-                "reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1",
+                "reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
                 "--require-mode-notes-marker",
-                "reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1",
+                "reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
                 "--require-mode-notes-marker",
                 "l2_cg_load_only=global_warmup_policy=ld_global_cg",
                 "--require-mode-notes-marker",
@@ -843,6 +843,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 q(str(0.8 * tensor_control_calibration_min_seconds)),
                 "--max-elapsed-ratio",
                 "1.35",
+                "--max-pair-start-distance-ms",
+                "30000",
                 "--pairing",
                 "nearest-control",
                 "--tensor-pair-policy",
@@ -1367,7 +1369,7 @@ instead of a WMMA store intrinsic. The treatment stores all accumulator
 fragment values to keep HMMA live; the control stores sink values with the same
 address pattern while keeping its HMMA count at zero.
 The raw Tensor rows must contain
-`tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1` in `notes`.
+`tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2` in `notes`.
 CG rows must contain `global_warmup_policy=ld_global_cg`. The package audit
 rejects either missing marker so a stale binary with the same CSV schema cannot
 silently pass.

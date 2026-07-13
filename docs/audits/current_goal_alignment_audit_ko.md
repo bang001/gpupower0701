@@ -64,11 +64,13 @@ Global L1/L2 address-control evidence 누락이 명시적으로 검출됐다.
 ## 남은 제한
 
 1. RTX 3090의 기존 0.129/0.171/0.173/1.131 계수는 현행 exact-control gate 이전
-   결과다. 새 package를 실행하기 전에는 current strict final 값이 아니다.
+   결과다. Tensor만 fixed-RF v2로 재실행해 2.2525 pJ/FLOP standalone 근거를
+   확보했으며, Shared/Global-L1/L2를 포함한 current strict table은 아직 아니다.
 2. A100/V100/H100은 실행 코드와 package gate가 준비됐지만 이 저장소에서 실제 GPU
    결과를 생성한 것은 아니다.
-3. `cmake`가 현재 점검 환경에 없어 CUDA binary clean rebuild는 수행하지 못했다.
-   Python self-test, package mock gate, generated command 정적 검증은 별도로 수행한다.
+3. 로컬 CUDA 13.2에서 sm_86/sm_80/sm_90 build는 성공했다. CUDA 13.2는 sm_70
+   offline compilation을 지원하지 않으므로 V100 build는 CUDA 12.x 대상 노드에서
+   수행해야 한다.
 4. Shared와 Global L1은 물리적으로 unified L1/shared subsystem에 가깝지만 주소 공간,
    instruction path, arbitration, denominator가 달라 별도 effective path로 보고한다.
 

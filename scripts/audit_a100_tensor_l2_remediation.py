@@ -18,8 +18,9 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-TENSOR_MARKER = "tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1"
+TENSOR_MARKER = "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2"
 CG_MARKER = "global_warmup_policy=ld_global_cg"
+L2_REVISION_MARKER = "l2_residency_revision=explicit_policy_warmup_v1"
 
 
 @dataclass(frozen=True)
@@ -37,10 +38,18 @@ class AuditConfig:
     min_delta_j: float
     tensor_min_pj_per_flop: float
     tensor_max_pj_per_flop: float
+    tensor_hmma_ratio_relative_spread_max: float
+    tensor_coefficient_relative_spread_max: float
     max_pair_start_distance_ms: float
+    ncu_replay_mode: str
+    ncu_cache_control: str
+    l2_residency_policy: str
+    global_warmup_passes: int
     l1_path_hit_max_pct: float
     l1_hit_bytes_ratio_max: float
     l2_path_hit_min_pct: float
+    l2_native_derived_hit_delta_max_pct: float
+    l2_sector_conservation_tolerance: float
     dram_to_l2_bytes_max: float
     address_control_dram_ratio_max: float
     plateau_relative_spread_max: float
@@ -214,7 +223,13 @@ def audit_data(
                 "active_SM",
                 "reuse_factor",
                 "load_repeat",
+                "ncu_replay_mode",
+                "ncu_cache_control",
+                "global_warmup_passes",
+                "l2_residency_policy",
                 "tensor_hmma_inst",
+                "expected_logical_mma",
+                "tensor_hmma_per_logical_mma",
                 "local_read_bytes",
                 "local_write_bytes",
                 "spill_local_read_inst",
@@ -223,10 +238,16 @@ def audit_data(
                 "spill_evidence_source",
                 "l1_path_hit_rate_pct",
                 "l2_path_hit_rate_pct",
+                "l2_native_read_hit_rate_pct",
+                "l2_native_vs_derived_hit_delta_pct",
+                "l2_read_sector_conservation_ratio",
                 "l1_request_bytes",
                 "l1_hit_bytes",
                 "l2_read_bytes",
+                "l2_read_miss_bytes",
+                "dram_read_bytes",
                 "dram_bytes",
+                "launch_persisting_l2_cache_size_bytes",
             },
         ),
         "matched_detail": (
@@ -242,6 +263,10 @@ def audit_data(
                 "iter_ratio",
                 "run_order_distance",
                 "pair_start_distance_ms",
+                "numerator_elapsed_s",
+                "control_elapsed_s",
+                "numerator_net_E_J",
+                "control_net_E_J",
                 "delta_E_J",
                 "coefficient",
                 "coefficient_pJ_per_bit",
@@ -282,6 +307,8 @@ def audit_data(
         return checks
 
     tensor_ncu_pass_by_rf: dict[int, bool] = {}
+    tensor_hmma_ratio_by_rf: dict[int, float] = {}
+    tensor_coefficient_by_rf: dict[int, float] = {}
     for rf in config.expected_rf:
         coord = f"B{config.blocks_per_sm}/RF{rf}"
         cal_rows = select(
@@ -410,11 +437,30 @@ def audit_data(
         if tensor_ncu_ok:
             treatment = treatment_ncu[0]
             control = control_ncu[0]
+            logical_mma = as_float(treatment, "expected_logical_mma")
+            hmma_per_logical_mma = as_float(
+                treatment, "tensor_hmma_per_logical_mma"
+            )
+            reported_hmma = as_float(treatment, "tensor_hmma_inst", 0.0)
+            ratio_consistent = (
+                logical_mma > 0.0
+                and hmma_per_logical_mma > 0.0
+                and abs(
+                    hmma_per_logical_mma - reported_hmma / logical_mma
+                )
+                <= max(1.0e-12, 1.0e-9 * hmma_per_logical_mma)
+            )
             tensor_ncu_ok = (
                 treatment.get("acceptance") == "accepted"
                 and control.get("acceptance") == "accepted"
-                and as_float(treatment, "tensor_hmma_inst", 0.0) > 0.0
+                and reported_hmma > 0.0
                 and as_float(control, "tensor_hmma_inst", -1.0) == 0.0
+                and ratio_consistent
+                and all(
+                    row.get("ncu_replay_mode") == config.ncu_replay_mode
+                    and row.get("ncu_cache_control") == config.ncu_cache_control
+                    for row in (treatment, control)
+                )
                 and all(
                     as_float(row, field, 0.0) == 0.0
                     for row in (treatment, control)
@@ -438,6 +484,8 @@ def audit_data(
                     for row in (treatment, control)
                 )
             )
+            if tensor_ncu_ok:
+                tensor_hmma_ratio_by_rf[rf] = hmma_per_logical_mma
         tensor_ncu_pass_by_rf[rf] = tensor_ncu_ok
         checks.append(
             result(
@@ -445,11 +493,17 @@ def audit_data(
                 coord,
                 "ncu_hmma_and_spill",
                 tensor_ncu_ok,
-                "treatment accepted with HMMA>0; control accepted with HMMA=0; both local-memory/spill=0",
+                (
+                    "treatment accepted with HMMA>0 and a valid logical-MMA ratio; "
+                    "control accepted with HMMA=0; both local-memory/spill=0; "
+                    f"NCU={config.ncu_replay_mode}/{config.ncu_cache_control}"
+                ),
                 (
                     f"treatment_rows={len(treatment_ncu)}, control_rows={len(control_ncu)}, "
                     f"HMMA={fmt(as_float(treatment_ncu[0], 'tensor_hmma_inst')) if treatment_ncu else 'missing'}/"
-                    f"{fmt(as_float(control_ncu[0], 'tensor_hmma_inst')) if control_ncu else 'missing'}"
+                    f"{fmt(as_float(control_ncu[0], 'tensor_hmma_inst')) if control_ncu else 'missing'}; "
+                    f"logical_MMA={fmt(as_float(treatment_ncu[0], 'expected_logical_mma')) if treatment_ncu else 'missing'}; "
+                    f"HMMA/logical_MMA={fmt(as_float(treatment_ncu[0], 'tensor_hmma_per_logical_mma')) if treatment_ncu else 'missing'}"
                 ),
                 evidence["ncu_acceptance"],
                 "inspect SASS/NCU, rebuild sm_80, and keep the RF out of the coefficient table",
@@ -467,7 +521,17 @@ def audit_data(
         valid = [row for row in detail if truthy(row.get("valid_component_estimate"))]
         deltas = [as_float(row, "delta_E_J") for row in detail]
         coefficients = [as_float(row, "coefficient") for row in valid]
+        treatment_elapsed = [as_float(row, "numerator_elapsed_s") for row in detail]
         control_elapsed = [as_float(row, "control_elapsed_s") for row in detail]
+        treatment_net_energy = [
+            as_float(row, "numerator_net_E_J") for row in detail
+        ]
+        control_net_energy = [as_float(row, "control_net_E_J") for row in detail]
+        treatment_tflops = [
+            as_float(row, "denominator") / elapsed / 1.0e12
+            for row, elapsed in zip(detail, treatment_elapsed)
+            if elapsed > 0.0 and as_float(row, "denominator") > 0.0
+        ]
         tensor_energy_ok = len(detail) == config.expected_repeats
         tensor_energy_ok &= len(valid) >= config.min_valid_repeats
         tensor_energy_ok &= all(
@@ -481,6 +545,12 @@ def audit_data(
             elapsed >= 0.8 * config.tensor_control_calibration_min_seconds
             for elapsed in control_elapsed
         )
+        tensor_energy_ok &= all(
+            elapsed >= 0.8 * config.tensor_treatment_target_seconds
+            for elapsed in treatment_elapsed
+        )
+        tensor_energy_ok &= all(value > 0.0 for value in treatment_net_energy)
+        tensor_energy_ok &= all(value > 0.0 for value in control_net_energy)
         tensor_energy_ok &= all(delta >= config.min_delta_j for delta in deltas)
         tensor_energy_ok &= all(value > 0.0 for value in coefficients)
         coefficient_median = median(coefficients)
@@ -489,6 +559,8 @@ def audit_data(
             <= coefficient_median
             <= config.tensor_max_pj_per_flop
         )
+        if tensor_energy_ok and tensor_ncu_ok and math.isfinite(coefficient_median):
+            tensor_coefficient_by_rf[rf] = coefficient_median
         checks.append(
             result(
                 "tensor",
@@ -505,13 +577,89 @@ def audit_data(
                 (
                     f"rows={len(detail)}, valid={len(valid)}, delta_min/median="
                     f"{fmt(min(deltas, default=float('nan')))}/{fmt(median(deltas))} J, "
+                    f"treatment_elapsed_min={fmt(min(treatment_elapsed, default=float('nan')))} s, "
                     f"control_elapsed_min={fmt(min(control_elapsed, default=float('nan')))} s, "
+                    f"treatment/control_net_power_median="
+                    f"{fmt(median(energy / elapsed for energy, elapsed in zip(treatment_net_energy, treatment_elapsed) if elapsed > 0.0))}/"
+                    f"{fmt(median(energy / elapsed for energy, elapsed in zip(control_net_energy, control_elapsed) if elapsed > 0.0))} W, "
+                    f"treatment_throughput_median={fmt(median(treatment_tflops))} TFLOP/s, "
                     f"coefficient_median={fmt(coefficient_median)} pJ/FLOP"
                 ),
                 evidence["matched_detail"],
                 "do not relax the delta gate; rerun the affected RF after checking clocks and pair adjacency",
             )
         )
+
+    hmma_ratios = list(tensor_hmma_ratio_by_rf.values())
+    hmma_ratio_center = median(hmma_ratios)
+    hmma_ratio_spread = (
+        (max(hmma_ratios) - min(hmma_ratios)) / hmma_ratio_center
+        if len(hmma_ratios) == len(config.expected_rf) and hmma_ratio_center > 0.0
+        else float("inf")
+    )
+    hmma_linearity_ok = (
+        len(hmma_ratios) == len(config.expected_rf)
+        and hmma_ratio_spread <= config.tensor_hmma_ratio_relative_spread_max
+    )
+    checks.append(
+        result(
+            "tensor",
+            "RF1-16",
+            "hmma_logical_mma_linearity",
+            hmma_linearity_ok,
+            (
+                "all RF points expose a positive HMMA/logical-MMA ratio with "
+                f"relative spread <= {100 * config.tensor_hmma_ratio_relative_spread_max:g}%"
+            ),
+            (
+                "ratios="
+                + ",".join(
+                    f"RF{rf}:{fmt(tensor_hmma_ratio_by_rf.get(rf, float('nan')))}"
+                    for rf in config.expected_rf
+                )
+                + f"; relative_spread={fmt(100 * hmma_ratio_spread)}%"
+            ),
+            evidence["ncu_acceptance"],
+            "reject the Tensor denominator or inspect architecture-specific WMMA-to-HMMA lowering",
+        )
+    )
+
+    tensor_coefficients = list(tensor_coefficient_by_rf.values())
+    tensor_coefficient_center = median(tensor_coefficients)
+    tensor_coefficient_spread = (
+        (max(tensor_coefficients) - min(tensor_coefficients))
+        / tensor_coefficient_center
+        if len(tensor_coefficients) == len(config.expected_rf)
+        and tensor_coefficient_center > 0.0
+        else float("inf")
+    )
+    tensor_stability_ok = (
+        len(tensor_coefficients) == len(config.expected_rf)
+        and tensor_coefficient_spread
+        <= config.tensor_coefficient_relative_spread_max
+    )
+    checks.append(
+        result(
+            "tensor",
+            "RF1-16",
+            "effective_coefficient_rf_stability",
+            tensor_stability_ok,
+            (
+                "all RF medians are positive and their relative range is <= "
+                f"{100 * config.tensor_coefficient_relative_spread_max:g}%"
+            ),
+            (
+                "medians="
+                + ",".join(
+                    f"RF{rf}:{fmt(tensor_coefficient_by_rf.get(rf, float('nan')))}pJ/FLOP"
+                    for rf in config.expected_rf
+                )
+                + f"; relative_range={fmt(100 * tensor_coefficient_spread)}%"
+            ),
+            evidence["matched_detail"],
+            "report RF dependence as a range and rerun unstable points; do not force an RTX 3090 match",
+        )
+    )
 
     l2_ncu_pass_by_w: dict[int, bool] = {}
     for w_sm_kib in config.expected_l2_w:
@@ -536,9 +684,14 @@ def audit_data(
             row.get("energy_source") == "nvml_total_energy"
             and row.get("energy_integration_method") == "total_energy_mj_delta"
             and row.get("measurement_scope") == "gpu_device_total_energy_counter"
+            and f"global_warmup_passes={config.global_warmup_passes}" in row.get("notes", "")
+            and f"l2_residency_policy={config.l2_residency_policy}" in row.get("notes", "")
             and (
                 row.get("mode") != "l2_cg_load_only"
-                or CG_MARKER in row.get("notes", "")
+                or (
+                    CG_MARKER in row.get("notes", "")
+                    and L2_REVISION_MARKER in row.get("notes", "")
+                )
             )
             for items in raw_by_mode_lr.values()
             for row in items
@@ -551,7 +704,9 @@ def audit_data(
                 raw_ok,
                 (
                     f"{config.expected_repeats} rows/mode/LR with total-energy scope; "
-                    "CG treatment carries the current warm-up marker"
+                    "CG treatment carries the current warm-up/replay revision and "
+                    f"all rows use {config.l2_residency_policy} residency with "
+                    f"{config.global_warmup_passes} warm-up passes"
                 ),
                 "counts=" + ",".join(
                     f"{mode}/LR{lr}:{len(items)}"
@@ -583,6 +738,10 @@ def audit_data(
         path_ok = all(len(items) == 1 for items in by_lr.values())
         path_ok &= all(len(items) == 1 for items in control_by_lr.values())
         path_rates: list[float] = []
+        native_path_rates: list[float] = []
+        native_derived_deltas: list[float] = []
+        sector_conservation_ratios: list[float] = []
+        persisting_sizes: list[float] = []
         l1_rates: list[float] = []
         hit_byte_ratios: list[float] = []
         dram_ratios: list[float] = []
@@ -593,6 +752,16 @@ def audit_data(
             row = items[0]
             l1_path = as_float(row, "l1_path_hit_rate_pct")
             l2_path = as_float(row, "l2_path_hit_rate_pct")
+            l2_native_path = as_float(row, "l2_native_read_hit_rate_pct")
+            native_derived_delta = as_float(
+                row, "l2_native_vs_derived_hit_delta_pct"
+            )
+            sector_conservation = as_float(
+                row, "l2_read_sector_conservation_ratio"
+            )
+            persisting_size = as_float(
+                row, "launch_persisting_l2_cache_size_bytes", 0.0
+            )
             l1_request = as_float(row, "l1_request_bytes", 0.0)
             l1_hit = as_float(row, "l1_hit_bytes", 0.0)
             l2_read = as_float(row, "l2_read_bytes", 0.0)
@@ -600,15 +769,35 @@ def audit_data(
             hit_ratio = l1_hit / l1_request if l1_request > 0.0 else float("inf")
             dram_ratio = dram / l2_read if l2_read > 0.0 else float("inf")
             path_rates.append(l2_path)
+            native_path_rates.append(l2_native_path)
+            native_derived_deltas.append(native_derived_delta)
+            sector_conservation_ratios.append(sector_conservation)
+            persisting_sizes.append(persisting_size)
             l1_rates.append(l1_path)
             hit_byte_ratios.append(hit_ratio)
             dram_ratios.append(dram_ratio)
             path_ok &= (
                 row.get("acceptance") == "accepted"
+                and row.get("ncu_replay_mode") == config.ncu_replay_mode
+                and row.get("ncu_cache_control") == config.ncu_cache_control
+                and row.get("l2_residency_policy")
+                == config.l2_residency_policy
+                and as_int(row, "global_warmup_passes")
+                == config.global_warmup_passes
                 and 0.0 <= l1_path <= config.l1_path_hit_max_pct
                 and hit_ratio <= config.l1_hit_bytes_ratio_max
                 and l2_path >= config.l2_path_hit_min_pct
+                and l2_native_path >= config.l2_path_hit_min_pct
+                and native_derived_delta
+                <= config.l2_native_derived_hit_delta_max_pct
+                and 1.0 - config.l2_sector_conservation_tolerance
+                <= sector_conservation
+                <= 1.0 + config.l2_sector_conservation_tolerance
                 and dram_ratio <= config.dram_to_l2_bytes_max
+                and (
+                    config.l2_residency_policy != "persisting"
+                    or persisting_size > 0.0
+                )
             )
             controls = control_by_lr[lr]
             if len(controls) != 1:
@@ -623,6 +812,12 @@ def audit_data(
             control_dram_ratios.append(control_dram_ratio)
             path_ok &= (
                 control.get("acceptance") == "accepted"
+                and control.get("ncu_replay_mode") == config.ncu_replay_mode
+                and control.get("ncu_cache_control") == config.ncu_cache_control
+                and control.get("l2_residency_policy")
+                == config.l2_residency_policy
+                and as_int(control, "global_warmup_passes")
+                == config.global_warmup_passes
                 and as_float(control, "l1_request_bytes", -1.0) == 0.0
                 and control_dram_ratio <= config.address_control_dram_ratio_max
             )
@@ -637,7 +832,11 @@ def audit_data(
                     f"treatment/control all LR accepted; control L1 request=0 and DRAM/expected <= "
                     f"{100 * config.address_control_dram_ratio_max:g}%; L1 path hit <= {config.l1_path_hit_max_pct:g}%; "
                     f"L1 hit/request <= {100 * config.l1_hit_bytes_ratio_max:g}%; "
-                    f"L2 read hit >= {config.l2_path_hit_min_pct:g}%"
+                    f"derived/native L2 read hit >= {config.l2_path_hit_min_pct:g}%, "
+                    f"delta <= {config.l2_native_derived_hit_delta_max_pct:g}pp, "
+                    f"sector conservation=1+/-{100 * config.l2_sector_conservation_tolerance:g}%; "
+                    f"NCU={config.ncu_replay_mode}/{config.ncu_cache_control}; "
+                    f"residency={config.l2_residency_policy}; warm-up={config.global_warmup_passes}"
                 ),
                 (
                     f"treatment_LR_rows={','.join(f'{lr}:{len(items)}' for lr, items in by_lr.items())}; "
@@ -646,6 +845,11 @@ def audit_data(
                     f"L1_path_max={fmt(max(l1_rates, default=float('nan')))}%; "
                     f"L1_hit/request_max={fmt(100 * max(hit_byte_ratios, default=float('nan')))}%; "
                     f"L2_path_min={fmt(min(path_rates, default=float('nan')))}%; "
+                    f"L2_native_min={fmt(min(native_path_rates, default=float('nan')))}%; "
+                    f"native_delta_max={fmt(max(native_derived_deltas, default=float('nan')))}pp; "
+                    f"sector_conservation_min/max={fmt(min(sector_conservation_ratios, default=float('nan')))}/"
+                    f"{fmt(max(sector_conservation_ratios, default=float('nan')))}; "
+                    f"persisting_size_min={fmt(min(persisting_sizes, default=float('nan')))}B; "
                     f"DRAM/L2_max={fmt(100 * max(dram_ratios, default=float('nan')))}%"
                 ),
                 evidence["ncu_acceptance"],
@@ -799,8 +1003,14 @@ def write_markdown(path: str, rows: list[dict[str, str]], csv_path: str) -> None
             "- Tensor passes only when every RF records treatment/control-floor "
             "candidate ITERs, applies their maximum to both modes, meets the actual "
             "control-duration floor, keeps control/treatment adjacent, has an "
-            "HMMA-free control and spill-free kernels, and produces positive energy "
-            "above the configured noise floor.\n"
+            "HMMA-free control and spill-free kernels, produces positive energy "
+            "above the configured noise floor, and keeps HMMA/logical-MMA lowering "
+            "linear across RF.\n"
+        )
+        f.write(
+            "- The Tensor coefficient is checked for RF stability but is not forced "
+            "to match a historical RTX 3090 number. Cross-architecture SASS lowering, "
+            "clock/power behavior, and measurement protocol must be audited first.\n"
         )
         f.write(
             "- `.cg` requests still pass through L1TEX. Therefore L1 request bytes "
@@ -810,6 +1020,12 @@ def write_markdown(path: str, rows: list[dict[str, str]], csv_path: str) -> None
         f.write(
             "- A single accepted L2 point is not enough. Two adjacent working-set "
             "points must pass path counters and produce a stable pJ/bit plateau.\n"
+        )
+        f.write(
+            "- L2 evidence must use application replay, cache-control none, four "
+            "in-application CG warm-up passes, and the residency policy selected by "
+            "the precheck. Persisting results describe a residency-managed path, not "
+            "universal default-cache behavior.\n"
         )
         f.write(
             "- These are NCU-validated, workload-dependent board-level effective "
@@ -864,6 +1080,7 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                         "measurement_scope": "gpu_device_total_energy_counter",
                     }
                 )
+            logical_mma = config.active_sm * config.blocks_per_sm * 100000 * rf
             ncu.append(
                 {
                     "mode": mode,
@@ -873,7 +1090,19 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "active_SM": str(config.active_sm),
                     "reuse_factor": str(rf),
                     "load_repeat": "1",
-                    "tensor_hmma_inst": "100000" if mode == "reg_mma" else "0",
+                    "ncu_replay_mode": config.ncu_replay_mode,
+                    "ncu_cache_control": config.ncu_cache_control,
+                    "global_warmup_passes": str(config.global_warmup_passes),
+                    "l2_residency_policy": "normal",
+                    "tensor_hmma_inst": (
+                        str(4 * logical_mma) if mode == "reg_mma" else "0"
+                    ),
+                    "expected_logical_mma": (
+                        str(logical_mma) if mode == "reg_mma" else ""
+                    ),
+                    "tensor_hmma_per_logical_mma": (
+                        "4" if mode == "reg_mma" else ""
+                    ),
                     "local_read_bytes": "0",
                     "local_write_bytes": "0",
                     "spill_local_read_inst": "0",
@@ -882,10 +1111,16 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "spill_evidence_source": "local_memory_bytes_zero_inference",
                     "l1_path_hit_rate_pct": "0",
                     "l2_path_hit_rate_pct": "0",
+                    "l2_native_read_hit_rate_pct": "",
+                    "l2_native_vs_derived_hit_delta_pct": "",
+                    "l2_read_sector_conservation_ratio": "",
                     "l1_request_bytes": "0",
                     "l1_hit_bytes": "0",
                     "l2_read_bytes": "0",
+                    "l2_read_miss_bytes": "0",
+                    "dram_read_bytes": "0",
                     "dram_bytes": "0",
+                    "launch_persisting_l2_cache_size_bytes": "0",
                 }
             )
         for _ in range(config.expected_repeats):
@@ -904,6 +1139,11 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "control_elapsed_s": str(
                         config.tensor_control_calibration_min_seconds
                     ),
+                    "numerator_elapsed_s": str(
+                        config.tensor_treatment_target_seconds
+                    ),
+                    "numerator_net_E_J": "30",
+                    "control_net_E_J": "10",
                     "delta_E_J": "20",
                     "coefficient": "0.2",
                     "coefficient_pJ_per_bit": "",
@@ -927,7 +1167,13 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "ITER": "100000",
                     "reuse_factor": "1",
                     "load_repeat": str(lr),
+                    "ncu_replay_mode": config.ncu_replay_mode,
+                    "ncu_cache_control": config.ncu_cache_control,
+                    "global_warmup_passes": str(config.global_warmup_passes),
+                    "l2_residency_policy": config.l2_residency_policy,
                     "tensor_hmma_inst": "0",
+                    "expected_logical_mma": "",
+                    "tensor_hmma_per_logical_mma": "",
                     "local_read_bytes": "0",
                     "local_write_bytes": "0",
                     "spill_local_read_inst": "0",
@@ -936,10 +1182,16 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "spill_evidence_source": "local_memory_bytes_zero_inference",
                     "l1_path_hit_rate_pct": "0",
                     "l2_path_hit_rate_pct": "0",
+                    "l2_native_read_hit_rate_pct": "0",
+                    "l2_native_vs_derived_hit_delta_pct": "0",
+                    "l2_read_sector_conservation_ratio": "1",
                     "l1_request_bytes": "0",
                     "l1_hit_bytes": "0",
                     "l2_read_bytes": "0",
+                    "l2_read_miss_bytes": "0",
+                    "dram_read_bytes": str(expected_bytes * 0.0005),
                     "dram_bytes": str(expected_bytes * 0.0005),
+                    "launch_persisting_l2_cache_size_bytes": "34603008",
                 }
             )
             ncu.append(
@@ -952,7 +1204,13 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "ITER": "100000",
                     "reuse_factor": "1",
                     "load_repeat": str(lr),
+                    "ncu_replay_mode": config.ncu_replay_mode,
+                    "ncu_cache_control": config.ncu_cache_control,
+                    "global_warmup_passes": str(config.global_warmup_passes),
+                    "l2_residency_policy": config.l2_residency_policy,
                     "tensor_hmma_inst": "0",
+                    "expected_logical_mma": "",
+                    "tensor_hmma_per_logical_mma": "",
                     "local_read_bytes": "0",
                     "local_write_bytes": "0",
                     "spill_local_read_inst": "0",
@@ -961,10 +1219,16 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "spill_evidence_source": "local_memory_bytes_zero_inference",
                     "l1_path_hit_rate_pct": "0",
                     "l2_path_hit_rate_pct": "99",
+                    "l2_native_read_hit_rate_pct": "99.2",
+                    "l2_native_vs_derived_hit_delta_pct": "0.2",
+                    "l2_read_sector_conservation_ratio": "1",
                     "l1_request_bytes": "100000",
                     "l1_hit_bytes": "0",
                     "l2_read_bytes": "100000",
+                    "l2_read_miss_bytes": "1000",
+                    "dram_read_bytes": "1000",
                     "dram_bytes": "1000",
+                    "launch_persisting_l2_cache_size_bytes": "34603008",
                 }
             )
         for lr in config.energy_load_repeats:
@@ -977,7 +1241,15 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                             "W_SM_KiB": str(w_sm_kib),
                             "blocks_per_SM": str(config.blocks_per_sm),
                             "active_SM": str(config.active_sm),
-                            "notes": CG_MARKER if mode == "l2_cg_load_only" else "",
+                            "notes": (
+                                f"global_warmup_passes={config.global_warmup_passes};"
+                                f"l2_residency_policy={config.l2_residency_policy};"
+                                + (
+                                    f"{CG_MARKER};{L2_REVISION_MARKER};"
+                                    if mode == "l2_cg_load_only"
+                                    else ""
+                                )
+                            ),
                             "energy_source": "nvml_total_energy",
                             "energy_integration_method": "total_energy_mj_delta",
                             "measurement_scope": "gpu_device_total_energy_counter",
@@ -995,6 +1267,10 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                         "iter_ratio": "1",
                         "run_order_distance": "1",
                         "pair_start_distance_ms": "1",
+                        "numerator_elapsed_s": "20",
+                        "control_elapsed_s": "20",
+                        "numerator_net_E_J": "30",
+                        "control_net_E_J": "10",
                         "delta_E_J": "20",
                         "coefficient": str(pbit * 8.0),
                         "coefficient_pJ_per_bit": str(pbit),
@@ -1020,10 +1296,18 @@ def run_self_test() -> None:
         min_delta_j=10.0,
         tensor_min_pj_per_flop=0.01,
         tensor_max_pj_per_flop=5.0,
+        tensor_hmma_ratio_relative_spread_max=0.10,
+        tensor_coefficient_relative_spread_max=0.75,
         max_pair_start_distance_ms=30000.0,
+        ncu_replay_mode="application",
+        ncu_cache_control="none",
+        l2_residency_policy="persisting",
+        global_warmup_passes=4,
         l1_path_hit_max_pct=1.0,
         l1_hit_bytes_ratio_max=0.01,
         l2_path_hit_min_pct=95.0,
+        l2_native_derived_hit_delta_max_pct=2.0,
+        l2_sector_conservation_tolerance=0.02,
         dram_to_l2_bytes_max=0.02,
         address_control_dram_ratio_max=0.001,
         plateau_relative_spread_max=0.35,
@@ -1059,6 +1343,31 @@ def run_self_test() -> None:
     assert any(
         row["coordinate"] == "B16/RF4"
         and row["check"] == "positive_matched_energy"
+        and row["status"] == "fail"
+        for row in rows
+    )
+
+    nonlinear_ncu = [dict(row) for row in data[3]]
+    nonlinear = next(
+        row
+        for row in nonlinear_ncu
+        if row["mode"] == "reg_mma" and row["reuse_factor"] == "4"
+    )
+    nonlinear["tensor_hmma_inst"] = str(
+        2 * as_int(nonlinear, "expected_logical_mma")
+    )
+    nonlinear["tensor_hmma_per_logical_mma"] = "2"
+    rows = audit_data(
+        config,
+        tensor_raw=data[0],
+        l2_raw=data[1],
+        calibration=data[2],
+        ncu_acceptance=nonlinear_ncu,
+        matched_detail=data[4],
+        evidence=evidence,
+    )
+    assert any(
+        row["check"] == "hmma_logical_mma_linearity"
         and row["status"] == "fail"
         for row in rows
     )
@@ -1132,6 +1441,32 @@ def run_self_test() -> None:
         for row in rows
     )
 
+    bad_crosscheck = [dict(row) for row in data[3]]
+    bad = next(
+        row
+        for row in bad_crosscheck
+        if row["mode"] == "l2_cg_load_only"
+        and row["W_SM_KiB"] == "32"
+        and row["load_repeat"] == "4"
+    )
+    bad["l2_native_vs_derived_hit_delta_pct"] = "5"
+    bad["l2_read_sector_conservation_ratio"] = "0.8"
+    rows = audit_data(
+        config,
+        tensor_raw=data[0],
+        l2_raw=data[1],
+        calibration=data[2],
+        ncu_acceptance=bad_crosscheck,
+        matched_detail=data[4],
+        evidence=evidence,
+    )
+    assert any(
+        row["coordinate"] == "W32/B16"
+        and row["check"] == "ncu_path_specific_hit"
+        and row["status"] == "fail"
+        for row in rows
+    )
+
     bad_control = [dict(row) for row in data[3]]
     bad = next(
         row
@@ -1148,6 +1483,29 @@ def run_self_test() -> None:
         l2_raw=data[1],
         calibration=data[2],
         ncu_acceptance=bad_control,
+        matched_detail=data[4],
+        evidence=evidence,
+    )
+    assert any(
+        row["coordinate"] == "W16/B16"
+        and row["check"] == "ncu_path_specific_hit"
+        and row["status"] == "fail"
+        for row in rows
+    )
+
+    bad_replay = [dict(row) for row in data[3]]
+    bad = next(
+        row
+        for row in bad_replay
+        if row["mode"] == "l2_cg_load_only" and row["W_SM_KiB"] == "16"
+    )
+    bad["ncu_replay_mode"] = "kernel"
+    rows = audit_data(
+        config,
+        tensor_raw=data[0],
+        l2_raw=data[1],
+        calibration=data[2],
+        ncu_acceptance=bad_replay,
         matched_detail=data[4],
         evidence=evidence,
     )
@@ -1182,10 +1540,34 @@ def main() -> int:
     parser.add_argument("--min-delta-j", type=float, default=10.0)
     parser.add_argument("--tensor-min-pj-per-flop", type=float, default=0.01)
     parser.add_argument("--tensor-max-pj-per-flop", type=float, default=5.0)
+    parser.add_argument(
+        "--tensor-hmma-ratio-relative-spread-max", type=float, default=0.10
+    )
+    parser.add_argument(
+        "--tensor-coefficient-relative-spread-max", type=float, default=0.75
+    )
     parser.add_argument("--max-pair-start-distance-ms", type=float, default=30000.0)
+    parser.add_argument(
+        "--ncu-replay-mode", choices=("application", "kernel"), default="application"
+    )
+    parser.add_argument(
+        "--ncu-cache-control", choices=("none", "all"), default="none"
+    )
+    parser.add_argument(
+        "--l2-residency-policy",
+        choices=("normal", "persisting"),
+        default="persisting",
+    )
+    parser.add_argument("--global-warmup-passes", type=int, default=4)
     parser.add_argument("--l1-path-hit-max-pct", type=float, default=1.0)
     parser.add_argument("--l1-hit-bytes-ratio-max", type=float, default=0.01)
     parser.add_argument("--l2-path-hit-min-pct", type=float, default=95.0)
+    parser.add_argument(
+        "--l2-native-derived-hit-delta-max-pct", type=float, default=2.0
+    )
+    parser.add_argument(
+        "--l2-sector-conservation-tolerance", type=float, default=0.02
+    )
     parser.add_argument("--dram-to-l2-bytes-max", type=float, default=0.02)
     parser.add_argument("--address-control-dram-ratio-max", type=float, default=0.001)
     parser.add_argument("--plateau-relative-spread-max", type=float, default=0.35)
@@ -1220,6 +1602,12 @@ def main() -> int:
         parser.error("--tensor-treatment-target-seconds must be positive")
     if args.tensor_control_calibration_min_seconds <= 0.0:
         parser.error("--tensor-control-calibration-min-seconds must be positive")
+    if args.global_warmup_passes <= 0:
+        parser.error("--global-warmup-passes must be positive")
+    if args.l2_native_derived_hit_delta_max_pct < 0.0:
+        parser.error("--l2-native-derived-hit-delta-max-pct cannot be negative")
+    if not 0.0 <= args.l2_sector_conservation_tolerance < 1.0:
+        parser.error("--l2-sector-conservation-tolerance must be in [0, 1)")
 
     config = AuditConfig(
         expected_rf=parse_ints(args.expected_rf),
@@ -1237,10 +1625,26 @@ def main() -> int:
         min_delta_j=args.min_delta_j,
         tensor_min_pj_per_flop=args.tensor_min_pj_per_flop,
         tensor_max_pj_per_flop=args.tensor_max_pj_per_flop,
+        tensor_hmma_ratio_relative_spread_max=(
+            args.tensor_hmma_ratio_relative_spread_max
+        ),
+        tensor_coefficient_relative_spread_max=(
+            args.tensor_coefficient_relative_spread_max
+        ),
         max_pair_start_distance_ms=args.max_pair_start_distance_ms,
+        ncu_replay_mode=args.ncu_replay_mode,
+        ncu_cache_control=args.ncu_cache_control,
+        l2_residency_policy=args.l2_residency_policy,
+        global_warmup_passes=args.global_warmup_passes,
         l1_path_hit_max_pct=args.l1_path_hit_max_pct,
         l1_hit_bytes_ratio_max=args.l1_hit_bytes_ratio_max,
         l2_path_hit_min_pct=args.l2_path_hit_min_pct,
+        l2_native_derived_hit_delta_max_pct=(
+            args.l2_native_derived_hit_delta_max_pct
+        ),
+        l2_sector_conservation_tolerance=(
+            args.l2_sector_conservation_tolerance
+        ),
         dram_to_l2_bytes_max=args.dram_to_l2_bytes_max,
         address_control_dram_ratio_max=args.address_control_dram_ratio_max,
         plateau_relative_spread_max=args.plateau_relative_spread_max,

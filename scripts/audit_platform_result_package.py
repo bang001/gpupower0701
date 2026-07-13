@@ -719,7 +719,7 @@ def audit_raw_energy(
             mode = row.get("mode", "")
             notes = row.get("notes", "")
             if mode in {"reg_mma", "reg_operand_only"} and (
-                "tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1"
+                "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2"
                 not in notes
             ):
                 problems.append(f"{prefix}:missing_tensor_kernel_revision")

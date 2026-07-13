@@ -1,0 +1,11 @@
+label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,ncu_replay_mode,ncu_cache_control,global_warmup_passes,l2_residency_policy,report
+reg_operand_only_W2048_B16_RF1,reg_operand_only_kernel,reg_operand_only,2048,16,82,100000,1,1,1,application,none,1,normal,/tmp/rtx3090_tensor_fixedrf_v2_ncu_20260713/reg_operand_only_W2048_B16_RF1
+reg_mma_W2048_B16_RF1,reg_mma_kernel,reg_mma,2048,16,82,100000,1,1,1,application,none,1,normal,/tmp/rtx3090_tensor_fixedrf_v2_ncu_20260713/reg_mma_W2048_B16_RF1
+reg_operand_only_W2048_B16_RF2,reg_operand_only_kernel,reg_operand_only,2048,16,82,100000,2,1,1,application,none,1,normal,/tmp/rtx3090_tensor_fixedrf_v2_ncu_20260713/reg_operand_only_W2048_B16_RF2
+reg_mma_W2048_B16_RF2,reg_mma_kernel,reg_mma,2048,16,82,100000,2,1,1,application,none,1,normal,/tmp/rtx3090_tensor_fixedrf_v2_ncu_20260713/reg_mma_W2048_B16_RF2
+reg_operand_only_W2048_B16_RF4,reg_operand_only_kernel,reg_operand_only,2048,16,82,100000,4,1,1,application,none,1,normal,/tmp/rtx3090_tensor_fixedrf_v2_ncu_20260713/reg_operand_only_W2048_B16_RF4
+reg_mma_W2048_B16_RF4,reg_mma_kernel,reg_mma,2048,16,82,100000,4,1,1,application,none,1,normal,/tmp/rtx3090_tensor_fixedrf_v2_ncu_20260713/reg_mma_W2048_B16_RF4
+reg_operand_only_W2048_B16_RF8,reg_operand_only_kernel,reg_operand_only,2048,16,82,100000,8,1,1,application,none,1,normal,/tmp/rtx3090_tensor_fixedrf_v2_ncu_20260713/reg_operand_only_W2048_B16_RF8
+reg_mma_W2048_B16_RF8,reg_mma_kernel,reg_mma,2048,16,82,100000,8,1,1,application,none,1,normal,/tmp/rtx3090_tensor_fixedrf_v2_ncu_20260713/reg_mma_W2048_B16_RF8
+reg_operand_only_W2048_B16_RF16,reg_operand_only_kernel,reg_operand_only,2048,16,82,100000,16,1,1,application,none,1,normal,/tmp/rtx3090_tensor_fixedrf_v2_ncu_20260713/reg_operand_only_W2048_B16_RF16
+reg_mma_W2048_B16_RF16,reg_mma_kernel,reg_mma,2048,16,82,100000,16,1,1,application,none,1,normal,/tmp/rtx3090_tensor_fixedrf_v2_ncu_20260713/reg_mma_W2048_B16_RF16

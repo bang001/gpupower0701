@@ -1,7 +1,7 @@
 area,check,status,expected,actual,evidence,next_action
 method,power_matrix_exists,pass,docs/platforms/power_measurement_api_matrix_ko.md,exists,docs/platforms/power_measurement_api_matrix_ko.md,restore or create the power API matrix before interpreting energy rows
 method,power_matrix_terms,pass,core power API/scope terms present,ok,docs/platforms/power_measurement_api_matrix_ko.md,update the matrix so final/provisional/reject semantics are explicit
-platforms,static_readiness_audit,pass,0 fail rows,"rows=84, failures=0",results/summary/platform_power_readiness_audit_20260708.csv,fix profile/power/doc mismatches before new platform runs
+platforms,static_readiness_audit,pass,0 fail rows,"rows=85, failures=0",results/summary/platform_power_readiness_audit_20260708.csv,fix profile/power/doc mismatches before new platform runs
 tooling,nvidia_smi_available,pass,nvidia-smi available,/usr/lib/wsl/lib/nvidia-smi,/usr/lib/wsl/lib/nvidia-smi,"without nvidia-smi, preflight power scope metadata cannot be collected"
 tooling,nvidia_smi_lists_gpu,pass,nvidia-smi -L returns at least one GPU,GPU 0: NVIDIA GeForce RTX 3090 (UUID: GPU-6176a2fd-d534-e78c-edd2-78b8db8109b0),nvidia-smi -L,run on a node with the target GPU before claiming platform results
 tooling,ncu_available_for_fresh_replay,pass,ncu executable available for fresh replay,/tmp/ncu2025/target/linux-desktop-glibc_2_11_3-x64/ncu,/tmp/ncu2025/target/linux-desktop-glibc_2_11_3-x64/ncu,install or expose Nsight Compute CLI to run fresh NCU sidecars

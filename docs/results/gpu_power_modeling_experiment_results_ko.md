@@ -4,16 +4,34 @@
 
 ## 현재 결론
 
-현재 저장소에는 **현행 protocol을 모두 통과한 RTX 3090 component coefficient가
-없다**. 2026-07-08 결과는 유효한 실험 이력이지만 Global L1/L2 energy pair가
-`clocked_empty` control을 사용했고, `global_addr_only`의 동일 좌표 NCU acceptance와
-현행 path-specific counter schema가 없다.
+현재 저장소에는 **Tensor, Shared, Global L1, L2를 모두 현행 protocol로
+재실행한 완전한 RTX 3090 component table은 없다**. 다만 2026-07-13에 Tensor
+path는 fixed-RF v2 kernel로 재실행해 power API 70/70, NCU 10/10 및 33개
+matched pair gate를 통과했다. Shared/Global L1/L2는 아직 새 전체 package를
+실행해야 한다.
+
+### 현행 Tensor fixed-RF v2 결과
+
+| Component/path | 현행 값 | 단위 | pair | 근거 | 상태 |
+|---|---:|---|---|---|---|
+| Tensor MMA incremental | **2.252501** | pJ/FLOP | `reg_mma - reg_operand_only`, matched ITER | RF1/2/4/8/16, 33 valid pair, NCU treatment/control 10/10 accepted | current standalone Tensor evidence |
+
+RF별 median은 RF1 `1.9754`, RF2 `2.3211`, RF4 `2.2733`, RF8 `2.2525`, RF16
+`2.2458 pJ/FLOP`이다. 모든 treatment의 `HMMA/logical MMA=2`, 모든 control의
+HMMA=0, local read/write=0이다. 이 값은 board-level effective MMA incremental
+coefficient이며 pure Tensor 회로 에너지가 아니다. 상세 조건과 제외 이유는
+[`results/summary/rtx3090_tensor_fixedrf_v2_report_20260713_ko.md`](../../results/summary/rtx3090_tensor_fixedrf_v2_report_20260713_ko.md)에
+정리했다.
+
+2026-07-08 Global L1/L2 energy pair는 `clocked_empty` control을 사용했고,
+`global_addr_only`의 동일 좌표 NCU acceptance와 현행 path-specific counter schema가
+없다.
 
 따라서 아래 과거 수치는 현행 final 값으로 인용하지 않는다.
 
 | Component/path | 과거 보고값 | 단위 | 과거 pair | 현행 상태 |
 |---|---:|---|---|---|
-| Tensor MMA incremental | 0.129216 | pJ/FLOP | `reg_mma - reg_operand_only` | historical; 현행 pair-lock/control gate 재실행 필요 |
+| Tensor MMA incremental | 0.129216 | pJ/FLOP | `reg_mma - reg_operand_only` | superseded historical; v2와 커널/프로토콜이 다름 |
 | Shared scalar path | 0.170590 | pJ/bit | `shared_scalar_load_only - clocked_empty` | historical; 전체 package 재실행 필요 |
 | Global L1 hit path | 0.173483 | pJ/bit | `global_l1_load_only - clocked_empty` | provisional; address control 누락 |
 | L2 CG hit path | 1.131073 | pJ/bit | `l2_cg_load_only - clocked_empty` | provisional; address control 누락 |

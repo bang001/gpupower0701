@@ -59,7 +59,7 @@ elapsed-aware control-power 차분을 사용한다. 모든 memory final row는 N
 
 | Platform | command readiness | measured current-protocol package | 상태 |
 |---|---|---|---|
-| RTX 3090 | ready | 없음 | 2026-07-08 결과가 current control/schema gate 실패, 재실행 필요 |
+| RTX 3090 | ready | Tensor fixed-RF v2 standalone | Tensor 33 valid pair/NCU 10/10 통과; Shared/Global-L1/L2 전체 package는 재실행 필요 |
 | V100 32GB | ready | 없음 | target node 실행/반입 필요 |
 | A100 | ready | 없음 | target node 실행/반입 필요 |
 | H100 | ready | 없음 | target node 실행/반입 필요 |
@@ -74,6 +74,12 @@ failures다. Global L1/L2의 `clocked_empty` control과 과거 NCU schema가 원
 | Global L1 | 0.173483 | pJ/bit | provisional; address control 없음 |
 | L2 CG | 1.131073 | pJ/bit | provisional; address control 없음 |
 | DRAM cumulative path | **26.709-28.409** | pJ/bit | provisional reference-aligned band; matched-ITER DRAM raw pair 없음 |
+
+현행 standalone Tensor는 fixed-RF v2에서 median **2.252501 pJ/FLOP**, 범위
+**1.945385-2.369221 pJ/FLOP**이다. 모든 RF treatment의 `HMMA/logical MMA=2`,
+control HMMA=0, local read/write=0이다. 이 값은 pure Tensor 회로 에너지가 아니라
+board-level effective MMA incremental coefficient이다. 상세는
+`results/summary/rtx3090_tensor_fixedrf_v2_report_20260713_ko.md`를 따른다.
 
 DRAM 범위는 strict coefficient가 아니다. 목표 pair는
 `dram_cg_load_only - global_addr_only`이며, 동일 ITER의 energy 차분과 exact NCU

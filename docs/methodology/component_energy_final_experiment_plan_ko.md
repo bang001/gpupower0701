@@ -1,6 +1,6 @@
 # Component Energy 최종 실험 계획
 
-작성일: 2026-07-05, updated 2026-07-11
+작성일: 2026-07-05, updated 2026-07-13
 
 ## 1. 실험 목표
 
@@ -43,7 +43,7 @@
 
 | 기존 항목 | 판정 | 이유 | 새 처리 |
 |---|---|---|---|
-| Tensor `0.146-0.170 pJ/FLOP` broad sweep | 후보값 | HMMA와 spill-free는 확인됐지만 no-MMA control 차분이며 reuse별 산포가 컸다. | RF=8/16 targeted 20초 반복 결과 0.107 pJ/FLOP를 blended candidate로 두고, RF=8 duration-scaling 0.143 pJ/FLOP와 RF=16 duration-scaling 0.077 pJ/FLOP로 RF-dependent range를 분리 보고한다. |
+| Tensor `0.077-0.170 pJ/FLOP` 과거 sweep | superseded historical | v1 dynamic loop가 GA102 RF2에서 `HMMA/logical MMA=3`, 나머지 primary RF에서 2로 비례성을 깨뜨렸다. control/kernel/pair protocol도 현행 v2와 다르다. | fixed-RF v2로 RF1/2/4/8/16을 재실행. RTX 3090은 NCU 10/10 accepted, 33 valid pair, median 2.2525 pJ/FLOP을 standalone current Tensor 근거로 기록. A100/V100/H100은 각 노드에서 독립 재측정 |
 | Global L1 `0.449 pJ/bit` | 후보값 미만 | L1 hit path는 맞지만 energy row 6개 중 2개가 음수였다. | 음수 row가 사라지는지 seconds/repeats를 늘려 재실험한다. |
 | L2 `0.798 pJ/bit` | 후보값 | CG L2 path는 맞지만 long scoreboard가 크고 1개 음수 row가 있었다. | L2는 stall을 보고하고, pJ/bit를 L2 SRAM 단독값으로 부르지 않는다. |
 | DRAM legacy `clocked_empty` 값 | 폐기된 current 후보 | 과거 control과 현행 matched-ITER address control이 다르며 cumulative path/device energy 의미도 섞였다. | 최신 보고는 26.709-28.409 pJ/bit provisional cumulative-path band로 제한하고 새 pair-lock 실험으로 검증한다. |
@@ -177,25 +177,22 @@ energy sweep과 같은 `reuse_factor`/`load_repeat` list를 NCU sidecar에서도
 또는 fixed-ITER 보조 실험을 별도로 수행한다. RTX 3090 L1에서는 `load_repeat=4`,
 10/20/30초 duration-scaling check가 기존 0.15 pJ/bit 결과와 정합했다.
 DRAM은 이 예외에서 제외하며, treatment와 address control에 동일 ITER를 강제한다.
-아래 RTX 3090 Tensor duration-scaling 수치는 새 pair-lock 이전의 역사적 민감도 분석이다.
-현재 finalplan에서는 그대로 재사용하지 않고 동일 ITER pair-lock으로 다시 측정한다.
-Tensor도 broad `reuse_factor` sweep만으로 단일 상수를 확정하지 않는다.
-RTX 3090에서는 RF=8/16, 20초, 6회 targeted follow-up이 12/12 valid와
-0.107 pJ/FLOP median을 보여 lower-side Tensor reporting candidate로 둔다. 같은
-RF=8/16에서 `ITER=8000000`을 고정한 fixed-ITER 보조실험은 10/10 valid와
-0.146 pJ/FLOP median을 보였다. 추가 RF=8 duration-scaling은 15/15 valid,
-0.143 pJ/FLOP median, 0.144-0.156 pJ/FLOP slope를 보였다. RF=16
-duration-scaling은 15/15 valid, 0.077 pJ/FLOP median, 0.053-0.071 pJ/FLOP slope를
-보였다. 따라서 Tensor는 단일 회로 상수가 아니라 RF-dependent effective coefficient로
-표기한다. 현재 RTX 3090 조건에서는 RF16 lower 약 0.06-0.09 pJ/FLOP, RF8 upper 약
-0.14-0.15 pJ/FLOP다.
+과거 RTX 3090 Tensor duration-scaling `0.077-0.170 pJ/FLOP`는 새
+pair-lock/fixed-RF v2 이전의 역사적 민감도 분석이다. 현행 finalplan에서는 그대로
+재사용하지 않는다. 2026-07-13 RTX 3090 fixed-RF v2는 RF1/2/4/8/16, B16,
+treatment 20초/control 2초 floor, 7 repeats로 실행했다. Power API 70/70, NCU
+10/10을 통과했고 pair/power-state gate 후 33/35 valid, median 2.2525 pJ/FLOP,
+RF별 median 1.9754-2.3211 pJ/FLOP이다. 이는 더 긴 treatment active time의
+scheduler/clock/register lifetime까지 포함한 board-level effective incremental이며 pure
+Tensor circuit energy가 아니다. 다른 GPU에는 이 숫자를 이식하지 않고 동일 v2
+프로토콜로 재측정한다.
 
 성공 기준:
 
 | 기준 | 통과 조건 |
 |---|---|
 | execution | 모든 row `smid_histogram_ok=true`, elapsed >= 4 s |
-| Tensor | reuse sweep에서 음수 coefficient 0 또는 원인 설명 가능 |
+| Tensor | 동일 ITER, control HMMA=0, treatment `HMMA/logical MMA` RF spread<=10%, spill/local=0, RF별 최소 5 valid pair, pair timestamp gate, `delta_E>=10 J`, coefficient>0 |
 | Shared scalar | 모든 load_repeat에서 양수, NCU shared path accepted |
 | Global L1 | 음수 row가 남으면 final에서 제외 또는 control 재설계 |
 | L2 | L2 hit >= 95%, DRAM/L2 <= 2%, long scoreboard를 결과 표에 포함 |

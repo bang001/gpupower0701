@@ -494,7 +494,7 @@ def run_self_test() -> None:
 
     marker_rules = {
         "reg_operand_only": (
-            "tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1"
+            "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2"
         ),
         "l2_cg_load_only": "global_warmup_policy=ld_global_cg",
     }
@@ -503,7 +503,7 @@ def run_self_test() -> None:
             mode="reg_operand_only",
             notes=(
                 "tensor_pair_kernel_revision="
-                "matched_add_scalar_epilogue_v1;other=value"
+                "matched_add_scalar_epilogue_fixed_rf_v2;other=value"
             ),
         ),
         input_file="selftest.csv",

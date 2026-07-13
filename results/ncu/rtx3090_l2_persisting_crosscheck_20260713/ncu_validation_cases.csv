@@ -1,0 +1,3 @@
+label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,ncu_replay_mode,ncu_cache_control,global_warmup_passes,l2_residency_policy,report
+global_addr_only_l2_W16_B16_LR4,global_scalar_addr_only_kernel,global_addr_only,16,16,82,100000,1,4,1,application,none,4,persisting,/tmp/rtx3090_l2_persisting_crosscheck_20260713/global_addr_only_l2_W16_B16_LR4
+l2_cg_load_only_W16_B16_LR4,global_cg_load_only_kernel,l2_cg_load_only,16,16,82,100000,1,4,1,application,none,4,persisting,/tmp/rtx3090_l2_persisting_crosscheck_20260713/l2_cg_load_only_W16_B16_LR4

@@ -175,6 +175,7 @@ __global__ void clocked_empty_kernel(std::uint64_t iters,
   }
 }
 
+template <int FixedReuseFactor>
 __global__ void reg_mma_kernel(std::uint64_t iters, float* output,
                                std::uint64_t reuse_factor,
                                int* smid_by_block, int* rank_by_block,
@@ -198,9 +199,17 @@ __global__ void reg_mma_kernel(std::uint64_t iters, float* output,
                   static_cast<unsigned>(blockIdx.x * blockDim.x + threadIdx.x);
 
   for (std::uint64_t i = 0; i < iters; ++i) {
-    for (std::uint64_t r = 0; r < reuse_factor; ++r) {
-      do_mma(a, b, c);
-      sink = register_control_step(sink, a_value, b_value, c_value);
+    if constexpr (FixedReuseFactor > 0) {
+#pragma unroll 1
+      for (int r = 0; r < FixedReuseFactor; ++r) {
+        do_mma(a, b, c);
+        sink = register_control_step(sink, a_value, b_value, c_value);
+      }
+    } else {
+      for (std::uint64_t r = 0; r < reuse_factor; ++r) {
+        do_mma(a, b, c);
+        sink = register_control_step(sink, a_value, b_value, c_value);
+      }
     }
   }
 
@@ -239,6 +248,7 @@ __global__ void reg_fragment_only_kernel(std::uint64_t iters, float* output,
   }
 }
 
+template <int FixedReuseFactor>
 __global__ void reg_operand_only_kernel(std::uint64_t iters, float* output,
                                         std::uint64_t reuse_factor,
                                         int* smid_by_block,
@@ -263,8 +273,15 @@ __global__ void reg_operand_only_kernel(std::uint64_t iters, float* output,
                   static_cast<unsigned>(blockIdx.x * blockDim.x + threadIdx.x);
 
   for (std::uint64_t i = 0; i < iters; ++i) {
-    for (std::uint64_t r = 0; r < reuse_factor; ++r) {
-      sink = register_control_step(sink, a_value, b_value, c_value);
+    if constexpr (FixedReuseFactor > 0) {
+#pragma unroll 1
+      for (int r = 0; r < FixedReuseFactor; ++r) {
+        sink = register_control_step(sink, a_value, b_value, c_value);
+      }
+    } else {
+      for (std::uint64_t r = 0; r < reuse_factor; ++r) {
+        sink = register_control_step(sink, a_value, b_value, c_value);
+      }
     }
   }
 
@@ -798,9 +815,38 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
           cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
       break;
     case Mode::reg_mma:
-      reg_mma_kernel<<<grid_dim, block, 0, cfg.stream>>>(
-          cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
-          cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+      switch (cfg.reuse_factor) {
+        case 1:
+          reg_mma_kernel<0><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 2:
+          reg_mma_kernel<2><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 4:
+          reg_mma_kernel<4><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 8:
+          reg_mma_kernel<8><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 16:
+          reg_mma_kernel<16><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        default:
+          reg_mma_kernel<0><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+      }
       break;
     case Mode::reg_fragment_only:
       reg_fragment_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
@@ -808,9 +854,38 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
           cfg.sm_counts, cfg.sm_count_capacity);
       break;
     case Mode::reg_operand_only:
-      reg_operand_only_kernel<<<grid_dim, block, 0, cfg.stream>>>(
-          cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
-          cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+      switch (cfg.reuse_factor) {
+        case 1:
+          reg_operand_only_kernel<0><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 2:
+          reg_operand_only_kernel<2><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 4:
+          reg_operand_only_kernel<4><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 8:
+          reg_operand_only_kernel<8><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        case 16:
+          reg_operand_only_kernel<16><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+        default:
+          reg_operand_only_kernel<0><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
+              cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+      }
       break;
     case Mode::reg_pressure:
       switch (cfg.reg_payload_bytes_per_block) {

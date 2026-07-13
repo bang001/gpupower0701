@@ -505,6 +505,7 @@ def make_detail_rows(
     tensor_control_min_elapsed_s: float,
     dram_control_min_elapsed_s: float,
     max_elapsed_ratio: float,
+    max_pair_start_distance_ms: float,
     min_delta_j: float,
     min_delta_fraction: float,
     require_ncu_denominator: bool,
@@ -662,8 +663,20 @@ def make_detail_rows(
                     if min(numerator_elapsed, control_elapsed) > 0.0
                     else float("inf")
                 )
+                pair_start_distance_ms = abs(
+                    run_order(numerator) - run_order(control)
+                )
 
                 reasons: list[str] = []
+                if (
+                    pairing == "nearest-control"
+                    and max_pair_start_distance_ms > 0.0
+                    and pair_start_distance_ms > max_pair_start_distance_ms
+                ):
+                    reasons.append(
+                        "pair_start_distance_ms>"
+                        f"{max_pair_start_distance_ms:g}"
+                    )
                 if (
                     pair_energy_basis == "duration_scaled_control_power"
                     and elapsed_ratio > max_elapsed_ratio
@@ -759,9 +772,7 @@ def make_detail_rows(
                         "run_order_distance": abs(
                             run_order(numerator) - run_order(control)
                         ),
-                        "pair_start_distance_ms": abs(
-                            run_order(numerator) - run_order(control)
-                        ),
+                        "pair_start_distance_ms": pair_start_distance_ms,
                         "numerator_elapsed_s": numerator_elapsed,
                         "control_elapsed_s": control_elapsed,
                         "elapsed_ratio": elapsed_ratio,
@@ -1033,6 +1044,10 @@ def write_markdown(
             f"{args.require_control_ncu_acceptance} |\n"
         )
         f.write(f"| max elapsed ratio | {args.max_elapsed_ratio:g} |\n")
+        f.write(
+            "| max pair start distance (ms) | "
+            f"{args.max_pair_start_distance_ms:g} |\n"
+        )
         f.write(f"| pairing | `{args.pairing}` |\n")
         f.write(f"| Tensor pair policy | `{args.tensor_pair_policy}` |\n")
         f.write(f"| min delta_E (J) | {args.min_delta_j:g} |\n")
@@ -1204,6 +1219,7 @@ def run_self_test() -> None:
         tensor_control_min_elapsed_s=0.05,
         dram_control_min_elapsed_s=0.05,
         max_elapsed_ratio=3.0,
+        max_pair_start_distance_ms=30000.0,
         min_delta_j=0.0,
         min_delta_fraction=0.0,
         require_ncu_denominator=False,
@@ -1221,6 +1237,16 @@ def run_self_test() -> None:
     assert matched[0]["pair_energy_basis"] == "matched_iters_net_energy"
     assert abs(float(matched[0]["delta_E_J"]) - 20.0) < 1.0e-9
     assert matched[0]["valid_component_estimate"]
+
+    distant_control = {
+        **control,
+        "run_id": "reg_operand_only_100000_r0",
+    }
+    distant = make_detail_rows(
+        [treatment, distant_control], tensor_pair_policy="matched-iters", **kwargs
+    )
+    assert not distant[0]["valid_component_estimate"]
+    assert "pair_start_distance_ms>30000" in distant[0]["diagnostic"]
 
     duration_scaled = make_detail_rows(
         [treatment, control], tensor_pair_policy="duration-scaled", **kwargs
@@ -1398,6 +1424,17 @@ def main() -> int:
         ),
     )
     parser.add_argument("--max-elapsed-ratio", type=float, default=1.35)
+    parser.add_argument(
+        "--max-pair-start-distance-ms",
+        type=float,
+        default=30000.0,
+        help=(
+            "Reject nearest-control pairs whose legacy run_id timestamps are "
+            "farther apart than this limit. run_id is emitted after measurement, "
+            "so the limit must include idle-baseline and kernel time. Set to 0 "
+            "to disable the gate."
+        ),
+    )
     parser.add_argument("--min-delta-j", type=float, default=0.0)
     parser.add_argument("--min-delta-fraction", type=float, default=0.0)
     parser.add_argument(
@@ -1461,6 +1498,7 @@ def main() -> int:
         tensor_control_min_elapsed_s=args.tensor_control_min_elapsed_s,
         dram_control_min_elapsed_s=args.dram_control_min_elapsed_s,
         max_elapsed_ratio=args.max_elapsed_ratio,
+        max_pair_start_distance_ms=args.max_pair_start_distance_ms,
         min_delta_j=args.min_delta_j,
         min_delta_fraction=args.min_delta_fraction,
         require_ncu_denominator=args.require_ncu_denominator,

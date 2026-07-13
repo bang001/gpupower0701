@@ -331,6 +331,12 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     l2_path_hit_rate = percent_from_hit_miss(
         l2_read_hit_sectors, l2_read_miss_sectors
     )
+    l2_native_read_hit_rate = metrics.first_names(
+        [
+            "lts__t_sector_op_read_hit_rate.pct",
+            "lts__t_sectors_op_read_hit_rate.pct",
+        ]
+    )
     l2_aggregate_hit_rate = metrics.first_names(
         [
             "lts__t_sector_hit_rate.pct",
@@ -574,6 +580,23 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     l2_read_bytes = (
         l2_read_sectors * SECTOR_BYTES if l2_read_sectors is not None else None
     )
+    l2_read_miss_bytes = (
+        l2_read_miss_sectors * SECTOR_BYTES
+        if l2_read_miss_sectors is not None
+        else None
+    )
+    l2_read_sector_conservation_ratio = None
+    if l2_read_sectors is not None and l2_read_sectors > 0.0:
+        hit_miss_sectors = sum_non_none(
+            l2_read_hit_sectors, l2_read_miss_sectors
+        )
+        if hit_miss_sectors is not None:
+            l2_read_sector_conservation_ratio = hit_miss_sectors / l2_read_sectors
+    l2_native_vs_derived_hit_delta_pct = None
+    if l2_native_read_hit_rate is not None and l2_path_hit_rate is not None:
+        l2_native_vs_derived_hit_delta_pct = abs(
+            l2_native_read_hit_rate - l2_path_hit_rate
+        )
 
     dram_read_sectors = metrics.sum_names(["dram__sectors_read.sum"])
     dram_write_sectors = metrics.sum_names(["dram__sectors_write.sum"])
@@ -589,8 +612,27 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         ),
         dram_sectors * SECTOR_BYTES if dram_sectors is not None else None,
     )
+    dram_read_bytes = first_non_none(
+        metrics.sum_names(["dram__bytes_read.sum"]),
+        dram_read_sectors * SECTOR_BYTES if dram_read_sectors is not None else None,
+    )
+    dram_read_to_l2_miss_bytes_ratio = None
+    if l2_read_miss_bytes is not None and l2_read_miss_bytes > 0.0:
+        if dram_read_bytes is not None:
+            dram_read_to_l2_miss_bytes_ratio = dram_read_bytes / l2_read_miss_bytes
 
     tensor_hmma_inst = metrics.sum_names(["sm__inst_executed_pipe_tensor_op_hmma.sum"])
+    expected_logical_mma = None
+    tensor_hmma_per_logical_mma = None
+    if manifest.get("mode", "") == "reg_mma":
+        geometry = [
+            parse_float(manifest.get(name, ""))
+            for name in ("active_SM", "blocks_per_SM", "ITER", "reuse_factor")
+        ]
+        if all(value is not None and value > 0.0 for value in geometry):
+            expected_logical_mma = math.prod(value for value in geometry if value is not None)
+            if tensor_hmma_inst is not None and expected_logical_mma > 0.0:
+                tensor_hmma_per_logical_mma = tensor_hmma_inst / expected_logical_mma
     local_read_bytes = metrics.sum_names(
         ["l1tex__t_bytes_pipe_lsu_mem_local_op_ld.sum"]
     )
@@ -648,6 +690,9 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     shared_mem_per_block_dynamic = metrics.first_names(
         ["launch__shared_mem_per_block_dynamic"]
     )
+    launch_persisting_l2_cache_size_bytes = metrics.first_names(
+        ["launch__persisting_l2_cache_size"]
+    )
 
     missing = []
     if l1_hit_rate is None:
@@ -697,14 +742,29 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         optional_missing.append("achieved_occupancy_pct")
     if registers_per_thread is None:
         optional_missing.append("registers_per_thread")
+    if l2_native_read_hit_rate is None:
+        optional_missing.append("l2_native_read_hit_rate_pct")
+    if launch_persisting_l2_cache_size_bytes is None:
+        optional_missing.append("launch_persisting_l2_cache_size_bytes")
 
     validation_notes = []
     for name, value in [
         ("l1_hit_rate_pct", l1_hit_rate),
         ("l2_hit_rate_pct", l2_hit_rate),
+        ("l2_native_read_hit_rate_pct", l2_native_read_hit_rate),
     ]:
         if value is not None and (value < -0.01 or value > 100.01):
             validation_notes.append(f"{name}_out_of_range")
+    if (
+        l2_native_vs_derived_hit_delta_pct is not None
+        and l2_native_vs_derived_hit_delta_pct > 2.0
+    ):
+        validation_notes.append("l2_native_derived_hit_rate_disagree")
+    if (
+        l2_read_sector_conservation_ratio is not None
+        and not 0.98 <= l2_read_sector_conservation_ratio <= 1.02
+    ):
+        validation_notes.append("l2_read_sector_conservation_failed")
 
     status = "ok" if not missing else "partial"
     if not metrics.values:
@@ -721,6 +781,10 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "reuse_factor": manifest.get("reuse_factor", ""),
         "load_repeat": manifest.get("load_repeat", ""),
         "store_repeat": manifest.get("store_repeat", ""),
+        "ncu_replay_mode": manifest.get("ncu_replay_mode", ""),
+        "ncu_cache_control": manifest.get("ncu_cache_control", ""),
+        "global_warmup_passes": manifest.get("global_warmup_passes", ""),
+        "l2_residency_policy": manifest.get("l2_residency_policy", ""),
         "status": status,
         "shared_accesses": fmt(shared_accesses),
         "shared_bytes": fmt(shared_bytes),
@@ -735,6 +799,10 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "l1_hit_rate_source": l1_hit_rate_source,
         "l2_hit_rate_pct": fmt(l2_hit_rate),
         "l2_path_hit_rate_pct": fmt(l2_path_hit_rate),
+        "l2_native_read_hit_rate_pct": fmt(l2_native_read_hit_rate),
+        "l2_native_vs_derived_hit_delta_pct": fmt(
+            l2_native_vs_derived_hit_delta_pct
+        ),
         "l2_aggregate_hit_rate_pct": fmt(l2_aggregate_hit_rate),
         "l2_hit_rate_source": l2_hit_rate_source,
         "l1_accesses": fmt(l1_accesses),
@@ -759,8 +827,18 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "l2_read_bytes": fmt(l2_read_bytes),
         "l2_read_hit_sectors": fmt(l2_read_hit_sectors),
         "l2_read_miss_sectors": fmt(l2_read_miss_sectors),
+        "l2_read_miss_bytes": fmt(l2_read_miss_bytes),
+        "l2_read_sector_conservation_ratio": fmt(
+            l2_read_sector_conservation_ratio
+        ),
         "dram_bytes": fmt(dram_bytes),
+        "dram_read_bytes": fmt(dram_read_bytes),
+        "dram_read_to_l2_miss_bytes_ratio": fmt(
+            dram_read_to_l2_miss_bytes_ratio
+        ),
         "tensor_hmma_inst": fmt(tensor_hmma_inst),
+        "expected_logical_mma": fmt(expected_logical_mma),
+        "tensor_hmma_per_logical_mma": fmt(tensor_hmma_per_logical_mma),
         "local_read_bytes": fmt(local_read_bytes),
         "local_write_bytes": fmt(local_write_bytes),
         "spill_local_read_inst": fmt(spill_local_read_inst),
@@ -775,6 +853,9 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "registers_per_thread": fmt(registers_per_thread),
         "shared_mem_per_block_static": fmt(shared_mem_per_block_static),
         "shared_mem_per_block_dynamic": fmt(shared_mem_per_block_dynamic),
+        "launch_persisting_l2_cache_size_bytes": fmt(
+            launch_persisting_l2_cache_size_bytes
+        ),
         "missing_metrics": ";".join(missing),
         "optional_missing_metrics": ";".join(optional_missing),
         "validation_notes": ";".join(validation_notes),
@@ -846,20 +927,53 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
         )
         f.write(
             "| label | mode | L1 path hit (%) | L1 aggregate hit (%) | L1 hit source | "
-            "L1 request bytes | L1 hit bytes | L1 miss bytes | L2 read hit (%) | "
-            "L2 aggregate hit (%) | L2 hit source | L2 read hit sectors | "
-            "L2 read miss sectors | L2 read bytes |\n"
+            "L1 request bytes | L1 hit bytes | L1 miss bytes | L2 derived read hit (%) | "
+            "L2 native read hit (%) | Native-derived delta (pp) | L2 aggregate hit (%) | "
+            "L2 hit source | L2 read hit sectors | L2 read miss sectors | "
+            "L2 read sectors conservation | L2 miss bytes | DRAM read bytes | "
+            "DRAM read/L2 miss ratio | L2 read bytes |\n"
         )
-        f.write("|---|---|---:|---:|---|---:|---:|---:|---:|---:|---|---:|---:|---:|\n")
+        f.write(
+            "|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|"
+            "---:|---:|---:|---:|---:|---:|---:|\n"
+        )
         for row in rows:
             f.write(
                 f"| {row['label']} | {row['mode']} | "
                 f"{row['l1_path_hit_rate_pct']} | {row['l1_aggregate_hit_rate_pct']} | "
                 f"{row['l1_hit_rate_source']} | {row['l1_request_bytes']} | "
                 f"{row['l1_hit_bytes']} | {row['l1_miss_bytes']} | "
-                f"{row['l2_path_hit_rate_pct']} | {row['l2_aggregate_hit_rate_pct']} | "
-                f"{row['l2_hit_rate_source']} | {row['l2_read_hit_sectors']} | "
-                f"{row['l2_read_miss_sectors']} | {row['l2_read_bytes']} |\n"
+                f"{row['l2_path_hit_rate_pct']} | "
+                f"{row['l2_native_read_hit_rate_pct']} | "
+                f"{row['l2_native_vs_derived_hit_delta_pct']} | "
+                f"{row['l2_aggregate_hit_rate_pct']} | {row['l2_hit_rate_source']} | "
+                f"{row['l2_read_hit_sectors']} | {row['l2_read_miss_sectors']} | "
+                f"{row['l2_read_sector_conservation_ratio']} | "
+                f"{row['l2_read_miss_bytes']} | {row['dram_read_bytes']} | "
+                f"{row['dram_read_to_l2_miss_bytes_ratio']} | "
+                f"{row['l2_read_bytes']} |\n"
+            )
+        f.write("\n")
+        f.write("## NCU Replay And Residency Policy\n\n")
+        f.write(
+            "Application replay with cache-control none reruns the program warm-up "
+            "before each metric pass. Persisting L2 rows additionally require an "
+            "explicit CUDA access-policy window.\n\n"
+        )
+        f.write(
+            "| label | mode | replay | cache control | warm-up passes | L2 residency | "
+            "persisting L2 size (bytes) | HMMA inst | logical MMA | HMMA/logical MMA |\n"
+        )
+        f.write("|---|---|---|---|---:|---|---:|---:|---:|---:|\n")
+        for row in rows:
+            f.write(
+                f"| {row['label']} | {row['mode']} | {row['ncu_replay_mode']} | "
+                f"{row['ncu_cache_control']} | {row['global_warmup_passes']} | "
+                f"{row['l2_residency_policy']} | "
+                f"{row['launch_persisting_l2_cache_size_bytes']} | "
+                f"{row['tensor_hmma_inst']} | "
+                f"{row['expected_logical_mma']} | "
+                f"{row['tensor_hmma_per_logical_mma']} |\n"
             )
         f.write("\n")
         f.write("## Spill And Local-Memory Evidence\n\n")
@@ -935,6 +1049,10 @@ def main() -> int:
         "reuse_factor",
         "load_repeat",
         "store_repeat",
+        "ncu_replay_mode",
+        "ncu_cache_control",
+        "global_warmup_passes",
+        "l2_residency_policy",
         "status",
         "shared_accesses",
         "shared_bytes",
@@ -949,6 +1067,8 @@ def main() -> int:
         "l1_hit_rate_source",
         "l2_hit_rate_pct",
         "l2_path_hit_rate_pct",
+        "l2_native_read_hit_rate_pct",
+        "l2_native_vs_derived_hit_delta_pct",
         "l2_aggregate_hit_rate_pct",
         "l2_hit_rate_source",
         "l1_accesses",
@@ -973,8 +1093,14 @@ def main() -> int:
         "l2_read_bytes",
         "l2_read_hit_sectors",
         "l2_read_miss_sectors",
+        "l2_read_miss_bytes",
+        "l2_read_sector_conservation_ratio",
         "dram_bytes",
+        "dram_read_bytes",
+        "dram_read_to_l2_miss_bytes_ratio",
         "tensor_hmma_inst",
+        "expected_logical_mma",
+        "tensor_hmma_per_logical_mma",
         "local_read_bytes",
         "local_write_bytes",
         "spill_local_read_inst",
@@ -989,6 +1115,7 @@ def main() -> int:
         "registers_per_thread",
         "shared_mem_per_block_static",
         "shared_mem_per_block_dynamic",
+        "launch_persisting_l2_cache_size_bytes",
         "missing_metrics",
         "optional_missing_metrics",
         "validation_notes",
@@ -997,7 +1124,7 @@ def main() -> int:
     out_csv = Path(args.out_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     with out_csv.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 

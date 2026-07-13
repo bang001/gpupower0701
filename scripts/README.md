@@ -14,12 +14,12 @@
 | power API audit | `audit_power_api_measurements.py` | raw energy CSV가 power measurement matrix 기준 final/provisional/reject인지 판정하고 새 finalplan에서는 explicit `measurement_scope`를 요구하며 `--self-test`로 A100 semantics, fallback numerator, H100 module scope 혼입 회귀를 검증 |
 | power-state audit | `audit_power_state_stability.py` | raw row의 평균 전력/endpoint power outlier를 찾아 측정 품질 문제와 weak-signal 문제를 분리 |
 | NCU sidecar | `run_ncu_validation.sh` | chip별 metric availability를 확인한 뒤 primary finalplan mode의 hit/access/byte/stall/spill/occupancy/launch-resource counter 수집. `NCU_COMPONENTS=tensor,l2`처럼 targeted subset 선택 가능 |
-| NCU summary | `summarize_ncu_cache_metrics.py` | NCU raw export를 cache/path와 achieved occupancy/register/shared-block summary로 정리 |
+| NCU summary | `summarize_ncu_cache_metrics.py` | NCU raw export를 cache/path, native-vs-derived L2 hit, sector conservation, DRAM read traffic, achieved occupancy/register/shared-block summary로 정리 |
 | path acceptance | `analyze_ncu_path_acceptance.py` | accepted/provisional/rejected path 판정 |
 | matched-control | `analyze_matched_control_energy.py` | NCU byte denominator 기반 pJ/FLOP, pJ/byte, pJ/bit 계산 |
 | component reliability | `audit_component_reliability.py` | power/NCU/matched-control 결과를 결합해 component별 최종 verdict 생성 |
 | instability audit | `audit_matched_control_instability.py` | invalid/weak-signal matched-control row 원인과 follow-up 실험 조건 요약 |
-| A100 Tensor/L2 remediation audit | `audit_a100_tensor_l2_remediation.py` | RF별 dual-calibration max ITER, 실제 control duration, 동일 ITER/HMMA/spill/양수 delta와 W별 path-specific L1/L2 hit, exact NCU denominator, 인접-W pJ/bit plateau를 검증 |
+| A100 Tensor/L2 remediation audit | `audit_a100_tensor_l2_remediation.py` | RF별 dual-calibration max ITER, 실제 control duration, 동일 ITER/HMMA/spill/양수 delta와 W별 native/derived L2 hit 및 sector conservation, exact NCU denominator, 인접-W pJ/bit plateau를 검증 |
 | strict summary build | `build_strict_component_summary.py` | accepted reliability, matched-control, NCU acceptance artifact에서 보고용 strict component coefficient summary 생성. 여러 NCU summary artifact가 입력되면 component별 strict detail 좌표를 덮는 artifact만 row에 연결하고, path-relevant NCU hit/access/byte/stall evidence를 summary row에 직접 노출하며 `--self-test`로 Tensor B4/B16 artifact 선택 회귀를 검증 |
 | strict summary audit | `audit_strict_component_summary.py` | strict component summary가 reliability artifact, matched-control detail row, power API scope, NCU denominator, 계층 순서, broad plausibility range, NCU counter schema, coordinate alignment, `ncu_evidence_summary_fields`에 일치하는지 검증하고, `--self-test`로 strict detail 좌표 mismatch를 잡는지 검증 |
 | platform package audit | `audit_platform_result_package.py` | 외부 노드에서 복사해 온 단일 profile/tag 결과 패키지의 raw profile metadata, active SM, power, NCU, reliability, strict summary gate를 검수 |
@@ -94,7 +94,7 @@ pairing의 시간/온도 거리를 줄인다. Global L1/L2/DRAM은 `global_addr_
 표준 component sweep runner도 현재 알려진 2-mode pair를 원자적으로 회전하므로 반복
 경계에서 control/treatment가 분리되지 않는다. A100 Tensor/L2 targeted 결과는
 `audit_a100_tensor_l2_remediation.py`로 RF별 동일 ITER/HMMA/spill/양수 차분과 L2
-path-specific hit 및 인접 W plateau를 함께 검사한다.
+path-specific/native hit, sector conservation 및 인접 W plateau를 함께 검사한다.
 
 ```bash
 python3 scripts/run_paired_component_stability.py \
@@ -189,6 +189,7 @@ python3 scripts/analyze_matched_control_energy.py \
   --require-total-energy \
   --expected-power-semantics one_sec_average \
   --pairing nearest-control \
+  --max-pair-start-distance-ms 30000 \
   --min-elapsed-s 10 \
   --min-delta-fraction 0.005 \
   --out-summary-csv results/summary/matched_control_summary.csv \
@@ -199,6 +200,10 @@ python3 scripts/analyze_matched_control_energy.py \
 Final package에서는 `--require-control-ncu-acceptance`를 생략하지 않는다.
 `reg_operand_only`와 `global_addr_only`가 treatment와 같은 좌표에서 NCU
 `accepted`여야 하며, treatment만 통과한 pair는 계수 후보에서 제외된다.
+`pair_start_distance_ms`는 legacy 열 이름으로, 실제로는 측정 완료 후
+생성된 두 `run_id` timestamp 간격이다. 임의의 다른 repeat control을 재사용하는
+것을 막되 idle baseline과 kernel 시간을 포함해야 한다. 10초 finalplan은
+30,000 ms, 20초 targeted remediation은 60,000 ms를 사용한다.
 
 Matched-control 이후에는 component reliability audit을 실행한다.
 

@@ -85,7 +85,7 @@ COMMAND_SHELL_TERMS = [
     "--fail-on-provisional",
     "--require-explicit-measurement-scope",
     "--require-mode-notes-marker",
-    "reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1",
+    "reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
     "l2_cg_load_only=global_warmup_policy=ld_global_cg",
     "scripts/audit_power_state_stability.py",
     "scripts/run_ncu_validation.sh",
@@ -141,7 +141,7 @@ COMMAND_PLAN_TERMS = [
     "complete control-treatment coordinate pairs",
     "path-specific L1 hit",
     "path-specific L2 read hit",
-    "tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1",
+    "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
     "global_warmup_policy=ld_global_cg",
     "spill_evidence_source=local_memory_bytes_zero_inference",
     "ncu_actual_exact",
@@ -2682,6 +2682,9 @@ def write_md(path: str | Path, rows: list[dict[str, str]]) -> None:
                 f"{row['next_action']} |\n"
             )
         write_external_intake_section(f, rows)
+    out.write_text(
+        out.read_text(encoding="utf-8").rstrip() + "\n", encoding="utf-8"
+    )
 
 
 def audit(repo: Path, ncu: str) -> list[dict[str, str]]:

@@ -137,6 +137,16 @@ It also checks that A100/V100/H100 generated command packages exist and contain
 the expected finalplan gates; that check proves execution readiness, not measured
 component coefficients.
 
+The current standalone RTX 3090 Tensor rerun uses
+`tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2`. It
+accepted 33/35 power-state-filtered pairs and all 10 Tensor/control NCU rows;
+RF1/2/4/8/16 treatment rows all have `HMMA/logical MMA=2`, controls have HMMA=0,
+and local read/write traffic is zero. The resulting board-level effective MMA
+incremental median is `2.2525 pJ/FLOP` over `1.9454-2.3692 pJ/FLOP`. This is not
+pure Tensor Core circuit energy, and it does not make the still-historical
+Shared/Global-L1/L2 rows current. See
+`results/summary/rtx3090_tensor_fixedrf_v2_report_20260713_ko.md`.
+
 Older inferred-scope RTX 3090 reporting medians retained for
 method-sensitivity/history: Tensor targeted RF=8/16 is
 `0.107 pJ/FLOP`, the fixed-ITER auxiliary check is `0.146 pJ/FLOP`, and
@@ -166,8 +176,8 @@ so their GPU/device scope was inferred from `nvml_total_energy` +
 `total_energy_mj_delta`; new finalplan runs require explicit
 `measurement_scope=gpu_device_total_energy_counter`.
 
-Under the 2026-07-08 protocol, explicit measurement-scope + fresh NCU rerun
-values were stricter than the older inferred-scope table: Tensor
+Under the historical 2026-07-08 protocol, explicit measurement-scope + fresh
+NCU rerun values were stricter than the older inferred-scope table: Tensor
 `0.129 pJ/FLOP` (`accepted`), Shared scalar `0.171 pJ/bit` (`accepted`),
 Global L1 `0.173 pJ/bit` (`accepted`), and L2 CG `1.131 pJ/bit` (`accepted`).
 These rows all use `nvml_total_energy` with
@@ -287,6 +297,13 @@ These command packages are generated plans, not measured platform results. Run
 them on the matching target node after building the profile-specific binary, then
 rerun the power API, power-state, NCU, reliability, strict-summary, and goal
 readiness audits.
+
+The A100 Tensor/L2 remediation package is the required first step after the
+observed 58.5-60.1% L2 path-hit failure. It now runs an application-replay NCU
+precheck, prefers normal `.cg` caching, and tries an explicit persisting-L2
+policy only when normal caching fails. It stops before the long energy sweep if
+neither policy reaches the strict 95% L2 read-hit gate. A persisting result is a
+residency-managed effective path coefficient, not a universal default-L2 value.
 
 Prompt templates:
 

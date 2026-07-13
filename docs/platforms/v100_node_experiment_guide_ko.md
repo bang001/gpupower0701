@@ -328,7 +328,7 @@ python3 scripts/audit_power_api_measurements.py \
   --fail-on-provisional \
   --require-explicit-measurement-scope \
   --require-mode-notes-marker \
-  reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1
+  reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2
 ```
 
 이 단계에서 모든 row가 `missing_column:measurement_scope` 또는
@@ -337,6 +337,10 @@ stale binary/schema 문제다. 현재 source를 pull한 뒤 `cmake --build build
 --clean-first -j`로 다시 빌드하고, 기존 `results/raw/v100_component_finalplan_*.csv`는
 archive로 옮긴 뒤 재실행한다. 구버전 CSV에 새 row를 append하면 power API audit이
 전체 reject될 수 있다.
+
+`fixed_rf_v2`는 RF1은 검증된 dynamic loop, RF2/4/8/16은 fixed-trip `unroll 1` kernel을
+사용한다. 이 분기가 V100에서 같은 SASS lowering을 보인다고 가정하지 않으며, V100 NCU에서
+RF별 `HMMA/logical MMA` 상대 spread<=10%, control HMMA=0을 다시 확인해야 한다.
 
 ## 8. Full sweep 실행
 

@@ -706,7 +706,7 @@ def write_raw_files(
         note_parts: list[str] = []
         if mode == "reg_mma" and not omit_tensor_revision:
             note_parts.append(
-                "tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1"
+                "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2"
             )
         if mode in {"l2_cg_load_only", "dram_cg_load_only"} and not omit_cg_warmup_policy:
             note_parts.append("global_warmup_policy=ld_global_cg")

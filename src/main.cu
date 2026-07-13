@@ -50,6 +50,8 @@ struct Options {
   std::uint64_t load_repeat = 1;
   std::uint64_t store_repeat = 1;
   std::uint64_t reg_payload_bytes_per_block = 0;
+  int global_warmup_passes = 1;
+  std::string l2_residency_policy = "normal";
   int repeats = 5;
   std::filesystem::path output = "results/raw/a100_fp16_energy_v2_raw.csv";
   bool verify_smid = true;
@@ -124,6 +126,8 @@ void print_usage(const char* argv0) {
       << "  --load-repeat <int>          operand loads per iteration, default 1\n"
       << "  --store-repeat <int>         store writes per iteration for store modes, default 1\n"
       << "  --reg-payload-bytes <int>    register payload target per block for reg_pressure; default 256 for reg_pressure, 0 otherwise\n"
+      << "  --global-warmup-passes <int> repeat the untimed global-input warm-up; default 1\n"
+      << "  --l2-residency-policy <name> normal or persisting; persisting is for L2 CG treatment/control only\n"
       << "  --repeats <int>              default 5\n"
       << "  --output <csv>               default results/raw/a100_fp16_energy_v2_raw.csv\n"
       << "  --verify-smid 0|1            default 1\n"
@@ -179,6 +183,10 @@ Options parse_args(int argc, char** argv) {
     } else if (arg == "--reg-payload-bytes") {
       opts.reg_payload_bytes_per_block =
           static_cast<std::uint64_t>(std::stoull(need_value(arg)));
+    } else if (arg == "--global-warmup-passes") {
+      opts.global_warmup_passes = std::stoi(need_value(arg));
+    } else if (arg == "--l2-residency-policy") {
+      opts.l2_residency_policy = need_value(arg);
     } else if (arg == "--repeats") {
       opts.repeats = std::stoi(need_value(arg));
     } else if (arg == "--output") {
@@ -205,6 +213,20 @@ Options parse_args(int argc, char** argv) {
   }
   if (opts.store_repeat == 0) {
     throw std::invalid_argument("--store-repeat must be > 0");
+  }
+  if (opts.global_warmup_passes <= 0) {
+    throw std::invalid_argument("--global-warmup-passes must be > 0");
+  }
+  if (opts.l2_residency_policy != "normal" &&
+      opts.l2_residency_policy != "persisting") {
+    throw std::invalid_argument(
+        "--l2-residency-policy must be normal or persisting");
+  }
+  if (opts.l2_residency_policy == "persisting" &&
+      opts.mode != Mode::l2_cg_load_only &&
+      opts.mode != Mode::global_addr_only) {
+    throw std::invalid_argument(
+        "persisting L2 residency is limited to l2_cg_load_only and its global_addr_only control");
   }
   if (opts.mode == Mode::reg_pressure && opts.reg_payload_bytes_per_block == 0) {
     opts.reg_payload_bytes_per_block = 256;
@@ -392,6 +414,8 @@ void print_dry_run(const Options& opts, const Feasibility& f, bool allowed,
   std::cout << "reuse_factor=" << opts.reuse_factor << "\n";
   std::cout << "load_repeat=" << opts.load_repeat << "\n";
   std::cout << "store_repeat=" << opts.store_repeat << "\n";
+  std::cout << "global_warmup_passes=" << opts.global_warmup_passes << "\n";
+  std::cout << "l2_residency_policy=" << opts.l2_residency_policy << "\n";
   std::cout << "reg_payload_bytes_per_block="
             << opts.reg_payload_bytes_per_block << "\n";
   std::cout << "reg_payload_regs_per_thread="
@@ -496,6 +520,10 @@ DeviceState setup_device(int gpu_id, const Options& opts,
         << ";runtime_compute_capability=" << prop.major << "." << prop.minor
         << ";runtime_sm_count=" << prop.multiProcessorCount
         << ";runtime_l2_bytes=" << prop.l2CacheSize
+        << ";runtime_persisting_l2_max_bytes="
+        << prop.persistingL2CacheMaxSize
+        << ";runtime_access_policy_max_window_bytes="
+        << prop.accessPolicyMaxWindowSize
         << ";runtime_shared_mem_per_block_optin_bytes="
         << prop.sharedMemPerBlockOptin << ";";
     state.notes += oss.str();
@@ -547,6 +575,54 @@ DeviceState setup_device(int gpu_id, const Options& opts,
     CUDA_CHECK(cudaStreamSynchronize(state.stream));
   }
 
+  if (opts.l2_residency_policy == "persisting") {
+    if (!opts.profile.supports_l2_persistence) {
+      throw std::runtime_error(
+          "target profile does not support L2 persistence controls");
+    }
+    if (state.input == nullptr || state.input_bytes == 0) {
+      throw std::runtime_error(
+          "persisting L2 residency requires a non-empty global input buffer");
+    }
+    const std::size_t set_aside_bytes = std::min<std::size_t>(
+        static_cast<std::size_t>(prop.l2CacheSize) * 3ull / 4ull,
+        static_cast<std::size_t>(prop.persistingL2CacheMaxSize));
+    const std::size_t max_window_bytes =
+        static_cast<std::size_t>(prop.accessPolicyMaxWindowSize);
+    if (set_aside_bytes == 0 || max_window_bytes == 0) {
+      throw std::runtime_error(
+          "runtime device exposes no usable persisting L2 set-aside/window");
+    }
+    if (state.input_bytes > set_aside_bytes ||
+        state.input_bytes > max_window_bytes) {
+      std::ostringstream oss;
+      oss << "L2 persisting window cannot cover the complete working set: input="
+          << state.input_bytes << " set_aside=" << set_aside_bytes
+          << " max_window=" << max_window_bytes;
+      throw std::runtime_error(oss.str());
+    }
+
+    CUDA_CHECK(cudaDeviceSetLimit(cudaLimitPersistingL2CacheSize,
+                                  set_aside_bytes));
+    cudaStreamAttrValue stream_attr{};
+    stream_attr.accessPolicyWindow.base_ptr = state.input;
+    stream_attr.accessPolicyWindow.num_bytes = state.input_bytes;
+    stream_attr.accessPolicyWindow.hitRatio = 1.0f;
+    stream_attr.accessPolicyWindow.hitProp = cudaAccessPropertyPersisting;
+    stream_attr.accessPolicyWindow.missProp = cudaAccessPropertyStreaming;
+    CUDA_CHECK(cudaStreamSetAttribute(
+        state.stream, cudaStreamAttributeAccessPolicyWindow, &stream_attr));
+
+    std::ostringstream oss;
+    oss << "l2_residency_policy=persisting"
+        << ";l2_persisting_set_aside_bytes=" << set_aside_bytes
+        << ";l2_access_policy_window_bytes=" << state.input_bytes
+        << ";l2_access_policy_hit_ratio=1;";
+    state.notes += oss.str();
+  } else {
+    state.notes += "l2_residency_policy=normal;";
+  }
+
   CUDA_CHECK(configure_kernel_attributes(opts.mode,
                                          static_cast<std::size_t>(f.w_block_bytes)));
   return state;
@@ -572,8 +648,11 @@ void warmup_global_inputs(const Options& opts,
       opts.mode == Mode::l2_cg_load_only || opts.mode == Mode::dram_cg_load_only;
   for (auto& state : states) {
     CUDA_CHECK(cudaSetDevice(state.gpu_id));
-    CUDA_CHECK(launch_global_warmup(state.input, state.input_half_count,
-                                    state.output, cache_global_only, state.stream));
+    for (int pass = 0; pass < opts.global_warmup_passes; ++pass) {
+      CUDA_CHECK(launch_global_warmup(state.input, state.input_half_count,
+                                      state.output, cache_global_only,
+                                      state.stream));
+    }
   }
   for (auto& state : states) {
     CUDA_CHECK(cudaSetDevice(state.gpu_id));
@@ -855,6 +934,8 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
         << "reuse_factor=" << opts.reuse_factor
         << ";load_repeat=" << opts.load_repeat
         << ";store_repeat=" << opts.store_repeat
+        << ";global_warmup_passes=" << opts.global_warmup_passes
+        << ";l2_residency_policy=" << opts.l2_residency_policy
         << ";reg_payload_bytes_per_block="
         << row.reg_payload_bytes_per_block
         << ";reg_payload_regs_per_thread="
@@ -997,10 +1078,18 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
           extra += cache_global_only
                        ? "global_warmup_policy=ld_global_cg;"
                        : "global_warmup_policy=default_cached;";
+          extra += "global_warmup_passes=" +
+                   std::to_string(opts.global_warmup_passes) + ";";
+          if (opts.mode == Mode::l2_cg_load_only ||
+              (opts.mode == Mode::global_addr_only &&
+               opts.l2_residency_policy == "persisting")) {
+            extra +=
+                "l2_residency_revision=explicit_policy_warmup_v1;";
+          }
         }
         if (is_register_operand_mode(opts.mode)) {
           extra +=
-              "tensor_pair_kernel_revision=matched_add_scalar_epilogue_v1;";
+              "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2;";
         }
         ResultRow row =
             make_row(opts, f, run_id, gpu, static_cast<int>(opts.gpu_list.size()),
@@ -1024,6 +1113,11 @@ int main(int argc, char** argv) {
   try {
     auto opts = a100fp16::parse_args(argc, argv);
     a100fp16::resolve_auto_profile(opts);
+    if (opts.l2_residency_policy == "persisting" &&
+        !opts.profile.supports_l2_persistence) {
+      throw std::invalid_argument(
+          "resolved target profile does not support L2 persistence controls");
+    }
     const auto f =
         a100fp16::classify_feasibility(opts.w_sm_kib, opts.blocks_per_sm,
                                        opts.profile);
