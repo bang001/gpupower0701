@@ -61,6 +61,12 @@ PROFILES: dict[str, dict[str, Any]] = {
         "l1_ncu_w": 32,
         "l2_w": "32,64",
         "l2_ncu_w": 32,
+        "l2_ncu_w_values": "32,64",
+        "l2_precheck_w": "32,64",
+        "l2_precheck_candidates": (
+            "normal:contiguous:32,normal:sm_interleaved:32,"
+            "normal:sm_interleaved:16,normal:sm_interleaved:4"
+        ),
         "l2_modes": "global_addr_only,l2_cg_load_only",
         "dram_w": "8192",
         "shared_capacity_kib": 96,
@@ -86,6 +92,13 @@ PROFILES: dict[str, dict[str, Any]] = {
         "l2_w": "16,32,64,128",
         "l2_ncu_w": 16,
         "l2_ncu_w_values": "16,32,64,128",
+        "l2_precheck_w": "16,128",
+        "l2_precheck_candidates": (
+            "normal:contiguous:16,normal:sm_interleaved:16,"
+            "normal:sm_interleaved:8,normal:sm_interleaved:4,"
+            "persisting:contiguous:16,persisting:sm_interleaved:16,"
+            "persisting:sm_interleaved:8,persisting:sm_interleaved:4"
+        ),
         "l2_modes": "global_addr_only,l2_cg_load_only",
         "dram_w": "8192",
         "shared_capacity_kib": 164,
@@ -208,6 +221,7 @@ def run_component_command(
     output: str,
     matrix: str,
     extra_args: list[str] | None = None,
+    blocks_shell_expansion: bool = False,
 ) -> str:
     return line(
         [
@@ -227,7 +241,7 @@ def run_component_command(
             "--w-sm-kib-values",
             q(w_values),
             "--blocks-per-sm-values",
-            q(blocks),
+            blocks if blocks_shell_expansion else q(blocks),
             "--active-sm-values",
             q(str(active_sm)),
             "--reuse-factors",
@@ -259,6 +273,10 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     tensor_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
     l2_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
     dram_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
+    pair_transition_gap_limit_ms = max(
+        30000, int(round((args.seconds + 15.0) * 1000.0))
+    )
+    l2_precheck_enabled = bool(profile.get("l2_precheck_candidates"))
     # l2_load_only follows the normal global-load policy and therefore cannot
     # prove an L2-only path. Keep it out of strict packages; only CG loads are
     # eligible L2-path evidence.
@@ -269,6 +287,9 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     ncu_dir = f"results/ncu/{args.target_profile}_component_finalplan_ncu_factor_{tag}"
     ncu_raw = f"results/raw/{args.target_profile}_component_finalplan_ncu_factor_{tag}.csv"
     ncu_summary = f"{ncu_dir}/ncu_cache_validation_summary.csv"
+    l2_path_selection_csv = f"{summary_prefix}_l2_path_selection.csv"
+    l2_path_selection_md = f"{summary_prefix}_l2_path_selection.md"
+    l2_path_selection_env = f"{summary_prefix}_l2_path_selection.env"
     tensor_pair_calibration_csv = f"{raw_prefix}_tensor_pair_calibration.csv"
     l2_pair_calibration_csv = f"{raw_prefix}_l2_pair_calibration.csv"
     dram_pair_calibration_csv = f"{raw_prefix}_dram_pair_calibration.csv"
@@ -350,6 +371,9 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         tensor_pair_calibration_csv,
         l2_pair_calibration_csv,
         dram_pair_calibration_csv,
+        l2_path_selection_csv,
+        l2_path_selection_md,
+        l2_path_selection_env,
         *energy_csvs,
         *matrix_csvs,
         ncu_raw,
@@ -378,6 +402,113 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         gap_report_md,
     ]
 
+    l2_precheck_commands: list[str] = []
+    if l2_precheck_enabled:
+        candidates = []
+        for value in str(profile["l2_precheck_candidates"]).split(","):
+            policy, layout, blocks_text = value.split(":")
+            candidates.append(f'  "{policy} {layout} {int(blocks_text)}"')
+        l2_precheck_commands = [
+            "# 5. NCU-first L2 path selection. The 95% hit gate is never relaxed.",
+            "run_l2_path_candidate() {",
+            "  local policy=\"$1\"",
+            "  local layout=\"$2\"",
+            "  local blocks_per_sm=\"$3\"",
+            "  local candidate=\"${policy}_${layout}_B${blocks_per_sm}\"",
+            f"  local outdir={q(ncu_dir)}/l2_precheck_${{candidate}}",
+            f"  local raw_out={q(raw_prefix)}_l2_precheck_${{candidate}}.csv",
+            f"  local acceptance_csv={q(summary_prefix)}_l2_precheck_${{candidate}}_acceptance.csv",
+            f"  local acceptance_md={q(summary_prefix)}_l2_precheck_${{candidate}}_acceptance.md",
+            "",
+            "  NCU_COMPONENTS=l2 \\",
+            "  NCU_EXPLICIT_METRICS_ONLY=1 \\",
+            "  NCU=\"${NCU_BIN}\" \\",
+            "  NCU_USE_SUDO=\"${NCU_USE_SUDO}\" \\",
+            "  NCU_AUTO_SUDO=\"${NCU_AUTO_SUDO}\" \\",
+            "  NCU_SUDO=\"${NCU_SUDO}\" \\",
+            f"  BIN={q(binary)} \\",
+            "  OUTDIR=\"${outdir}\" \\",
+            "  RAW_OUT=\"${raw_out}\" \\",
+            f"  TARGET_PROFILE={q(args.target_profile)} \\",
+            f"  NCU_CHIP={q(profile['ncu_chip'])} \\",
+            f"  NCU_FILTER_UNAVAILABLE_METRICS={int(profile.get('filter_unavailable_ncu_metrics', 0))} \\",
+            "  NCU_REPLAY_MODE=application \\",
+            "  NCU_CACHE_CONTROL=none \\",
+            "  GLOBAL_WARMUP_PASSES=4 \\",
+            "  L2_RESIDENCY_POLICY=\"${policy}\" \\",
+            "  L2_ADDRESS_LAYOUT=\"${layout}\" \\",
+            f"  GPU={q(args.gpu_ids.split(',')[0])} \\",
+            f"  ACTIVE_SM={active_sm} \\",
+            "  BLOCKS_PER_SM=\"${blocks_per_sm}\" \\",
+            "  L2_BLOCKS_PER_SM=\"${blocks_per_sm}\" \\",
+            f"  L2_W_SM_KIB_VALUES={q(str(profile['l2_precheck_w']))} \\",
+            "  MEMORY_LOAD_REPEATS=4 \\",
+            "  INCLUDE_L2_CAPACITY_NCU=0 \\",
+            "  INCLUDE_DIAGNOSTIC_NCU=0 \\",
+            "  bash scripts/run_ncu_validation.sh || return 2",
+            "",
+            "  python3 scripts/analyze_ncu_path_acceptance.py \\",
+            "    \"${outdir}/ncu_cache_validation_summary.csv\" \\",
+            f"    --target-profile {q(args.target_profile)} \\",
+            "    --out-csv \"${acceptance_csv}\" \\",
+            "    --out-md \"${acceptance_md}\" \\",
+            "    --require-ncu-replay-mode application \\",
+            "    --require-ncu-cache-control none \\",
+            "    --require-l2-residency-policy \"${policy}\" \\",
+            "    --require-l2-address-layout \"${layout}\" || return 2",
+            "",
+            "  L2_CANDIDATE_ARGS+=(--candidate \"${policy}:${layout}:${blocks_per_sm}:${acceptance_csv}\")",
+            "  local selector_rc=0",
+            "  python3 scripts/select_l2_path_configuration.py \\",
+            f"    --target-profile {q(args.target_profile)} \\",
+            "    \"${L2_CANDIDATE_ARGS[@]}\" \\",
+            f"    --expected-w {q(str(profile['l2_precheck_w']))} \\",
+            "    --load-repeat 4 \\",
+            f"    --out-csv {q(l2_path_selection_csv)} \\",
+            f"    --out-md {q(l2_path_selection_md)} \\",
+            f"    --out-env {q(l2_path_selection_env)} || selector_rc=$?",
+            "  if [[ \"${selector_rc}\" == \"0\" ]]; then",
+            f"    source {q(l2_path_selection_env)}",
+            "    export L2_BLOCKS_PER_SM L2_RESIDENCY_POLICY L2_ADDRESS_LAYOUT",
+            "    return 0",
+            "  fi",
+            "  [[ \"${selector_rc}\" == \"2\" ]] && return 1",
+            "  return 2",
+            "}",
+            "",
+            "L2_CANDIDATE_ARGS=()",
+            "L2_PATH_SELECTED=0",
+            "L2_CANDIDATES=(",
+            *candidates,
+            ")",
+            "for candidate in \"${L2_CANDIDATES[@]}\"; do",
+            "  read -r candidate_policy candidate_layout candidate_blocks <<< \"${candidate}\"",
+            "  if run_l2_path_candidate \"${candidate_policy}\" \"${candidate_layout}\" \"${candidate_blocks}\"; then",
+            "    L2_PATH_SELECTED=1",
+            "    break",
+            "  else",
+            "    candidate_rc=$?",
+            "    if [[ \"${candidate_rc}\" != \"1\" ]]; then",
+            "      echo \"L2 candidate profiling failed before a path verdict\" >&2",
+            "      exit \"${candidate_rc}\"",
+            "    fi",
+            "  fi",
+            "done",
+            "if [[ \"${L2_PATH_SELECTED}\" != \"1\" || -z \"${L2_BLOCKS_PER_SM:-}\" || -z \"${L2_RESIDENCY_POLICY:-}\" || -z \"${L2_ADDRESS_LAYOUT:-}\" ]]; then",
+            f"  echo \"No {args.target_profile.upper()} L2 candidate passed strict NCU gates; energy sweep was not started.\" >&2",
+            f"  echo \"Inspect {l2_path_selection_md} and the l2_precheck_* NCU logs.\" >&2",
+            "  exit 2",
+            "fi",
+            "echo \"Selected L2 path: policy=${L2_RESIDENCY_POLICY} layout=${L2_ADDRESS_LAYOUT} blocks/SM=${L2_BLOCKS_PER_SM}\"",
+            "",
+        ]
+    else:
+        l2_precheck_commands = [
+            "# 5. This profile retains its reviewed fixed L2 coordinate.",
+            "echo \"L2 precheck selector not enabled for this profile; using policy=${L2_RESIDENCY_POLICY} layout=${L2_ADDRESS_LAYOUT} blocks/SM=${L2_BLOCKS_PER_SM}\"",
+            "",
+        ]
+
     commands = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
@@ -403,6 +534,10 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         "echo \"Using NCU command: ${NCU_COMMAND}\"",
         "echo \"NCU permission policy: use_sudo=${NCU_USE_SUDO} auto_sudo=${NCU_AUTO_SUDO}\"",
         "echo \"Using CUDA compiler: ${NVCC_COMMAND}\"",
+        f"L2_BLOCKS_PER_SM={ncu_blocks}",
+        "L2_RESIDENCY_POLICY=normal",
+        "L2_ADDRESS_LAYOUT=contiguous",
+        "export L2_BLOCKS_PER_SM L2_RESIDENCY_POLICY L2_ADDRESS_LAYOUT",
         "",
         "# 1. Preflight",
         line(
@@ -472,6 +607,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         line(["python3", "scripts/run_component_regression_sweep.py", "--self-test"]),
         line(["python3", "scripts/summarize_ncu_cache_metrics.py", "--self-test"]),
         line(["python3", "scripts/analyze_ncu_path_acceptance.py", "--self-test"]),
+        line(["python3", "scripts/select_l2_path_configuration.py", "--self-test"]),
         line(["python3", "scripts/analyze_matched_control_energy.py", "--self-test"]),
         line(["python3", "scripts/audit_power_api_measurements.py", "--self-test"]),
         line(["python3", "scripts/audit_a100_tensor_l2_remediation.py", "--self-test"]),
@@ -521,6 +657,18 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         f"  mkdir -p \"${{STALE_DIR}}/$(dirname {q(ncu_dir)})\"",
         f"  mv {q(ncu_dir)} \"${{STALE_DIR}}/{ncu_dir}\"",
         "fi",
+        *(
+            [
+                "shopt -s nullglob",
+                f"for path in {q(raw_prefix)}_l2_precheck_* {q(summary_prefix)}_l2_precheck_*; do",
+                "  mkdir -p \"${STALE_DIR}/$(dirname \"${path}\")\"",
+                "  mv \"${path}\" \"${STALE_DIR}/${path}\"",
+                "done",
+                "shopt -u nullglob",
+            ]
+            if l2_precheck_enabled
+            else []
+        ),
         "",
         "# 4. Three-row schema/revision smoke test. Catch stale binaries before the full sweep.",
         line(
@@ -636,6 +784,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--fail-on-reject",
                 "--fail-on-provisional",
                 "--require-explicit-measurement-scope",
+                "--require-exact-measurement-interval",
                 "--require-mode-notes-marker",
                 "reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
                 "--require-mode-notes-marker",
@@ -647,7 +796,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
-        "# 5. Energy sweeps. Keep NCU detached from these runs.",
+        *l2_precheck_commands,
+        "# 6. Energy sweeps. Keep NCU detached from these runs.",
         run_component_command(
             binary=binary,
             profile=args.target_profile,
@@ -709,18 +859,27 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             repeats=args.repeats,
             modes=profile["l2_modes"],
             w_values=profile["l2_w"],
-            blocks=blocks,
+            blocks=(
+                '"${L2_BLOCKS_PER_SM}"' if l2_precheck_enabled else blocks
+            ),
             reuse_factors="1",
             load_repeats=profile["memory_energy_load_repeats"],
             output=energy_csvs[3],
             matrix=matrix_csvs[3],
             extra_args=[
+                "--global-warmup-passes",
+                "4",
+                "--l2-residency-policy",
+                '"${L2_RESIDENCY_POLICY}"',
+                "--l2-address-layout",
+                '"${L2_ADDRESS_LAYOUT}"',
                 "--memory-pair-lock-iters",
                 "--memory-pair-control-min-seconds",
                 q(str(l2_control_calibration_min_seconds)),
                 "--memory-pair-calibration-csv",
                 q(l2_pair_calibration_csv),
             ],
+            blocks_shell_expansion=l2_precheck_enabled,
         ),
         run_component_command(
             binary=binary,
@@ -745,7 +904,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ],
         ),
         "",
-        "# 6. Power API audit before spending time on NCU.",
+        "# 7. Power API audit before spending time on NCU.",
         line(
             [
                 "python3",
@@ -760,6 +919,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--fail-on-reject",
                 "--fail-on-provisional",
                 "--require-explicit-measurement-scope",
+                "--require-exact-measurement-interval",
                 "--require-mode-notes-marker",
                 "reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
                 "--require-mode-notes-marker",
@@ -801,6 +961,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 f"GPU={q(args.gpu_ids.split(',')[0])}",
                 f"ACTIVE_SM={active_sm}",
                 f"BLOCKS_PER_SM={ncu_blocks}",
+                "L2_BLOCKS_PER_SM=\"${L2_BLOCKS_PER_SM}\"",
                 f"REG_BLOCKS_PER_SM={ncu_blocks}",
                 "REG_PRESSURE_PAYLOAD_BYTES=256",
                 "REG_W_SM_KIB=2048",
@@ -811,6 +972,9 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 f"DRAM_W_SM_KIB_OVERRIDE={profile['dram_w']}",
                 f"INCLUDE_L2_CAPACITY_NCU={include_l2_capacity_ncu}",
                 "INCLUDE_DIAGNOSTIC_NCU=0",
+                "GLOBAL_WARMUP_PASSES=4",
+                "L2_RESIDENCY_POLICY=\"${L2_RESIDENCY_POLICY}\"",
+                "L2_ADDRESS_LAYOUT=\"${L2_ADDRESS_LAYOUT}\"",
                 "REUSE_FACTOR=1",
                 "LOAD_REPEAT=1",
                 "TENSOR_REUSE_FACTORS=1,2,4,8,16",
@@ -841,6 +1005,14 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "1.0",
                 "--register-memory-bytes-per-op-max",
                 "1.0",
+                "--require-ncu-replay-mode",
+                "application",
+                "--require-ncu-cache-control",
+                "none",
+                "--require-l2-residency-policy",
+                '"${L2_RESIDENCY_POLICY}"',
+                "--require-l2-address-layout",
+                '"${L2_ADDRESS_LAYOUT}"',
             ]
         ),
         "",
@@ -867,8 +1039,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 q(str(0.8 * tensor_control_calibration_min_seconds)),
                 "--max-elapsed-ratio",
                 "1.35",
-                "--max-pair-start-distance-ms",
-                "30000",
+                "--max-pair-transition-gap-ms",
+                q(str(pair_transition_gap_limit_ms)),
                 "--pairing",
                 "nearest-control",
                 "--tensor-pair-policy",
@@ -1109,10 +1281,19 @@ def write_markdown(args: argparse.Namespace, profile: dict[str, Any], path: Path
     active_sm = args.active_sm or profile["active_sm"]
     blocks = args.blocks_per_sm_values or profile["blocks"]
     ncu_blocks = args.ncu_blocks_per_sm
+    l2_precheck_enabled = bool(profile.get("l2_precheck_candidates"))
+    l2_ncu_block_label = (
+        "selected by NCU precheck"
+        if l2_precheck_enabled
+        else str(ncu_blocks)
+    )
     tensor_control_min_seconds = max(1.0, args.seconds * 0.1)
     l2_control_min_seconds = max(1.0, args.seconds * 0.1)
     dram_control_min_seconds = max(1.0, args.seconds * 0.1)
     tensor_control_analysis_min_seconds = 0.8 * tensor_control_min_seconds
+    pair_transition_gap_limit_ms = max(
+        30000, int(round((args.seconds + 15.0) * 1000.0))
+    )
     out_sh = args.out_sh
     build_dir = str(Path(args.binary).parent)
     block_values = [int(value) for value in blocks.split(",") if value]
@@ -1151,16 +1332,19 @@ W_SM={profile['l2_w']} KiB as the strict L2 path. The generated strict anchor is
 B{ncu_blocks}; the existing accepted RTX 3090 reporting package uses separate
 B16 targeted/stability evidence and must not be confused with this generated plan.""",
         "v100": f"""V100 uses `NCU_CHIP=gv100` and `l2_cg_load_only` as the L2
-final path. Its energy sweep covers blocks/SM={blocks}; the generated strict
-anchor is B{ncu_blocks}, L2 W_SM={profile['l2_ncu_w']} KiB. L2
-W_SM={profile['l2_w'].split(',')[-1]} KiB is retained as a capacity-stress point.
-The NCU binary must explicitly support GV100.""",
+final path. Before energy measurement, strict NCU tests normal-residency
+`contiguous`/`sm_interleaved` candidates at blocks/SM 32,16,4 and W_SM=32,64
+KiB/SM. V100 does not support CUDA persisting-L2 controls, so a persisting
+candidate is invalid. Only a candidate passing the unchanged 95% L2-hit gate is
+propagated to the L2 energy sweep. The NCU binary must explicitly support GV100.""",
         "a100": f"""A100 uses `NCU_CHIP=ga100`; its L2 candidates are below the
 {profile['l2_mib']} MiB L2 capacity and use `ld.global.cg` to avoid global-L1
-cache hits. The sidecar sweeps W_SM={profile.get('l2_ncu_w_values', profile['l2_ncu_w'])}
-KiB and keeps only coordinates where path-specific L1 hit bytes are near zero
-and path-specific L2 read hit rate passes. L1TEX request bytes are expected for
-`.cg` and are not treated as L1 cache-hit evidence.""",
+cache hits. Before energy measurement, NCU tests normal and supported persisting
+residency with contiguous/sm_interleaved layouts and blocks/SM 16,8,4 at
+W_SM=16,128 KiB/SM. The first candidate passing path-specific L1 bypass, at
+least 95% derived/native L2 hit, sector conservation, expected traffic, and
+DRAM-leakage gates is propagated to the full L2 sweep. L1TEX request bytes are
+expected for `.cg` and are not treated as L1 cache-hit evidence.""",
         "h100": f"""H100 uses `NCU_CHIP=gh100` and `l2_cg_load_only` at
 W_SM={profile['l2_w']} KiB for the L2 candidate sweep. The current kernels use
 the WMMA FP16 compatibility path, so this evidence does not validate Hopper-native
@@ -1179,10 +1363,13 @@ Generated: {dt.date.today().isoformat()}
 | active_SM (SMs) | `{active_sm}` |
 | energy sweep blocks/SM | `{blocks}` |
 | strict NCU blocks/SM | `{ncu_blocks}` |
+| L2 strict blocks/SM | `{l2_ncu_block_label}` |
+| L2 NCU-first selector | `{'enabled' if l2_precheck_enabled else 'fixed reviewed coordinate'}` |
 | expected power semantics | `{profile['power_semantics']}` |
 | minimum visible device memory (MiB) | `{args.min_device_memory_mib}` |
 | seconds (s) | `{args.seconds}` |
 | repeats | `{args.repeats}` |
+| max pair transition gap (ms) | `{pair_transition_gap_limit_ms}` (`max(30000, (seconds + 15) x 1000)`) |
 | Tensor control calibration floor (s) | `{tensor_control_min_seconds}` |
 | DRAM address-control calibration floor (s) | `{dram_control_min_seconds}` |
 | binary | `{args.binary}` |
@@ -1220,8 +1407,14 @@ binary whose CSV header includes `measurement_scope`.
 | Tensor | `reg_operand_only,reg_mma` | 2048 | 2048/{ncu_blocks} | reuse 1,2,4,8,16; treatment/control-floor dual-calibrated pair-locked ITER |
 | Shared scalar | `clocked_empty,shared_scalar_load_only` | {profile['shared_w']} | {profile['shared_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
 | Global L1 | `global_addr_only,global_l1_load_only` | {profile['l1_w']} | {profile['l1_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
-| L2 | `{profile['l2_modes']}` | {profile['l2_w']} | {profile.get('l2_ncu_w_values', profile['l2_ncu_w'])}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; treatment/control-floor dual-calibrated pair-locked ITER; NCU also checks 1,2 |
+| L2 | `{profile['l2_modes']}` | {profile['l2_w']} | {profile.get('l2_ncu_w_values', profile['l2_ncu_w'])}/{l2_ncu_block_label} | energy load_repeat {profile['memory_energy_load_repeats']}; treatment/control-floor dual-calibrated pair-locked ITER; NCU also checks 1,2 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | {profile['dram_w']} | {profile['dram_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; treatment/control-floor dual-calibrated pair-locked ITER; NCU checks 1,4,8,16 |
+
+For A100/V100, the generated shell performs the L2 NCU selector before any long
+energy sweep. It records every rejected candidate in
+`{f'results/summary/{args.target_profile}_component_finalplan_{args.tag}_l2_path_selection.csv'}`.
+If no candidate passes, the shell stops without manufacturing an L2 coefficient;
+the 95% threshold is not relaxed.
 
 The energy runner applies the same 1 KiB/block feasibility rule to treatment and
 matched control. Global L1 valid coordinates are
@@ -1400,8 +1593,24 @@ hard-invalid DRAM detail row; duration-scaled DRAM coefficients are not final
 cross-platform evidence.
 The runner rotates complete control-treatment coordinate pairs between repeats;
 it never rotates a flat list by one command and split a pair across repeat
-boundaries. The same atomic pair ordering applies to the generated Shared,
-Global L1, L2 CG, and DRAM CG treatment-control sweeps.
+boundaries. It counterbalances `control -> treatment` and
+`treatment -> control` using both repeat and coordinate index, so one repeat
+also contains opposing pair directions and thermal/clock drift is not
+systematically assigned to the treatment. The same atomic and counterbalanced pair
+policy applies to Shared, Global L1, L2 CG, and DRAM CG sweeps. Strict package
+audit requires valid rows from both execution orders.
+Current raw CSVs record `measurement_start_epoch_ms` and
+`measurement_end_epoch_ms` around the timed benchmark. Matched-control adjacency
+uses the non-overlapping `pair_transition_gap_ms`, not the formerly misnamed
+completion timestamp difference `pair_start_distance_ms`. Legacy raw CSVs remain
+reanalyzable by estimating each interval from `run_id - elapsed_s`, with
+`pair_timing_source=legacy_run_id_elapsed_inferred` recorded explicitly.
+The generated transition-gap limit is
+`max(30000, (seconds + 15) x 1000)` ms. Each binary invocation measures an idle
+baseline for `seconds` before its timed kernel, so a fixed 30-second gate would
+reject valid adjacent pairs in longer stability runs. The 15-second allowance
+covers process startup, allocation, warm-up, and synchronization; the actual
+limit is recorded as `pair_transition_gap_limit_ms` in every matched-detail row.
 Both Tensor kernels execute the same dependent register integer add once per
 RF iteration, so the liveness/control instruction cancels in the direct pair.
 The control no longer performs the former RF-proportional FP32 FMA/checksum or

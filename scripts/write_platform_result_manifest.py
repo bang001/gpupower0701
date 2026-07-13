@@ -49,6 +49,11 @@ ARTIFACT_PURPOSES = {
         "proves L2 treatment and address control used identical resolved ITER",
         "l2_pair_calibration_policy",
     ),
+    "l2_path_selection": (
+        "L2 NCU-first path selection",
+        "records the policy/layout/blocks-SM candidates and the strict path verdict before energy measurement",
+        "l2_path_selection_policy",
+    ),
     "dram_pair_calibration": (
         "DRAM pair calibration manifest",
         "proves DRAM treatment and address control used identical resolved ITER",

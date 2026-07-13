@@ -22,7 +22,7 @@ This package is not yet publishable as final component evidence. Fix missing/fai
 
 | status | checks |
 |---|---:|
-| `missing` | 16 |
+| `missing` | 17 |
 | `pass` | 2 |
 
 ## Checks
@@ -46,4 +46,5 @@ This package is not yet publishable as final component evidence. Fix missing/fai
 | `files` | `instability_present` | `missing` | file exists | missing | `results/summary/v100_component_finalplan_20260708_matched_control_instability_audit.csv` | run the generated command package or copy the artifact from the node |
 | `files` | `strict_summary_present` | `missing` | file exists | missing | `results/summary/v100_strict_scope_fresh_ncu_component_coefficients_20260708.csv` | run the generated command package or copy the artifact from the node |
 | `files` | `strict_audit_present` | `missing` | file exists | missing | `results/summary/v100_strict_scope_fresh_ncu_component_summary_audit_20260708.csv` | run the generated command package or copy the artifact from the node |
-| `raw` | `raw_energy_power_policy` | `missing` | raw rows use target profile metadata, target active SM, total-energy delta, GPU/device scope, explicit measurement_scope, profile power semantics, positive counter delta, elapsed time, and iteration count; Tensor rows carry the matched-add/scalar-epilogue revision and CG rows carry the ld.global.cg warm-up policy | no_raw_rows_read | `results/raw/v100_component_finalplan_20260708_tensor.csv;results/raw/v100_component_finalplan_20260708_shared.csv;results/raw/v100_component_finalplan_20260708_l1.csv;results/raw/v100_component_finalplan_20260708_l2.csv;results/raw/v100_component_finalplan_20260708_dram.csv` | copy raw energy CSVs from the target node |
+| `files` | `l2_path_selection_present` | `missing` | file exists | missing | `results/summary/v100_component_finalplan_20260708_l2_path_selection.csv` | run the generated command package or copy the artifact from the node |
+| `raw` | `raw_energy_power_policy` | `missing` | raw rows use target profile metadata, target active SM, total-energy delta, GPU/device scope, exact timed-kernel epoch interval, explicit measurement_scope, profile power semantics, positive counter delta, elapsed time, and iteration count; Tensor rows carry the matched-add/scalar-epilogue revision and CG rows carry the ld.global.cg warm-up policy | no_raw_rows_read | `results/raw/v100_component_finalplan_20260708_tensor.csv;results/raw/v100_component_finalplan_20260708_shared.csv;results/raw/v100_component_finalplan_20260708_l1.csv;results/raw/v100_component_finalplan_20260708_l2.csv;results/raw/v100_component_finalplan_20260708_dram.csv` | copy raw energy CSVs from the target node |

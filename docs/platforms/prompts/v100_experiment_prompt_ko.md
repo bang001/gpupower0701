@@ -218,7 +218,7 @@ V100 전용 기준:
 | Tensor | `reg_mma - reg_operand_only` | energy B4/16/32; strict W2048/B32, reuse sweep | treatment HMMA 존재, control HMMA=0, spill/local 0, 두 mode ITER 동일 | pJ/FLOP |
 | Shared scalar | `shared_scalar_load_only - clocked_empty` | energy W32/64, B4/16/32; strict W32/B32 | shared bytes 존재, bank conflict 낮음 | pJ/bit, pJ/Byte |
 | Global L1 | `global_l1_load_only - global_addr_only` | energy W8/16/32, B4/16/32; strict W32/B32 | L1 hit >= 95%, L2/DRAM 낮음 | pJ/bit, pJ/Byte |
-| L2 | `l2_cg_load_only - global_addr_only` | energy W32/64, B4/16/32; strict W32/B32 | 두 mode 동일 ITER, L2 read path hit >=95%, L1 path hit와 hit/request bytes <=1%, DRAM 낮음 | pJ/bit, pJ/Byte |
+| L2 | `l2_cg_load_only - global_addr_only` | precheck W32/64에서 normal contiguous/sm_interleaved B32/B16/B4 중 통과 후보 선택; energy는 선택 B만 사용 | 두 mode 동일 ITER, derived L2 read path hit >=95%, sector/expected bytes 정합, L1 path hit와 hit/request bytes <=1%, DRAM 낮음. GV100 native op-read metric은 있을 때만 교차검증 | pJ/bit, pJ/Byte |
 | DRAM sanity | `dram_cg_load_only - global_addr_only` | energy B4/16/32; strict W8192/B32 | 두 mode 동일 ITER, DRAM bytes 충분, capacity-bound L2 residual hit 허용 | pJ/bit, pJ/Byte 후보 |
 
 ## 해석 시 주의할 표현

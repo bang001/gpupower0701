@@ -306,7 +306,8 @@ python3 scripts/audit_power_api_measurements.py \
   --out-md results/summary/your_power_api_audit.md \
   --fail-on-reject \
   --fail-on-provisional \
-  --require-explicit-measurement-scope
+  --require-explicit-measurement-scope \
+  --require-exact-measurement-interval
 ```
 
 Profile별 expected semantics:
@@ -319,8 +320,9 @@ Profile별 expected semantics:
 | `h100` | `one_sec_average` |
 
 Audit가 `provisional` 또는 `reject`를 내면 NCU 결과가 좋아도 final coefficient로 쓰지
-않는다. 새 finalplan run에서는 `--require-explicit-measurement-scope`를 사용해 raw
-CSV에 `measurement_scope`가 직접 기록되었는지 확인한다.
+않는다. 새 finalplan run에서는 `--require-explicit-measurement-scope`와
+`--require-exact-measurement-interval`을 사용해 raw CSV에 `measurement_scope`와 timed
+kernel 시작/종료 epoch가 직접 기록되었는지 확인한다.
 
 ## 보고서에 남겨야 하는 metadata
 

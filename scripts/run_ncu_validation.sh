@@ -63,6 +63,7 @@ L2_W_SM_KIB="${L2_W_SM_KIB:-64}"
 L2_W_SM_KIB_VALUES="${L2_W_SM_KIB_VALUES:-${L2_W_SM_KIB}}"
 DRAM_W_SM_KIB="${DRAM_W_SM_KIB_OVERRIDE:-${DRAM_W_SM_KIB}}"
 BLOCKS_PER_SM="${BLOCKS_PER_SM:-16}"
+L2_BLOCKS_PER_SM="${L2_BLOCKS_PER_SM:-${BLOCKS_PER_SM}}"
 REG_W_SM_KIB="${REG_W_SM_KIB:-2048}"
 REG_BLOCKS_PER_SM="${REG_BLOCKS_PER_SM:-4}"
 REG_PRESSURE_PAYLOAD_BYTES="${REG_PRESSURE_PAYLOAD_BYTES:-8192}"
@@ -110,6 +111,10 @@ case "${L2_ADDRESS_LAYOUT}" in
 esac
 if ! [[ "${GLOBAL_WARMUP_PASSES}" =~ ^[1-9][0-9]*$ ]]; then
   echo "GLOBAL_WARMUP_PASSES must be a positive integer" >&2
+  exit 2
+fi
+if ! [[ "${L2_BLOCKS_PER_SM}" =~ ^(4|8|16|32)$ ]]; then
+  echo "L2_BLOCKS_PER_SM must be 4, 8, 16, or 32" >&2
   exit 2
 fi
 printf "label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,ncu_replay_mode,ncu_cache_control,global_warmup_passes,l2_residency_policy,l2_address_layout,report\n" > "${CASE_MANIFEST}"
@@ -433,10 +438,10 @@ for load_repeat in "${MEMORY_LOAD_REPEAT_LIST[@]}"; do
   if component_enabled l2; then
     for l2_w_sm_kib in "${L2_W_SM_KIB_LIST[@]}"; do
       if [[ "${INCLUDE_L2_CAPACITY_NCU}" == "1" ]]; then
-        run_case "l2_load_only_W${l2_w_sm_kib}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_load_only_kernel" "l2_load_only" "${l2_w_sm_kib}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+        run_case "l2_load_only_W${l2_w_sm_kib}_B${L2_BLOCKS_PER_SM}_LR${load_repeat}" "global_load_only_kernel" "l2_load_only" "${l2_w_sm_kib}" "${L2_BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
       fi
-      run_case "global_addr_only_l2_W${l2_w_sm_kib}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${l2_w_sm_kib}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
-      run_case "l2_cg_load_only_W${l2_w_sm_kib}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_cg_load_only_kernel" "l2_cg_load_only" "${l2_w_sm_kib}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+      run_case "global_addr_only_l2_W${l2_w_sm_kib}_B${L2_BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${l2_w_sm_kib}" "${L2_BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+      run_case "l2_cg_load_only_W${l2_w_sm_kib}_B${L2_BLOCKS_PER_SM}_LR${load_repeat}" "global_cg_load_only_kernel" "l2_cg_load_only" "${l2_w_sm_kib}" "${L2_BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
     done
   fi
 done

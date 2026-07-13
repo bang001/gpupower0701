@@ -41,7 +41,7 @@ class AuditConfig:
     tensor_max_pj_per_flop: float
     tensor_hmma_ratio_relative_spread_max: float
     tensor_coefficient_relative_spread_max: float
-    max_pair_start_distance_ms: float
+    max_pair_transition_gap_ms: float
     ncu_replay_mode: str
     ncu_cache_control: str
     l2_residency_policy: str
@@ -269,7 +269,7 @@ def audit_data(
                 "numerator_ITER",
                 "control_ITER",
                 "run_order_distance",
-                "pair_start_distance_ms",
+                "pair_transition_gap_ms",
                 "numerator_elapsed_s",
                 "control_elapsed_s",
                 "numerator_net_E_J",
@@ -544,8 +544,8 @@ def audit_data(
         tensor_energy_ok &= all(
             row.get("pair_energy_basis") == "matched_iters_net_energy"
             and abs(as_float(row, "iter_ratio") - 1.0) <= 1.0e-12
-            and as_float(row, "pair_start_distance_ms")
-            <= config.max_pair_start_distance_ms
+            and as_float(row, "pair_transition_gap_ms")
+            <= config.max_pair_transition_gap_ms
             for row in detail
         )
         tensor_energy_ok &= all(
@@ -575,8 +575,8 @@ def audit_data(
                 "positive_matched_energy",
                 tensor_energy_ok,
                 (
-                    f"{config.expected_repeats} matched-ITER pairs with start distance <= "
-                    f"{config.max_pair_start_distance_ms:g} ms; every delta_E >= "
+                    f"{config.expected_repeats} matched-ITER pairs with transition gap <= "
+                    f"{config.max_pair_transition_gap_ms:g} ms; every delta_E >= "
                     f"{config.min_delta_j:g} J; control elapsed >= "
                     f"{0.8 * config.tensor_control_calibration_min_seconds:g} s; "
                     "median within plausibility range"
@@ -1164,7 +1164,7 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "numerator_ITER": "1000",
                     "control_ITER": "1000",
                     "run_order_distance": "1",
-                    "pair_start_distance_ms": "1",
+                    "pair_transition_gap_ms": "1",
                     "control_elapsed_s": str(
                         config.tensor_control_calibration_min_seconds
                     ),
@@ -1305,7 +1305,7 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                         "numerator_ITER": "1000",
                         "control_ITER": "1000",
                         "run_order_distance": "1",
-                        "pair_start_distance_ms": "1",
+                        "pair_transition_gap_ms": "1",
                         "numerator_elapsed_s": "20",
                         "control_elapsed_s": "20",
                         "numerator_net_E_J": "30",
@@ -1338,7 +1338,7 @@ def run_self_test() -> None:
         tensor_max_pj_per_flop=5.0,
         tensor_hmma_ratio_relative_spread_max=0.10,
         tensor_coefficient_relative_spread_max=0.75,
-        max_pair_start_distance_ms=30000.0,
+        max_pair_transition_gap_ms=30000.0,
         ncu_replay_mode="application",
         ncu_cache_control="none",
         l2_residency_policy="persisting",
@@ -1615,7 +1615,15 @@ def main() -> int:
     parser.add_argument(
         "--tensor-coefficient-relative-spread-max", type=float, default=0.75
     )
-    parser.add_argument("--max-pair-start-distance-ms", type=float, default=30000.0)
+    parser.add_argument(
+        "--max-pair-transition-gap-ms", type=float, default=None
+    )
+    parser.add_argument(
+        "--max-pair-start-distance-ms",
+        type=float,
+        default=None,
+        help="Deprecated alias for --max-pair-transition-gap-ms.",
+    )
     parser.add_argument(
         "--ncu-replay-mode", choices=("application", "kernel"), default="application"
     )
@@ -1660,6 +1668,17 @@ def main() -> int:
     if args.self_test:
         run_self_test()
         return 0
+    if args.max_pair_transition_gap_ms is None:
+        args.max_pair_transition_gap_ms = (
+            args.max_pair_start_distance_ms
+            if args.max_pair_start_distance_ms is not None
+            else 30000.0
+        )
+    elif (
+        args.max_pair_start_distance_ms is not None
+        and args.max_pair_start_distance_ms != args.max_pair_transition_gap_ms
+    ):
+        parser.error("pair transition-gap options disagree")
     required_paths = {
         "tensor_raw": args.tensor_raw,
         "l2_raw": args.l2_raw,
@@ -1714,7 +1733,7 @@ def main() -> int:
         tensor_coefficient_relative_spread_max=(
             args.tensor_coefficient_relative_spread_max
         ),
-        max_pair_start_distance_ms=args.max_pair_start_distance_ms,
+        max_pair_transition_gap_ms=args.max_pair_transition_gap_ms,
         ncu_replay_mode=args.ncu_replay_mode,
         ncu_cache_control=args.ncu_cache_control,
         l2_residency_policy=args.l2_residency_policy,

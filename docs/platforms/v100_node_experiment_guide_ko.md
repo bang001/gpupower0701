@@ -327,11 +327,13 @@ python3 scripts/audit_power_api_measurements.py \
   --fail-on-reject \
   --fail-on-provisional \
   --require-explicit-measurement-scope \
+  --require-exact-measurement-interval \
   --require-mode-notes-marker \
   reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2
 ```
 
-이 단계에서 모든 row가 `missing_column:measurement_scope` 또는
+이 단계에서 모든 row가 `missing_column:measurement_scope`,
+`missing_column:measurement_start_epoch_ms` 또는
 `missing_explicit_measurement_scope`로 reject되면, V100 power counter 문제가 아니라
 stale binary/schema 문제다. 현재 source를 pull한 뒤 `cmake --build build-v100
 --clean-first -j`로 다시 빌드하고, 기존 `results/raw/v100_component_finalplan_*.csv`는
@@ -605,6 +607,7 @@ python3 scripts/plot_results.py \
 | 단계 | script | 목적 |
 |---|---|---|
 | command plan | `scripts/plan_platform_component_experiment.py` | V100용 표준 energy/NCU/analyze 명령 생성 |
+| L2 NCU precheck | `scripts/select_l2_path_configuration.py` | energy 전에 normal residency의 layout/blocks-SM 후보를 strict gate로 선택; persisting은 V100에서 금지 |
 | energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 energy 수집. Shared/Global L1은 duration-calibrated, Tensor/L2 CG/DRAM CG는 treatment/control-floor dual calibration의 최대 ITER를 두 mode에 동일 적용 |
 | NCU sidecar | `scripts/run_ncu_validation.sh` | path hit/access/stall/spill 검증 |
 | path acceptance | `scripts/analyze_ncu_path_acceptance.py` | accepted component 후보만 선별 |
@@ -659,31 +662,33 @@ V100 추천 finalplan 좌표:
 
 RTX 3090/A100/V100의 전체 파라미터와 command 개수 비교는
 [cross-platform component experiment guide](cross_platform_component_experiment_guide_ko.md)의
-4.0-4.5절을 기준으로 한다. 현재 V100 표준 package는 유효 좌표 156개/1 repeat,
-`repeats=5` 적용 후 energy raw 780행, Tensor pair calibration 15 coordinates/30 commands,
-L2 pair calibration 18 coordinates/36 commands, DRAM pair calibration 9 coordinates/18 commands, schema/revision smoke 3행,
-primary NCU 44 cases다.
+4.0-4.5절을 기준으로 한다. 현재 V100 표준 package는 L2 precheck가 선택한 blocks/SM
+하나만 L2 energy에 사용한다. 유효 좌표는 132개/1 repeat, `repeats=5`에서 energy raw
+660행이며 Tensor pair calibration 15 coordinates/30 commands, L2 pair calibration
+6 coordinates/12 commands, DRAM pair calibration 9 coordinates/18 commands, schema
+smoke 3행, primary NCU 54 cases다. L2 selector는 첫 후보 통과 시 조기 종료하며
+최악에는 4 candidates x 2 W x 2 modes = 16개 NCU precheck case를 추가한다.
 
-`seconds=10 s` 기준 nominal energy kernel 시간은 `780 x 10 s = 7,800 s`, 즉 약
-2시간 10분이다. calibration, launch, audit와 44-case NCU replay를 포함한 노드 전체
+`seconds=10 s` 기준 nominal energy kernel 시간은 `660 x 10 s = 6,600 s`, 즉 약
+1시간 50분이다. calibration, launch, audit와 54-case NCU replay 및 L2 precheck를 포함한 노드 전체
 예상시간은 보통 약 3~4.5시간이며 NCU metric replay 횟수와 노드 부하에 따라 달라진다.
-기존 1,650-row package보다 energy 측정량은 약 52.7% 감소한다.
+후보가 늦게 선택되면 NCU precheck 시간만큼 더 필요하다.
 
 | Component | modes | energy W_SM (KiB) | energy blocks/SM | strict NCU W_SM/B | factor |
 |---|---|---:|---:|---:|---|
 | Tensor | `reg_operand_only,reg_mma` | 2048 | 4,16,32 | 2048/32 | reuse 1,2,4,8,16 |
 | Shared scalar | `clocked_empty,shared_scalar_load_only` | 32,64 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
 | Global L1 | `global_addr_only,global_l1_load_only` | 8,16,32 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
-| L2 CG | `global_addr_only,l2_cg_load_only` | 32,64 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; 동일 pair ITER; NCU 1,2,4,8,16 |
+| L2 CG | `global_addr_only,l2_cg_load_only` | 32,64 | NCU가 32/16/4 중 선택 | 32,64/selected B | energy load_repeat 4,8,16; 동일 pair ITER; NCU 1,2,4,8,16 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 4,16,32 | 8192/32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
 ### V100 sweep를 그래프로 해석하기
 
 ![플랫폼별 blocks/SM sweep](../presentations/assets/platform_blocks_per_sm_sweep.png)
 
-V100 B4는 저밀도, B16은 중간 밀도 utilization 진단이며 strict anchor는 B32다.
+V100 B4는 저밀도, B16은 중간 밀도 utilization 진단이며 Shared/Global-L1 strict anchor는 B32다.
 B1/B2/B8은 실행시간 대비 추가 식별력이 제한적이어서 기본 package에서 제외했다. B4나
-B16을 final로 쓰려면 해당 좌표의 exact-coordinate NCU가 추가로 필요하다.
+B16이 L2 selector에서 선택되면 해당 좌표의 exact-coordinate full NCU가 자동 수집된다.
 
 ![플랫폼별 W_SM path sweep](../presentations/assets/platform_wsm_path_sweep.png)
 
@@ -727,17 +732,15 @@ reject한다.
 두 kernel은 RF당 dependent register integer add 1개를 공통으로 실행하므로 control
 liveness instruction 비용은 direct 차분에서 상쇄된다.
 
-Energy sweep의 B4/B16은 utilization 변화와 추세를 보는 diagnostic이다. 현재 generated
-sidecar는 strict 대표점 B32만 exact NCU로 검증하므로,
-B32가 아닌 row를 final coefficient로 채택하려면 같은 W/blocks/factor의 NCU sidecar를
-추가 수집해야 한다.
+Energy sweep의 Tensor/Shared/L1/DRAM B4/B16은 utilization 변화와 추세를 보는
+diagnostic이다. L2는 precheck가 선택한 B 하나만 energy와 full NCU에 동일 적용한다.
 
 좌표 선정 근거:
 
 | 좌표 | 계산과 의미 |
 |---|---|
 | Global L1 strict W32/B32 | block당 1 KiB tile을 만족하며 32 KiB/SM은 shared를 쓰지 않는 Volta combined 128 KiB cache보다 작음 |
-| L2 strict W32/B32 | `80 SM x 32 KiB = 2.5 MiB`, 6 MiB L2의 약 42%로 residency 여유 확보 |
+| L2 precheck W32/W64 | 전체 2.5/5 MiB를 normal residency에서 B32 contiguous부터 sm_interleaved B32/B16/B4 순서로 검증 |
 | L2 stress W64 | `80 SM x 64 KiB = 5 MiB`, 6 MiB L2의 약 83%라 conflict/background traffic 민감도를 보는 보조점 |
 | Shared strict W32/B32 | feasibility의 보수적 계산 `W_SM + B = 64 KiB/SM`, 96 KiB shared 한도 아래 |
 | Shared stress W64/B32 | `W_SM + B = 96 KiB/SM`으로 capacity 경계점이므로 strict 기본점이 아닌 stress 보조점 |
@@ -745,6 +748,8 @@ B32가 아닌 row를 final coefficient로 채택하려면 같은 W/blocks/factor
 V100은 6 MiB L2라 capacity 기반 `l2_load_only`가 L1 hit와 쉽게 섞일 수 있다. 따라서 L2 후보는 우선 `l2_cg_load_only`로 잡고, NCU에서 다음을 확인한다.
 CG mode의 warm-up도 `ld.global.cg.u32` 전용 kernel을 사용해 normal warm-up이 L1을
 미리 채우지 않도록 한다.
+CUDA persisting-L2 control은 compute capability 8.0 이상 기능이므로 V100(CC 7.0)에서는
+사용하지 않는다. `persisting` 후보가 plan 또는 selection CSV에 보이면 잘못된 실행이다.
 
 | NCU 기준 | 통과 조건 |
 |---|---:|
@@ -752,6 +757,17 @@ CG mode의 warm-up도 `ld.global.cg.u32` 전용 kernel을 사용해 normal warm-
 | Global L1 | L1 hit >= 95%, L1 access/bytes 존재, L2/L1 bytes <= 1% |
 | Shared scalar | shared access/bytes 존재, bank conflict 0 또는 매우 낮음 |
 | Tensor | HMMA > 0, spill/local 0 |
+
+새 raw CSV는 timed kernel의 exact epoch interval을 기록하고 matched-control은
+`pair_transition_gap_ms<=pair_transition_gap_limit_ms`를 검사한다. 생성 plan의
+한계는 `max(30000, (seconds+15)x1000)` ms이므로 표준 10초 run은 30,000 ms,
+20초 stability run은 35,000 ms다. 과거 `pair_start_distance_ms`는 두 완료
+시각 차이여서 treatment 실행시간과 매 실행의 idle baseline이 섞였고 정상 인접 pair를
+오탈락시킬 수 있었다. 이전 raw 재분석은 `run_id-elapsed_s` 추정임을 명시한다.
+추정 timing row는 진단용으로만 유지하며 strict final package는 새 binary가 기록한 exact
+epoch interval을 요구한다.
+새 runner는 반복과 좌표 index를 함께 사용해 pair 방향을 counterbalance하고 strict package는 양쪽 실행 순서의 valid row를
+모두 요구해 일방향 thermal/clock drift를 검출한다.
 
 B32 row에서는 위 path 기준과 별도로 achieved occupancy, registers/thread, static/dynamic
 shared/block을 표에 남긴다. 이 값이 없으면 B32를 “32 blocks가 동시에 resident였다”고

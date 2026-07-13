@@ -259,6 +259,8 @@ RAW_SUFFIXES = ("tensor", "shared", "l1", "l2", "dram")
 RAW_REQUIRED_MEASUREMENT_COLUMNS = {
     "mode",
     "elapsed_s",
+    "measurement_start_epoch_ms",
+    "measurement_end_epoch_ms",
     "E_before_mJ",
     "E_after_mJ",
     "delta_E_J",
@@ -494,7 +496,7 @@ def status_counts(rows: list[dict[str, str]]) -> dict[str, int]:
 
 def expected_paths(profile: str, tag: str) -> dict[str, Path | list[Path]]:
     base = f"{profile}_component_finalplan_{tag}"
-    return {
+    paths: dict[str, Path | list[Path]] = {
         "command_shell": Path(f"results/summary/{base}_commands.sh"),
         "command_plan": Path(f"results/summary/{base}_command_plan.md"),
         "preflight": Path(f"results/summary/{base}_preflight.md"),
@@ -528,6 +530,11 @@ def expected_paths(profile: str, tag: str) -> dict[str, Path | list[Path]]:
             f"results/summary/{profile}_strict_scope_fresh_ncu_component_summary_audit_{tag}.csv"
         ),
     }
+    if profile in {"a100", "v100"}:
+        paths["l2_path_selection"] = Path(
+            f"results/summary/{base}_l2_path_selection.csv"
+        )
+    return paths
 
 
 def rel(repo: Path, path: Path) -> Path:
@@ -562,6 +569,113 @@ def audit_file_presence(
                 evidence=str(value),
                 action="run the generated command package or copy the artifact from the node",
             )
+
+
+def audit_l2_path_selection(
+    repo: Path,
+    rows: list[dict[str, str]],
+    path: Path,
+    *,
+    profile: str,
+) -> None:
+    full = rel(repo, path)
+    if not full.exists():
+        return
+    selection_rows = read_csv(full)
+    required = {
+        "policy",
+        "layout",
+        "blocks_per_SM",
+        "W_SM_KiB",
+        "l1_path_hit_rate_pct",
+        "l2_path_hit_rate_pct",
+        "l2_native_read_hit_rate_pct",
+        "native_l2_gate",
+        "l2_read_sector_conservation_ratio",
+        "l2_read_bytes_to_expected",
+        "dram_read_to_l2_read_ratio",
+        "selected_candidate",
+        "status",
+        "reason",
+    }
+    columns = set(selection_rows[0]) if selection_rows else set()
+    missing = sorted(required - columns)
+    add(
+        rows,
+        area="l2_selection",
+        check="l2_path_selection_schema",
+        status="pass" if selection_rows and not missing else "fail",
+        expected="NCU-first L2 selector fields are complete",
+        actual=(
+            f"rows={len(selection_rows)}"
+            if selection_rows and not missing
+            else "missing=" + ",".join(missing or ["rows"])
+        ),
+        evidence=str(path),
+        action="rerun the generated L2 precheck with the current selector",
+    )
+    if not selection_rows or missing:
+        return
+
+    grouped: dict[tuple[str, str, str], list[dict[str, str]]] = {}
+    for row in selection_rows:
+        key = (row.get("policy", ""), row.get("layout", ""), row.get("blocks_per_SM", ""))
+        grouped.setdefault(key, []).append(row)
+    expected_w = {16, 128} if profile == "a100" else {32, 64}
+    accepted = []
+    selected = []
+    for key, candidate_rows in grouped.items():
+        observed_w = {
+            value
+            for value in (parse_int(row.get("W_SM_KiB", "")) for row in candidate_rows)
+            if value is not None
+        }
+        if observed_w == expected_w and all(
+            row.get("status") == "pass" for row in candidate_rows
+        ):
+            accepted.append(key)
+        if all(row.get("selected_candidate") == "yes" for row in candidate_rows):
+            selected.append(key)
+        elif any(row.get("selected_candidate") == "yes" for row in candidate_rows):
+            selected.append((key[0], key[1], f"{key[2]}:partial_selection"))
+    policy_valid = not (
+        profile == "v100"
+        and any(row.get("policy") == "persisting" for row in selection_rows)
+    )
+    native_gate_valid = all(
+        row.get("native_l2_gate") == "required"
+        if profile == "a100"
+        else row.get("native_l2_gate")
+        in {"optional_unavailable", "optional_present_cross_checked"}
+        for row in selection_rows
+    )
+    passed = (
+        len(selected) == 1
+        and selected[0] in accepted
+        and policy_valid
+        and native_gate_valid
+    )
+    add(
+        rows,
+        area="l2_selection",
+        check="l2_path_selected_before_energy",
+        status="pass" if passed else "fail",
+        expected=(
+            f"exactly one selected candidate passes W_SM={','.join(str(v) for v in sorted(expected_w))} KiB/SM; "
+            + ("V100 policy must be normal" if profile == "v100" else "A100 policy may be normal or persisting")
+        ),
+        actual=(
+            "selected="
+            + (";".join("/".join(key) for key in selected) if selected else "none")
+            + ";fully_passing="
+            + (";".join("/".join(key) for key in accepted) if accepted else "none")
+            + f";native_gate_valid={str(native_gate_valid).lower()}"
+        ),
+        evidence=str(path),
+        action=(
+            "do not report an L2 coefficient; inspect candidate raw metrics and NCU stderr"
+        ),
+    )
 
 
 def audit_preflight(
@@ -740,6 +854,12 @@ def audit_raw_energy(
                     + ",".join(missing_measurement)
                 )
             elapsed_s = parse_float(row.get("elapsed_s", ""))
+            measurement_start_ms = parse_float(
+                row.get("measurement_start_epoch_ms", "")
+            )
+            measurement_end_ms = parse_float(
+                row.get("measurement_end_epoch_ms", "")
+            )
             e_before = parse_float(row.get("E_before_mJ", ""))
             e_after = parse_float(row.get("E_after_mJ", ""))
             delta_j = parse_float(row.get("delta_E_J", ""))
@@ -748,6 +868,34 @@ def audit_raw_energy(
             iter_count = parse_float(row.get("ITER", ""))
             if elapsed_s is None or elapsed_s <= 0.0:
                 problems.append(f"{prefix}:elapsed_s={row.get('elapsed_s', '')}")
+            if measurement_start_ms is None or measurement_start_ms <= 0.0:
+                problems.append(
+                    f"{prefix}:measurement_start_epoch_ms="
+                    f"{row.get('measurement_start_epoch_ms', '')}"
+                )
+            if (
+                measurement_end_ms is None
+                or measurement_start_ms is None
+                or measurement_end_ms < measurement_start_ms
+            ):
+                problems.append(
+                    f"{prefix}:measurement_end_epoch_ms="
+                    f"{row.get('measurement_end_epoch_ms', '')}"
+                )
+            if (
+                elapsed_s is not None
+                and elapsed_s > 0.0
+                and measurement_start_ms is not None
+                and measurement_end_ms is not None
+                and measurement_end_ms >= measurement_start_ms
+            ):
+                interval_ms = measurement_end_ms - measurement_start_ms
+                expected_ms = elapsed_s * 1000.0
+                if abs(interval_ms - expected_ms) > max(5.0, expected_ms * 0.01):
+                    problems.append(
+                        f"{prefix}:measurement_interval_elapsed_mismatch="
+                        f"{interval_ms:g}/{expected_ms:g}ms"
+                    )
             if e_before is None or e_before <= 0.0:
                 problems.append(f"{prefix}:E_before_mJ={row.get('E_before_mJ', '')}")
             if e_after is None or e_after <= 0.0:
@@ -784,7 +932,8 @@ def audit_raw_energy(
         status="pass" if not problems else "missing" if no_rows else "fail",
         expected=(
             "raw rows use target profile metadata, target active SM, total-energy "
-            "delta, GPU/device scope, explicit measurement_scope, profile "
+            "delta, GPU/device scope, exact timed-kernel epoch interval, explicit "
+            "measurement_scope, profile "
             "power semantics, positive counter delta, elapsed time, and iteration "
             "count; Tensor rows carry the matched-add/scalar-epilogue revision and "
             "CG rows carry the ld.global.cg warm-up policy"
@@ -1613,9 +1762,58 @@ def audit_matched_control(
         return
     csv_rows = read_csv(full)
     problems: list[str] = []
+    valid_pair_orders: dict[str, set[str]] = {}
+    seen_components: set[str] = set()
     for idx, row in enumerate(csv_rows, start=2):
         valid = row.get("valid_component_estimate", row.get("valid_for_summary", "")).lower()
         component = row.get("component", "")
+        seen_components.add(component)
+        pair_execution_order = row.get("pair_execution_order", "")
+        if valid == "true":
+            if pair_execution_order not in {
+                "control_then_treatment",
+                "treatment_then_control",
+            }:
+                problems.append(
+                    f"{path}:{idx}:valid_pair_execution_order={pair_execution_order}"
+                )
+            else:
+                valid_pair_orders.setdefault(component, set()).add(
+                    pair_execution_order
+                )
+        pair_transition_gap_ms = parse_float(row.get("pair_transition_gap_ms", ""))
+        pair_transition_gap_limit_ms = parse_float(
+            row.get("pair_transition_gap_limit_ms", "")
+        )
+        if pair_transition_gap_ms is None or pair_transition_gap_ms < 0.0:
+            problems.append(
+                f"{path}:{idx}:pair_transition_gap_ms="
+                f"{row.get('pair_transition_gap_ms', '')}"
+            )
+        if (
+            pair_transition_gap_limit_ms is None
+            or pair_transition_gap_limit_ms <= 0.0
+        ):
+            problems.append(
+                f"{path}:{idx}:pair_transition_gap_limit_ms="
+                f"{row.get('pair_transition_gap_limit_ms', '')}"
+            )
+        elif (
+            valid == "true"
+            and pair_transition_gap_ms is not None
+            and pair_transition_gap_ms > pair_transition_gap_limit_ms
+        ):
+            problems.append(
+                f"{path}:{idx}:valid_pair_transition_gap_ms="
+                f"{pair_transition_gap_ms:g}>{pair_transition_gap_limit_ms:g}"
+            )
+        if not row.get("pair_timing_source", "").strip():
+            problems.append(f"{path}:{idx}:pair_timing_source=blank")
+        elif valid == "true" and row.get("pair_timing_source") != "exact_epoch_interval":
+            problems.append(
+                f"{path}:{idx}:valid_pair_timing_source="
+                f"{row.get('pair_timing_source', '')}"
+            )
         if component in CONTROL_NCU_REQUIRED_COMPONENTS:
             if not truthy(row.get("ncu_control_acceptance_required", "")):
                 problems.append(
@@ -1706,6 +1904,14 @@ def audit_matched_control(
         for column, expected in expected_pairs.items():
             if row.get(column, "") != expected:
                 problems.append(f"{path}:{idx}:{column}={row.get(column, '')}")
+    required_orders = {"control_then_treatment", "treatment_then_control"}
+    for component in sorted(EXPECTED_RELIABILITY_COMPONENTS & seen_components):
+        observed_orders = valid_pair_orders.get(component, set())
+        if observed_orders != required_orders:
+            problems.append(
+                f"{component}:valid_pair_orders="
+                f"{','.join(sorted(observed_orders)) or 'none'}"
+            )
     if not csv_rows:
         problems.append("empty_matched_detail")
     add(
@@ -1717,7 +1923,8 @@ def audit_matched_control(
             "Tensor, L2, and DRAM rows use matched_iters_net_energy with identical "
             "positive ITER; Tensor/global-memory controls have exact-coordinate "
             "NCU acceptance; memory paths use exact NCU denominators; valid "
-            "deltas are positive"
+            "deltas are positive; pair adjacency uses benchmark transition gap; "
+            "strict components retain valid rows in both execution orders"
         ),
         actual=f"rows={len(csv_rows)}" if not problems else ";".join(problems[:12]),
         evidence=str(path),
@@ -1725,7 +1932,8 @@ def audit_matched_control(
             "rerun Tensor sweeps with --tensor-pair-lock-iters and L2/DRAM sweeps "
             "with --memory-pair-lock-iters; analyze with matched-iters pair policies and "
             "--require-control-ncu-acceptance; retain exact NCU denominators, "
-            "total-energy scope, and expected power semantics"
+            "total-energy scope, expected power semantics, and the current pair "
+            "timing fields and alternating pair execution orders"
         ),
     )
 
@@ -2041,6 +2249,13 @@ def audit_package(
     semantics = PROFILE_POWER_SEMANTICS[profile]
     paths = expected_paths(profile, tag)
     audit_file_presence(repo, rows, paths)
+    if "l2_path_selection" in paths:
+        audit_l2_path_selection(
+            repo,
+            rows,
+            paths["l2_path_selection"],  # type: ignore[arg-type]
+            profile=profile,
+        )
     audit_preflight(
         repo,
         rows,

@@ -17,6 +17,7 @@
 | 백서에 어떤 표현을 써야 하는가 | `docs/reports/gpu_power_modeling_whitepaper_synthesis_ko.md` |
 | 다른 GPU에서 어떻게 실행하는가 | `docs/platforms/README.md` |
 | 코드/문서/결과의 현재 한계는 무엇인가 | `docs/audits/component_energy_self_critique_ko.md` |
+| A100/V100 외부 결과가 왜 탈락했고 무엇을 다시 받아야 하는가 | `docs/audits/a100_v100_external_result_remediation_ko.md` |
 | 무엇이 archive로 이동했는가 | `docs/audits/repository_active_archive_audit_ko.md` |
 
 ## 실행 순서
@@ -82,6 +83,7 @@ python3 scripts/plan_platform_component_experiment.py \
 | audits | `current_goal_alignment_audit_ko.md` | 목표와 코드/문서 gate 정합성 |
 | audits | `component_energy_self_critique_ko.md` | 현재 신뢰도와 남은 약점 |
 | audits | `a100_strict_summary_failure_remediation_ko.md` | A100 Tensor/L2 실패 교정 |
+| audits | `a100_v100_external_result_remediation_ko.md` | A100/V100 pair timing 및 L2 58-72% 외부 결과 교정 |
 | audits | `v100_l2_iter_mismatch_remediation_ko.md` | V100 L2 동일 ITER 교정 |
 | audits | `v100_32gb_platform_review_ko.md` | V100 32GB SKU/toolchain 검토 |
 | audits | `literature_energy_values_audit_ko.md` | 문헌값과 측정 경계 비교 |

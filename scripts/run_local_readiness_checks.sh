@@ -40,6 +40,7 @@ python3 -m py_compile \
   scripts/audit_matched_control_instability.py \
   scripts/audit_a100_ncu_precheck.py \
   scripts/audit_a100_tensor_l2_remediation.py \
+  scripts/select_l2_path_configuration.py \
   scripts/select_a100_l2_path_configuration.py \
   scripts/audit_component_goal_readiness.py \
   scripts/build_strict_component_summary.py \
@@ -59,7 +60,7 @@ python3 scripts/analyze_ncu_path_acceptance.py --self-test
 python3 scripts/analyze_matched_control_energy.py --self-test
 python3 scripts/audit_a100_ncu_precheck.py --self-test
 python3 scripts/audit_a100_tensor_l2_remediation.py --self-test
-python3 scripts/select_a100_l2_path_configuration.py --self-test
+python3 scripts/select_l2_path_configuration.py --self-test
 python3 scripts/build_strict_component_summary.py --self-test
 python3 scripts/audit_strict_component_summary.py --self-test
 python3 scripts/selftest_platform_package_gates.py

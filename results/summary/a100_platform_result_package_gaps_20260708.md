@@ -9,13 +9,13 @@ It is not a replacement for the package audit; it is a debugging guide.
 | result manifest CSV | `results/summary/a100_component_finalplan_20260708_result_manifest.csv` |
 | expected power semantics | `instant` |
 | final numerator policy | `nvml_total_energy + total_energy_mj_delta + gpu_device_total_energy_counter` |
-| open gaps | `16` |
+| open gaps | `17` |
 
 ## Severity Counts
 
 | severity | gaps |
 |---|---:|
-| `blocker` | 16 |
+| `blocker` | 17 |
 
 ## Next Actions
 
@@ -36,6 +36,7 @@ It is not a replacement for the package audit; it is a debugging guide.
 | strict summary audit | `blocker` | `missing` | missing | `results/summary/a100_strict_scope_fresh_ncu_component_summary_audit_20260708.csv (strict component summary audit)` | Run `scripts/audit_strict_component_summary.py --fail-on-fail` after building the strict summary. | `python3 scripts/audit_strict_component_summary.py ... --fail-on-fail` |
 | other | `blocker` | `missing` | missing | `results/raw/a100_component_finalplan_20260708_dram_pair_calibration.csv (DRAM pair calibration manifest)` | Generate or copy the missing artifact listed in the package audit and manifest. | `` |
 | other | `blocker` | `missing` | missing | `results/raw/a100_component_finalplan_20260708_l2_pair_calibration.csv (L2 pair calibration manifest)` | Generate or copy the missing artifact listed in the package audit and manifest. | `` |
+| other | `blocker` | `missing` | missing | `results/summary/a100_component_finalplan_20260708_l2_path_selection.csv (L2 NCU-first path selection)` | Generate or copy the missing artifact listed in the package audit and manifest. | `` |
 | other | `blocker` | `missing` | missing | `results/raw/a100_component_finalplan_20260708_tensor_pair_calibration.csv (Tensor pair calibration manifest)` | Generate or copy the missing artifact listed in the package audit and manifest. | `` |
 
 ## Power API Interpretation

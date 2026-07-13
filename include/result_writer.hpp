@@ -18,6 +18,8 @@ struct ResultRow {
   std::uint64_t ITER = 0;
   std::uint64_t sweeps = 0;
   double elapsed_s = 0.0;
+  std::uint64_t measurement_start_epoch_ms = 0;
+  std::uint64_t measurement_end_epoch_ms = 0;
   std::uint64_t E_before_mJ = 0;
   std::uint64_t E_after_mJ = 0;
   double delta_E_J = 0.0;

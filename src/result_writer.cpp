@@ -34,7 +34,8 @@ bool needs_header(const std::filesystem::path& path) {
 std::string csv_header() {
   return "run_id,gpu_id,n_gpu_active,mode,W_SM_KiB,blocks_per_SM,"
          "threads_per_block,active_SM,ITER,sweeps,elapsed_s,E_before_mJ,"
-         "E_after_mJ,delta_E_J,idle_baseline_J,net_E_J,N_MMA,FLOP,"
+         "measurement_start_epoch_ms,measurement_end_epoch_ms,E_after_mJ,"
+         "delta_E_J,idle_baseline_J,net_E_J,N_MMA,FLOP,"
          "input_bits,w_block_bytes,tiles_per_block,reuse_factor,"
          "load_repeat,store_repeat,reg_payload_bytes_per_block,"
          "reg_payload_regs_per_thread,reg_payload_bytes_per_sm,"
@@ -97,7 +98,8 @@ void CsvWriter::write(const ResultRow& row) {
       << row.W_SM_KiB << ',' << row.blocks_per_SM << ','
       << row.threads_per_block << ',' << row.active_SM << ',' << row.ITER
       << ',' << row.sweeps << ',' << row.elapsed_s << ','
-      << row.E_before_mJ << ',' << row.E_after_mJ << ','
+      << row.E_before_mJ << ',' << row.measurement_start_epoch_ms << ','
+      << row.measurement_end_epoch_ms << ',' << row.E_after_mJ << ','
       << row.delta_E_J << ',' << row.idle_baseline_J << ','
       << row.net_E_J << ',' << row.N_MMA << ',' << row.FLOP << ','
       << row.input_bits << ',' << row.w_block_bytes << ','

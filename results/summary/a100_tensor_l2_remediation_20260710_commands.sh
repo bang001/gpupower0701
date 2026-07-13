@@ -149,6 +149,7 @@ python3 scripts/audit_power_api_measurements.py "${SCHEMA_SMOKE}" \
   --out-csv "${SUMMARY_PREFIX}_schema_smoke_power_api_audit.csv" \
   --out-md "${SUMMARY_PREFIX}_schema_smoke_power_api_audit.md" \
   --fail-on-reject --fail-on-provisional --require-explicit-measurement-scope \
+  --require-exact-measurement-interval \
   --require-mode-notes-marker \
   reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2 \
   --require-mode-notes-marker \
@@ -364,6 +365,7 @@ python3 scripts/audit_power_api_measurements.py "${TENSOR_RAW}" "${L2_RAW}" \
   --out-csv "${POWER_AUDIT_CSV}" \
   --out-md "${POWER_AUDIT_MD}" \
   --fail-on-reject --fail-on-provisional --require-explicit-measurement-scope \
+  --require-exact-measurement-interval \
   --require-mode-notes-marker \
   reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2 \
   --require-mode-notes-marker \
@@ -386,7 +388,7 @@ python3 scripts/analyze_matched_control_energy.py "${TENSOR_RAW}" "${L2_RAW}" \
   --min-elapsed-s 16 \
   --tensor-control-min-elapsed-s 1.6 \
   --max-elapsed-ratio 1.35 \
-  --max-pair-start-distance-ms 60000 \
+  --max-pair-transition-gap-ms 35000 \
   --pairing nearest-control \
   --tensor-pair-policy matched-iters \
   --l2-pair-policy matched-iters \
@@ -420,7 +422,7 @@ python3 scripts/audit_a100_tensor_l2_remediation.py \
   --tensor-treatment-target-seconds 20 \
   --tensor-control-calibration-min-seconds 2 \
   --min-delta-j 10 \
-  --max-pair-start-distance-ms 60000 \
+  --max-pair-transition-gap-ms 35000 \
   --ncu-replay-mode application \
   --ncu-cache-control none \
   --l2-residency-policy "${L2_RESIDENCY_POLICY}" \

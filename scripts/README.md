@@ -10,17 +10,18 @@
 | command plan | `plan_platform_component_experiment.py` | 플랫폼별 finalplan 명령 생성 |
 | platform readiness | `audit_platform_power_readiness.py` | RTX 3090/V100/A100/H100 profile, power API 의미, 문서, 생성 plan 정합성 점검 |
 | documentation consistency | `audit_documentation_consistency.py` | active/archive Markdown 링크, canonical 문서, archive 경계, 현행 pair/ITER 정책, C++/Python 플랫폼 profile 상수를 교차 검사 |
-| energy sweep | `run_component_regression_sweep.py` | Python/C++ feasibility self-test와 unique-coordinate binary dry-run 후 NCU 없이 energy CSV 수집. `--execute`는 accidental legacy sweep을 막기 위해 explicit `--modes`를 요구한다. 알려진 2-mode control-treatment는 pair 단위로 회전하고 Tensor/L2 CG/DRAM CG는 treatment 목표/control 최소시간의 dual calibration에서 큰 ITER를 두 mode에 동일 적용 |
+| energy sweep | `run_component_regression_sweep.py` | Python/C++ feasibility self-test와 unique-coordinate binary dry-run 후 NCU 없이 energy CSV 수집. `--execute`는 accidental legacy sweep을 막기 위해 explicit `--modes`를 요구한다. 알려진 2-mode control-treatment는 pair 단위로 회전하며, 반복과 좌표 index를 함께 사용해 실행 방향을 counterbalance한다. Tensor/L2 CG/DRAM CG는 treatment 목표/control 최소시간의 dual calibration에서 큰 ITER를 두 mode에 동일 적용 |
 | paired stability | `run_paired_component_stability.py` | drift-sensitive component를 explicit control-treatment-control 순서로 재측정. Global L1/L2/DRAM은 `global_addr_only`, Shared는 `clocked_empty`를 강제 |
-| power API audit | `audit_power_api_measurements.py` | raw energy CSV가 power measurement matrix 기준 final/provisional/reject인지 판정하고 새 finalplan에서는 explicit `measurement_scope`를 요구하며 `--self-test`로 A100 semantics, fallback numerator, H100 module scope 혼입 회귀를 검증 |
+| power API audit | `audit_power_api_measurements.py` | raw energy CSV가 power measurement matrix 기준 final/provisional/reject인지 판정하고 새 finalplan에서는 explicit `measurement_scope`와 exact timed-kernel interval을 요구하며 `--self-test`로 A100 semantics, fallback numerator, H100 module scope 혼입 회귀를 검증 |
 | power-state audit | `audit_power_state_stability.py` | raw row의 평균 전력/endpoint power outlier를 찾아 측정 품질 문제와 weak-signal 문제를 분리 |
 | NCU sidecar | `run_ncu_validation.sh` | chip별 metric availability를 확인한 뒤 primary finalplan mode의 hit/access/byte/stall/spill/occupancy/launch-resource counter 수집. `NCU_COMPONENTS=tensor,l2`처럼 targeted subset 선택 가능 |
 | NCU summary | `summarize_ncu_cache_metrics.py` | NCU raw export를 cache/path, native-vs-derived L2 hit, sector conservation, observed/expected L2 traffic, DRAM read traffic, achieved occupancy/register/shared-block summary로 정리 |
 | path acceptance | `analyze_ncu_path_acceptance.py` | accepted/provisional/rejected path 판정. A100 L2는 selected address layout과 observed/expected byte gate를 강제할 수 있음 |
-| matched-control | `analyze_matched_control_energy.py` | NCU byte denominator 기반 pJ/FLOP, pJ/byte, pJ/bit 계산 |
+| matched-control | `analyze_matched_control_energy.py` | NCU byte denominator 기반 pJ/FLOP, pJ/byte, pJ/bit 계산. 실제 benchmark interval의 `pair_transition_gap_ms`로 pair 인접성을 검사하고 legacy CSV는 `run_id-elapsed_s`로 명시적 추정 |
 | component reliability | `audit_component_reliability.py` | power/NCU/matched-control 결과를 결합해 component별 최종 verdict 생성 |
 | instability audit | `audit_matched_control_instability.py` | invalid/weak-signal matched-control row 원인과 follow-up 실험 조건 요약 |
-| A100 L2 path selector | `select_a100_l2_path_configuration.py` | 사전 순서의 policy/layout/blocks-SM 후보 중 W16/W128 strict NCU gate를 모두 통과한 첫 후보를 선택하고 energy sweep에 env로 전달 |
+| platform L2 path selector | `select_l2_path_configuration.py` | A100/V100의 사전 순서 policy/layout/blocks-SM 후보 중 두 working-set anchor의 strict NCU gate를 모두 통과한 첫 후보를 energy sweep에 전달. A100 native L2 hit는 필수, GV100 native metric은 없으면 derived/sector/traffic 증거로 대체하고 있으면 교차검증. V100 persisting policy는 하드 거부 |
+| legacy selector entry point | `select_a100_l2_path_configuration.py` | 기존 A100 remediation command와의 호환 wrapper. 새 plan은 generic selector 사용 |
 | A100 Tensor/L2 NCU precheck | `audit_a100_ncu_precheck.py` | energy 전에 Tensor RF 선형성과 selected L2 policy/layout/B의 전체 W/LR path evidence를 hard gate |
 | A100 Tensor/L2 remediation audit | `audit_a100_tensor_l2_remediation.py` | RF별 dual-calibration max ITER, 실제 control duration, 동일 ITER/HMMA/spill/양수 delta와 W별 native/derived L2 hit, sector/traffic 보존, exact NCU denominator, 인접-W pJ/bit plateau를 검증 |
 | strict summary build | `build_strict_component_summary.py` | accepted reliability, matched-control, NCU acceptance artifact에서 보고용 strict component coefficient summary 생성. 여러 NCU summary artifact가 입력되면 component별 strict detail 좌표를 덮는 artifact만 row에 연결하고, path-relevant NCU hit/access/byte/stall evidence를 summary row에 직접 노출하며 `--self-test`로 Tensor B4/B16 artifact 선택 회귀를 검증 |
@@ -98,7 +99,7 @@ pairing의 시간/온도 거리를 줄인다. Global L1/L2/DRAM은 `global_addr_
 
 표준 component sweep runner도 현재 알려진 2-mode pair를 원자적으로 회전하므로 반복
 경계에서 control/treatment가 분리되지 않는다. A100 Tensor/L2 targeted 결과는
-`select_a100_l2_path_configuration.py`로 strict policy/layout/B 후보를 먼저 선택하고,
+`select_l2_path_configuration.py`로 strict policy/layout/B 후보를 먼저 선택하고,
 `audit_a100_tensor_l2_remediation.py`로 RF별 동일 ITER/HMMA/spill/양수 차분과 L2
 path-specific/native hit, sector/expected-traffic conservation 및 인접 W plateau를 함께 검사한다.
 
@@ -136,13 +137,15 @@ python3 scripts/audit_power_api_measurements.py \
   --out-md results/summary/power_api_audit.md \
   --fail-on-reject \
   --fail-on-provisional \
-  --require-explicit-measurement-scope
+  --require-explicit-measurement-scope \
+  --require-exact-measurement-interval
 ```
 
 `final_candidate`는 `nvml_total_energy`와 `total_energy_mj_delta`를 사용하고,
 profile의 `nvml_power_usage_semantics`가 맞는 row다. `GetPowerUsage`
 fallback row는 `provisional`로 분리하고 final pJ/FLOP, pJ/bit 표에 섞지 않는다.
-새 finalplan에서는 raw CSV의 `measurement_scope`가 직접 기록되어야 한다. 기존 파일처럼
+새 finalplan에서는 raw CSV의 `measurement_scope`와 timed-kernel 시작/종료 epoch가 직접
+기록되어야 한다. 기존 파일처럼
 source/integration에서 scope를 추론해야 하는 row는 history/provisional로 분리한다.
 Audit CSV의 `measurement_scope`는 `gpu_device_total_energy_counter` 또는
 `gpu_device_power_usage_fallback`으로 기록된다. H100/HGX에서 보이는 module power나
@@ -195,7 +198,7 @@ python3 scripts/analyze_matched_control_energy.py \
   --require-total-energy \
   --expected-power-semantics one_sec_average \
   --pairing nearest-control \
-  --max-pair-start-distance-ms 30000 \
+  --max-pair-transition-gap-ms 30000 \
   --min-elapsed-s 10 \
   --min-delta-fraction 0.005 \
   --out-summary-csv results/summary/matched_control_summary.csv \
@@ -206,10 +209,17 @@ python3 scripts/analyze_matched_control_energy.py \
 Final package에서는 `--require-control-ncu-acceptance`를 생략하지 않는다.
 `reg_operand_only`와 `global_addr_only`가 treatment와 같은 좌표에서 NCU
 `accepted`여야 하며, treatment만 통과한 pair는 계수 후보에서 제외된다.
-`pair_start_distance_ms`는 legacy 열 이름으로, 실제로는 측정 완료 후
-생성된 두 `run_id` timestamp 간격이다. 임의의 다른 repeat control을 재사용하는
-것을 막되 idle baseline과 kernel 시간을 포함해야 한다. 10초 finalplan은
-30,000 ms, 20초 targeted remediation은 60,000 ms를 사용한다.
+현재 binary는 timed kernel 전후의 `measurement_start_epoch_ms`와
+`measurement_end_epoch_ms`를 raw CSV에 기록한다. 분석 gate는 두 benchmark interval
+사이의 비실행 간격인 `pair_transition_gap_ms`에 적용된다. legacy
+`pair_start_distance_ms`는 완료 timestamp 차이였고 시작 간격이 아니므로 더 이상
+gate에 사용하지 않는다. 이전 raw CSV는 `run_id-elapsed_s`로 interval을 추정하며
+`pair_timing_source=legacy_run_id_elapsed_inferred`로 구분한다.
+생성 finalplan의 transition-gap 한계는
+`max(30000, (seconds + 15) x 1000)` ms다. 각 binary process가 timed kernel 전에
+`seconds`만큼 idle baseline을 다시 측정하므로, 20초 이상 stability run에
+고정 30초 gate를 쓰면 정상인 인접 pair도 오탈락할 수 있다. 적용된 한계는
+matched detail의 `pair_transition_gap_limit_ms`에 row별로 기록된다.
 
 Matched-control 이후에는 component reliability audit을 실행한다.
 

@@ -93,6 +93,8 @@ RAW_COLUMNS = [
     "nvml_total_energy_supported",
     "nvml_power_usage_semantics",
     "elapsed_s",
+    "measurement_start_epoch_ms",
+    "measurement_end_epoch_ms",
     "E_before_mJ",
     "E_after_mJ",
     "delta_E_J",
@@ -162,6 +164,10 @@ MATCHED_DETAIL_COLUMNS = [
     "pair_energy_basis",
     "ncu_control_acceptance_required",
     "ncu_control_acceptance_exact",
+    "pair_transition_gap_ms",
+    "pair_transition_gap_limit_ms",
+    "pair_timing_source",
+    "pair_execution_order",
     "numerator_ITER",
     "control_ITER",
     "iter_ratio",
@@ -729,6 +735,10 @@ def write_raw_files(
             "nvml_total_energy_supported": total_energy_supported,
             "nvml_power_usage_semantics": power_semantics,
             "elapsed_s": elapsed_s,
+            "measurement_start_epoch_ms": "100000",
+            "measurement_end_epoch_ms": str(
+                100000 + int(round(float(elapsed_s) * 1000.0))
+            ),
             "E_before_mJ": e_before_mj,
             "E_after_mJ": e_after_mj,
             "delta_E_J": delta_e_j,
@@ -763,6 +773,49 @@ def write_power_api_audit(
         "actual_power_semantics": power_semantics,
     }
     write_csv(path, POWER_API_COLUMNS, [row])
+
+
+def write_l2_path_selection_fixture(
+    module: Any,
+    repo: Path,
+    profile: str,
+    tag: str,
+    *,
+    selected: bool = True,
+    policy: str = "normal",
+) -> None:
+    path = repo / module.expected_paths(profile, tag)["l2_path_selection"]
+    expected_w = (16, 128) if profile == "a100" else (32, 64)
+    rows = []
+    for w_sm_kib in expected_w:
+        rows.append(
+            {
+                "policy": policy,
+                "layout": "sm_interleaved",
+                "blocks_per_SM": "8" if profile == "a100" else "16",
+                "W_SM_KiB": str(w_sm_kib),
+                "load_repeat": "4",
+                "l1_path_hit_rate_pct": "0",
+                "l2_path_hit_rate_pct": "99.5",
+                "l2_native_read_hit_rate_pct": "99.4",
+                "l2_native_vs_derived_hit_delta_pct": "0.1",
+                "native_l2_gate": (
+                    "required"
+                    if profile == "a100"
+                    else "optional_present_cross_checked"
+                ),
+                "l2_read_sector_conservation_ratio": "1",
+                "l2_read_bytes_to_expected": "1",
+                "dram_read_to_l2_read_ratio": "0.001",
+                "launch_persisting_l2_cache_size_bytes": (
+                    "1048576" if policy == "persisting" else "0"
+                ),
+                "selected_candidate": "yes" if selected else "no",
+                "status": "pass",
+                "reason": "pass",
+            }
+        )
+    write_csv(path, list(rows[0]), rows)
 
 
 def write_power_state_audit(
@@ -873,6 +926,10 @@ def write_matched_detail(
     dram_pair_energy_basis: str = "matched_iters_net_energy",
     dram_control_iters: str = "1000",
     dram_control_elapsed_s: str = "1.0",
+    pair_timing_source: str = "exact_epoch_interval",
+    include_reverse_order: bool = True,
+    pair_transition_gap_ms: str = "1000",
+    pair_transition_gap_limit_ms: str = "30000",
 ) -> None:
     semantics = module.PROFILE_POWER_SEMANTICS[profile]
     rows: list[dict[str, str]] = []
@@ -880,8 +937,7 @@ def write_matched_detail(
         tensor = component == "tensor_mma_increment"
         l2 = component == "l2_hit_cg_path"
         dram = component == "dram_cg_stream_path"
-        rows.append(
-            {
+        base_row = {
                 "component": component,
                 "valid_component_estimate": "True",
                 "pair_energy_basis": (
@@ -915,6 +971,10 @@ def write_matched_detail(
                     }
                     else ""
                 ),
+                "pair_transition_gap_ms": pair_transition_gap_ms,
+                "pair_transition_gap_limit_ms": pair_transition_gap_limit_ms,
+                "pair_timing_source": pair_timing_source,
+                "pair_execution_order": "control_then_treatment",
                 "numerator_ITER": "1000",
                 "control_ITER": (
                     tensor_control_iters
@@ -959,7 +1019,11 @@ def write_matched_detail(
                 "numerator_power_semantics": semantics,
                 "control_power_semantics": semantics,
             }
-        )
+        rows.append(base_row)
+        if include_reverse_order:
+            rows.append(
+                {**base_row, "pair_execution_order": "treatment_then_control"}
+            )
     write_csv(
         repo / module.expected_paths(profile, tag)["matched_detail"],
         MATCHED_DETAIL_COLUMNS,
@@ -1681,6 +1745,43 @@ def run_matched_summary_case(
         print(f"{name}: ok")
 
 
+def run_l2_path_selection_case(
+    module: Any,
+    *,
+    name: str,
+    profile: str,
+    expected_status: str,
+    expected_text: str | None = None,
+    selected: bool = True,
+    policy: str = "normal",
+) -> None:
+    with tempfile.TemporaryDirectory(prefix=f"{name}_") as tmp:
+        repo = Path(tmp)
+        write_l2_path_selection_fixture(
+            module,
+            repo,
+            profile,
+            "selftest",
+            selected=selected,
+            policy=policy,
+        )
+        rows = module.audit_package(
+            repo,
+            profile,
+            "selftest",
+            expected_active_sm=PROFILE_ACTIVE_SM[profile],
+            expected_sm_count=None,
+        )
+        assert_status(rows, "l2_path_selection_present", "pass")
+        assert_status(
+            rows,
+            "l2_path_selected_before_energy",
+            expected_status,
+            actual_contains=expected_text,
+        )
+        print(f"{name}: ok")
+
+
 def run_matched_detail_case(
     module: Any,
     *,
@@ -1697,6 +1798,10 @@ def run_matched_detail_case(
     dram_pair_energy_basis: str = "matched_iters_net_energy",
     dram_control_iters: str = "1000",
     dram_control_elapsed_s: str = "1.0",
+    pair_timing_source: str = "exact_epoch_interval",
+    include_reverse_order: bool = True,
+    pair_transition_gap_ms: str = "1000",
+    pair_transition_gap_limit_ms: str = "30000",
 ) -> None:
     with tempfile.TemporaryDirectory(prefix=f"{name}_") as tmp:
         repo = Path(tmp)
@@ -1716,6 +1821,10 @@ def run_matched_detail_case(
             dram_pair_energy_basis=dram_pair_energy_basis,
             dram_control_iters=dram_control_iters,
             dram_control_elapsed_s=dram_control_elapsed_s,
+            pair_timing_source=pair_timing_source,
+            include_reverse_order=include_reverse_order,
+            pair_transition_gap_ms=pair_transition_gap_ms,
+            pair_transition_gap_limit_ms=pair_transition_gap_limit_ms,
         )
         rows = module.audit_package(
             repo,
@@ -2334,11 +2443,59 @@ def main() -> int:
         expected_status="fail",
         expected_text="tensor_mma_increment:median=0",
     )
+    run_l2_path_selection_case(
+        module,
+        name="good_a100_l2_path_selection",
+        profile="a100",
+        expected_status="pass",
+        expected_text="selected=normal/sm_interleaved/8",
+    )
+    run_l2_path_selection_case(
+        module,
+        name="bad_a100_l2_path_not_selected",
+        profile="a100",
+        selected=False,
+        expected_status="fail",
+        expected_text="selected=none",
+    )
+    run_l2_path_selection_case(
+        module,
+        name="bad_v100_persisting_l2_selection",
+        profile="v100",
+        policy="persisting",
+        expected_status="fail",
+        expected_text="selected=persisting/sm_interleaved/16",
+    )
     run_matched_detail_case(
         module,
         name="good_tensor_matched_iters_detail",
         profile="a100",
         expected_status="pass",
+    )
+    run_matched_detail_case(
+        module,
+        name="bad_legacy_inferred_pair_timing_detail",
+        profile="a100",
+        pair_timing_source="legacy_run_id_elapsed_inferred",
+        expected_status="fail",
+        expected_text="valid_pair_timing_source=legacy_run_id_elapsed_inferred",
+    )
+    run_matched_detail_case(
+        module,
+        name="bad_single_pair_execution_order_detail",
+        profile="a100",
+        include_reverse_order=False,
+        expected_status="fail",
+        expected_text="valid_pair_orders=control_then_treatment",
+    )
+    run_matched_detail_case(
+        module,
+        name="bad_pair_transition_gap_above_recorded_limit",
+        profile="a100",
+        pair_transition_gap_ms="35001",
+        pair_transition_gap_limit_ms="35000",
+        expected_status="fail",
+        expected_text="valid_pair_transition_gap_ms=35001>35000",
     )
     run_matched_detail_case(
         module,

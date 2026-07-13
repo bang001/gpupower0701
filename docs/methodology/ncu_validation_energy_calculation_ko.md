@@ -78,8 +78,11 @@ path-specific hit/miss-derived ratio와 DRAM traffic으로 별도 판정한다.
 현재 NCU sidecar는 기본적으로 `application replay + cache-control none`을 사용한다.
 metric pass마다 application setup과 kernel 전 warm-up을 다시 실행하기 위한 선택이다.
 summary에는 `ncu_replay_mode`, `ncu_cache_control`, `global_warmup_passes`,
-`l2_residency_policy`, `l2_address_layout`을 남긴다. A100 targeted L2 결과는 이 다섯
-필드와 selected blocks/SM이 energy 구성과 정확히 일치하지 않으면 reject한다. persisting policy가 선택되면 그 값은
+`l2_residency_policy`, `l2_address_layout`을 남긴다. A100/V100 새 finalplan은 긴 energy
+sweep 전에 L2 후보를 먼저 profiling한다. A100은 normal/persisting, V100은 CC 7.0에서
+지원되는 normal만 사용하며, 두 working-set anchor에서 strict gate를 통과한
+policy/layout/blocks-SM을 full NCU와 energy에 동일하게 전달한다. 이 다섯 필드와
+selected blocks/SM이 energy 구성과 정확히 일치하지 않으면 reject한다. persisting policy가 선택되면 그 값은
 일반 L2가 아니라 residency-managed L2 effective path coefficient다.
 
 ## Path acceptance 기준
@@ -92,7 +95,7 @@ summary에는 `ncu_replay_mode`, `ncu_cache_control`, `global_warmup_passes`,
 | Tensor control | `reg_operand_only`에서 Tensor/HMMA instruction = 0, spill/local 0 |
 | Shared scalar | shared bytes/accesses > 0, shared instruction 존재, bank conflict ratio 낮음, global/L2/DRAM traffic 낮음 |
 | Global L1 | path-specific L1 hit >=95%, L1 request/hit bytes 존재, L2 read/L1 request <=1%, DRAM/L1 request <=1% |
-| L2 CG | hit/miss-derived 및 native op-read L2 hit 모두 >=95%, 두 값 차이 <=2 percentage points, `(hit+miss)/total read sectors=1+/-2%`, observed/expected L2 bytes=0.95-1.05, L1 path hit <=1%, L1 hit/request bytes <=1%, DRAM/L2 read <=2%. aggregate hit rate는 진단값 |
+| L2 CG | hit/miss-derived L2 hit >=95%. A100은 native op-read hit도 >=95%이고 두 값 차이 <=2 percentage points여야 한다. GV100은 native metric이 없을 수 있어 derived hit/miss, `(hit+miss)/total read sectors=1+/-2%`, observed/expected L2 bytes=0.95-1.05, L1 path hit <=1%, L1 hit/request bytes <=1%, DRAM/L2 read <=2%를 필수로 삼는다. aggregate hit rate는 진단값 |
 | DRAM sanity | path-specific L1 hit <=1%, DRAM bytes dominant, path-specific L2 read hit은 `max(5%, 2 x L2_capacity/full_working_set + 2%)` 이하 |
 
 L2 CG mode은 measurement 전 warm-up도 `ld.global.cg.u32`를 쓰는

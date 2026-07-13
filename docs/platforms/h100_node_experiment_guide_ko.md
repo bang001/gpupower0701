@@ -215,6 +215,7 @@ python3 scripts/audit_power_api_measurements.py \
   --fail-on-reject \
   --fail-on-provisional \
   --require-explicit-measurement-scope \
+  --require-exact-measurement-interval \
   --require-mode-notes-marker \
   reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2
 ```

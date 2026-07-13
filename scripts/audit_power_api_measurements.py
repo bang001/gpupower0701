@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterable
@@ -70,12 +71,21 @@ def audit_row(
     row_index: int,
     target_profile: str,
     require_explicit_measurement_scope: bool,
+    require_exact_measurement_interval: bool = False,
     required_mode_notes_markers: dict[str, str] | None = None,
 ) -> dict[str, str]:
     marker_rules = required_mode_notes_markers or {}
     required_columns = set(REQUIRED_COLUMNS)
     if require_explicit_measurement_scope:
         required_columns.add("measurement_scope")
+    if require_exact_measurement_interval:
+        required_columns.update(
+            {
+                "elapsed_s",
+                "measurement_start_epoch_ms",
+                "measurement_end_epoch_ms",
+            }
+        )
     if marker_rules:
         required_columns.update({"mode", "notes"})
     missing = sorted(col for col in required_columns if col not in row)
@@ -136,6 +146,35 @@ def audit_row(
         reasons.append("measurement_scope_energy_source_mismatch")
         notes.append(f"inferred_measurement_scope={inferred_measurement_scope}")
 
+    if require_exact_measurement_interval:
+        try:
+            elapsed_s = float(row.get("elapsed_s", ""))
+            measurement_start_ms = float(row.get("measurement_start_epoch_ms", ""))
+            measurement_end_ms = float(row.get("measurement_end_epoch_ms", ""))
+        except (TypeError, ValueError):
+            elapsed_s = measurement_start_ms = measurement_end_ms = math.nan
+        if not math.isfinite(elapsed_s) or elapsed_s <= 0.0:
+            reasons.append("invalid_elapsed_s_for_measurement_interval")
+        if not math.isfinite(measurement_start_ms) or measurement_start_ms <= 0.0:
+            reasons.append("invalid_measurement_start_epoch_ms")
+        if (
+            not math.isfinite(measurement_end_ms)
+            or not math.isfinite(measurement_start_ms)
+            or measurement_end_ms < measurement_start_ms
+        ):
+            reasons.append("invalid_measurement_end_epoch_ms")
+        if (
+            math.isfinite(elapsed_s)
+            and elapsed_s > 0.0
+            and math.isfinite(measurement_start_ms)
+            and math.isfinite(measurement_end_ms)
+            and measurement_end_ms >= measurement_start_ms
+        ):
+            interval_ms = measurement_end_ms - measurement_start_ms
+            expected_ms = elapsed_s * 1000.0
+            if abs(interval_ms - expected_ms) > max(5.0, expected_ms * 0.01):
+                reasons.append("measurement_interval_elapsed_mismatch")
+
     if source != "nvml_total_energy":
         notes.append("not_final_coefficient_numerator")
     if integration != "total_energy_mj_delta":
@@ -171,6 +210,8 @@ def audit_row(
         "power_after_mw": row.get("power_after_mw", ""),
         "power_sample_count": power_sample_count,
         "power_sample_period_ms": row.get("power_sample_period_ms", ""),
+        "measurement_start_epoch_ms": row.get("measurement_start_epoch_ms", ""),
+        "measurement_end_epoch_ms": row.get("measurement_end_epoch_ms", ""),
         "status": status,
         "reasons": ";".join(reasons),
         "notes": ";".join(notes),
@@ -182,6 +223,7 @@ def read_rows(
     target_profile: str,
     *,
     require_explicit_measurement_scope: bool,
+    require_exact_measurement_interval: bool = False,
     required_mode_notes_markers: dict[str, str] | None = None,
 ) -> list[dict[str, str]]:
     audited: list[dict[str, str]] = []
@@ -197,6 +239,7 @@ def read_rows(
                         row_index=idx,
                         target_profile=target_profile,
                         require_explicit_measurement_scope=require_explicit_measurement_scope,
+                        require_exact_measurement_interval=require_exact_measurement_interval,
                         required_mode_notes_markers=required_mode_notes_markers,
                     )
                 )
@@ -225,6 +268,8 @@ def write_csv(path: str, rows: list[dict[str, str]]) -> None:
         "power_after_mw",
         "power_sample_count",
         "power_sample_period_ms",
+        "measurement_start_epoch_ms",
+        "measurement_end_epoch_ms",
         "status",
         "reasons",
         "notes",
@@ -307,6 +352,11 @@ def write_markdown(path: str, rows: list[dict[str, str]], csv_path: str) -> None
             "analysis.\n"
         )
         f.write(
+            "- When `--require-exact-measurement-interval` is used, the raw row "
+            "must contain positive timed-kernel start/end epoch fields consistent "
+            "with `elapsed_s`. Legacy run-id timing inference is diagnostic only.\n"
+        )
+        f.write(
             "- `provisional` means the row uses a fallback power integral. It "
             "should not be mixed into final pJ/FLOP or pJ/bit tables.\n"
         )
@@ -356,6 +406,9 @@ def selftest_row(**overrides: str) -> dict[str, str]:
         "power_after_mw": "255000",
         "power_sample_count": "0",
         "power_sample_period_ms": "0",
+        "elapsed_s": "10",
+        "measurement_start_epoch_ms": "100000",
+        "measurement_end_epoch_ms": "110000",
     }
     row.update(overrides)
     return row
@@ -379,6 +432,38 @@ def run_self_test() -> None:
         good["status"] == "final_candidate",
         "good_a100_total_energy",
         good["reasons"],
+    )
+
+    good_exact_interval = audit_row(
+        selftest_row(),
+        input_file="selftest.csv",
+        row_index=2,
+        target_profile="a100",
+        require_explicit_measurement_scope=True,
+        require_exact_measurement_interval=True,
+    )
+    assert_selftest(
+        good_exact_interval["status"] == "final_candidate",
+        "good_exact_measurement_interval",
+        good_exact_interval["reasons"],
+    )
+
+    missing_exact_interval = selftest_row()
+    missing_exact_interval.pop("measurement_start_epoch_ms")
+    missing_exact_interval_result = audit_row(
+        missing_exact_interval,
+        input_file="selftest.csv",
+        row_index=2,
+        target_profile="a100",
+        require_explicit_measurement_scope=True,
+        require_exact_measurement_interval=True,
+    )
+    assert_selftest(
+        missing_exact_interval_result["status"] == "reject"
+        and "missing_column:measurement_start_epoch_ms"
+        in missing_exact_interval_result["reasons"],
+        "missing_exact_measurement_interval",
+        missing_exact_interval_result["reasons"],
     )
 
     bad_semantics = audit_row(
@@ -572,6 +657,14 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--require-exact-measurement-interval",
+        action="store_true",
+        help=(
+            "Reject rows without positive timed-kernel start/end epoch fields "
+            "consistent with elapsed_s. Use this for new finalplan runs."
+        ),
+    )
+    parser.add_argument(
         "--require-mode-notes-marker",
         action="append",
         default=[],
@@ -613,6 +706,7 @@ def main() -> int:
         args.csv_paths,
         args.target_profile,
         require_explicit_measurement_scope=args.require_explicit_measurement_scope,
+        require_exact_measurement_interval=args.require_exact_measurement_interval,
         required_mode_notes_markers=required_mode_notes_markers,
     )
     write_csv(args.out_csv, rows)

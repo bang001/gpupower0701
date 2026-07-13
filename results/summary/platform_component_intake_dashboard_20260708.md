@@ -15,8 +15,8 @@ This dashboard summarizes package audits and gap reports. It does not replace pa
 | profile | power semantics | package status | package pass/missing/fail | gap blockers | first open stage | strict summary | accepted components |
 |---|---|---|---:|---:|---|---|---:|
 | `rtx3090` | `one_sec_average` | `historical_local_evidence` | 0/0/0 | 0 | - | `historical_pass` | 4 |
-| `v100` | `instant` | `missing_artifacts` | 2/16/0 | 16 | preflight | `missing_summary` | 0 |
-| `a100` | `instant` | `missing_artifacts` | 2/16/0 | 16 | preflight | `missing_summary` | 0 |
+| `v100` | `instant` | `missing_artifacts` | 2/17/0 | 17 | preflight | `missing_summary` | 0 |
+| `a100` | `instant` | `missing_artifacts` | 2/17/0 | 17 | preflight | `missing_summary` | 0 |
 | `h100` | `one_sec_average` | `missing_artifacts` | 2/16/0 | 16 | preflight | `missing_summary` | 0 |
 
 ## First Corrective Actions

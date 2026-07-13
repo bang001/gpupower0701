@@ -9,10 +9,13 @@ Generated: 2026-07-14
 | active_SM (SMs) | `108` |
 | energy sweep blocks/SM | `16,32` |
 | strict NCU blocks/SM | `16` |
+| L2 strict blocks/SM | `selected by NCU precheck` |
+| L2 NCU-first selector | `enabled` |
 | expected power semantics | `instant` |
 | minimum visible device memory (MiB) | `0` |
 | seconds (s) | `10.0` |
 | repeats | `5` |
+| max pair transition gap (ms) | `30000` (`max(30000, (seconds + 15) x 1000)`) |
 | Tensor control calibration floor (s) | `1.0` |
 | DRAM address-control calibration floor (s) | `1.0` |
 | binary | `./build-a100/a100_fp16_energy_v2` |
@@ -51,8 +54,14 @@ binary whose CSV header includes `measurement_scope`.
 | Tensor | `reg_operand_only,reg_mma` | 2048 | 2048/16 | reuse 1,2,4,8,16; treatment/control-floor dual-calibrated pair-locked ITER |
 | Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | 128/16 | energy load_repeat 4,8,16; NCU also checks 1,2 |
 | Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | 16/16 | energy load_repeat 4,8,16; NCU also checks 1,2 |
-| L2 | `global_addr_only,l2_cg_load_only` | 16,32,64,128 | 16,32,64,128/16 | energy load_repeat 4,8,16; treatment/control-floor dual-calibrated pair-locked ITER; NCU also checks 1,2 |
+| L2 | `global_addr_only,l2_cg_load_only` | 16,32,64,128 | 16,32,64,128/selected by NCU precheck | energy load_repeat 4,8,16; treatment/control-floor dual-calibrated pair-locked ITER; NCU also checks 1,2 |
 | DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 8192/16 | energy load_repeat 4,8,16; treatment/control-floor dual-calibrated pair-locked ITER; NCU checks 1,4,8,16 |
+
+For A100/V100, the generated shell performs the L2 NCU selector before any long
+energy sweep. It records every rejected candidate in
+`results/summary/a100_component_finalplan_20260708_l2_path_selection.csv`.
+If no candidate passes, the shell stops without manufacturing an L2 coefficient;
+the 95% threshold is not relaxed.
 
 The energy runner applies the same 1 KiB/block feasibility rule to treatment and
 matched control. Global L1 valid coordinates are
@@ -86,10 +95,12 @@ an unvalidated or traffic-contaminated control.
 
 A100 uses `NCU_CHIP=ga100`; its L2 candidates are below the
 40 MiB L2 capacity and use `ld.global.cg` to avoid global-L1
-cache hits. The sidecar sweeps W_SM=16,32,64,128
-KiB and keeps only coordinates where path-specific L1 hit bytes are near zero
-and path-specific L2 read hit rate passes. L1TEX request bytes are expected for
-`.cg` and are not treated as L1 cache-hit evidence.
+cache hits. Before energy measurement, NCU tests normal and supported persisting
+residency with contiguous/sm_interleaved layouts and blocks/SM 16,8,4 at
+W_SM=16,128 KiB/SM. The first candidate passing path-specific L1 bypass, at
+least 95% derived/native L2 hit, sector conservation, expected traffic, and
+DRAM-leakage gates is propagated to the full L2 sweep. L1TEX request bytes are
+expected for `.cg` and are not treated as L1 cache-hit evidence.
 
 CG measurement paths also use an `ld.global.cg` warm-up kernel so the harness
 does not pre-populate L1 with a normal cached-load warm-up.
@@ -236,8 +247,24 @@ hard-invalid DRAM detail row; duration-scaled DRAM coefficients are not final
 cross-platform evidence.
 The runner rotates complete control-treatment coordinate pairs between repeats;
 it never rotates a flat list by one command and split a pair across repeat
-boundaries. The same atomic pair ordering applies to the generated Shared,
-Global L1, L2 CG, and DRAM CG treatment-control sweeps.
+boundaries. It counterbalances `control -> treatment` and
+`treatment -> control` using both repeat and coordinate index, so one repeat
+also contains opposing pair directions and thermal/clock drift is not
+systematically assigned to the treatment. The same atomic and counterbalanced pair
+policy applies to Shared, Global L1, L2 CG, and DRAM CG sweeps. Strict package
+audit requires valid rows from both execution orders.
+Current raw CSVs record `measurement_start_epoch_ms` and
+`measurement_end_epoch_ms` around the timed benchmark. Matched-control adjacency
+uses the non-overlapping `pair_transition_gap_ms`, not the formerly misnamed
+completion timestamp difference `pair_start_distance_ms`. Legacy raw CSVs remain
+reanalyzable by estimating each interval from `run_id - elapsed_s`, with
+`pair_timing_source=legacy_run_id_elapsed_inferred` recorded explicitly.
+The generated transition-gap limit is
+`max(30000, (seconds + 15) x 1000)` ms. Each binary invocation measures an idle
+baseline for `seconds` before its timed kernel, so a fixed 30-second gate would
+reject valid adjacent pairs in longer stability runs. The 15-second allowance
+covers process startup, allocation, warm-up, and synchronization; the actual
+limit is recorded as `pair_transition_gap_limit_ms` in every matched-detail row.
 Both Tensor kernels execute the same dependent register integer add once per
 RF iteration, so the liveness/control instruction cancels in the direct pair.
 The control no longer performs the former RF-proportional FP32 FMA/checksum or

@@ -20,7 +20,7 @@
 
 - NVML energy는 보드/디바이스 전체 에너지다. Tensor Core, register file, scheduler, LSU, interconnect, cache, memory controller, DRAM, clock/power-state 변화가 함께 들어간다.
 - GPU 세대별 power API 의미는 다르다. 최종 분석에서는 `nvmlDeviceGetTotalEnergyConsumption` 기반 `energy_source=nvml_total_energy`, `energy_integration_method=total_energy_mj_delta`, `measurement_scope=gpu_device_total_energy_counter`, `nvml_total_energy_supported=true` row를 우선하고, `GetPowerUsage` fallback row는 provisional로 둔다. 세부 기준은 `docs/platforms/power_measurement_api_matrix_ko.md`를 따른다.
-- Energy sweep 직후 `scripts/audit_power_api_measurements.py`를 실행한다. 새 finalplan에서는 `--require-explicit-measurement-scope`를 사용해 raw CSV에 `measurement_scope`가 직접 기록되었는지 확인한다. 이 단계에서 `final_candidate`가 아닌 row가 있으면 NCU path가 좋아도 최종 coefficient로 채택하지 않는다.
+- Energy sweep 직후 `scripts/audit_power_api_measurements.py`를 실행한다. 새 finalplan에서는 `--require-explicit-measurement-scope --require-exact-measurement-interval`을 사용해 raw CSV에 `measurement_scope`와 timed-kernel 시작/종료 epoch가 직접 기록되었는지 확인한다. 이 단계에서 `final_candidate`가 아닌 row가 있으면 NCU path가 좋아도 최종 coefficient로 채택하지 않는다.
 - Matched-control 이후 `scripts/audit_component_reliability.py`를 실행해 power/NCU/계수 안정성 gate를 결합한 verdict를 만든다.
 - Final analyzer는 `--require-control-ncu-acceptance`를 사용한다. Tensor의 `reg_operand_only`와 Global L1/L2/DRAM의 `global_addr_only`가 treatment와 같은 좌표에서 NCU accepted가 아니면 해당 pair를 최종 계수에 사용하지 않는다.
 - 따라서 최종 보고서는 “pure physical bitcell energy”가 아니라 “NCU로 path가 검증된 microbenchmark의 effective coefficient”로 쓴다.
@@ -220,7 +220,7 @@ energy 측정과 NCU profiling은 분리한다. 개수는 2026-07-10에
 |---|---|---|---|---|---|
 | CUDA arch / active SM | `sm_86` / 82 | `sm_80` / 108 | `sm_70` / 80 | `sm_90` / 132 | SM count는 full-GPU profile 기준이며 runtime preflight와 다르면 중단 |
 | energy blocks/SM | 8,16 | 16,32 | 4,16,32 | 16,32 | blocks/SM; V100은 저밀도 B4, 중간 B16, strict B32를 비교 |
-| strict NCU blocks/SM | 8 | 16 | 32 | 16 | blocks/SM; 다른 B의 energy row를 채택하려면 exact-coordinate NCU 추가 필요 |
+| strict NCU blocks/SM | 8 | Shared/L1 16; L2 selector 16/8/4 | Shared/L1 32; L2 selector 32/16/4 | 16 | blocks/SM; A100/V100 L2는 precheck와 energy/full NCU에 같은 selected B 사용 |
 | Tensor W_SM / RF | 2048 / 1,2,4,8,16 | 동일 | 동일 | 동일 | W_SM: KiB/SM 고정 좌표, RF: reuse factor count; W_SM은 register footprint가 아님 |
 | Shared scalar W_SM | 32,64 | 64,128 | 32,64 | 64,128 | KiB/SM; shared allocation/residency 조건 통과 필요 |
 | Global L1 W_SM | 8,16 | 16,32 | 8,16,32 | 16,32 | KiB/SM; 아래 최소 tile 조건으로 일부 W/B 제외 |
@@ -236,7 +236,8 @@ energy 측정과 NCU profiling은 분리한다. 개수는 2026-07-10에
 
 ![플랫폼별 blocks/SM sweep](../presentations/assets/platform_blocks_per_sm_sweep.png)
 
-현재 V100은 B4를 저밀도 민감도 점, B16을 중간 밀도 점, B32를 strict anchor로 사용한다.
+현재 V100은 B4를 저밀도 민감도 점, B16을 중간 밀도 점, B32를 Shared/L1 strict
+anchor로 사용한다. L2는 B32/B16/B4 중 NCU precheck를 통과한 하나를 선택한다.
 B1/B2/B8은 실행시간 대비 추가 식별력이 제한적이어서 기본 package에서 제외했다. 요청
 blocks/SM은 실제 동시 residency를 보장하지 않으므로 세 점 모두 SMID와 NCU
 occupancy/resource evidence로 검증한다.
@@ -270,7 +271,7 @@ Memory-backed mode는 block당 최소 1 KiB tile을 요구하므로
 | Path | RTX 3090 유효 W/B | A100 유효 W/B | V100 유효 W/B | H100 유효 W/B | 제외 조건 |
 |---|---|---|---|---|---|
 | Global L1 | W8/B8; W16/B8,16 | W16/B16; W32/B16,32 | W8/B4; W16/B4,16; W32/B4,16,32 | W16/B16; W32/B16,32 | RTX W8/B16, A100/H100 W16/B32, V100 W8/B16,32와 W16/B32는 tile < 1 KiB/block |
-| L2 CG | W64/B8,16 | W16/B16; W32,64,128/B16,32 | W32,64/B4,16,32 | W64,128/B16,32 | A100 W16/B32만 tile = 0.5 KiB/block이라 제외 |
+| L2 CG | W64/B8,16 | selector candidates W16,32,64,128/B16,8,4 | selector candidates W32,64/B32,16,4 | W64,128/B16,32 | A100/V100은 두 anchor precheck를 통과한 B 하나만 energy에서 실행 |
 
 아래 `유효 좌표`는 treatment와 control command를 모두 포함한 1회 반복 기준이다.
 `energy raw rows`는 이 값에 `repeats=5`를 곱한 값이다. Schema smoke,
@@ -281,20 +282,20 @@ Tensor calibration, NCU sidecar는 서로 다른 단계이므로 energy raw rows
 | Tensor | 20 / 100 | 20 / 100 | 30 / 150 | 20 / 100 | 2 modes x B x RF 5개 |
 | Shared scalar | 24 / 120 | 24 / 120 | 36 / 180 | 24 / 120 | 2 modes x W x B x LR 3개 |
 | Global L1 | 18 / 90 | 18 / 90 | 36 / 180 | 18 / 90 | 2 modes x 유효 W/B x LR 3개 |
-| L2 CG | 12 / 60 | 42 / 210 | 36 / 180 | 24 / 120 | 2 modes x 유효 W/B x LR 3개 |
+| L2 CG | 12 / 60 | 24 / 120 | 12 / 60 | 24 / 120 | A100/V100은 2 modes x W x selected B 1개 x LR 3개 |
 | DRAM sanity | 12 / 60 | 12 / 60 | 18 / 90 | 12 / 60 | 2 modes x B x LR 3개 |
-| **합계** | **86 / 430** | **116 / 580** | **156 / 780** | **98 / 490** | 유효 commands / expected CSV rows |
+| **합계** | **86 / 430** | **98 / 490** | **132 / 660** | **98 / 490** | 유효 commands / expected CSV rows |
 
 | 별도 실행 단계 | RTX 3090 | A100 | V100 | H100 | 의미 |
 |---|---:|---:|---:|---:|---|
-| feasibility 전 candidate matrix | 92 rows | 128 rows | 174 rows | 104 rows | mode x W x B x RF/LR의 전체 조합 |
-| feasibility 제외 | 6 rows | 12 rows | 18 rows | 6 rows | treatment/control과 LR를 포함한 최소 tile 위반 row |
+| feasibility 전 candidate matrix | 92 rows | 104 rows | 150 rows | 104 rows | A100/V100 L2 matrix는 selector가 고른 B 하나로 생성 |
+| feasibility 제외 | 6 rows | 6 rows | 18 rows | 6 rows | treatment/control과 LR를 포함한 최소 tile 위반 row |
 | schema/revision smoke | 3 rows | 3 rows | 3 rows | 3 rows | full sweep 전 CSV schema와 kernel marker 확인 |
 | Tensor pair calibration | 10 coordinates / 20 commands | 10 coordinates / 20 commands | 15 coordinates / 30 commands | 10 coordinates / 20 commands | B x RF 좌표마다 treatment/control-floor calibration 2회; 큰 ITER를 두 mode에 함께 적용 |
-| L2 pair calibration | 6 coordinates / 12 commands | 21 coordinates / 42 commands | 18 coordinates / 36 commands | 12 coordinates / 24 commands | 유효 W/B/LR 좌표마다 treatment/control-floor calibration 2회; 큰 ITER를 두 mode에 함께 적용 |
+| L2 pair calibration | 6 coordinates / 12 commands | 12 coordinates / 24 commands | 6 coordinates / 12 commands | 12 coordinates / 24 commands | A100/V100은 selected B의 W/LR 좌표만 dual calibration |
 | DRAM pair calibration | 6 coordinates / 12 commands | 6 coordinates / 12 commands | 9 coordinates / 18 commands | 6 coordinates / 12 commands | B x LR 좌표마다 treatment/control-floor calibration 2회; 큰 ITER를 두 mode에 함께 적용 |
-| primary NCU sidecar | 44 cases | 74 cases | 44 cases | 44 cases | A100만 L2 W 4개에서 treatment/control을 모두 profiling; H100 strict sidecar는 W64 사용 |
-| nominal energy kernel time | 4,300 s | 5,800 s | 7,800 s | 4,900 s | raw rows x 10 s의 기준값; dual calibration에서 control candidate가 크면 Tensor treatment가 10 s보다 길어질 수 있으며 calibration/launch/cooling/NCU 시간도 별도 |
+| primary NCU sidecar | 44 cases | 74 cases | 54 cases | 44 cases | A100 L2 W 4개, V100 L2 W 2개; selector precheck는 A100 최대 32/V100 최대 16 case 별도 |
+| nominal energy kernel time | 4,300 s | 4,900 s | 6,600 s | 4,900 s | raw rows x 10 s의 기준값; calibration/launch/cooling/NCU/precheck 시간 별도 |
 
 상세 계산식, generated strict anchor와 기존 RTX 3090 accepted B16 결과의 구분은
 [cross-platform component experiment guide](../platforms/cross_platform_component_experiment_guide_ko.md)의
@@ -309,10 +310,10 @@ combined L1/shared 구조와 NCU toolchain 지원 범위가 다르므로 별도 
 | Step | V100 확인 내용 |
 |---|---|
 | preflight | profile `v100`, CUDA 12.x 권장 compiler의 `compute_70` 지원, `sm_70`, runtime 80 SM, 32GB reference memory >= 30,000 MiB, NVML total energy support |
-| blocks sweep | energy B=4,16,32; strict NCU 대표 B=32. one warp/block이라 이론상 64 warps/SM의 50%이며, 실제 residency는 achieved occupancy/registers/shared-block NCU evidence로 확인 |
+| blocks sweep | Tensor/Shared/L1/DRAM energy B=4,16,32; Shared/L1 strict NCU B32. L2는 normal contiguous B32 뒤 sm_interleaved B32/B16/B4 중 strict-pass B 선택 |
 | shared | energy W_SM 32/64 KiB; strict NCU W32/B32. W64/B32는 96 KiB capacity 경계 stress point |
 | global L1 | energy W_SM 8/16/32 KiB; strict NCU W32/B32. 기존 W8/B16은 block당 1 KiB tile 미만이라 폐기 |
-| L2 final path | `l2_cg_load_only - global_addr_only`; strict W32/B32 = 2.5 MiB total, W64 = 5 MiB stress point |
+| L2 final path | `l2_cg_load_only - global_addr_only`; W32/W64 두 anchor에서 selected B와 normal residency를 검증. V100은 persisting policy 금지 |
 | Tensor | `reg_mma - reg_operand_only`, energy B=4,16,32, strict NCU B32, reuse 1-16 |
 | NCU | 2024.3 GV100 지원 확인. `--list-chips`, `--query-metrics --chips gv100`, exact-coordinate hit/access/byte/stall/HMMA evidence 필수 |
 | power | `nvml_total_energy`, `total_energy_mj_delta`, device total-energy scope, `instant` semantics만 final candidate |

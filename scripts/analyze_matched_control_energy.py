@@ -231,6 +231,56 @@ def run_order(row: dict[str, str], default: int | None = None) -> int:
         return int(as_float(row, "_row_index", 0.0))
 
 
+def measurement_interval_ms(row: dict[str, str]) -> tuple[float, float, str]:
+    """Return the benchmark interval, with a legacy best-effort fallback.
+
+    Current binaries write exact epoch timestamps around the timed kernel. Old
+    CSVs only have a run_id timestamp emitted after measurement, so their start
+    is estimated by subtracting elapsed_s. The fallback intentionally remains
+    available so already-collected A100/V100 rows can be reanalyzed.
+    """
+
+    start = as_float(row, "measurement_start_epoch_ms", float("nan"))
+    end = as_float(row, "measurement_end_epoch_ms", float("nan"))
+    if math.isfinite(start) and math.isfinite(end) and start > 0.0 and end >= start:
+        return start, end, "exact_epoch_interval"
+
+    completion = float(run_order(row))
+    elapsed_ms = max(0.0, as_float(row, "elapsed_s") * 1000.0)
+    return completion - elapsed_ms, completion, "legacy_run_id_elapsed_inferred"
+
+
+def pair_timing_ms(
+    numerator: dict[str, str], control: dict[str, str]
+) -> tuple[float, float, str, str]:
+    """Return completion distance, transition gap, timing source, and pair order."""
+
+    numerator_start, numerator_end, numerator_source = measurement_interval_ms(
+        numerator
+    )
+    control_start, control_end, control_source = measurement_interval_ms(control)
+    if numerator_start >= control_end:
+        transition_gap = numerator_start - control_end
+        execution_order = "control_then_treatment"
+    elif control_start >= numerator_end:
+        transition_gap = control_start - numerator_end
+        execution_order = "treatment_then_control"
+    else:
+        transition_gap = 0.0
+        execution_order = "overlapping_intervals"
+    timing_source = (
+        numerator_source
+        if numerator_source == control_source
+        else f"mixed:{numerator_source}+{control_source}"
+    )
+    return (
+        abs(float(run_order(numerator)) - float(run_order(control))),
+        transition_gap,
+        timing_source,
+        execution_order,
+    )
+
+
 def normalized_key_value(value: str, default: str = "") -> str:
     if value == "":
         return default
@@ -506,7 +556,7 @@ def make_detail_rows(
     l2_control_min_elapsed_s: float,
     dram_control_min_elapsed_s: float,
     max_elapsed_ratio: float,
-    max_pair_start_distance_ms: float,
+    max_pair_transition_gap_ms: float,
     min_delta_j: float,
     min_delta_fraction: float,
     require_ncu_denominator: bool,
@@ -671,19 +721,35 @@ def make_detail_rows(
                     if min(numerator_elapsed, control_elapsed) > 0.0
                     else float("inf")
                 )
-                pair_start_distance_ms = abs(
-                    run_order(numerator) - run_order(control)
+                (
+                    pair_completion_distance_ms,
+                    pair_transition_gap_ms,
+                    pair_timing_source,
+                    pair_execution_order,
+                ) = pair_timing_ms(numerator, control)
+                # Compatibility field for older consumers. This is a completion
+                # timestamp distance and was historically misnamed as a start
+                # distance; it is no longer used as the adjacency gate.
+                pair_start_distance_ms = pair_completion_distance_ms
+
+                numerator_start_ms, numerator_end_ms, _ = measurement_interval_ms(
+                    numerator
+                )
+                control_start_ms, control_end_ms, _ = measurement_interval_ms(
+                    control
                 )
 
                 reasons: list[str] = []
+                if pair_execution_order == "overlapping_intervals":
+                    reasons.append("pair_measurement_intervals_overlap")
                 if (
                     pairing == "nearest-control"
-                    and max_pair_start_distance_ms > 0.0
-                    and pair_start_distance_ms > max_pair_start_distance_ms
+                    and max_pair_transition_gap_ms > 0.0
+                    and pair_transition_gap_ms > max_pair_transition_gap_ms
                 ):
                     reasons.append(
-                        "pair_start_distance_ms>"
-                        f"{max_pair_start_distance_ms:g}"
+                        "pair_transition_gap_ms>"
+                        f"{max_pair_transition_gap_ms:g}"
                     )
                 if (
                     pair_energy_basis == "duration_scaled_control_power"
@@ -782,6 +848,15 @@ def make_detail_rows(
                             run_order(numerator) - run_order(control)
                         ),
                         "pair_start_distance_ms": pair_start_distance_ms,
+                        "pair_completion_distance_ms": pair_completion_distance_ms,
+                        "pair_transition_gap_ms": pair_transition_gap_ms,
+                        "pair_transition_gap_limit_ms": max_pair_transition_gap_ms,
+                        "pair_timing_source": pair_timing_source,
+                        "pair_execution_order": pair_execution_order,
+                        "numerator_measurement_start_epoch_ms": numerator_start_ms,
+                        "numerator_measurement_end_epoch_ms": numerator_end_ms,
+                        "control_measurement_start_epoch_ms": control_start_ms,
+                        "control_measurement_end_epoch_ms": control_end_ms,
                         "numerator_elapsed_s": numerator_elapsed,
                         "control_elapsed_s": control_elapsed,
                         "elapsed_ratio": elapsed_ratio,
@@ -1059,8 +1134,12 @@ def write_markdown(
         )
         f.write(f"| max elapsed ratio | {args.max_elapsed_ratio:g} |\n")
         f.write(
-            "| max pair start distance (ms) | "
-            f"{args.max_pair_start_distance_ms:g} |\n"
+            "| max pair transition gap (ms) | "
+            f"{args.max_pair_transition_gap_ms:g} |\n"
+        )
+        f.write(
+            "| pair timing semantics | exact benchmark intervals when present; "
+            "legacy run_id minus elapsed fallback otherwise |\n"
         )
         f.write(f"| pairing | `{args.pairing}` |\n")
         f.write(f"| Tensor pair policy | `{args.tensor_pair_policy}` |\n")
@@ -1110,10 +1189,10 @@ def write_markdown(
             )
         f.write("\n## Detail Rows\n\n")
         f.write(
-            "| component | W_SM (KiB) | blocks/SM | reuse | load_repeat | pair | pairing | delta_E (J) | signal fraction | denominator | denominator source | energy source | integration | measurement scope | power semantics | coeff | unit | pJ/bit | elapsed ratio | valid | diagnostic |\n"
+            "| component | W_SM (KiB) | blocks/SM | reuse | load_repeat | pair | pairing | execution order | delta_E (J) | signal fraction | denominator | denominator source | energy source | integration | measurement scope | power semantics | coeff | unit | pJ/bit | elapsed ratio | valid | diagnostic |\n"
         )
         f.write(
-            "|---|---:|---:|---:|---:|---|---|---:|---:|---:|---|---|---|---|---|---:|---|---:|---:|---|---|\n"
+            "|---|---:|---:|---:|---:|---|---|---|---:|---:|---:|---|---|---|---|---|---:|---|---:|---:|---|---|\n"
         )
         for row in detail_rows:
             f.write(
@@ -1121,6 +1200,7 @@ def write_markdown(
                 f"{row['blocks_per_SM']} | {row['reuse_factor']} | "
                 f"{row['load_repeat']} | "
                 f"{row['pair']} | {row['pairing']} | "
+                f"{row['pair_execution_order']} | "
                 f"{fmt(row['delta_E_J'])} | "
                 f"{fmt(row['delta_signal_fraction'])} | "
                 f"{fmt(row['denominator'])} | {row['denominator_source']} | "
@@ -1211,7 +1291,7 @@ def run_self_test() -> None:
     treatment = {
         **common,
         "mode": "reg_mma",
-        "run_id": "reg_mma_200_r0",
+        "run_id": "reg_mma_20000_r0",
         "elapsed_s": "10",
         "net_E_J": "30",
         "FLOP": "1415577600",
@@ -1219,7 +1299,7 @@ def run_self_test() -> None:
     control = {
         **common,
         "mode": "reg_operand_only",
-        "run_id": "reg_operand_only_199_r0",
+        "run_id": "reg_operand_only_9000_r0",
         "elapsed_s": "5",
         "net_E_J": "10",
         "FLOP": "0",
@@ -1234,7 +1314,7 @@ def run_self_test() -> None:
         l2_control_min_elapsed_s=0.05,
         dram_control_min_elapsed_s=0.05,
         max_elapsed_ratio=3.0,
-        max_pair_start_distance_ms=30000.0,
+        max_pair_transition_gap_ms=30000.0,
         min_delta_j=0.0,
         min_delta_fraction=0.0,
         require_ncu_denominator=False,
@@ -1252,7 +1332,63 @@ def run_self_test() -> None:
     assert len(matched) == 1
     assert matched[0]["pair_energy_basis"] == "matched_iters_net_energy"
     assert abs(float(matched[0]["delta_E_J"]) - 20.0) < 1.0e-9
+    assert float(matched[0]["pair_transition_gap_ms"]) == 1000.0
+    assert matched[0]["pair_timing_source"] == "legacy_run_id_elapsed_inferred"
+    assert matched[0]["pair_execution_order"] == "control_then_treatment"
     assert matched[0]["valid_component_estimate"]
+
+    adjacent_after_long_kernel = {
+        **control,
+        "run_id": "reg_operand_only_51000_r0",
+        "elapsed_s": "10",
+    }
+    adjacent = make_detail_rows(
+        [treatment, adjacent_after_long_kernel],
+        tensor_pair_policy="matched-iters",
+        **kwargs,
+    )
+    assert adjacent[0]["pair_completion_distance_ms"] == 31000.0
+    assert adjacent[0]["pair_transition_gap_ms"] == 21000.0
+    assert adjacent[0]["valid_component_estimate"]
+
+    exact_treatment = {
+        **treatment,
+        "measurement_start_epoch_ms": "100000",
+        "measurement_end_epoch_ms": "110000",
+    }
+    exact_control = {
+        **control,
+        "measurement_start_epoch_ms": "70000",
+        "measurement_end_epoch_ms": "90000",
+    }
+    exact = make_detail_rows(
+        [exact_treatment, exact_control],
+        tensor_pair_policy="matched-iters",
+        **kwargs,
+    )
+    assert exact[0]["pair_transition_gap_ms"] == 10000.0
+    assert exact[0]["pair_timing_source"] == "exact_epoch_interval"
+    assert exact[0]["pair_execution_order"] == "control_then_treatment"
+    assert exact[0]["valid_component_estimate"]
+
+    reverse_exact_treatment = {
+        **treatment,
+        "measurement_start_epoch_ms": "70000",
+        "measurement_end_epoch_ms": "80000",
+    }
+    reverse_exact_control = {
+        **control,
+        "measurement_start_epoch_ms": "90000",
+        "measurement_end_epoch_ms": "110000",
+    }
+    reverse_exact = make_detail_rows(
+        [reverse_exact_treatment, reverse_exact_control],
+        tensor_pair_policy="matched-iters",
+        **kwargs,
+    )
+    assert reverse_exact[0]["pair_transition_gap_ms"] == 10000.0
+    assert reverse_exact[0]["pair_execution_order"] == "treatment_then_control"
+    assert reverse_exact[0]["valid_component_estimate"]
 
     distant_control = {
         **control,
@@ -1262,7 +1398,7 @@ def run_self_test() -> None:
         [treatment, distant_control], tensor_pair_policy="matched-iters", **kwargs
     )
     assert not distant[0]["valid_component_estimate"]
-    assert "pair_start_distance_ms>30000" in distant[0]["diagnostic"]
+    assert "pair_transition_gap_ms>30000" in distant[0]["diagnostic"]
 
     duration_scaled = make_detail_rows(
         [treatment, control], tensor_pair_policy="duration-scaled", **kwargs
@@ -1298,7 +1434,7 @@ def run_self_test() -> None:
     l2_treatment = {
         **l2_common,
         "mode": "l2_cg_load_only",
-        "run_id": "l2_cg_load_only_300_r0",
+        "run_id": "l2_cg_load_only_40000_r0",
         "elapsed_s": "10",
         "net_E_J": "50",
         "expected_l2_bytes": "1000000",
@@ -1306,7 +1442,7 @@ def run_self_test() -> None:
     l2_control = {
         **l2_common,
         "mode": "global_addr_only",
-        "run_id": "global_addr_only_299_r0",
+        "run_id": "global_addr_only_29000_r0",
         "elapsed_s": "4",
         "net_E_J": "15",
         "expected_l2_bytes": "0",
@@ -1339,7 +1475,7 @@ def run_self_test() -> None:
     dram_treatment = {
         **dram_common,
         "mode": "dram_cg_load_only",
-        "run_id": "dram_cg_load_only_400_r0",
+        "run_id": "dram_cg_load_only_60000_r0",
         "elapsed_s": "10",
         "net_E_J": "80",
         "expected_dram_bytes": "1000000",
@@ -1347,7 +1483,7 @@ def run_self_test() -> None:
     dram_control = {
         **dram_common,
         "mode": "global_addr_only",
-        "run_id": "global_addr_only_399_r0",
+        "run_id": "global_addr_only_49000_r0",
         "elapsed_s": "3",
         "net_E_J": "20",
         "expected_dram_bytes": "0",
@@ -1490,14 +1626,23 @@ def main() -> int:
     )
     parser.add_argument("--max-elapsed-ratio", type=float, default=1.35)
     parser.add_argument(
+        "--max-pair-transition-gap-ms",
+        type=float,
+        default=None,
+        help=(
+            "Reject nearest-control pairs whose timed benchmark intervals are "
+            "separated by more than this limit. Exact epoch fields are preferred; "
+            "legacy CSVs infer each interval from run_id and elapsed_s. Defaults "
+            "to 30000 ms. Set to 0 to disable the gate."
+        ),
+    )
+    parser.add_argument(
         "--max-pair-start-distance-ms",
         type=float,
-        default=30000.0,
+        default=None,
         help=(
-            "Reject nearest-control pairs whose legacy run_id timestamps are "
-            "farther apart than this limit. run_id is emitted after measurement, "
-            "so the limit must include idle-baseline and kernel time. Set to 0 "
-            "to disable the gate."
+            "Deprecated alias for --max-pair-transition-gap-ms. It no longer "
+            "gates the legacy completion-to-completion distance."
         ),
     )
     parser.add_argument("--min-delta-j", type=float, default=0.0)
@@ -1549,6 +1694,21 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    if args.max_pair_transition_gap_ms is None:
+        args.max_pair_transition_gap_ms = (
+            args.max_pair_start_distance_ms
+            if args.max_pair_start_distance_ms is not None
+            else 30000.0
+        )
+    elif (
+        args.max_pair_start_distance_ms is not None
+        and args.max_pair_start_distance_ms != args.max_pair_transition_gap_ms
+    ):
+        parser.error(
+            "--max-pair-transition-gap-ms and deprecated "
+            "--max-pair-start-distance-ms disagree"
+        )
+
     if args.self_test:
         run_self_test()
         return 0
@@ -1573,7 +1733,7 @@ def main() -> int:
         l2_control_min_elapsed_s=args.l2_control_min_elapsed_s,
         dram_control_min_elapsed_s=args.dram_control_min_elapsed_s,
         max_elapsed_ratio=args.max_elapsed_ratio,
-        max_pair_start_distance_ms=args.max_pair_start_distance_ms,
+        max_pair_transition_gap_ms=args.max_pair_transition_gap_ms,
         min_delta_j=args.min_delta_j,
         min_delta_fraction=args.min_delta_fraction,
         require_ncu_denominator=args.require_ncu_denominator,
@@ -1610,6 +1770,15 @@ def main() -> int:
         "control_run_id",
         "run_order_distance",
         "pair_start_distance_ms",
+        "pair_completion_distance_ms",
+        "pair_transition_gap_ms",
+        "pair_transition_gap_limit_ms",
+        "pair_timing_source",
+        "pair_execution_order",
+        "numerator_measurement_start_epoch_ms",
+        "numerator_measurement_end_epoch_ms",
+        "control_measurement_start_epoch_ms",
+        "control_measurement_end_epoch_ms",
         "numerator_elapsed_s",
         "control_elapsed_s",
         "elapsed_ratio",

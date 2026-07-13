@@ -162,7 +162,7 @@ def atomic_pair_groups(
     control_mode: str,
     treatment_mode: str,
 ) -> list[list[dict[str, Any]]]:
-    """Keep each known control immediately before its treatment.
+    """Build adjacent control/treatment groups for balanced execution.
 
     Rotating a flat command list by one item can split a pair across the two
     ends of a repeat. Rotate complete coordinate groups instead so thermal/run
@@ -195,6 +195,25 @@ def atomic_pair_groups(
             )
         pairs.append([by_mode[control_mode], by_mode[treatment_mode]])
     return pairs
+
+
+def ordered_atomic_pairs_for_repeat(
+    pairs: list[list[dict[str, Any]]], repeat: int
+) -> list[list[dict[str, Any]]]:
+    """Rotate coordinates and counterbalance pair direction across coordinates."""
+
+    if not pairs:
+        return []
+    offset = repeat % len(pairs)
+    ordered_indices = list(range(offset, len(pairs))) + list(range(offset))
+    return [
+        (
+            pairs[original_index]
+            if (repeat + original_index) % 2 == 0
+            else list(reversed(pairs[original_index]))
+        )
+        for original_index in ordered_indices
+    ]
 
 
 def tensor_pair_groups(
@@ -815,6 +834,25 @@ def run_self_test() -> None:
         "reg_operand_only",
         "reg_mma",
     ]
+    counterbalanced_pairs = ordered_atomic_pairs_for_repeat(ordered_pairs, 1)
+    assert [item["mode"] for item in counterbalanced_pairs[0]] == [
+        "reg_operand_only",
+        "reg_mma",
+    ]
+    assert [item["mode"] for item in counterbalanced_pairs[1]] == [
+        "reg_mma",
+        "reg_operand_only",
+    ]
+    forward_ordered_pairs = ordered_atomic_pairs_for_repeat(ordered_pairs, 2)
+    assert [item["mode"] for item in forward_ordered_pairs[0]] == [
+        "reg_operand_only",
+        "reg_mma",
+    ]
+    second_pair_repeat_zero = ordered_atomic_pairs_for_repeat(ordered_pairs * 2, 0)[1]
+    assert [item["mode"] for item in second_pair_repeat_zero] == [
+        "reg_mma",
+        "reg_operand_only",
+    ]
     l2_commands = [
         {**base, "mode": "global_addr_only", "cmd": ["control-l2-rf4"]},
         {**base, "mode": "l2_cg_load_only", "cmd": ["treatment-l2-rf4"]},
@@ -1239,7 +1277,9 @@ def main() -> int:
     for repeat in range(args.repeats):
         if atomic_pairs:
             repeat_commands = [
-                item for pair in rotated(atomic_pairs, repeat) for item in pair
+                item
+                for pair in ordered_atomic_pairs_for_repeat(atomic_pairs, repeat)
+                for item in pair
             ]
         else:
             repeat_commands = rotated(commands, repeat)

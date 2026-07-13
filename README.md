@@ -190,8 +190,9 @@ them on the matching target node after building the profile-specific binary, the
 rerun the power API, power-state, NCU, reliability, strict-summary, and goal
 readiness audits.
 
-The A100 Tensor/L2 remediation package is the required first step after the
-observed 58.5-60.1% L2 path-hit failure. It runs application-replay NCU prechecks
+The standard A100 and V100 finalplans now run an NCU-first L2 selector before any
+long energy sweep. The standalone A100 remediation package remains a focused
+diagnostic for the observed 58.5-60.1% L2 path-hit failure. The selector runs application-replay NCU prechecks
 over an ordered policy/address-layout/blocks-per-SM candidate list while keeping
 the strict 95% L2 read-hit gate. It also requires observed L2 bytes to match
 logical expected traffic and verifies the persisting-cache size counter. It
@@ -212,14 +213,17 @@ Prompt templates:
 - 1 logical op input footprint = A+B FP16 = 1KiB = 8192 bits.
 - `threads/block = 32`, so `blocks/SM = resident warps/SM`.
 
-For V100, the energy diagnostic sweep uses `blocks/SM=4,16,32` and the
-strict NCU sidecar uses B32 with Shared/Global-L1/L2 `W_SM=32 KiB`. Because the
+For V100, the general energy diagnostic sweep uses `blocks/SM=4,16,32` and the
+strict NCU sidecar uses B32 for Shared/Global-L1 at `W_SM=32 KiB`. L2 first tests
+normal-residency contiguous B32 and sm-interleaved B32/B16/B4 at W32/W64, then
+uses the first strict-pass B in both L2 energy and full NCU. V100 does not use
+persisting-L2 controls. Because the
 kernel has one warp per block, B32 requests at most 32 warps/SM, or 50% of
 GV100's 64-warp limit. Register/shared-memory limits can reduce actual
 residency, so NCU achieved occupancy and launch registers/thread must be
 reported; B32 is not proof of 32 simultaneously resident blocks or full warp
-occupancy. The V100 strict L2 point is 2.5 MiB total
-(`80 SM x 32 KiB`), while W64=5 MiB is retained only as a 6 MiB-L2 stress point.
+occupancy. The V100 L2 anchors are 2.5 and 5 MiB total
+(`80 SM x 32/64 KiB`); both must pass before an L2 coefficient is attempted.
 
 The current kernel implementation uses CUDA WMMA as the portable Tensor Core
 path. In low-level SASS this may compile to multiple tensor instructions for one
@@ -326,7 +330,8 @@ numerator is the NVML GPU/device total-energy mJ delta when available;
 `GetPowerUsage`, `power.draw.*`, Hopper module power, and GPU memory power are
 fallback or metadata scopes with different meanings.
 For new finalplan runs, run `scripts/audit_power_api_measurements.py` with
-`--require-explicit-measurement-scope`. Historical rows whose scope can only be
+`--require-explicit-measurement-scope --require-exact-measurement-interval`.
+Historical rows whose scope or timed-kernel interval can only be
 inferred from source/integration should be reported as legacy/inferred-scope
 evidence, not strict cross-platform final evidence.
 Matched-control analysis can also take a power-state audit CSV; rows marked

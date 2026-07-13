@@ -293,6 +293,12 @@ std::string now_token() {
       std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
 }
 
+std::uint64_t epoch_milliseconds() {
+  const auto now = std::chrono::system_clock::now().time_since_epoch();
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
+}
+
 double elapsed_seconds(Clock::time_point start, Clock::time_point stop) {
   return std::chrono::duration<double>(stop - start).count();
 }
@@ -817,6 +823,8 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
                    const std::string& run_id, int gpu_id, int n_gpu_active,
                    bool gpu_active, const GpuEnergySample& before,
                    const GpuEnergySample& after, double elapsed_s,
+                   std::uint64_t measurement_start_epoch_ms,
+                   std::uint64_t measurement_end_epoch_ms,
                    double idle_baseline_j, double delta_j,
                    const SmidCheck& smid_check, std::uint64_t iters,
                    int actual_sm_count, const std::string& extra_notes) {
@@ -837,6 +845,8 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
           ? ceil_div(tile_loads_per_block, f.tiles_per_block)
           : 0;
   row.elapsed_s = elapsed_s;
+  row.measurement_start_epoch_ms = measurement_start_epoch_ms;
+  row.measurement_end_epoch_ms = measurement_end_epoch_ms;
   row.E_before_mJ = before.energy_mj;
   row.E_after_mJ = after.energy_mj;
   row.delta_E_J = delta_j;
@@ -1020,9 +1030,11 @@ int run_idle(const Options& opts, NvmlEnergy& nvml) {
   CsvWriter writer(opts.output);
   for (int repeat = 0; repeat < opts.repeats; ++repeat) {
     const auto before = nvml.sample_all();
+    const std::uint64_t measurement_start_epoch_ms = epoch_milliseconds();
     const auto t0 = Clock::now();
     sleep_seconds(opts.seconds);
     const auto t1 = Clock::now();
+    const std::uint64_t measurement_end_epoch_ms = epoch_milliseconds();
     const auto after = nvml.sample_all();
     const double elapsed = elapsed_seconds(t0, t1);
     const auto delta = energy_delta_j(before, after);
@@ -1035,7 +1047,8 @@ int run_idle(const Options& opts, NvmlEnergy& nvml) {
       const double delta_j = delta.at(gpu);
       SmidCheck smid;
       ResultRow row = make_row(opts, f, run_id, gpu, 0, false, before[gpu],
-                               after[gpu], elapsed, delta_j, delta_j, smid, 0,
+                               after[gpu], elapsed, measurement_start_epoch_ms,
+                               measurement_end_epoch_ms, delta_j, delta_j, smid, 0,
                                opts.profile.full_sm_count, "idle_measurement=1;");
       writer.write(row);
     }
@@ -1084,8 +1097,10 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
       synchronize_active_devices(states);
 
       const auto before = nvml.sample_all();
+      const std::uint64_t measurement_start_epoch_ms = epoch_milliseconds();
       const double elapsed =
           launch_all(opts, f, states, iters, false);
+      const std::uint64_t measurement_end_epoch_ms = epoch_milliseconds();
       synchronize_active_devices(states);
       const auto after = nvml.sample_all();
       const auto delta = energy_delta_j(before, after);
@@ -1139,8 +1154,10 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
         }
         ResultRow row =
             make_row(opts, f, run_id, gpu, static_cast<int>(opts.gpu_list.size()),
-                     active, before[gpu], after[gpu], elapsed, baseline_scaled,
-                     delta.at(gpu), smid, iters, actual_sm_count, extra);
+                     active, before[gpu], after[gpu], elapsed,
+                     measurement_start_epoch_ms, measurement_end_epoch_ms,
+                     baseline_scaled, delta.at(gpu), smid, iters,
+                     actual_sm_count, extra);
         writer.write(row);
       }
     }

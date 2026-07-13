@@ -48,6 +48,7 @@ cmake --build build-v100 -j
 | instability audit | `results/summary/v100_component_finalplan_20260708_matched_control_instability_audit.csv` | explains weak-signal, negative, or noisy matched-control rows and follow-up conditions | `instability_diagnosis` |
 | strict component coefficient summary | `results/summary/v100_strict_scope_fresh_ncu_component_coefficients_20260708.csv` | reporting table built only from accepted reliability evidence | `strict_summary_policy` |
 | strict component summary audit | `results/summary/v100_strict_scope_fresh_ncu_component_summary_audit_20260708.csv` | verifies traceability, power matrix policy, NCU denominator, counter schema, coordinate alignment, hierarchy, and plausibility gates | `strict_summary_audit_clean` |
+| L2 NCU-first path selection | `results/summary/v100_component_finalplan_20260708_l2_path_selection.csv` | records the policy/layout/blocks-SM candidates and the strict path verdict before energy measurement | `l2_path_selection_policy` |
 
 ## After Copy
 
