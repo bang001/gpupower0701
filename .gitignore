@@ -6,3 +6,10 @@ __pycache__/
 results/ncu/**/*.ncu-rep
 results/ncu/**/*_raw_metrics.csv
 results/ncu/**/*_details.csv
+results/ncu/**/*_ncu_stderr.log
+results/ncu/**/ncu_available_metrics_*.txt
+results/archive/**/*.ncu-rep
+results/archive/**/*_raw_metrics.csv
+results/archive/**/*_details.csv
+results/archive/**/*_ncu_stderr.log
+results/archive/**/ncu_available_metrics_*.txt

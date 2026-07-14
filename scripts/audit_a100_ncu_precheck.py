@@ -226,12 +226,28 @@ def audit_rows(
             l1_request = as_float(treatment, "l1_request_bytes", 0.0)
             l1_hit = as_float(treatment, "l1_hit_bytes", math.inf)
             l2_read = as_float(treatment, "l2_read_bytes", 0.0)
-            dram = as_float(treatment, "dram_bytes", math.inf)
+            dram_read = as_float(treatment, "dram_read_bytes", math.inf)
+            direct_l2_hit = as_float(treatment, "l2_path_hit_rate_pct")
+            logical_l2_hit = as_float(
+                treatment, "l2_logical_read_hit_rate_pct"
+            )
             native_l2_hit = as_float(
                 treatment, "l2_native_read_hit_rate_pct"
             )
-            native_derived_delta = as_float(
-                treatment, "l2_native_vs_derived_hit_delta_pct"
+            native_model_delta = as_float(
+                treatment, "l2_native_vs_fabric_model_hit_delta_pct"
+            )
+            fabric_metrics_present = as_float(
+                treatment, "l2_fabric_metrics_present", 0.0
+            )
+            fabric_counter_coherent = as_float(
+                treatment, "l2_fabric_counter_coherent", 0.0
+            )
+            fabric_model_coherent = as_float(
+                treatment, "l2_fabric_model_coherent", 0.0
+            )
+            fabric_fraction = as_float(
+                treatment, "l2_fabric_read_fraction"
             )
             sector_conservation = as_float(
                 treatment, "l2_read_sector_conservation_ratio"
@@ -247,8 +263,8 @@ def audit_rows(
                 * load_repeat
                 * 1024
             )
-            control_dram_ratio = (
-                as_float(control, "dram_bytes", math.inf) / control_expected
+            control_dram_read_ratio = (
+                as_float(control, "dram_read_bytes", math.inf) / control_expected
                 if control_expected > 0
                 else math.inf
             )
@@ -274,34 +290,39 @@ def audit_rows(
                 and 0.0 <= as_float(treatment, "l1_path_hit_rate_pct") <= 1.0
                 and l1_request > 0.0
                 and l1_hit / l1_request <= 0.01
-                and as_float(treatment, "l2_path_hit_rate_pct") >= 95.0
-                and native_l2_hit >= 95.0
-                and native_derived_delta <= 2.0
+                and fabric_metrics_present == 1.0
+                and fabric_counter_coherent == 1.0
+                and fabric_model_coherent == 1.0
+                and 95.0 <= logical_l2_hit <= 100.5
+                and math.isfinite(native_l2_hit)
+                and native_model_delta <= 2.0
                 and 0.98 <= sector_conservation <= 1.02
                 and 0.95 <= traffic_ratio <= 1.05
                 and l2_read > 0.0
-                and dram / l2_read <= 0.02
+                and dram_read / l2_read <= 0.02
                 and (
                     l2_residency_policy != "persisting"
                     or persisting_size > 0.0
                 )
                 and as_float(control, "l1_request_bytes", -1.0) == 0.0
-                and control_dram_ratio <= 0.001
+                and control_dram_read_ratio <= 0.001
             )
             checks.append(
                 check_row(
                     "l2",
                     f"W{w_sm_kib}/B{l2_blocks_per_sm}/LR{load_repeat}",
                     passed,
-                    "accepted treatment/control, L1 path<=1%, derived/native L2 read hit>=95%, native delta<=2pp, sector conservation=1+/-2%, traffic/expected=1+/-5%, DRAM/L2<=2%",
+                    "accepted treatment/control, L1 path<=1%, GA100 source+LTC-fabric logical L2 hit=95-100.5%, coherent fabric/native model (<=2pp), sector conservation=1+/-2%, traffic/expected=1+/-5%, DRAM-read/L2<=2%",
                     (
                         f"rows={len(treatment_rows)}/{len(control_rows)}; "
                         f"L1={as_float(treatment, 'l1_path_hit_rate_pct'):g}%; "
-                        f"L2={as_float(treatment, 'l2_path_hit_rate_pct'):g}%/"
-                        f"native={native_l2_hit:g}%; delta={native_derived_delta:g}pp; "
+                        f"L2-direct={direct_l2_hit:g}%/logical={logical_l2_hit:g}%/"
+                        f"native={native_l2_hit:g}%; native-model-delta={native_model_delta:g}pp; "
+                        f"fabric_fraction={fabric_fraction:g}; "
+                        f"fabric_coherent={fabric_counter_coherent:g}/{fabric_model_coherent:g}; "
                         f"sector_conservation={sector_conservation:g}; "
                         f"traffic/expected={traffic_ratio:g}; "
-                        f"DRAM/L2={100 * dram / l2_read if l2_read > 0.0 else math.inf:g}%; "
+                        f"DRAM-read/L2={100 * dram_read / l2_read if l2_read > 0.0 else math.inf:g}%; "
                         f"persisting_size={persisting_size:g}B"
                     ),
                 )
@@ -383,15 +404,21 @@ def self_test() -> None:
                     "l2_residency_policy": "persisting",
                     "l2_address_layout": "sm_interleaved",
                     "l1_path_hit_rate_pct": "0",
-                    "l2_path_hit_rate_pct": "99",
-                    "l2_native_read_hit_rate_pct": "99.2",
-                    "l2_native_vs_derived_hit_delta_pct": "0.2",
+                    "l2_path_hit_rate_pct": "55",
+                    "l2_logical_read_hit_rate_pct": "99.5",
+                    "l2_native_read_hit_rate_pct": "68.62",
+                    "l2_native_vs_fabric_model_hit_delta_pct": "0.01",
+                    "l2_fabric_metrics_present": "1",
+                    "l2_fabric_counter_coherent": "1",
+                    "l2_fabric_model_coherent": "1",
+                    "l2_fabric_read_fraction": "0.310345",
                     "l2_read_sector_conservation_ratio": "1",
                     "l2_read_bytes_to_expected": "1",
                     "launch_persisting_l2_cache_size_bytes": "34603008",
                     "l1_request_bytes": "100000" if mode == "l2_cg_load_only" else "0",
                     "l1_hit_bytes": "0",
                     "l2_read_bytes": "100000" if mode == "l2_cg_load_only" else "0",
+                    "dram_read_bytes": "100" if mode == "l2_cg_load_only" else "1000",
                     "dram_bytes": "100" if mode == "l2_cg_load_only" else "1000",
                 }
             )
@@ -416,7 +443,7 @@ def self_test() -> None:
         row
         for row in bad
         if row["mode"] == "l2_cg_load_only" and row["W_SM_KiB"] == "128"
-    )["l2_path_hit_rate_pct"] = "60"
+    )["l2_logical_read_hit_rate_pct"] = "60"
     checks = audit_rows(
         bad,
         expected_rf=(1, 16),

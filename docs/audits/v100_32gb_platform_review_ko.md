@@ -39,7 +39,7 @@ strict preflight에서 확인한다.
 | shared allocation | 96 KiB/SM, 96 KiB/block | profile feasibility check에 반영 |
 | blocks/SM | energy 4,16,32; strict NCU 32 | 저밀도 B4, 중간 B16, exact-NCU B32 좌표 분리 |
 | HBM capacity | 32 GB HBM2 reference | strict preflight: visible `memory.total >= 30,000 MiB` |
-| DRAM sanity working set | `80 x 8192 KiB = 640 MiB` | 6 MiB L2를 넘고 32 GB device capacity보다 작음 |
+| External-memory W sweep | `80 x (256,512,1024,2048) KiB = 20,40,80,160 MiB` | 6 MiB L2의 3.33x-26.67x; 경계점 reject와 external-read dominant accepted 구간을 함께 탐색 |
 | power numerator | NVML total-energy delta only | `GetPowerUsage` instantaneous fallback은 final coefficient에서 제외 |
 | NCU | `gv100` | availability와 counter acceptance는 target node에서 재확인 필요 |
 
@@ -48,7 +48,7 @@ strict preflight에서 확인한다.
 32 GB는 L1/shared, L2, register-file capacity를 바꾸지 않는다. 따라서 cache-path
 working-set 좌표는 SKU capacity가 아니라 `SM count x W_SM`, L2 capacity, 그리고 NCU
 hit/traffic evidence로 정한다. 이 package의 strict L2 2.5 MiB point, L2 stress 5 MiB
-point, DRAM 640 MiB point는 32 GB의 한계보다 충분히 작다.
+point, external-memory 20-160 MiB sweep은 32 GB의 한계보다 충분히 작다.
 
 기존 V100 계획은 Global L1 NCU를 `W8/B16`으로 생성해 block당 최소 1 KiB tile
 조건을 위반했고, L2는 6 MiB의 약 83%인 W64 단일점만 사용했다. 수정 계획은 strict

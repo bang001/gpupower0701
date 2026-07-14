@@ -1,0 +1,5 @@
+label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,ncu_replay_mode,ncu_cache_control,ncu_metric_profile,global_warmup_passes,l2_residency_policy,l2_address_layout,report
+reg_operand_only_W1_B4_RF1,reg_operand_only_kernel,reg_operand_only,1,4,82,100000,1,1,1,application,none,full,1,normal,contiguous,results/ncu/rtx3090_tensor_ops_crosscheck_20260714/reg_operand_only_W1_B4_RF1
+reg_mma_W1_B4_RF1,reg_mma_kernel,reg_mma,1,4,82,100000,1,1,1,application,none,full,1,normal,contiguous,results/ncu/rtx3090_tensor_ops_crosscheck_20260714/reg_mma_W1_B4_RF1
+reg_operand_only_W1_B4_RF2,reg_operand_only_kernel,reg_operand_only,1,4,82,100000,2,1,1,application,none,full,1,normal,contiguous,results/ncu/rtx3090_tensor_ops_crosscheck_20260714/reg_operand_only_W1_B4_RF2
+reg_mma_W1_B4_RF2,reg_mma_kernel,reg_mma,1,4,82,100000,2,1,1,application,none,full,1,normal,contiguous,results/ncu/rtx3090_tensor_ops_crosscheck_20260714/reg_mma_W1_B4_RF2

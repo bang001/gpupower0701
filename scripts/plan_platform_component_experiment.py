@@ -4,8 +4,8 @@
 The generated commands follow the acceptance-first flow:
 
 1. Run architecture/GPU preflight.
-2. Tensor/L2/DRAM final pairs use matched ITER; Shared/Global-L1 use duration
-   calibration. Run all energy rows without NCU attached.
+2. All final treatment/control pairs use matched ITER. Run all energy rows
+   without NCU attached.
 3. Run a separate NCU sidecar validation.
 4. Classify NCU path acceptance.
 5. Analyze matched-control energy with NCU byte-denominator scaling.
@@ -30,6 +30,8 @@ PROFILES: dict[str, dict[str, Any]] = {
         "cuda_arch": "86",
         "active_sm": 82,
         "blocks": "8,16",
+        "tensor_blocks": "4,8,16",
+        "tensor_w": 1,
         "ncu_blocks": 8,
         "shared_w": "32,64",
         "shared_ncu_w": 64,
@@ -38,7 +40,7 @@ PROFILES: dict[str, dict[str, Any]] = {
         "l2_w": "64",
         "l2_ncu_w": 64,
         "l2_modes": "global_addr_only,l2_cg_load_only",
-        "dram_w": "8192",
+        "dram_w": "256,512,1024,2048",
         "shared_capacity_kib": 100,
         "l2_mib": 6,
         "ncu_chip": "ga102",
@@ -48,12 +50,14 @@ PROFILES: dict[str, dict[str, Any]] = {
         "memory_energy_load_repeats": "4,8,16",
         "min_device_memory_mib": 0,
         "power_semantics": "one_sec_average",
-        "note": "RTX 3090 / GA102 path. Use total-energy rows for final coefficients; GetPowerUsage fallback has one-second-average semantics.",
+        "note": "RTX 3090 / GA102 GDDR6X path. External-memory W_SM sweep spans about 3.4x-27.3x nominal L2. Use total-energy rows; GetPowerUsage fallback has one-second-average semantics.",
     },
     "v100": {
         "cuda_arch": "70",
         "active_sm": 80,
         "blocks": "4,16,32",
+        "tensor_blocks": "4,16,32",
+        "tensor_w": 1,
         "ncu_blocks": 32,
         "shared_w": "32,64",
         "shared_ncu_w": 32,
@@ -68,7 +72,7 @@ PROFILES: dict[str, dict[str, Any]] = {
             "normal:sm_interleaved:16,normal:sm_interleaved:4"
         ),
         "l2_modes": "global_addr_only,l2_cg_load_only",
-        "dram_w": "8192",
+        "dram_w": "256,512,1024,2048",
         "shared_capacity_kib": 96,
         "l2_mib": 6,
         "ncu_chip": "gv100",
@@ -78,12 +82,14 @@ PROFILES: dict[str, dict[str, Any]] = {
         "memory_energy_load_repeats": "4,8,16",
         "min_device_memory_mib": 30000,
         "power_semantics": "instant",
-        "note": "Volta path. Use nvcc with compute_70 support (CUDA 12.x recommended; CUDA 13 removed Volta offline compilation). Nsight Compute 2024.3 is confirmed for GV100; always require --list-chips and --query-metrics support for gv100 because newer releases can remove Volta.",
+        "note": "Volta HBM2 path. External-memory W_SM sweep spans about 3.3x-26.7x nominal L2. Use nvcc with compute_70 support (CUDA 12.x recommended; CUDA 13 removed Volta offline compilation). Nsight Compute 2024.3 is confirmed for GV100; require --list-chips and --query-metrics support for gv100.",
     },
     "a100": {
         "cuda_arch": "80",
         "active_sm": 108,
         "blocks": "16,32",
+        "tensor_blocks": "4,16,32",
+        "tensor_w": 1,
         "ncu_blocks": 16,
         "shared_w": "64,128",
         "shared_ncu_w": 128,
@@ -94,13 +100,16 @@ PROFILES: dict[str, dict[str, Any]] = {
         "l2_ncu_w_values": "16,32,64,128",
         "l2_precheck_w": "16,128",
         "l2_precheck_candidates": (
-            "normal:contiguous:16,normal:sm_interleaved:16,"
+            "normal:contiguous:16,normal:contiguous:8,"
+            "normal:contiguous:4,normal:contiguous:2,"
+            "normal:contiguous:1,normal:sm_interleaved:16,"
             "normal:sm_interleaved:8,normal:sm_interleaved:4,"
-            "persisting:contiguous:16,persisting:sm_interleaved:16,"
+            "persisting:contiguous:16,persisting:contiguous:8,"
+            "persisting:contiguous:4,persisting:contiguous:1,"
             "persisting:sm_interleaved:8,persisting:sm_interleaved:4"
         ),
         "l2_modes": "global_addr_only,l2_cg_load_only",
-        "dram_w": "8192",
+        "dram_w": "2048,4096,8192",
         "shared_capacity_kib": 164,
         "l2_mib": 40,
         "ncu_chip": "ga100",
@@ -110,12 +119,14 @@ PROFILES: dict[str, dict[str, Any]] = {
         "memory_energy_load_repeats": "4,8,16",
         "min_device_memory_mib": 0,
         "power_semantics": "instant",
-        "note": "GA100 40 MiB L2 path. Final L2 candidates sweep ld.global.cg at W_SM=16,32,64,128 KiB and require path-specific L1 hit bytes plus L2 read hit/miss evidence; l2_load_only is diagnostic-only.",
+        "note": "GA100 HBM2 path with 40 MiB two-partition L2 and compute-data compression. External-memory W_SM spans about 5.4x-21.6x L2, uses high-entropy input, and requires source plus LTC-fabric final-service evidence and NCU read-byte conservation.",
     },
     "h100": {
         "cuda_arch": "90",
         "active_sm": 132,
         "blocks": "16,32",
+        "tensor_blocks": "4,16,32",
+        "tensor_w": 1,
         "ncu_blocks": 16,
         "shared_w": "64,128",
         "shared_ncu_w": 128,
@@ -124,7 +135,7 @@ PROFILES: dict[str, dict[str, Any]] = {
         "l2_w": "64,128",
         "l2_ncu_w": 64,
         "l2_modes": "global_addr_only,l2_cg_load_only",
-        "dram_w": "8192",
+        "dram_w": "2048,4096,8192",
         "shared_capacity_kib": 228,
         "l2_mib": 50,
         "ncu_chip": "gh100",
@@ -134,7 +145,7 @@ PROFILES: dict[str, dict[str, Any]] = {
         "memory_energy_load_repeats": "4,8,16",
         "min_device_memory_mib": 0,
         "power_semantics": "one_sec_average",
-        "note": "Current kernel uses WMMA compatibility path, not Hopper WGMMA/TMA. Final L2 coefficient uses ld.global.cg; l2_load_only remains diagnostic-only.",
+        "note": "Hopper HBM3 path. External-memory W_SM spans about 5.3x-21.1x nominal L2. Current kernel uses WMMA compatibility, not WGMMA/TMA; external-memory coefficients remain effective GPU-device path values.",
     },
 }
 
@@ -157,12 +168,30 @@ def validate_ncu_coordinates(
     *,
     active_sm: int,
     energy_blocks: str,
+    tensor_blocks: str,
     ncu_blocks: int,
 ) -> None:
     block_values = {int(value) for value in energy_blocks.split(",") if value}
     if ncu_blocks not in block_values:
         raise ValueError(
             f"{profile_name}: strict NCU blocks/SM {ncu_blocks} is not in energy sweep {energy_blocks}"
+        )
+
+    tensor_block_values = [
+        int(value) for value in tensor_blocks.split(",") if value
+    ]
+    max_tensor_blocks = 16 if profile_name == "rtx3090" else 32
+    if (
+        not tensor_block_values
+        or len(set(tensor_block_values)) != len(tensor_block_values)
+        or any(
+            value not in {1, 2, 4, 8, 16, 32}
+            or value > max_tensor_blocks
+            for value in tensor_block_values
+        )
+    ):
+        raise ValueError(
+            f"{profile_name}: invalid Tensor blocks/SM sweep {tensor_blocks}"
         )
 
     coordinates = {
@@ -193,12 +222,21 @@ def validate_ncu_coordinates(
                 f"{full_working_set_mib:g} MiB, above nominal L2 {l2_mib:g} MiB"
             )
 
-    dram_working_set_mib = active_sm * int(profile["dram_w"]) / 1024.0
-    if dram_working_set_mib <= l2_mib:
+    dram_w_values = [
+        int(value) for value in str(profile["dram_w"]).split(",") if value
+    ]
+    if len(dram_w_values) < 2:
         raise ValueError(
-            f"{profile_name}: DRAM sanity working set {dram_working_set_mib:g} MiB "
-            f"does not exceed nominal L2 {l2_mib:g} MiB"
+            f"{profile_name}: external-memory design requires a W_SM sweep"
         )
+    for dram_w_sm_kib in dram_w_values:
+        dram_working_set_mib = active_sm * dram_w_sm_kib / 1024.0
+        if dram_working_set_mib <= l2_mib:
+            raise ValueError(
+                f"{profile_name}: external-memory working set "
+                f"{dram_working_set_mib:g} MiB does not exceed nominal L2 "
+                f"{l2_mib:g} MiB"
+            )
 
 
 def line(parts: list[str]) -> str:
@@ -267,10 +305,16 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     tag = args.tag
     active_sm = args.active_sm or profile["active_sm"]
     blocks = args.blocks_per_sm_values or profile["blocks"]
+    tensor_blocks = (
+        args.blocks_per_sm_values
+        or str(profile.get("tensor_blocks", blocks))
+    )
     ncu_blocks = args.ncu_blocks_per_sm
     binary = args.binary
     ncu = args.ncu
     tensor_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
+    shared_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
+    l1_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
     l2_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
     dram_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
     pair_transition_gap_limit_ms = max(
@@ -287,10 +331,23 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     ncu_dir = f"results/ncu/{args.target_profile}_component_finalplan_ncu_factor_{tag}"
     ncu_raw = f"results/raw/{args.target_profile}_component_finalplan_ncu_factor_{tag}.csv"
     ncu_summary = f"{ncu_dir}/ncu_cache_validation_summary.csv"
+    ncu_summary_md = f"{ncu_dir}/ncu_cache_validation_summary.md"
+    ncu_full_dir = f"{ncu_dir}/full_non_l2"
+    ncu_full_summary = f"{ncu_full_dir}/ncu_cache_validation_summary.csv"
+    ncu_full_summary_md = f"{ncu_full_dir}/ncu_cache_validation_summary.md"
+    ncu_l2_dir = f"{ncu_dir}/l2_selected_minimal"
+    ncu_l2_raw = (
+        f"results/raw/{args.target_profile}_component_finalplan_"
+        f"ncu_l2_minimal_{tag}.csv"
+    )
+    ncu_l2_summary = f"{ncu_l2_dir}/ncu_cache_validation_summary.csv"
+    ncu_l2_summary_md = f"{ncu_l2_dir}/ncu_cache_validation_summary.md"
     l2_path_selection_csv = f"{summary_prefix}_l2_path_selection.csv"
     l2_path_selection_md = f"{summary_prefix}_l2_path_selection.md"
     l2_path_selection_env = f"{summary_prefix}_l2_path_selection.env"
     tensor_pair_calibration_csv = f"{raw_prefix}_tensor_pair_calibration.csv"
+    shared_pair_calibration_csv = f"{raw_prefix}_shared_pair_calibration.csv"
+    l1_pair_calibration_csv = f"{raw_prefix}_l1_pair_calibration.csv"
     l2_pair_calibration_csv = f"{raw_prefix}_l2_pair_calibration.csv"
     dram_pair_calibration_csv = f"{raw_prefix}_dram_pair_calibration.csv"
     acceptance_csv = f"{summary_prefix}_ncu_acceptance.csv"
@@ -369,6 +426,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         schema_smoke_audit_csv,
         schema_smoke_audit_md,
         tensor_pair_calibration_csv,
+        shared_pair_calibration_csv,
+        l1_pair_calibration_csv,
         l2_pair_calibration_csv,
         dram_pair_calibration_csv,
         l2_path_selection_csv,
@@ -377,6 +436,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         *energy_csvs,
         *matrix_csvs,
         ncu_raw,
+        ncu_l2_raw,
         acceptance_csv,
         acceptance_md,
         power_audit_csv,
@@ -409,7 +469,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             policy, layout, blocks_text = value.split(":")
             candidates.append(f'  "{policy} {layout} {int(blocks_text)}"')
         l2_precheck_commands = [
-            "# 5. NCU-first L2 path selection. The 95% hit gate is never relaxed.",
+            "# 5. NCU-first L2 path selection. GA100 applies 95% to final service after LTC-fabric recovery.",
             "run_l2_path_candidate() {",
             "  local policy=\"$1\"",
             "  local layout=\"$2\"",
@@ -422,6 +482,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             "",
             "  NCU_COMPONENTS=l2 \\",
             "  NCU_EXPLICIT_METRICS_ONLY=1 \\",
+            "  NCU_METRIC_PROFILE=l2_path_minimal \\",
             "  NCU=\"${NCU_BIN}\" \\",
             "  NCU_USE_SUDO=\"${NCU_USE_SUDO}\" \\",
             "  NCU_AUTO_SUDO=\"${NCU_AUTO_SUDO}\" \\",
@@ -507,6 +568,94 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             "# 5. This profile retains its reviewed fixed L2 coordinate.",
             "echo \"L2 precheck selector not enabled for this profile; using policy=${L2_RESIDENCY_POLICY} layout=${L2_ADDRESS_LAYOUT} blocks/SM=${L2_BLOCKS_PER_SM}\"",
             "",
+        ]
+
+    ncu_validation_commands = [
+            "# 8a. Selected L2 path: minimal coherent counter bundle for gating.",
+            line(
+                [
+                    "NCU_COMPONENTS=l2",
+                    "NCU_EXPLICIT_METRICS_ONLY=1",
+                    "NCU_METRIC_PROFILE=l2_path_minimal",
+                    "NCU=\"${NCU_BIN}\"",
+                    "NCU_USE_SUDO=\"${NCU_USE_SUDO}\"",
+                    "NCU_AUTO_SUDO=\"${NCU_AUTO_SUDO}\"",
+                    "NCU_SUDO=\"${NCU_SUDO}\"",
+                    f"BIN={q(binary)}",
+                    f"OUTDIR={q(ncu_l2_dir)}",
+                    f"RAW_OUT={q(ncu_l2_raw)}",
+                    f"SUMMARY_CSV={q(ncu_l2_summary)}",
+                    f"SUMMARY_MD={q(ncu_l2_summary_md)}",
+                    f"TARGET_PROFILE={q(args.target_profile)}",
+                    f"NCU_CHIP={q(profile['ncu_chip'])}",
+                    f"NCU_FILTER_UNAVAILABLE_METRICS={int(profile.get('filter_unavailable_ncu_metrics', 0))}",
+                    f"GPU={q(args.gpu_ids.split(',')[0])}",
+                    f"ACTIVE_SM={active_sm}",
+                    "BLOCKS_PER_SM=\"${L2_BLOCKS_PER_SM}\"",
+                    "L2_BLOCKS_PER_SM=\"${L2_BLOCKS_PER_SM}\"",
+                    f"L2_W_SM_KIB_VALUES={profile.get('l2_ncu_w_values', profile['l2_ncu_w'])}",
+                    "MEMORY_LOAD_REPEATS=1,2,4,8,16",
+                    "GLOBAL_WARMUP_PASSES=4",
+                    "L2_RESIDENCY_POLICY=\"${L2_RESIDENCY_POLICY}\"",
+                    "L2_ADDRESS_LAYOUT=\"${L2_ADDRESS_LAYOUT}\"",
+                    "INCLUDE_L2_CAPACITY_NCU=0",
+                    "INCLUDE_DIAGNOSTIC_NCU=0",
+                    "bash",
+                    "scripts/run_ncu_validation.sh",
+                ]
+            ),
+            "",
+            "# 8b. Full diagnostic bundle for non-L2 components.",
+            line(
+                [
+                    "NCU_COMPONENTS=baseline,tensor,shared,l1,dram",
+                    "NCU_EXPLICIT_METRICS_ONLY=1",
+                    "NCU_METRIC_PROFILE=full",
+                    "NCU=\"${NCU_BIN}\"",
+                    "NCU_USE_SUDO=\"${NCU_USE_SUDO}\"",
+                    "NCU_AUTO_SUDO=\"${NCU_AUTO_SUDO}\"",
+                    "NCU_SUDO=\"${NCU_SUDO}\"",
+                    f"BIN={q(binary)}",
+                    f"OUTDIR={q(ncu_full_dir)}",
+                    f"RAW_OUT={q(ncu_raw)}",
+                    f"SUMMARY_CSV={q(ncu_full_summary)}",
+                    f"SUMMARY_MD={q(ncu_full_summary_md)}",
+                    f"TARGET_PROFILE={q(args.target_profile)}",
+                    f"NCU_CHIP={q(profile['ncu_chip'])}",
+                    f"NCU_FILTER_UNAVAILABLE_METRICS={int(profile.get('filter_unavailable_ncu_metrics', 0))}",
+                    f"GPU={q(args.gpu_ids.split(',')[0])}",
+                    f"ACTIVE_SM={active_sm}",
+                    f"BLOCKS_PER_SM={ncu_blocks}",
+                    f"REG_BLOCKS_PER_SM={tensor_blocks.split(',')[0]}",
+                    f"REG_BLOCKS_PER_SM_VALUES={tensor_blocks}",
+                    "REG_PRESSURE_PAYLOAD_BYTES=256",
+                    f"REG_W_SM_KIB={profile['tensor_w']}",
+                    f"L1_W_SM_KIB={profile['l1_ncu_w']}",
+                    f"SHARED_W_SM_KIB={profile['shared_ncu_w']}",
+                    f"DRAM_W_SM_KIB_VALUES={profile['dram_w']}",
+                    "INCLUDE_DIAGNOSTIC_NCU=0",
+                    "GLOBAL_WARMUP_PASSES=4",
+                    "TENSOR_REUSE_FACTORS=1,2,4,8,16",
+                    "MEMORY_LOAD_REPEATS=1,2,4,8,16",
+                    "DRAM_LOAD_REPEATS=1,4,8,16",
+                    "bash",
+                    "scripts/run_ncu_validation.sh",
+                ]
+            ),
+            "",
+            "# 8c. Canonical summary: disjoint full non-L2 plus minimal L2 rows.",
+            line(
+                [
+                    "python3",
+                    "scripts/merge_ncu_validation_summaries.py",
+                    q(ncu_full_summary),
+                    q(ncu_l2_summary),
+                    "--out-csv",
+                    q(ncu_summary),
+                    "--out-md",
+                    q(ncu_summary_md),
+                ]
+            ),
         ]
 
     commands = [
@@ -606,10 +755,18 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         "# 2. Pipeline policy self-tests. Fail early if a gate is broken.",
         line(["python3", "scripts/run_component_regression_sweep.py", "--self-test"]),
         line(["python3", "scripts/summarize_ncu_cache_metrics.py", "--self-test"]),
+        line(["python3", "scripts/merge_ncu_validation_summaries.py", "--self-test"]),
         line(["python3", "scripts/analyze_ncu_path_acceptance.py", "--self-test"]),
         line(["python3", "scripts/select_l2_path_configuration.py", "--self-test"]),
         line(["python3", "scripts/analyze_matched_control_energy.py", "--self-test"]),
         line(["python3", "scripts/audit_power_api_measurements.py", "--self-test"]),
+        line(
+            [
+                "python3",
+                "scripts/remediate_wsl_wallclock_intervals.py",
+                "--self-test",
+            ]
+        ),
         line(["python3", "scripts/audit_a100_tensor_l2_remediation.py", "--self-test"]),
         line(["python3", "scripts/build_strict_component_summary.py", "--self-test"]),
         line(["python3", "scripts/audit_strict_component_summary.py", "--self-test"]),
@@ -712,7 +869,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--mode",
                 "reg_operand_only",
                 "--w-sm-kib",
-                "2048",
+                q(str(profile["tensor_w"])),
                 "--blocks-per-sm",
                 "1",
                 "--target-profile",
@@ -786,13 +943,15 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--require-explicit-measurement-scope",
                 "--require-exact-measurement-interval",
                 "--require-mode-notes-marker",
-                "reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
+                "reg_operand_only=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
                 "--require-mode-notes-marker",
-                "reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
+                "reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
                 "--require-mode-notes-marker",
                 "l2_cg_load_only=global_warmup_policy=ld_global_cg",
                 "--require-mode-notes-marker",
                 "dram_cg_load_only=global_warmup_policy=ld_global_cg",
+                "--require-mode-notes-marker",
+                "dram_cg_load_only=input_data_pattern=splitmix64_uniform_fp16_v1",
             ]
         ),
         "",
@@ -806,8 +965,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             seconds=args.seconds,
             repeats=args.repeats,
             modes="reg_operand_only,reg_mma",
-            w_values="2048",
-            blocks=blocks,
+            w_values=str(profile["tensor_w"]),
+            blocks=tensor_blocks,
             reuse_factors="1,2,4,8,16",
             load_repeats="1",
             output=energy_csvs[0],
@@ -827,13 +986,20 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             active_sm=active_sm,
             seconds=args.seconds,
             repeats=args.repeats,
-            modes="clocked_empty,shared_scalar_load_only",
+            modes="shared_scalar_addr_only,shared_scalar_load_only",
             w_values=profile["shared_w"],
             blocks=blocks,
             reuse_factors="1",
             load_repeats=profile["memory_energy_load_repeats"],
             output=energy_csvs[1],
             matrix=matrix_csvs[1],
+            extra_args=[
+                "--memory-pair-lock-iters",
+                "--memory-pair-control-min-seconds",
+                q(str(shared_control_calibration_min_seconds)),
+                "--memory-pair-calibration-csv",
+                q(shared_pair_calibration_csv),
+            ],
         ),
         run_component_command(
             binary=binary,
@@ -849,6 +1015,13 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             load_repeats=profile["memory_energy_load_repeats"],
             output=energy_csvs[2],
             matrix=matrix_csvs[2],
+            extra_args=[
+                "--memory-pair-lock-iters",
+                "--memory-pair-control-min-seconds",
+                q(str(l1_control_calibration_min_seconds)),
+                "--memory-pair-calibration-csv",
+                q(l1_pair_calibration_csv),
+            ],
         ),
         run_component_command(
             binary=binary,
@@ -921,13 +1094,19 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--require-explicit-measurement-scope",
                 "--require-exact-measurement-interval",
                 "--require-mode-notes-marker",
-                "reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
+                "reg_operand_only=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
                 "--require-mode-notes-marker",
-                "reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
+                "reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
+                "--require-mode-notes-marker",
+                "shared_scalar_addr_only=shared_pair_kernel_revision=matched_shared_addr_v1",
+                "--require-mode-notes-marker",
+                "shared_scalar_load_only=shared_pair_kernel_revision=matched_shared_addr_v1",
                 "--require-mode-notes-marker",
                 "l2_cg_load_only=global_warmup_policy=ld_global_cg",
                 "--require-mode-notes-marker",
                 "dram_cg_load_only=global_warmup_policy=ld_global_cg",
+                "--require-mode-notes-marker",
+                "dram_cg_load_only=input_data_pattern=splitmix64_uniform_fp16_v1",
             ]
         ),
         "",
@@ -944,46 +1123,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
-        "# 8. NCU sidecar validation. These profiler runs are not energy rows.",
-        line(
-            [
-                f"NCU_EXPLICIT_METRICS_ONLY=1",
-                "NCU=\"${NCU_BIN}\"",
-                "NCU_USE_SUDO=\"${NCU_USE_SUDO}\"",
-                "NCU_AUTO_SUDO=\"${NCU_AUTO_SUDO}\"",
-                "NCU_SUDO=\"${NCU_SUDO}\"",
-                f"BIN={q(binary)}",
-                f"OUTDIR={q(ncu_dir)}",
-                f"RAW_OUT={q(ncu_raw)}",
-                f"TARGET_PROFILE={q(args.target_profile)}",
-                f"NCU_CHIP={q(profile['ncu_chip'])}",
-                f"NCU_FILTER_UNAVAILABLE_METRICS={int(profile.get('filter_unavailable_ncu_metrics', 0))}",
-                f"GPU={q(args.gpu_ids.split(',')[0])}",
-                f"ACTIVE_SM={active_sm}",
-                f"BLOCKS_PER_SM={ncu_blocks}",
-                "L2_BLOCKS_PER_SM=\"${L2_BLOCKS_PER_SM}\"",
-                f"REG_BLOCKS_PER_SM={ncu_blocks}",
-                "REG_PRESSURE_PAYLOAD_BYTES=256",
-                "REG_W_SM_KIB=2048",
-                f"L1_W_SM_KIB={profile['l1_ncu_w']}",
-                f"SHARED_W_SM_KIB={profile['shared_ncu_w']}",
-                f"L2_W_SM_KIB={profile['l2_ncu_w']}",
-                f"L2_W_SM_KIB_VALUES={profile.get('l2_ncu_w_values', profile['l2_ncu_w'])}",
-                f"DRAM_W_SM_KIB_OVERRIDE={profile['dram_w']}",
-                f"INCLUDE_L2_CAPACITY_NCU={include_l2_capacity_ncu}",
-                "INCLUDE_DIAGNOSTIC_NCU=0",
-                "GLOBAL_WARMUP_PASSES=4",
-                "L2_RESIDENCY_POLICY=\"${L2_RESIDENCY_POLICY}\"",
-                "L2_ADDRESS_LAYOUT=\"${L2_ADDRESS_LAYOUT}\"",
-                "REUSE_FACTOR=1",
-                "LOAD_REPEAT=1",
-                "TENSOR_REUSE_FACTORS=1,2,4,8,16",
-                "MEMORY_LOAD_REPEATS=1,2,4,8,16",
-                "DRAM_LOAD_REPEATS=1,4,8,16",
-                "bash",
-                "scripts/run_ncu_validation.sh",
-            ]
-        ),
+        *ncu_validation_commands,
         "",
         "# 9. Path acceptance.",
         line(
@@ -1045,6 +1185,14 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "nearest-control",
                 "--tensor-pair-policy",
                 "matched-iters",
+                "--shared-pair-policy",
+                "matched-iters",
+                "--shared-control-min-elapsed-s",
+                q(str(0.8 * shared_control_calibration_min_seconds)),
+                "--l1-pair-policy",
+                "matched-iters",
+                "--l1-control-min-elapsed-s",
+                q(str(0.8 * l1_control_calibration_min_seconds)),
                 "--l2-pair-policy",
                 "matched-iters",
                 "--l2-control-min-elapsed-s",
@@ -1280,6 +1428,9 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
 def write_markdown(args: argparse.Namespace, profile: dict[str, Any], path: Path) -> None:
     active_sm = args.active_sm or profile["active_sm"]
     blocks = args.blocks_per_sm_values or profile["blocks"]
+    tensor_blocks = (
+        args.blocks_per_sm_values or str(profile.get("tensor_blocks", blocks))
+    )
     ncu_blocks = args.ncu_blocks_per_sm
     l2_precheck_enabled = bool(profile.get("l2_precheck_candidates"))
     l2_ncu_block_label = (
@@ -1288,6 +1439,8 @@ def write_markdown(args: argparse.Namespace, profile: dict[str, Any], path: Path
         else str(ncu_blocks)
     )
     tensor_control_min_seconds = max(1.0, args.seconds * 0.1)
+    shared_control_min_seconds = max(1.0, args.seconds * 0.1)
+    l1_control_min_seconds = max(1.0, args.seconds * 0.1)
     l2_control_min_seconds = max(1.0, args.seconds * 0.1)
     dram_control_min_seconds = max(1.0, args.seconds * 0.1)
     tensor_control_analysis_min_seconds = 0.8 * tensor_control_min_seconds
@@ -1340,11 +1493,17 @@ propagated to the L2 energy sweep. The NCU binary must explicitly support GV100.
         "a100": f"""A100 uses `NCU_CHIP=ga100`; its L2 candidates are below the
 {profile['l2_mib']} MiB L2 capacity and use `ld.global.cg` to avoid global-L1
 cache hits. Before energy measurement, NCU tests normal and supported persisting
-residency with contiguous/sm_interleaved layouts and blocks/SM 16,8,4 at
+residency with contiguous/sm_interleaved layouts and blocks/SM 16,8,4,2,1 at
 W_SM=16,128 KiB/SM. The first candidate passing path-specific L1 bypass, at
-least 95% derived/native L2 hit, sector conservation, expected traffic, and
-DRAM-leakage gates is propagated to the full L2 sweep. L1TEX request bytes are
-expected for `.cg` and are not treated as L1 cache-hit evidence.""",
+least 95% final-service L2 hit, source/LTC-fabric sector conservation,
+native fabric-model agreement, expected traffic, and DRAM-leakage gates is
+propagated to the minimal-counter L2 sweep. Device-aperture TEX first lookups,
+LTC-fabric remote lookups, native op-read, counter coherence, and DRAM refill
+remain visible. A direct-partition hit rate near 50-60% is not accepted by
+itself; fabric hits must recover it while HBM read leakage stays below the gate.
+L1TEX request bytes are expected for `.cg` and are not treated as L1 cache-hit
+evidence. The resulting pJ/bit is an effective L2-plus-partition-fabric path
+coefficient, not pure L2 SRAM energy.""",
         "h100": f"""H100 uses `NCU_CHIP=gh100` and `l2_cg_load_only` at
 W_SM={profile['l2_w']} KiB for the L2 candidate sweep. The current kernels use
 the WMMA FP16 compatibility path, so this evidence does not validate Hopper-native
@@ -1362,6 +1521,7 @@ Generated: {dt.date.today().isoformat()}
 | CUDA arch | `sm_{profile['cuda_arch']}` |
 | active_SM (SMs) | `{active_sm}` |
 | energy sweep blocks/SM | `{blocks}` |
+| Tensor energy/NCU blocks/SM | `{tensor_blocks}` |
 | strict NCU blocks/SM | `{ncu_blocks}` |
 | L2 strict blocks/SM | `{l2_ncu_block_label}` |
 | L2 NCU-first selector | `{'enabled' if l2_precheck_enabled else 'fixed reviewed coordinate'}` |
@@ -1371,12 +1531,15 @@ Generated: {dt.date.today().isoformat()}
 | repeats | `{args.repeats}` |
 | max pair transition gap (ms) | `{pair_transition_gap_limit_ms}` (`max(30000, (seconds + 15) x 1000)`) |
 | Tensor control calibration floor (s) | `{tensor_control_min_seconds}` |
+| Shared address-control calibration floor (s) | `{shared_control_min_seconds}` |
+| Global-L1 address-control calibration floor (s) | `{l1_control_min_seconds}` |
 | DRAM address-control calibration floor (s) | `{dram_control_min_seconds}` |
 | binary | `{args.binary}` |
 | NCU | `{args.ncu}` |
 | NCU counter permission probe | baseline hardware-counter profile before energy sweep |
 | NCU automatic sudo retry | enabled by default with `NCU_AUTO_SUDO=1` |
 | NCU sudo fallback | `NCU_USE_SUDO=1 bash {out_sh}` |
+| L2 NCU metric profile | `l2_path_minimal`; full non-L2 rows are collected separately and merged by row |
 | generated shell | `{out_sh}` |
 
 ## Platform Note
@@ -1404,11 +1567,11 @@ binary whose CSV header includes `measurement_scope`.
 
 | component/path | modes | energy W_SM (KiB) | strict NCU W_SM/B | factor |
 |---|---|---:|---:|---|
-| Tensor | `reg_operand_only,reg_mma` | 2048 | 2048/{ncu_blocks} | reuse 1,2,4,8,16; treatment/control-floor dual-calibrated pair-locked ITER |
-| Shared scalar | `clocked_empty,shared_scalar_load_only` | {profile['shared_w']} | {profile['shared_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
-| Global L1 | `global_addr_only,global_l1_load_only` | {profile['l1_w']} | {profile['l1_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; NCU also checks 1,2 |
+| Tensor | `reg_operand_only,reg_mma` | {profile['tensor_w']} (CLI placeholder; memory W_SM N/A) | {profile['tensor_w']}/{tensor_blocks} | reuse 1,2,4,8,16; every energy B has exact-coordinate NCU; pair-locked ITER |
+| Shared scalar | `shared_scalar_addr_only,shared_scalar_load_only` | {profile['shared_w']} | {profile['shared_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; dual-calibrated equal ITER; NCU also checks 1,2 |
+| Global L1 | `global_addr_only,global_l1_load_only` | {profile['l1_w']} | {profile['l1_ncu_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; dual-calibrated equal ITER; NCU also checks 1,2 |
 | L2 | `{profile['l2_modes']}` | {profile['l2_w']} | {profile.get('l2_ncu_w_values', profile['l2_ncu_w'])}/{l2_ncu_block_label} | energy load_repeat {profile['memory_energy_load_repeats']}; treatment/control-floor dual-calibrated pair-locked ITER; NCU also checks 1,2 |
-| DRAM sanity | `global_addr_only,dram_cg_load_only` | {profile['dram_w']} | {profile['dram_w']}/{ncu_blocks} | energy load_repeat {profile['memory_energy_load_repeats']}; treatment/control-floor dual-calibrated pair-locked ITER; NCU checks 1,4,8,16 |
+| External-memory read path (effective) | `global_addr_only,dram_cg_load_only` | {profile['dram_w']} | {profile['dram_w']}/{ncu_blocks} | W_SM은 nominal L2 배수 sweep; energy load_repeat {profile['memory_energy_load_repeats']}; pair-locked ITER; NCU read-byte conservation/write-contamination 검증 |
 
 For A100/V100, the generated shell performs the L2 NCU selector before any long
 energy sweep. It records every rejected candidate in
@@ -1433,15 +1596,17 @@ both cache-hit direction and traffic magnitude:
 The hard gates require path-specific L1 hit evidence and path-specific L2 read hit
 evidence; aggregate cache percentages are diagnostic context only.
 The matched-control analyzer also requires exact-coordinate accepted NCU rows
-for `reg_operand_only` and `global_addr_only`; a clean treatment cannot rescue
+for `reg_operand_only`, `shared_scalar_addr_only`, and `global_addr_only`; a clean treatment cannot rescue
 an unvalidated or traffic-contaminated control.
 
 | evidence | required columns | unit / meaning |
 |---|---|---|
 | L1 hit direction | `l1_path_hit_rate_pct`, `l1_hit_bytes` | percent, bytes; global-load lookup hit/miss path |
-| L2 hit direction | `l2_path_hit_rate_pct`, `l2_read_hit_sectors`, `l2_read_miss_sectors` | percent, sectors; srcunit-TEX read path |
+| L2 hit direction | `l2_device_path_hit_rate_pct`, `l2_logical_read_hit_rate_pct`, `l2_fabric_hit_rate_pct`, `l2_native_read_hit_rate_pct` | percent; GA100 distinguishes first-partition, final-service, fabric, and transaction-weighted native rates |
+| L2 counter coherence | `l2_read_sector_conservation_ratio`, `l2_fabric_read_sector_conservation_ratio`, `l2_fabric_model_coherent`, `ncu_metric_profile` | ratio/boolean/profile; GA100 strict L2 requires coherent source and fabric populations in `l2_path_minimal` |
 | access magnitude | `l1_accesses`, `l2_accesses`, `dram_accesses` | L1 requests when available, otherwise sectors; L2/DRAM sectors |
-| byte magnitude | `shared_bytes`, `l1_request_bytes`, `l1_hit_bytes`, `l2_read_bytes`, `dram_bytes` | bytes; L1 request bytes are not L1 hit bytes; L2 pJ/bit uses L2 read bytes |
+| byte magnitude | `shared_read_bytes`, `shared_write_bytes`, `l1_request_bytes`, `l1_hit_bytes`, `l2_read_bytes`, `dram_read_bytes`, `dram_write_bytes` | bytes; Shared pJ/bit uses read bytes, L1 request bytes are not L1 hit bytes, L2 pJ/bit uses L2 read bytes |
+| external-byte provenance | `dram_read_bytes_source`, `dram_write_bytes_source` | strict external path requires direct `dram__bytes_read.sum` and `dram__bytes_write.sum`; derived fallback is diagnostic-only |
 | spill/local traffic | `local_read_bytes`, `local_write_bytes`, `spill_local_read_inst`, `spill_local_write_inst`, `spill_evidence_source` | bytes/instructions; unsupported dedicated spill counters fall back to zero local-memory bytes only |
 | stall context | `stall_long_scoreboard_pct` | percent-like NCU stall signal |
 | launch/resource context | `achieved_occupancy_pct`, `registers_per_thread`, `shared_mem_per_block_static`, `shared_mem_per_block_dynamic` | requested B value가 실제 residency로 이어졌는지 해석하는 보조 evidence |
@@ -1503,11 +1668,14 @@ fallback is only for the NCU sidecar/preflight/goal-readiness commands; failed
 NCU evidence must not be replaced with unvalidated denominators in final
 component coefficients.
 
-The generated NCU sidecar profiles primary finalplan modes at every energy
-`reuse_factor`/`load_repeat` coordinate and includes 1,2 as lower-signal
-diagnostic points. This lets `analyze_matched_control_energy.py` prefer
+The generated NCU stage runs a minimal coherent L2 sidecar and a separate full
+non-L2 sidecar, then merges disjoint rows with `ncu_summary_source` provenance.
+It profiles every energy `reuse_factor`/`load_repeat` coordinate and includes
+1,2 as lower-signal diagnostic points. This lets `analyze_matched_control_energy.py` prefer
 `ncu_actual_exact` denominators instead of representative same-working-set
-scaling. The global-memory pairs use `global_addr_only` as a matched address
+scaling. Shared uses `shared_scalar_addr_only`, which keeps the same dynamic-shared
+allocation, initialization, index loop, and dependent checksum while removing
+shared reads. Global L1/L2/DRAM use `global_addr_only` as a matched address
 control; NCU verifies global-load L1 request bytes are zero and treats SMID atomic L2
 sectors as control bookkeeping rather than input traffic. Legacy diagnostic
 modes such as `l2_load_only`, `shared_mma`, `l2_mma`, and `dram_mma` are not
@@ -1530,9 +1698,11 @@ calibration, NCU path-counter, matched-control policy, power API, and strict
 summary self-tests. In particular,
 `scripts/run_component_regression_sweep.py --self-test`,
 `scripts/summarize_ncu_cache_metrics.py --self-test`,
+`scripts/merge_ncu_validation_summaries.py --self-test`,
 `scripts/analyze_ncu_path_acceptance.py --self-test`,
 `scripts/analyze_matched_control_energy.py --self-test`,
 `scripts/audit_power_api_measurements.py --self-test`, and
+`scripts/remediate_wsl_wallclock_intervals.py --self-test`,
 `scripts/audit_a100_tensor_l2_remediation.py --self-test`,
 `scripts/build_strict_component_summary.py --self-test`,
 `scripts/audit_strict_component_summary.py --self-test`,
@@ -1557,7 +1727,7 @@ After matched-control analysis, the generated shell runs
 `scripts/audit_component_reliability.py`. This joins the power API audit, NCU
 path acceptance, and matched-control summary/detail into component-level verdicts
 such as `accepted`, `accepted_with_caution`, `accepted_low_stability`, and
-`accepted_sanity`.
+`accepted_effective_path`.
 
 Matched-control consumes the generated power-state audit CSV with
 `--exclude-power-state-rejects`, so rows flagged as `status=reject` or
@@ -1573,6 +1743,18 @@ analysis then uses `--tensor-pair-policy matched-iters` and directly subtracts
 the two idle-corrected net energies. An ITER mismatch is a hard-invalid Tensor
 detail row; the analysis no longer rescales a differently calibrated Tensor
 control by elapsed-time power.
+Shared scalar energy rows use `--memory-pair-lock-iters` with
+`--memory-pair-control-min-seconds={shared_control_min_seconds}` and directly
+compute `net_E(shared_scalar_load_only) - net_E(shared_scalar_addr_only)` at
+equal ITER. NCU requires shared read bytes in the treatment and zero repeated
+shared read traffic in the control; fixed shared initialization stores are
+allowed. This coefficient includes the board-level completion-time effect of
+shared-load latency and is not pure shared-SRAM access energy.
+Global L1 energy rows use `--memory-pair-lock-iters` with
+`--memory-pair-control-min-seconds={l1_control_min_seconds}` and directly compute
+`net_E(global_l1_load_only) - net_E(global_addr_only)` at equal ITER. This
+replaces duration-scaled power subtraction, which could become negative when
+the load dependency reduced issue activity relative to the no-load control.
 L2 CG energy rows use `--memory-pair-lock-iters` with
 `--memory-pair-control-min-seconds={l2_control_min_seconds}`. Each
 W/B/LR coordinate calibrates `l2_cg_load_only` for the treatment target and
@@ -1582,25 +1764,31 @@ directly computes `net_E(l2_cg_load_only) - net_E(global_addr_only)`. This is
 required even when NCU reports a perfect L2-hit path: path acceptance proves
 where bytes traveled, while equal ITER proves that the energy numerator compares
 the same logical work. An ITER mismatch is a hard-invalid L2 row.
-DRAM energy rows use `--memory-pair-lock-iters` together with
+External-memory read-path rows use `--memory-pair-lock-iters` together with
 `--memory-pair-control-min-seconds={dram_control_min_seconds}`. Each W/B/LR
 coordinate calibrates `dram_cg_load_only` for the treatment target and
 `global_addr_only` for the control-duration floor, then runs both with the
 larger identical ITER. Matched-control analysis uses
 `--dram-pair-policy matched-iters` and directly computes
 `net_E(dram_cg_load_only) - net_E(global_addr_only)`. An ITER mismatch is a
-hard-invalid DRAM detail row; duration-scaled DRAM coefficients are not final
-cross-platform evidence.
+hard-invalid row. The denominator is strict NCU `dram__bytes_read.sum`; total
+DRAM bytes and expected bytes are not final denominators. NCU must also prove
+global-read byte conservation, at least 90% external-read service, at most 1%
+write contamination, low L1/L2 service hit, and zero local spills. The result is
+an effective GPU-device external-memory read-path coefficient, not physical
+HBM/GDDR device energy.
 The runner rotates complete control-treatment coordinate pairs between repeats;
 it never rotates a flat list by one command and split a pair across repeat
 boundaries. It counterbalances `control -> treatment` and
 `treatment -> control` using both repeat and coordinate index, so one repeat
 also contains opposing pair directions and thermal/clock drift is not
 systematically assigned to the treatment. The same atomic and counterbalanced pair
-policy applies to Shared, Global L1, L2 CG, and DRAM CG sweeps. Strict package
+policy applies to Shared, Global L1, L2 CG, and external-memory sweeps. Strict package
 audit requires valid rows from both execution orders.
-Current raw CSVs record `measurement_start_epoch_ms` and
-`measurement_end_epoch_ms` around the timed benchmark. Matched-control adjacency
+Current raw CSVs anchor `measurement_start_epoch_ms` immediately before the
+timed benchmark and derive `measurement_end_epoch_ms` from the monotonic
+`steady_clock` elapsed interval. This prevents Windows/WSL wall-clock
+corrections from corrupting interval duration. Matched-control adjacency
 uses the non-overlapping `pair_transition_gap_ms`, not the formerly misnamed
 completion timestamp difference `pair_start_distance_ms`. Legacy raw CSVs remain
 reanalyzable by estimating each interval from `run_id - elapsed_s`, with
@@ -1611,15 +1799,18 @@ baseline for `seconds` before its timed kernel, so a fixed 30-second gate would
 reject valid adjacent pairs in longer stability runs. The 15-second allowance
 covers process startup, allocation, warm-up, and synchronization; the actual
 limit is recorded as `pair_transition_gap_limit_ms` in every matched-detail row.
-Both Tensor kernels execute the same dependent register integer add once per
-RF iteration, so the liveness/control instruction cancels in the direct pair.
-The control no longer performs the former RF-proportional FP32 FMA/checksum or
-memory work. Both modes use the same per-thread eight-scalar-store epilogue
-instead of a WMMA store intrinsic. The treatment stores all accumulator
-fragment values to keep HMMA live; the control stores sink values with the same
-address pattern while keeping its HMMA count at zero.
+Both Tensor kernels execute the same fragment-dependent register integer add and
+the same in-place FP16 sign-bit flip once per RF iteration. `reg_mma` therefore
+uses one A fragment with alternating sign, so its FP32 accumulator remains bounded
+instead of becoming numerically stagnant
+after millions of constant-sign accumulations. Both modes use the same
+`c.num_elements` scalar-store epilogue and issue no operand memory load. The
+no-MMA control can still compile to fewer registers than treatment; therefore the
+coefficient includes WMMA/HMMA operand and accumulator RF activity and is not a
+pure Tensor circuit coefficient. Report both launch register counts.
 The raw Tensor rows must contain
-`tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2` in `notes`.
+`tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4`
+and `tensor_operand_source=register_fill_no_memory` in `notes`.
 CG rows must contain `global_warmup_policy=ld_global_cg`. The package audit
 rejects either missing marker so a stale binary with the same CSV schema cannot
 silently pass.
@@ -1659,11 +1850,13 @@ partitioning, or an SKU with fewer visible SMs, regenerate this plan with
 package audit.
 The package audit also verifies that the NCU summary exposes aggregate and
 path-specific L1/L2 hit rates, L1 request/hit/miss bytes, L2 read hit/miss
-sectors and bytes, L1/L2/DRAM access counts, DRAM traffic, and long-scoreboard stall counters
+sectors and bytes, `hit+miss/read` conservation, metric-profile provenance,
+L1/L2/DRAM access counts, DRAM traffic, and long-scoreboard stall counters
 before the result can be treated as final evidence. Hit rate alone is not enough:
 accepted cache rows must also show path-relevant access/byte magnitude. The NCU
 summary must include
-`clocked_empty`, `reg_operand_only`, `reg_mma`, `shared_scalar_load_only`,
+`clocked_empty`, `reg_operand_only`, `reg_mma`, `shared_scalar_addr_only`,
+`shared_scalar_load_only`,
 `global_addr_only`, `global_l1_load_only`, `l2_cg_load_only`, and
 `dram_cg_load_only` coverage.
 All generated platform packages use `l2_cg_load_only` as the strict L2 path;
@@ -1755,6 +1948,10 @@ def main() -> int:
 
     profile = PROFILES[args.target_profile]
     blocks = args.blocks_per_sm_values or profile["blocks"]
+    tensor_blocks = (
+        args.blocks_per_sm_values
+        or str(profile.get("tensor_blocks", blocks))
+    )
     if args.ncu_blocks_per_sm <= 0:
         args.ncu_blocks_per_sm = int(profile["ncu_blocks"])
     validate_ncu_coordinates(
@@ -1762,6 +1959,7 @@ def main() -> int:
         profile,
         active_sm=args.active_sm or int(profile["active_sm"]),
         energy_blocks=blocks,
+        tensor_blocks=tensor_blocks,
         ncu_blocks=args.ncu_blocks_per_sm,
     )
     if args.min_device_memory_mib < 0:

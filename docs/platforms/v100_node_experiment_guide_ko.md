@@ -1,5 +1,8 @@
 # V100 노드 실험 실행 가이드
 
+External-memory 결과의 최신 명칭, read-only NCU 분모와 W sweep은
+[External-Memory Read-Path 설계](../methodology/external_memory_read_path_experiment_design_ko.md)를 우선 적용한다.
+
 작성일: 2026-07-02, V100 L2 동일-ITER 정책 재검토: 2026-07-13
 
 ## 목적
@@ -62,7 +65,7 @@ RTX 3090이나 A100에서 쓰던 좌표를 그대로 V100에 적용하면 L1/L2 
 | `sm_80`, `ga100`, `L2=40 MiB`, `shared=164 KiB/SM` | A100/GA100 기준이 섞인 상태 | A100 결과와 V100 결과를 다른 CSV/report로 분리 |
 | `NCU_CHIP` 미지정 또는 `gv100` query 실패 | Volta counter 경로 검증이 불가능할 수 있음 | `NCU_CHIP=gv100`으로 재실행하고, 실패하면 “NCU path acceptance 미완료”로 보고 |
 | L2 후보에서 L1 request bytes가 L2 bytes와 비슷함 | `.cg` 요청도 L1TEX를 통과하므로 request byte만으로 L1 cache hit를 판정한 오류 | V100 L2는 `l2_cg_load_only` 우선, path-specific L1 hit bytes/request <=1%와 L2 read hit >=95% 확인. aggregate hit는 진단값 |
-| DRAM sanity에서 `W_SM`이 L2와 비슷함 | DRAM streaming이 아니라 L2 재사용을 측정할 수 있음 | `DRAM_W_SM_KIB_OVERRIDE=8192` 이상으로 sidecar를 재실행 |
+| External-memory W가 L2와 비슷함 | L2 재사용을 external read로 오인할 수 있음 | `DRAM_W_SM_KIB_VALUES=256,512,1024,2048` sweep과 strict NCU gate 적용 |
 
 이 실험의 최종값은 순수 회로 에너지가 아니라 NCU로 경로가 검증된 effective microbenchmark coefficient다. 즉 `pJ/FLOP`, `pJ/bit`, `pJ/Byte`는 “이 커널, 이 access pattern, 이 GPU 상태에서 관찰된 board-level incremental coefficient”로 해석해야 한다.
 
@@ -329,7 +332,7 @@ python3 scripts/audit_power_api_measurements.py \
   --require-explicit-measurement-scope \
   --require-exact-measurement-interval \
   --require-mode-notes-marker \
-  reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2
+  reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4
 ```
 
 이 단계에서 모든 row가 `missing_column:measurement_scope`,
@@ -340,9 +343,10 @@ stale binary/schema 문제다. 현재 source를 pull한 뒤 `cmake --build build
 archive로 옮긴 뒤 재실행한다. 구버전 CSV에 새 row를 append하면 power API audit이
 전체 reject될 수 있다.
 
-`fixed_rf_v2`는 RF1은 검증된 dynamic loop, RF2/4/8/16은 fixed-trip `unroll 1` kernel을
-사용한다. 이 분기가 V100에서 같은 SASS lowering을 보인다고 가정하지 않으며, V100 NCU에서
-RF별 `HMMA/logical MMA` 상대 spread<=10%, control HMMA=0을 다시 확인해야 한다.
+`fixed_rf_v4`는 RF1/2/4/8/16 모두 fixed-trip `unroll 1` kernel을 사용하고 한 A
+fragment의 sign bit를 in-place로 뒤집어 FP32 accumulator를 bounded 상태로 유지한다. V100의 SASS lowering을
+Ampere와 같다고 가정하지 않으며 V100 NCU에서
+predicated HMMA=0, RF별 `HMMA/logical MMA` 상대 spread<=10%, control HMMA=0을 다시 확인해야 한다.
 
 ## 8. Full sweep 실행
 
@@ -401,7 +405,7 @@ python3 scripts/run_sweep.py \
   --execute \
   --target-profile v100 \
   --gpu-ids 0 \
-  --modes clocked_empty,reg_operand_only,reg_mma,global_addr_only,shared_scalar_load_only,global_l1_load_only,l2_cg_load_only,dram_cg_load_only \
+  --modes clocked_empty,reg_operand_only,reg_mma,shared_scalar_addr_only,global_addr_only,shared_scalar_load_only,global_l1_load_only,l2_cg_load_only,dram_cg_load_only \
   --w-sm-kib-values 32,64,128,512,8192 \
   --blocks-per-sm-values 1,8,16,32 \
   --active-sm-values 80 \
@@ -443,13 +447,15 @@ BIN=./build-v100/a100_fp16_energy_v2 \
 TARGET_PROFILE=v100 \
 ACTIVE_SM=80 \
 GPU=0 \
-DRAM_W_SM_KIB_OVERRIDE=8192 \
+DRAM_W_SM_KIB_VALUES=256,512,1024,2048 \
 OUTDIR=results/ncu/v100_validation_$(date +%Y%m%d) \
 RAW_OUT=results/raw/v100_ncu_validation_sidecar_$(date +%Y%m%d).csv \
 bash scripts/run_ncu_validation.sh
 ```
 
-`DRAM_W_SM_KIB_OVERRIDE=8192`는 V100의 6 MiB L2보다 충분히 큰 per-SM working set으로 DRAM streaming 후보를 검증하기 위한 기본값이다. 이 값이 너무 작으면 DRAM row가 L2 재사용 row로 오인될 수 있으므로 DRAM coefficient 후보로 쓰지 않는다.
+`DRAM_W_SM_KIB_VALUES=256,512,1024,2048`는 full set 20/40/80/160 MiB,
+즉 V100 6 MiB L2의 약 3.3/6.7/13.3/26.7배를 sweep한다. 최종 채택은 크기가
+아니라 final L2 hit, DRAM read/source read, write contamination으로 결정한다.
 
 권한 또는 버전 문제가 있으면 다음을 구분해서 기록한다.
 
@@ -518,7 +524,7 @@ BIN=./build-v100/a100_fp16_energy_v2 \
 TARGET_PROFILE=v100 \
 ACTIVE_SM=80 \
 GPU=0 \
-DRAM_W_SM_KIB_OVERRIDE=8192 \
+DRAM_W_SM_KIB_VALUES=256,512,1024,2048 \
 OUTDIR=results/ncu/v100_validation_$(date +%Y%m%d) \
 RAW_OUT=results/raw/v100_ncu_validation_sidecar_$(date +%Y%m%d).csv \
 bash scripts/run_ncu_validation.sh
@@ -608,7 +614,7 @@ python3 scripts/plot_results.py \
 |---|---|---|
 | command plan | `scripts/plan_platform_component_experiment.py` | V100용 표준 energy/NCU/analyze 명령 생성 |
 | L2 NCU precheck | `scripts/select_l2_path_configuration.py` | energy 전에 normal residency의 layout/blocks-SM 후보를 strict gate로 선택; persisting은 V100에서 금지 |
-| energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 energy 수집. Shared/Global L1은 duration-calibrated, Tensor/L2 CG/DRAM CG는 treatment/control-floor dual calibration의 최대 ITER를 두 mode에 동일 적용 |
+| energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 energy 수집. 모든 final pair에서 treatment/control-floor dual calibration의 최대 ITER를 두 mode에 동일 적용 |
 | NCU sidecar | `scripts/run_ncu_validation.sh` | path hit/access/stall/spill 검증 |
 | path acceptance | `scripts/analyze_ncu_path_acceptance.py` | accepted component 후보만 선별 |
 | matched-control | `scripts/analyze_matched_control_energy.py` | NCU actual-byte denominator로 pJ/bit 계산 |
@@ -663,24 +669,24 @@ V100 추천 finalplan 좌표:
 RTX 3090/A100/V100의 전체 파라미터와 command 개수 비교는
 [cross-platform component experiment guide](cross_platform_component_experiment_guide_ko.md)의
 4.0-4.5절을 기준으로 한다. 현재 V100 표준 package는 L2 precheck가 선택한 blocks/SM
-하나만 L2 energy에 사용한다. 유효 좌표는 132개/1 repeat, `repeats=5`에서 energy raw
-660행이며 Tensor pair calibration 15 coordinates/30 commands, L2 pair calibration
-6 coordinates/12 commands, DRAM pair calibration 9 coordinates/18 commands, schema
-smoke 3행, primary NCU 54 cases다. L2 selector는 첫 후보 통과 시 조기 종료하며
+하나만 L2 energy에 사용한다. 유효 좌표는 186개/1 repeat, `repeats=5`에서 energy raw
+930행이며 Tensor pair calibration 15 coordinates/30 commands, L2 pair calibration
+6 coordinates/12 commands, external-memory pair calibration 36 coordinates/72 commands, schema
+smoke 3행, primary NCU 83 cases다. L2 selector는 첫 후보 통과 시 조기 종료하며
 최악에는 4 candidates x 2 W x 2 modes = 16개 NCU precheck case를 추가한다.
 
-`seconds=10 s` 기준 nominal energy kernel 시간은 `660 x 10 s = 6,600 s`, 즉 약
-1시간 50분이다. calibration, launch, audit와 54-case NCU replay 및 L2 precheck를 포함한 노드 전체
-예상시간은 보통 약 3~4.5시간이며 NCU metric replay 횟수와 노드 부하에 따라 달라진다.
+`seconds=10 s` 기준 nominal energy kernel 시간은 `930 x 10 s = 9,300 s`, 즉 약
+2시간 35분이다. calibration, launch, audit와 83-case NCU replay 및 L2 precheck를 포함한 노드 전체
+예상시간은 보통 약 4~7시간이며 NCU metric replay 횟수와 노드 부하에 따라 달라진다.
 후보가 늦게 선택되면 NCU precheck 시간만큼 더 필요하다.
 
 | Component | modes | energy W_SM (KiB) | energy blocks/SM | strict NCU W_SM/B | factor |
 |---|---|---:|---:|---:|---|
-| Tensor | `reg_operand_only,reg_mma` | 2048 | 4,16,32 | 2048/32 | reuse 1,2,4,8,16 |
-| Shared scalar | `clocked_empty,shared_scalar_load_only` | 32,64 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| Tensor | `reg_operand_only,reg_mma` | N/A (CLI placeholder 1) | 4,16,32 | 1/4,16,32 | reuse 1,2,4,8,16 |
+| Shared scalar | `shared_scalar_addr_only,shared_scalar_load_only` | 32,64 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16; 동일 pair ITER |
 | Global L1 | `global_addr_only,global_l1_load_only` | 8,16,32 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
 | L2 CG | `global_addr_only,l2_cg_load_only` | 32,64 | NCU가 32/16/4 중 선택 | 32,64/selected B | energy load_repeat 4,8,16; 동일 pair ITER; NCU 1,2,4,8,16 |
-| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 4,16,32 | 8192/32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
+| External-memory read path | `global_addr_only,dram_cg_load_only` | 256,512,1024,2048 | 4,16,32 | W2048/B32 anchor | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
 ### V100 sweep를 그래프로 해석하기
 
@@ -688,7 +694,8 @@ smoke 3행, primary NCU 54 cases다. L2 selector는 첫 후보 통과 시 조기
 
 V100 B4는 저밀도, B16은 중간 밀도 utilization 진단이며 Shared/Global-L1 strict anchor는 B32다.
 B1/B2/B8은 실행시간 대비 추가 식별력이 제한적이어서 기본 package에서 제외했다. B4나
-B16이 L2 selector에서 선택되면 해당 좌표의 exact-coordinate full NCU가 자동 수집된다.
+B16이 L2 selector에서 선택되면 해당 좌표의 exact-coordinate
+`l2_path_minimal` NCU가 자동 수집된다.
 
 ![플랫폼별 W_SM path sweep](../presentations/assets/platform_wsm_path_sweep.png)
 
@@ -696,7 +703,7 @@ B16이 L2 selector에서 선택되면 해당 좌표의 exact-coordinate full NCU
 - Global L1 strict W32/B32는 block당 1 KiB를 확보한다. W8/B16·B32와 W16/B32는 tile
   부족으로 제외한다.
 - L2 W32는 전체 2.5 MiB로 6 MiB L2의 약 42%, W64는 5 MiB로 약 83%인 stress 점이다.
-- DRAM W8192는 전체 640 MiB다. Shared는 별도 address space이며 이 L1-L2-DRAM
+- External-memory W256/512/1024/2048은 전체 20/40/80/160 MiB다. Shared는 별도 address space이며 이 L1-L2-external-memory
   global hierarchy 전이축과 섞어 해석하지 않는다.
 
 현행 분석은 `--require-control-ncu-acceptance`를 사용한다. 따라서 V100에서도
@@ -722,18 +729,19 @@ ITER와 `global_addr_only` 최소 control 시간 ITER를 각각 구하고, 두 c
 음수였던 결과는 폐기한다. NCU 결과는 경로가 L2였다는 증거일 뿐, 서로 다른 작업량을 뺀
 energy numerator를 정당화하지 않는다. 이 경우 L2 energy sweep과 matched-control 이후
 단계를 다시 실행해야 하며, 기존 음수 `-12~-9 pJ/byte`를 L2 계수로 보고하면 안 된다.
-DRAM pair도 동일한 원칙을 사용한다. 각 B/LR 좌표에서 `dram_cg_load_only`의 목표
+External-memory pair도 동일한 원칙을 사용한다. 각 W/B/LR 좌표에서 `dram_cg_load_only`의 목표
 시간 ITER와 `global_addr_only`의 최소 control 시간 ITER를 구하고, 그중 큰 동일
 ITER를 양쪽에 전달한다. 분석은 `--dram-pair-policy matched-iters`로 두
 idle-corrected `net_E`를 직접 차분한다. `*_dram_pair_calibration.csv`가 없거나 raw
-`ITER`가 다르거나 matched detail의 `iter_ratio`가 1이 아니면 V100 DRAM 결과는
-reject한다.
+`ITER`가 다르거나 matched detail의 `iter_ratio`가 1이 아니면 V100 external-memory
+결과는 reject한다. 분모는 NCU `dram__bytes_read.sum`만 사용한다.
 
-두 kernel은 RF당 dependent register integer add 1개를 공통으로 실행하므로 control
-liveness instruction 비용은 direct 차분에서 상쇄된다.
+두 kernel은 source상 fragment, phase, dependent scalar update, epilogue를 공통으로
+두지만 ptxas 최적화 후 control의 register footprint는 더 작다. 따라서
+control은 lightweight no-MMA baseline이며 차분값은 pure Tensor 회로 에너지가 아니다.
 
 Energy sweep의 Tensor/Shared/L1/DRAM B4/B16은 utilization 변화와 추세를 보는
-diagnostic이다. L2는 precheck가 선택한 B 하나만 energy와 full NCU에 동일 적용한다.
+diagnostic이다. L2는 precheck가 선택한 B 하나만 energy와 minimal coherent NCU에 동일 적용한다.
 
 좌표 선정 근거:
 
@@ -758,7 +766,7 @@ CUDA persisting-L2 control은 compute capability 8.0 이상 기능이므로 V100
 | Shared scalar | shared access/bytes 존재, bank conflict 0 또는 매우 낮음 |
 | Tensor | HMMA > 0, spill/local 0 |
 
-새 raw CSV는 timed kernel의 exact epoch interval을 기록하고 matched-control은
+새 raw CSV는 시작 epoch에 monotonic `steady_clock` elapsed를 결합한 exact interval을 기록하고 matched-control은
 `pair_transition_gap_ms<=pair_transition_gap_limit_ms`를 검사한다. 생성 plan의
 한계는 `max(30000, (seconds+15)x1000)` ms이므로 표준 10초 run은 30,000 ms,
 20초 stability run은 35,000 ms다. 과거 `pair_start_distance_ms`는 두 완료

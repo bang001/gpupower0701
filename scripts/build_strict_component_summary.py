@@ -41,9 +41,9 @@ COMPONENTS = [
     {
         "component_key": "shared_l1_scalar_path",
         "component": "Shared scalar path",
-        "mode_pair": "shared_scalar_load_only - clocked_empty",
+        "mode_pair": "shared_scalar_load_only - shared_scalar_addr_only",
         "unit": "pJ/bit",
-        "ncu_candidates": ["shared_memory_path"],
+        "ncu_candidates": ["shared_memory_path", "shared_address_control"],
     },
     {
         "component_key": "global_l1_hit_path",
@@ -72,7 +72,10 @@ NCU_COORDINATE_COLUMNS = [
 
 NCU_EXACT_COORDINATE_MODES_BY_COMPONENT = {
     "tensor_mma_increment": {"reg_mma", "reg_operand_only"},
-    "shared_l1_scalar_path": {"shared_scalar_load_only"},
+    "shared_l1_scalar_path": {
+        "shared_scalar_load_only",
+        "shared_scalar_addr_only",
+    },
     "global_l1_hit_path": {"global_l1_load_only", "global_addr_only"},
     "l2_hit_cg_path": {"l2_cg_load_only", "global_addr_only"},
 }
@@ -86,10 +89,19 @@ NCU_METRIC_MODES_BY_COMPONENT = {
 
 NCU_METRIC_COLUMNS = [
     "shared_bytes",
+    "shared_read_bytes",
+    "shared_write_bytes",
     "l1_hit_rate_pct",
     "l1_path_hit_rate_pct",
     "l2_hit_rate_pct",
     "l2_path_hit_rate_pct",
+    "l2_logical_read_hit_rate_pct",
+    "l2_fabric_hit_rate_pct",
+    "l2_fabric_read_fraction",
+    "l2_fabric_read_sectors",
+    "l2_fabric_read_hit_sectors",
+    "l2_fabric_read_miss_sectors",
+    "l2_native_vs_fabric_model_hit_delta_pct",
     "l1_accesses",
     "l2_accesses",
     "dram_accesses",
@@ -102,7 +114,15 @@ NCU_METRIC_COLUMNS = [
     "l2_read_hit_sectors",
     "l2_read_miss_sectors",
     "dram_bytes",
+    "dram_read_bytes",
     "tensor_hmma_inst",
+    "expected_logical_mma",
+    "tensor_hmma_per_logical_mma",
+    "tensor_pipe_active_pct",
+    "achieved_occupancy_pct",
+    "launch_warp_capacity_pct",
+    "launch_warps_per_scheduler",
+    "registers_per_thread",
     "local_read_bytes",
     "local_write_bytes",
     "spill_zero_verified",
@@ -142,6 +162,13 @@ FIELDNAMES = [
     "ncu_l1_path_hit_rate_pct_min_med_max",
     "ncu_l2_hit_rate_pct_min_med_max",
     "ncu_l2_path_hit_rate_pct_min_med_max",
+    "ncu_l2_logical_read_hit_rate_pct_min_med_max",
+    "ncu_l2_fabric_hit_rate_pct_min_med_max",
+    "ncu_l2_fabric_read_fraction_min_med_max",
+    "ncu_l2_fabric_read_sectors_min_med_max",
+    "ncu_l2_fabric_read_hit_sectors_min_med_max",
+    "ncu_l2_fabric_read_miss_sectors_min_med_max",
+    "ncu_l2_native_vs_fabric_model_hit_delta_pct_min_med_max",
     "ncu_l1_accesses_min_med_max",
     "ncu_l2_accesses_min_med_max",
     "ncu_dram_accesses_min_med_max",
@@ -154,7 +181,17 @@ FIELDNAMES = [
     "ncu_l2_read_hit_sectors_min_med_max",
     "ncu_l2_read_miss_sectors_min_med_max",
     "ncu_dram_bytes_min_med_max",
+    "ncu_dram_read_bytes_min_med_max",
     "ncu_tensor_hmma_inst_min_med_max",
+    "ncu_expected_logical_mma_min_med_max",
+    "ncu_tensor_hmma_per_logical_mma_min_med_max",
+    "ncu_tensor_pipe_active_pct_min_med_max",
+    "ncu_achieved_occupancy_pct_min_med_max",
+    "ncu_launch_warp_capacity_pct_min_med_max",
+    "ncu_launch_warps_per_scheduler_min_med_max",
+    "ncu_registers_per_thread_min_med_max",
+    "ncu_control_tensor_hmma_inst_min_med_max",
+    "ncu_control_registers_per_thread_min_med_max",
     "ncu_local_read_bytes_min_med_max",
     "ncu_local_write_bytes_min_med_max",
     "ncu_spill_zero_verified_min_med_max",
@@ -381,7 +418,9 @@ def ncu_artifact_quality_score(
             score -= 100.0 + (l2_hit - 100.0) * 10.0
     elif component_key == "l2_hit_cg_path":
         l1_hit = mid("l1_hit_rate_pct")
-        l2_hit = mid("l2_hit_rate_pct")
+        l2_hit = mid("l2_logical_read_hit_rate_pct")
+        if not math.isfinite(l2_hit):
+            l2_hit = mid("l2_hit_rate_pct")
         score += l2_hit if math.isfinite(l2_hit) else -100.0
         score -= min(l1_hit, 100.0) if math.isfinite(l1_hit) else 50.0
         score += 20.0 if mid("l2_bytes") > 0.0 else -100.0
@@ -426,6 +465,7 @@ def ncu_evidence_summary(
     expected = expected_ncu_coords(component_key, details)
     coord_rows = ncu_rows_for_coords(ncu_summary_artifact, expected, exact_modes)
     metric_rows = [row for row in coord_rows if row.get("mode", "") in metric_modes]
+    control_rows = [row for row in coord_rows if row.get("mode", "") not in metric_modes]
 
     out = {
         "ncu_coordinate_rows": str(len(coord_rows)),
@@ -438,6 +478,12 @@ def ncu_evidence_summary(
         out[f"ncu_{column}_min_med_max"] = fmt_min_med_max(
             [as_float(row, column) for row in metric_rows]
         )
+    out["ncu_control_tensor_hmma_inst_min_med_max"] = fmt_min_med_max(
+        [as_float(row, "tensor_hmma_inst") for row in control_rows]
+    )
+    out["ncu_control_registers_per_thread_min_med_max"] = fmt_min_med_max(
+        [as_float(row, "registers_per_thread") for row in control_rows]
+    )
     out["ncu_path_evidence"] = path_evidence_text(component_key, out)
     out["ncu_counter_caveat"] = counter_caveat_text(component_key)
     return out
@@ -453,6 +499,13 @@ def path_evidence_text(component_key: str, summary: dict[str, str]) -> str:
         return (
             "HMMA_inst="
             f"{summary_value(summary, 'ncu_tensor_hmma_inst_min_med_max')}; "
+            "HMMA/logical_MMA="
+            f"{summary_value(summary, 'ncu_tensor_hmma_per_logical_mma_min_med_max')}; "
+            "Tensor/control_regs_per_thread="
+            f"{summary_value(summary, 'ncu_registers_per_thread_min_med_max')}/"
+            f"{summary_value(summary, 'ncu_control_registers_per_thread_min_med_max')}; "
+            "control_HMMA="
+            f"{summary_value(summary, 'ncu_control_tensor_hmma_inst_min_med_max')}; "
             "L1_bytes="
             f"{summary_value(summary, 'ncu_l1_bytes_min_med_max')}; "
             "local_read/write_bytes="
@@ -492,15 +545,21 @@ def path_evidence_text(component_key: str, summary: dict[str, str]) -> str:
             "L1_request/hit_bytes="
             f"{summary.get('ncu_l1_request_bytes_min_med_max', '')}/"
             f"{summary.get('ncu_l1_hit_bytes_min_med_max', '')}; "
-            "L2_read_hit_pct="
-            f"{summary.get('ncu_l2_path_hit_rate_pct_min_med_max', '')}; "
+            "L2_direct/logical_hit_pct="
+            f"{summary.get('ncu_l2_path_hit_rate_pct_min_med_max', '')}/"
+            f"{summary.get('ncu_l2_logical_read_hit_rate_pct_min_med_max', '')}; "
+            "LTC_fabric_hit/fraction="
+            f"{summary.get('ncu_l2_fabric_hit_rate_pct_min_med_max', '')}/"
+            f"{summary.get('ncu_l2_fabric_read_fraction_min_med_max', '')}; "
             "L2_read_hit/miss_sectors="
             f"{summary.get('ncu_l2_read_hit_sectors_min_med_max', '')}/"
             f"{summary.get('ncu_l2_read_miss_sectors_min_med_max', '')}; "
             "L2_read_bytes="
             f"{summary.get('ncu_l2_read_bytes_min_med_max', '')}; "
             "DRAM_bytes="
-            f"{summary.get('ncu_dram_bytes_min_med_max', '')}"
+            f"{summary.get('ncu_dram_bytes_min_med_max', '')}; "
+            "DRAM_read_bytes="
+            f"{summary.get('ncu_dram_read_bytes_min_med_max', '')}"
         )
     return ""
 
@@ -513,9 +572,10 @@ def counter_caveat_text(component_key: str) -> str:
         )
     if component_key == "tensor_mma_increment":
         return (
-            "Tensor validation uses HMMA instruction evidence plus zero spill/local "
-            "instructions. Cache traffic is contamination context, not a Tensor "
-            "denominator; ptxas/register-footprint evidence is still required."
+            "Tensor validation uses architecture-local HMMA/logical-MMA linearity, "
+            "zero-HMMA control, explicit treatment/control register footprints, and "
+            "zero spill/local traffic. The pJ/FLOP value includes the unmatched "
+            "Tensor operand/accumulator register path and is not pure Tensor circuitry."
         )
     if component_key == "global_l1_hit_path":
         return (
@@ -526,7 +586,9 @@ def counter_caveat_text(component_key: str) -> str:
         return (
             "An ld.global.cg request still traverses L1TEX, so L1 request bytes are "
             "expected. Bypass is shown by near-zero path-specific L1 hit bytes and a "
-            "high path-specific L2 read hit rate; L2 read bytes are the denominator."
+            "high final-service L2 read hit rate; L2 read bytes are the denominator. "
+            "On GA100, final service combines direct-partition and LTC-fabric hits, "
+            "so the coefficient includes partition-fabric traffic."
         )
     return "Cache hit/access/byte fields are path-relevant for this global-memory candidate."
 
@@ -817,15 +879,20 @@ def run_self_test() -> None:
             [
                 ncu_selftest_row(
                     mode="reg_mma",
-                    w_sm_kib="2048",
+                    w_sm_kib="1",
                     blocks_per_sm="4",
                     reuse_factor="8",
+                    tensor_hmma_inst="100",
+                    expected_logical_mma="50",
+                    tensor_hmma_per_logical_mma="2",
+                    registers_per_thread="32",
                 ),
                 ncu_selftest_row(
                     mode="reg_operand_only",
-                    w_sm_kib="2048",
+                    w_sm_kib="1",
                     blocks_per_sm="4",
                     reuse_factor="8",
+                    registers_per_thread="16",
                 ),
             ],
         )
@@ -833,10 +900,24 @@ def run_self_test() -> None:
             tensor_b16,
             fields,
             [
-                ncu_selftest_row(mode="reg_mma", w_sm_kib="2048", reuse_factor="8"),
-                ncu_selftest_row(mode="reg_operand_only", w_sm_kib="2048", reuse_factor="8"),
-                ncu_selftest_row(mode="reg_mma", w_sm_kib="2048", reuse_factor="16"),
-                ncu_selftest_row(mode="reg_operand_only", w_sm_kib="2048", reuse_factor="16"),
+                ncu_selftest_row(
+                    mode="reg_mma", w_sm_kib="1", reuse_factor="8",
+                    tensor_hmma_inst="200", expected_logical_mma="100",
+                    tensor_hmma_per_logical_mma="2", registers_per_thread="32",
+                ),
+                ncu_selftest_row(
+                    mode="reg_operand_only", w_sm_kib="1", reuse_factor="8",
+                    registers_per_thread="16",
+                ),
+                ncu_selftest_row(
+                    mode="reg_mma", w_sm_kib="1", reuse_factor="16",
+                    tensor_hmma_inst="400", expected_logical_mma="200",
+                    tensor_hmma_per_logical_mma="2", registers_per_thread="32",
+                ),
+                ncu_selftest_row(
+                    mode="reg_operand_only", w_sm_kib="1", reuse_factor="16",
+                    registers_per_thread="16",
+                ),
                 ncu_selftest_row(
                     mode="global_l1_load_only",
                     w_sm_kib="16",
@@ -951,14 +1032,14 @@ def run_self_test() -> None:
                 component="tensor_mma_increment",
                 numerator_mode="reg_mma",
                 control_mode="reg_operand_only",
-                w_sm_kib="2048",
+                w_sm_kib="1",
                 reuse_factor="8",
             ),
             detail_selftest_row(
                 component="tensor_mma_increment",
                 numerator_mode="reg_mma",
                 control_mode="reg_operand_only",
-                w_sm_kib="2048",
+                w_sm_kib="1",
                 reuse_factor="16",
             ),
         ]
@@ -1001,6 +1082,17 @@ def run_self_test() -> None:
         )
         if tensor_selected != str(tensor_b16):
             raise AssertionError(f"expected tensor B16 artifact only, got {tensor_selected}")
+        tensor_evidence = ncu_evidence_summary(
+            "tensor_mma_increment", tensor_details, tensor_selected
+        )
+        if tensor_evidence["ncu_tensor_hmma_per_logical_mma_min_med_max"] != "2":
+            raise AssertionError(f"missing HMMA/logical-MMA evidence: {tensor_evidence}")
+        if tensor_evidence["ncu_control_tensor_hmma_inst_min_med_max"] != "0":
+            raise AssertionError(f"control HMMA is not zero: {tensor_evidence}")
+        if tensor_evidence["ncu_registers_per_thread_min_med_max"] != "32":
+            raise AssertionError(f"missing treatment register evidence: {tensor_evidence}")
+        if tensor_evidence["ncu_control_registers_per_thread_min_med_max"] != "16":
+            raise AssertionError(f"missing control register evidence: {tensor_evidence}")
         shared_selected = select_ncu_summary_artifacts(
             "shared_l1_scalar_path", shared_details, paths
         )
@@ -1122,10 +1214,11 @@ def write_md(path: str | Path, rows: list[dict[str, str]], *, target_profile: st
             "| component | coord rows | metric rows | metric modes | L1 path hit % | "
             "L2 read hit % | L1 accesses | L2 accesses | DRAM accesses | shared bytes | "
             "L1 request bytes | L1 hit bytes | L2 read bytes | DRAM bytes | HMMA inst | "
-            "long scoreboard % |\n"
+            "HMMA/logical MMA | Tensor/control regs/thread | Tensor pipe active % | "
+            "achieved occupancy % | launch warp capacity % | long scoreboard % |\n"
         )
         f.write(
-            "|---|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+            "|---|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         )
         for row in rows:
             f.write(
@@ -1147,6 +1240,13 @@ def write_md(path: str | Path, rows: list[dict[str, str]], *, target_profile: st
                         row["ncu_l2_read_bytes_min_med_max"],
                         row["ncu_dram_bytes_min_med_max"],
                         row["ncu_tensor_hmma_inst_min_med_max"],
+                        row["ncu_tensor_hmma_per_logical_mma_min_med_max"],
+                        row["ncu_registers_per_thread_min_med_max"]
+                        + "/"
+                        + row["ncu_control_registers_per_thread_min_med_max"],
+                        row["ncu_tensor_pipe_active_pct_min_med_max"],
+                        row["ncu_achieved_occupancy_pct_min_med_max"],
+                        row["ncu_launch_warp_capacity_pct_min_med_max"],
                         row["ncu_stall_long_scoreboard_pct_min_med_max"],
                     ]
                 )

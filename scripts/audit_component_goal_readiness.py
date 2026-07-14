@@ -85,7 +85,7 @@ COMMAND_SHELL_TERMS = [
     "--fail-on-provisional",
     "--require-explicit-measurement-scope",
     "--require-mode-notes-marker",
-    "reg_operand_only=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
+    "reg_operand_only=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
     "l2_cg_load_only=global_warmup_policy=ld_global_cg",
     "scripts/audit_power_state_stability.py",
     "scripts/run_ncu_validation.sh",
@@ -145,7 +145,7 @@ COMMAND_PLAN_TERMS = [
     "complete control-treatment coordinate pairs",
     "path-specific L1 hit",
     "path-specific L2 read hit",
-    "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2",
+    "tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
     "global_warmup_policy=ld_global_cg",
     "spill_evidence_source=local_memory_bytes_zero_inference",
     "ncu_actual_exact",
@@ -260,6 +260,15 @@ NCU_ACCEPTANCE_REQUIRED_COLUMNS = (
     NCU_ACCEPTANCE_BASE_REQUIRED_COLUMNS | NCU_ACCEPTANCE_PATH_REQUIRED_COLUMNS
 )
 
+A100_L2_FABRIC_REQUIRED_COLUMNS = {
+    "l2_logical_read_hit_rate_pct",
+    "l2_fabric_metrics_present",
+    "l2_fabric_counter_coherent",
+    "l2_fabric_model_coherent",
+    "l2_native_vs_fabric_model_hit_delta_pct",
+    "dram_read_bytes",
+}
+
 NCU_L1_HIT_MIN_PCT = 95.0
 NCU_L1_L2_RATIO_MAX = 0.01
 NCU_L1_DRAM_RATIO_MAX = 0.01
@@ -329,7 +338,10 @@ SUMMARY_REQUIRED_COLUMNS = SUMMARY_BASE_REQUIRED_COLUMNS | SUMMARY_PATH_REQUIRED
 
 STRICT_SUMMARY_EVIDENCE_MODES = {
     "Tensor MMA incremental": {"reg_mma", "reg_operand_only"},
-    "Shared scalar path": {"shared_scalar_load_only"},
+    "Shared scalar path": {
+        "shared_scalar_load_only",
+        "shared_scalar_addr_only",
+    },
     "Global L1 hit path": {"global_l1_load_only", "global_addr_only"},
     "L2 CG hit path": {"l2_cg_load_only", "global_addr_only"},
 }
@@ -709,6 +721,12 @@ def ncu_path_sanity_pass(
     l2_read_bytes = ncu_value(row, "l2_read_bytes")
     l2_traffic_bytes = l2_read_bytes if has_path_specific_cache_evidence else l2_bytes
     dram_bytes = ncu_value(row, "dram_bytes")
+    dram_read_bytes = ncu_value(row, "dram_read_bytes", math.nan)
+    effective_dram_read_bytes = (
+        dram_read_bytes
+        if math.isfinite(dram_read_bytes)
+        else (math.nan if profile == "a100" else dram_bytes)
+    )
     shared_bytes = ncu_value(row, "shared_bytes")
     shared_accesses = ncu_value(row, "shared_accesses")
     shared_inst = ncu_value(row, "shared_inst")
@@ -751,15 +769,37 @@ def ncu_path_sanity_pass(
                 and 0.0 <= l1_hit <= NCU_L2_L1_HIT_MAX_PCT
                 and ncu_ratio(dram_bytes, l2_bytes) <= NCU_L2_DRAM_RATIO_MAX
             )
+        accepted_l2_hit = (
+            ncu_value(row, "l2_logical_read_hit_rate_pct", -1.0)
+            if profile == "a100"
+            else l2_hit
+        )
+        fabric_ok = True
+        if profile == "a100":
+            fabric_ok = (
+                ncu_value(row, "l2_fabric_metrics_present", 0.0) == 1.0
+                and ncu_value(row, "l2_fabric_counter_coherent", -1.0)
+                == 1.0
+                and ncu_value(row, "l2_fabric_model_coherent", -1.0) == 1.0
+                and ncu_value(
+                    row,
+                    "l2_native_vs_fabric_model_hit_delta_pct",
+                    math.inf,
+                )
+                <= 2.0
+            )
         return (
-            l2_hit >= NCU_L2_HIT_MIN_PCT
+            NCU_L2_HIT_MIN_PCT <= accepted_l2_hit <= 100.5
+            and fabric_ok
             and l2_read_bytes > 0.0
             and l1_request_bytes > 0.0
             and l1_hit >= 0.0
             and l1_hit <= NCU_L2_L1_HIT_MAX_PCT
             and ncu_ratio(l1_hit_bytes, l1_request_bytes)
             <= NCU_L2_L1_BYTES_RATIO_MAX
-            and ncu_ratio(dram_bytes, l2_read_bytes) <= NCU_L2_DRAM_RATIO_MAX
+            and math.isfinite(effective_dram_read_bytes)
+            and ncu_ratio(effective_dram_read_bytes, l2_read_bytes)
+            <= NCU_L2_DRAM_RATIO_MAX
         )
     if mode in {"shared_scalar_load_only", "shared_load_only"}:
         denominator = max(shared_bytes, 1.0)
@@ -1026,6 +1066,8 @@ def validate_ncu_acceptance_artifacts(
     required_columns = set(NCU_ACCEPTANCE_BASE_REQUIRED_COLUMNS)
     if require_path_specific_cache_evidence:
         required_columns.update(NCU_ACCEPTANCE_PATH_REQUIRED_COLUMNS)
+    if profile == "a100":
+        required_columns.update(A100_L2_FABRIC_REQUIRED_COLUMNS)
     for artifact in artifacts:
         with artifact.open(newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -2344,7 +2386,9 @@ def audit_rtx3090_strict(repo: Path, rows: list[dict[str, str]]) -> None:
 
     expected_pairs = {
         "Tensor MMA incremental": "reg_mma - reg_operand_only",
-        "Shared scalar path": "shared_scalar_load_only - clocked_empty",
+        "Shared scalar path": (
+            "shared_scalar_load_only - shared_scalar_addr_only"
+        ),
         "Global L1 hit path": "global_l1_load_only - global_addr_only",
         "L2 CG hit path": "l2_cg_load_only - global_addr_only",
     }

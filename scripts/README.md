@@ -10,20 +10,22 @@
 | command plan | `plan_platform_component_experiment.py` | 플랫폼별 finalplan 명령 생성 |
 | platform readiness | `audit_platform_power_readiness.py` | RTX 3090/V100/A100/H100 profile, power API 의미, 문서, 생성 plan 정합성 점검 |
 | documentation consistency | `audit_documentation_consistency.py` | active/archive Markdown 링크, canonical 문서, archive 경계, 현행 pair/ITER 정책, C++/Python 플랫폼 profile 상수를 교차 검사 |
-| energy sweep | `run_component_regression_sweep.py` | Python/C++ feasibility self-test와 unique-coordinate binary dry-run 후 NCU 없이 energy CSV 수집. `--execute`는 accidental legacy sweep을 막기 위해 explicit `--modes`를 요구한다. 알려진 2-mode control-treatment는 pair 단위로 회전하며, 반복과 좌표 index를 함께 사용해 실행 방향을 counterbalance한다. Tensor/L2 CG/DRAM CG는 treatment 목표/control 최소시간의 dual calibration에서 큰 ITER를 두 mode에 동일 적용 |
-| paired stability | `run_paired_component_stability.py` | drift-sensitive component를 explicit control-treatment-control 순서로 재측정. Global L1/L2/DRAM은 `global_addr_only`, Shared는 `clocked_empty`를 강제 |
+| energy sweep | `run_component_regression_sweep.py` | Python/C++ feasibility self-test와 unique-coordinate binary dry-run 후 NCU 없이 energy CSV 수집. `--execute`는 accidental legacy sweep을 막기 위해 explicit `--modes`를 요구한다. 알려진 2-mode control-treatment는 pair 단위로 회전하며, 반복과 좌표 index를 함께 사용해 실행 방향을 counterbalance한다. Tensor/Shared/Global L1/L2 CG/DRAM CG는 treatment 목표/control 최소시간의 dual calibration에서 큰 ITER를 두 mode에 동일 적용 |
+| paired stability | `run_paired_component_stability.py` | drift-sensitive component를 explicit control-treatment-control 순서로 재측정. Global L1/L2/DRAM은 `global_addr_only`, Shared는 `shared_scalar_addr_only`를 강제 |
 | power API audit | `audit_power_api_measurements.py` | raw energy CSV가 power measurement matrix 기준 final/provisional/reject인지 판정하고 새 finalplan에서는 explicit `measurement_scope`와 exact timed-kernel interval을 요구하며 `--self-test`로 A100 semantics, fallback numerator, H100 module scope 혼입 회귀를 검증 |
 | power-state audit | `audit_power_state_stability.py` | raw row의 평균 전력/endpoint power outlier를 찾아 측정 품질 문제와 weak-signal 문제를 분리 |
-| NCU sidecar | `run_ncu_validation.sh` | chip별 metric availability를 확인한 뒤 primary finalplan mode의 hit/access/byte/stall/spill/occupancy/launch-resource counter 수집. `NCU_COMPONENTS=tensor,l2`처럼 targeted subset 선택 가능 |
-| NCU summary | `summarize_ncu_cache_metrics.py` | NCU raw export를 cache/path, native-vs-derived L2 hit, sector conservation, observed/expected L2 traffic, DRAM read traffic, achieved occupancy/register/shared-block summary로 정리 |
-| path acceptance | `analyze_ncu_path_acceptance.py` | accepted/provisional/rejected path 판정. A100 L2는 selected address layout과 observed/expected byte gate를 강제할 수 있음 |
+| NCU sidecar | `run_ncu_validation.sh` | chip별 metric availability를 확인한 뒤 counter 수집. L2 strict gate는 `NCU_METRIC_PROFILE=l2_path_minimal`, 나머지 component는 `full`을 사용하며 `NCU_COMPONENTS=tensor,l2`처럼 subset 선택 가능 |
+| Tensor binary audit | `audit_tensor_mma_binary.py` | target binary의 RF1/2/4/8/16 treatment/control SASS와 resource usage를 검사해 control HMMA, predicated dual-HMMA, operand LDG/LDS, local/stack allocation을 거부. runtime NCU를 대체하지 않음 |
+| NCU summary | `summarize_ncu_cache_metrics.py` | NCU raw export를 cache/path, source/native L2 hit, GA100 LTC-fabric recovery와 logical final hit, sector conservation, observed/expected traffic, DRAM read, occupancy/register/shared-block summary로 정리 |
+| NCU summary merge | `merge_ncu_validation_summaries.py` | disjoint full non-L2와 minimal L2 summary를 row source를 보존해 canonical CSV로 병합하고 duplicate label을 거부 |
+| path acceptance | `analyze_ncu_path_acceptance.py` | accepted/provisional/rejected path 판정. A100 L2는 source+LTC-fabric logical final hit, native-model, selected layout, observed/expected byte gate를 강제 |
 | matched-control | `analyze_matched_control_energy.py` | NCU byte denominator 기반 pJ/FLOP, pJ/byte, pJ/bit 계산. 실제 benchmark interval의 `pair_transition_gap_ms`로 pair 인접성을 검사하고 legacy CSV는 `run_id-elapsed_s`로 명시적 추정 |
 | component reliability | `audit_component_reliability.py` | power/NCU/matched-control 결과를 결합해 component별 최종 verdict 생성 |
 | instability audit | `audit_matched_control_instability.py` | invalid/weak-signal matched-control row 원인과 follow-up 실험 조건 요약 |
-| platform L2 path selector | `select_l2_path_configuration.py` | A100/V100의 사전 순서 policy/layout/blocks-SM 후보 중 두 working-set anchor의 strict NCU gate를 모두 통과한 첫 후보를 energy sweep에 전달. A100 native L2 hit는 필수, GV100 native metric은 없으면 derived/sector/traffic 증거로 대체하고 있으면 교차검증. V100 persisting policy는 하드 거부 |
+| platform L2 path selector | `select_l2_path_configuration.py` | A100/V100의 사전 순서 policy/layout/blocks-SM 후보 중 두 working-set anchor의 strict NCU gate를 모두 통과한 첫 후보를 energy sweep에 전달. A100은 native hit 95%가 아니라 source+fabric logical hit와 native-model coherence를 필수로 하며, GV100은 native metric이 없으면 direct/sector/traffic 증거로 대체. V100 persisting policy는 하드 거부 |
 | legacy selector entry point | `select_a100_l2_path_configuration.py` | 기존 A100 remediation command와의 호환 wrapper. 새 plan은 generic selector 사용 |
 | A100 Tensor/L2 NCU precheck | `audit_a100_ncu_precheck.py` | energy 전에 Tensor RF 선형성과 selected L2 policy/layout/B의 전체 W/LR path evidence를 hard gate |
-| A100 Tensor/L2 remediation audit | `audit_a100_tensor_l2_remediation.py` | RF별 dual-calibration max ITER, 실제 control duration, 동일 ITER/HMMA/spill/양수 delta와 W별 native/derived L2 hit, sector/traffic 보존, exact NCU denominator, 인접-W pJ/bit plateau를 검증 |
+| A100 Tensor/L2 remediation audit | `audit_a100_tensor_l2_remediation.py` | RF별 dual-calibration max ITER, 실제 control duration, 동일 ITER/HMMA/spill/양수 delta와 W별 source/fabric logical L2 hit, native-model, sector/traffic 보존, exact NCU denominator, 인접-W pJ/bit plateau를 검증 |
 | strict summary build | `build_strict_component_summary.py` | accepted reliability, matched-control, NCU acceptance artifact에서 보고용 strict component coefficient summary 생성. 여러 NCU summary artifact가 입력되면 component별 strict detail 좌표를 덮는 artifact만 row에 연결하고, path-relevant NCU hit/access/byte/stall evidence를 summary row에 직접 노출하며 `--self-test`로 Tensor B4/B16 artifact 선택 회귀를 검증 |
 | strict summary audit | `audit_strict_component_summary.py` | strict component summary가 reliability artifact, matched-control detail row, power API scope, NCU denominator, 계층 순서, broad plausibility range, NCU counter schema, coordinate alignment, `ncu_evidence_summary_fields`에 일치하는지 검증하고, `--self-test`로 strict detail 좌표 mismatch를 잡는지 검증 |
 | platform package audit | `audit_platform_result_package.py` | 외부 노드에서 복사해 온 단일 profile/tag 결과 패키지의 raw profile metadata, active SM, power, NCU, reliability, strict summary gate를 검수 |
@@ -45,12 +47,13 @@
 | `plot_results.py` | raw sweep CSV용 일반 plot helper |
 | `summarize_matched_control_by_factor.py` | matched-control detail을 RF/LR별 min/median/max와 invalid diagnostics 표로 요약하는 선택적 sweep 보고 도구 |
 | `plot_platform_sweep_design.py` | planner profile에서 플랫폼별 blocks/SM, W_SM path, capacity-context 그래프 생성. `--self-test`로 좌표 feasibility와 용량 산술 검증 |
-| `plot_dram_reporting_policy.py` | RTX 3090 DRAM 26.709-28.409 pJ/bit provisional reporting band 시각화. strict 미채택과 pJ/byte-pJ/bit 환산을 `--self-test`로 검증 |
+| `plot_external_memory_scope_review.py` | RTX 3090/A100/V100 user-reported effective-path observation과 HBM2/GDDR5 device reference를 measurement scope별 분리 시각화하고 `--self-test`로 값·scope·strict 상태 검증 |
+| `plot_dram_reporting_policy.py` | 2026-07-12 `26.709-28.409 pJ/bit` legacy provisional band 재현 전용; active 계수/그림 생성에 사용 금지 |
 | `build_gpu_component_energy_presentation.py` | sweep 그래프를 재생성하고 22장 기술백서 PPT/PDF와 렌더 검토 이미지를 빌드 |
 | `selftest_ncu_permission_fallback.sh` | 부모 sudo 환경을 격리하고 fake NCU/sudo로 동기식 stderr 판정, `ERR_NVGPUCTRPERM` 자동 재시도와 `NCU_AUTO_SUDO=0` hard-fail을 회귀 검증 |
 
 `run_ncu_validation.sh`는 기본적으로 `clocked_empty`, `reg_operand_only`,
-`reg_mma`, `shared_scalar_load_only`, `global_addr_only`, `global_l1_load_only`,
+`reg_mma`, `shared_scalar_addr_only`, `shared_scalar_load_only`, `global_addr_only`, `global_l1_load_only`,
 `l2_cg_load_only`, `dram_cg_load_only`만 실행한다. A100/H100의 capacity L2
 비교가 필요하면 `INCLUDE_L2_CAPACITY_NCU=1`, 과거 sweep과의 비교가
 필요하면 `INCLUDE_DIAGNOSTIC_NCU=1`을 명시한다.
@@ -94,14 +97,14 @@ L1처럼 treatment-control drift가 의심되는 component는 factor sweep runne
 paired stability runner를 사용할 수 있다. 이 runner는 각 repeat를
 `explicit control -> treatment -> explicit control`로 bracket해서 nearest-control
 pairing의 시간/온도 거리를 줄인다. Global L1/L2/DRAM은 `global_addr_only`, Shared는
-`clocked_empty`를 명시한다. Tensor는 이 runner를 쓰지 않고 pair-locked ITER sweep을
+`shared_scalar_addr_only`를 명시한다. Tensor는 이 runner를 쓰지 않고 pair-locked ITER sweep을
 사용한다.
 
 표준 component sweep runner도 현재 알려진 2-mode pair를 원자적으로 회전하므로 반복
 경계에서 control/treatment가 분리되지 않는다. A100 Tensor/L2 targeted 결과는
 `select_l2_path_configuration.py`로 strict policy/layout/B 후보를 먼저 선택하고,
 `audit_a100_tensor_l2_remediation.py`로 RF별 동일 ITER/HMMA/spill/양수 차분과 L2
-path-specific/native hit, sector/expected-traffic conservation 및 인접 W plateau를 함께 검사한다.
+source/fabric logical hit, native-model, sector/expected-traffic conservation 및 인접 W plateau를 함께 검사한다.
 
 ```bash
 python3 scripts/run_paired_component_stability.py \
@@ -209,8 +212,11 @@ python3 scripts/analyze_matched_control_energy.py \
 Final package에서는 `--require-control-ncu-acceptance`를 생략하지 않는다.
 `reg_operand_only`와 `global_addr_only`가 treatment와 같은 좌표에서 NCU
 `accepted`여야 하며, treatment만 통과한 pair는 계수 후보에서 제외된다.
-현재 binary는 timed kernel 전후의 `measurement_start_epoch_ms`와
-`measurement_end_epoch_ms`를 raw CSV에 기록한다. 분석 gate는 두 benchmark interval
+현재 binary는 timed kernel 직전의 `measurement_start_epoch_ms`와 monotonic
+`steady_clock` elapsed를 raw CSV에 기록하고, `measurement_end_epoch_ms`는 시작 epoch에
+그 elapsed를 더해 산출한다. Windows/WSL wall clock이 측정 중 보정되어도 interval 길이가
+왜곡되지 않으며 `notes`에는
+`measurement_interval_clock=steady_clock_anchored_epoch`가 기록된다. 분석 gate는 두 benchmark interval
 사이의 비실행 간격인 `pair_transition_gap_ms`에 적용된다. legacy
 `pair_start_distance_ms`는 완료 timestamp 차이였고 시작 간격이 아니므로 더 이상
 gate에 사용하지 않는다. 이전 raw CSV는 `run_id-elapsed_s`로 interval을 추정하며
@@ -237,7 +243,7 @@ python3 scripts/audit_component_reliability.py \
 
 `accepted_low_stability`와 `accepted_with_caution`은 최종 표에 넣을 수는 있지만,
 보고서에서 낮은 반복 안정도나 invalid detail row 이유를 반드시 같이 적는다.
-`accepted_sanity`는 DRAM streaming sanity처럼 물리 device energy로 해석하면 안 되는
+`accepted_effective_path`는 external-memory read path처럼 물리 device energy로 해석하면 안 되는
 항목에 사용한다.
 
 Reliability audit에서 `accepted_with_caution`이 남으면 instability audit으로 원인을
@@ -398,7 +404,7 @@ Tensor/Shared/Global L1/L2는 `status=accepted`, 양수 median, 기대 unit, `va
 `invalid_detail_rows=0`, total-energy GPU/device scope, profile power semantics를 가져야
 하며, memory component는 `ncu_denominator_rows > 0`, 모든 component는
 `ncu_accepted_rows > 0`이어야 한다. `accepted_with_caution`, `accepted_low_stability`,
-`accepted_sanity`는 분석용으로 남길 수 있지만 strict package gate에서는 최종 reporting
+`accepted_effective_path`는 분석용으로 남길 수 있지만 strict 4-component package에서는 최종 reporting
 component로 통과시키지 않는다.
 
 복사 전에 expected artifact manifest를 만들 수 있다. 이 manifest는 검증 결과가 아니라,
@@ -523,7 +529,8 @@ python3 scripts/build_platform_intake_dashboard.py --self-test
 |---|---|---|
 | `TENSOR_REUSE_FACTORS` | `1,2,4,8,16` | `reg_operand_only`, `reg_mma` reuse sweep |
 | `MEMORY_LOAD_REPEATS` | `1,2,4,8,16` | shared/L1/L2 load_repeat sweep |
-| `DRAM_LOAD_REPEATS` | `1,4,16` | DRAM sanity load_repeat sweep |
+| `DRAM_LOAD_REPEATS` | `1,4,8,16` | external-memory load_repeat sweep |
+| `DRAM_W_SM_KIB_VALUES` | profile별: RTX/V100 `256,512,1024,2048`; A100/H100 `2048,4096,8192` | nominal L2 배수 W_SM sweep (KiB/SM) |
 | `DRY_RUN_NCU` | `1` | NCU 실행 없이 case manifest만 생성 |
 
 대표 조건만 빠르게 확인하려면 세 list를 모두 `4`로 제한한다. 그 결과는

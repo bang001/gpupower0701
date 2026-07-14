@@ -1,0 +1,2 @@
+label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,ncu_replay_mode,ncu_cache_control,global_warmup_passes,l2_residency_policy,l2_address_layout,report
+clocked_empty_W64_B8,clocked_empty_kernel,clocked_empty,64,8,82,1000000,1,1,1,application,none,1,normal,contiguous,results/ncu/rtx3090_pairv2b_permission2_20260714/clocked_empty_W64_B8

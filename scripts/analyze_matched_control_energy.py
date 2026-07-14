@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Analyze component runs with matched treatment/control rows.
 
-Shared/Global-L1 paths can use elapsed-aware control-power scaling. Tensor, L2,
-and DRAM finalplan rows can instead require pair-locked ITER and directly
-subtract the two net energies, so different calibrated work counts cannot
-masquerade as component energy.
+Finalplan paths require pair-locked ITER and directly subtract treatment and
+matched-control net energies. Duration scaling remains available only for
+explicit legacy diagnostics because it can turn memory stalls into a negative
+"component" coefficient.
 
 The output is an effective microbenchmark energy estimate. It is not a pure
 physical SRAM/register/DRAM bitcell energy.
@@ -17,6 +17,7 @@ import csv
 import math
 import random
 import statistics
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -49,9 +50,9 @@ PAIR_SPECS = [
     },
     {
         "component": "shared_l1_scalar_path",
-        "pair": "shared_scalar_load_only_minus_clocked_empty",
+        "pair": "shared_scalar_load_only_minus_shared_scalar_addr_only",
         "numerator_mode": "shared_scalar_load_only",
-        "control_mode": "clocked_empty",
+        "control_mode": "shared_scalar_addr_only",
         "denominator_column": "expected_shared_bytes",
         "unit": "pJ/byte",
     },
@@ -72,7 +73,7 @@ PAIR_SPECS = [
         "unit": "pJ/byte",
     },
     {
-        "component": "dram_cg_stream_path",
+        "component": "external_memory_read_path",
         "pair": "dram_cg_load_only_minus_global_addr_only",
         "numerator_mode": "dram_cg_load_only",
         "control_mode": "global_addr_only",
@@ -81,8 +82,19 @@ PAIR_SPECS = [
     },
 ]
 
+PROFILE_EXTERNAL_MEMORY = {
+    "rtx3090": {
+        "technology": "GDDR6X",
+        "topology": "off_package_board",
+    },
+    "v100": {"technology": "HBM2", "topology": "on_package_interposer"},
+    "a100": {"technology": "HBM2", "topology": "on_package_interposer"},
+    "h100": {"technology": "HBM3", "topology": "on_package_interposer"},
+}
+
 MEMORY_PATH_MODES = {
     "shared_scalar_load_only",
+    "shared_scalar_addr_only",
     "shared_load_only",
     "global_l1_load_only",
     "global_addr_only",
@@ -101,7 +113,11 @@ TENSOR_REGISTER_MODES = {
 
 
 CONTROL_MODES = {"clocked_empty"}
-NCU_VALIDATED_CONTROL_MODES = {"reg_operand_only", "global_addr_only"}
+NCU_VALIDATED_CONTROL_MODES = {
+    "reg_operand_only",
+    "shared_scalar_addr_only",
+    "global_addr_only",
+}
 LOGICAL_OPERAND_BITS_PER_REG_OP = 8192.0
 
 
@@ -402,13 +418,13 @@ def read_ncu_denominator_scales(
     exact: dict[tuple[str, ...], tuple[float, float]] = {}
     same_working_set: dict[tuple[str, ...], tuple[float, float]] = {}
     actual_columns_by_mode = {
-        "shared_scalar_load_only": ["shared_bytes"],
-        "shared_load_only": ["shared_bytes"],
+        "shared_scalar_load_only": ["shared_read_bytes", "shared_bytes"],
+        "shared_load_only": ["shared_read_bytes", "shared_bytes"],
         "global_l1_load_only": ["l1_request_bytes", "l1_bytes"],
         "l2_cg_load_only": ["l2_read_bytes", "l2_bytes"],
         "l2_load_only": ["l2_read_bytes", "l2_bytes"],
-        "dram_cg_load_only": ["dram_bytes"],
-        "dram_load_only": ["dram_bytes"],
+        "dram_cg_load_only": ["dram_read_bytes"],
+        "dram_load_only": ["dram_read_bytes"],
     }
     for path in paths:
         with Path(path).open(newline="") as f:
@@ -416,6 +432,12 @@ def read_ncu_denominator_scales(
                 mode = row.get("mode", "")
                 actual_columns = actual_columns_by_mode.get(mode)
                 if not actual_columns or row.get("status") != "ok":
+                    continue
+                if (
+                    mode in {"dram_cg_load_only", "dram_load_only"}
+                    and row.get("dram_read_bytes_source", "").strip()
+                    != "dram__bytes_read.sum"
+                ):
                     continue
                 expected = ncu_expected_bytes(row)
                 actual = 0.0
@@ -553,6 +575,8 @@ def make_detail_rows(
     same_working_set_ncu_scales: dict[tuple[str, ...], tuple[float, float]],
     min_elapsed_s: float,
     tensor_control_min_elapsed_s: float,
+    shared_control_min_elapsed_s: float,
+    l1_control_min_elapsed_s: float,
     l2_control_min_elapsed_s: float,
     dram_control_min_elapsed_s: float,
     max_elapsed_ratio: float,
@@ -565,6 +589,8 @@ def make_detail_rows(
     exclude_power_state_rejects: bool,
     pairing: str,
     tensor_pair_policy: str,
+    shared_pair_policy: str,
+    l1_pair_policy: str,
     l2_pair_policy: str,
     dram_pair_policy: str,
     require_control_ncu_acceptance: bool,
@@ -604,11 +630,17 @@ def make_detail_rows(
                     tensor_control_min_elapsed_s
                     if spec["component"] == "tensor_mma_increment"
                     and tensor_pair_policy == "matched-iters"
+                    else shared_control_min_elapsed_s
+                    if spec["component"] == "shared_l1_scalar_path"
+                    and shared_pair_policy == "matched-iters"
+                    else l1_control_min_elapsed_s
+                    if spec["component"] == "global_l1_hit_path"
+                    and l1_pair_policy == "matched-iters"
                     else l2_control_min_elapsed_s
                     if spec["component"] == "l2_hit_cg_path"
                     and l2_pair_policy == "matched-iters"
                     else dram_control_min_elapsed_s
-                    if spec["component"] == "dram_cg_stream_path"
+                    if spec["component"] == "external_memory_read_path"
                     and dram_pair_policy == "matched-iters"
                     else min_elapsed_s
                 )
@@ -683,10 +715,16 @@ def make_detail_rows(
                     spec["component"] == "tensor_mma_increment"
                     and tensor_pair_policy == "matched-iters"
                 ) or (
+                    spec["component"] == "shared_l1_scalar_path"
+                    and shared_pair_policy == "matched-iters"
+                ) or (
+                    spec["component"] == "global_l1_hit_path"
+                    and l1_pair_policy == "matched-iters"
+                ) or (
                     spec["component"] == "l2_hit_cg_path"
                     and l2_pair_policy == "matched-iters"
                 ) or (
-                    spec["component"] == "dram_cg_stream_path"
+                    spec["component"] == "external_memory_read_path"
                     and dram_pair_policy == "matched-iters"
                 )
                 if matched_iter_component:
@@ -767,8 +805,10 @@ def make_detail_rows(
                     elif int(numerator_iters) != int(control_iters):
                         mismatch_reason = {
                             "tensor_mma_increment": "tensor_iter_mismatch",
+                            "shared_l1_scalar_path": "shared_iter_mismatch",
+                            "global_l1_hit_path": "l1_iter_mismatch",
                             "l2_hit_cg_path": "l2_iter_mismatch",
-                            "dram_cg_stream_path": "dram_iter_mismatch",
+                            "external_memory_read_path": "dram_iter_mismatch",
                         }[spec["component"]]
                         reasons.append(mismatch_reason)
                 if numerator.get("energy_source", "") != control.get("energy_source", ""):
@@ -819,6 +859,14 @@ def make_detail_rows(
                     pj_per_bit = coeff / 8.0
                 elif spec["unit"] == "pJ/reg-op":
                     pj_per_bit = coeff / LOGICAL_OPERAND_BITS_PER_REG_OP
+                external_memory = PROFILE_EXTERNAL_MEMORY.get(profile_name, {})
+                coefficient_semantics = "effective_microbenchmark_coefficient"
+                denominator_metric = spec["denominator_column"]
+                if spec["component"] == "external_memory_read_path":
+                    coefficient_semantics = (
+                        "effective_gpu_device_external_read_path_not_pure_memory_device_energy"
+                    )
+                    denominator_metric = "NCU dram__bytes_read.sum"
                 detail_rows.append(
                     {
                         "profile_name": profile_name,
@@ -831,6 +879,13 @@ def make_detail_rows(
                         "load_repeat": load_repeat,
                         "store_repeat": store_repeat,
                         "component": spec["component"],
+                        "coefficient_semantics": coefficient_semantics,
+                        "external_memory_technology": external_memory.get(
+                            "technology", ""
+                        ),
+                        "external_memory_topology": external_memory.get(
+                            "topology", ""
+                        ),
                         "pair": spec["pair"],
                         "pairing": pairing,
                         "pair_energy_basis": pair_energy_basis,
@@ -878,6 +933,7 @@ def make_detail_rows(
                         "delta_E_J": delta_j,
                         "delta_signal_fraction": delta_fraction,
                         "denominator_column": spec["denominator_column"],
+                        "denominator_metric": denominator_metric,
                         "denominator": denominator,
                         "denominator_scale": denominator_scale,
                         "denominator_source": denominator_source,
@@ -1025,6 +1081,30 @@ def make_summary_rows(detail_rows: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "measurement_scope": ",".join(
                     sorted({str(row.get("numerator_measurement_scope", "")) for row in rows})
                 ),
+                "coefficient_semantics": ",".join(
+                    sorted({str(row.get("coefficient_semantics", "")) for row in rows})
+                ),
+                "external_memory_technology": ",".join(
+                    sorted(
+                        {
+                            str(row.get("external_memory_technology", ""))
+                            for row in rows
+                            if row.get("external_memory_technology", "")
+                        }
+                    )
+                ),
+                "external_memory_topology": ",".join(
+                    sorted(
+                        {
+                            str(row.get("external_memory_topology", ""))
+                            for row in rows
+                            if row.get("external_memory_topology", "")
+                        }
+                    )
+                ),
+                "denominator_metric": ",".join(
+                    sorted({str(row.get("denominator_metric", "")) for row in rows})
+                ),
                 "min": stats["min"],
                 "median": stats["median"],
                 "mean": stats["mean"],
@@ -1094,10 +1174,10 @@ def write_markdown(
         f.write("# Matched-Control Component Energy\n\n")
         f.write("## Method\n\n")
         f.write(
-            "Default rows use `delta_E_J = E_mode_J - "
-            "(E_control_J / t_control_s) * t_mode_s`. Tensor, L2 CG, and DRAM rows use "
-            "direct net-energy subtraction only when their pair policy is "
-            "`matched-iters` and both ITER values match.\n\n"
+            "Final rows use pair policy `matched-iters`: treatment and control "
+            "must have identical ITER and `delta_E_J = net_E_treatment_J - "
+            "net_E_control_J` is computed directly. Duration scaling remains "
+            "available only when explicitly requested for legacy diagnostics.\n\n"
         )
         f.write(
             "Only rows passing elapsed, net-energy, SMID, and optional NCU "
@@ -1119,6 +1199,14 @@ def write_markdown(
             f"{args.tensor_control_min_elapsed_s:g} |\n"
         )
         f.write(
+            "| Shared control min elapsed (s) | "
+            f"{args.shared_control_min_elapsed_s:g} |\n"
+        )
+        f.write(
+            "| Global L1 control min elapsed (s) | "
+            f"{args.l1_control_min_elapsed_s:g} |\n"
+        )
+        f.write(
             "| L2 control min elapsed (s) | "
             f"{args.l2_control_min_elapsed_s:g} |\n"
         )
@@ -1126,8 +1214,11 @@ def write_markdown(
             "| DRAM control min elapsed (s) | "
             f"{args.dram_control_min_elapsed_s:g} |\n"
         )
-        f.write(f"| DRAM pair policy | {args.dram_pair_policy} |\n")
-        f.write(f"| L2 pair policy | {args.l2_pair_policy} |\n")
+        f.write(f"| Tensor pair policy | `{args.tensor_pair_policy}` |\n")
+        f.write(f"| Shared pair policy | `{args.shared_pair_policy}` |\n")
+        f.write(f"| Global L1 pair policy | `{args.l1_pair_policy}` |\n")
+        f.write(f"| L2 pair policy | `{args.l2_pair_policy}` |\n")
+        f.write(f"| DRAM pair policy | `{args.dram_pair_policy}` |\n")
         f.write(
             "| require exact control NCU acceptance | "
             f"{args.require_control_ncu_acceptance} |\n"
@@ -1142,7 +1233,6 @@ def write_markdown(
             "legacy run_id minus elapsed fallback otherwise |\n"
         )
         f.write(f"| pairing | `{args.pairing}` |\n")
-        f.write(f"| Tensor pair policy | `{args.tensor_pair_policy}` |\n")
         f.write(f"| min delta_E (J) | {args.min_delta_j:g} |\n")
         f.write(f"| min delta fraction | {args.min_delta_fraction:g} |\n")
         f.write(f"| require NCU denominator | {args.require_ncu_denominator} |\n")
@@ -1153,9 +1243,9 @@ def write_markdown(
         )
         f.write("\n## Component Summary\n\n")
         f.write(
-            "| component | rows | confidence | NCU denominator rows | expected denominator rows | energy source | integration | measurement scope | power semantics | estimate unit | min | median | mean | max | stdev | IQR | CV | median CI | median pJ/bit | pJ/bit min-max | pJ/bit median CI |\n"
+            "| component | semantics | memory technology/topology | denominator metric | rows | confidence | NCU denominator rows | expected denominator rows | energy source | integration | measurement scope | power semantics | estimate unit | min | median | mean | max | stdev | IQR | CV | median CI | median pJ/bit | pJ/bit min-max | pJ/bit median CI |\n"
         )
-        f.write("|---|---:|---|---:|---:|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---|---|\n")
+        f.write("|---|---|---|---|---:|---|---:|---:|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---|---|\n")
         for row in summary_rows:
             pbit_range = ""
             if row["median_pJ_per_bit"] != "":
@@ -1172,7 +1262,9 @@ def write_markdown(
                     f"{fmt(row['median_pJ_per_bit_ci_high'])}"
                 )
             f.write(
-                f"| {row['component']} | {row['rows']} | "
+                f"| {row['component']} | {row['coefficient_semantics']} | "
+                f"{row['external_memory_technology']}/{row['external_memory_topology']} | "
+                f"{row['denominator_metric']} | {row['rows']} | "
                 f"{row['confidence_class']} | "
                 f"{row['ncu_denominator_rows']} | "
                 f"{row['expected_denominator_rows']} | "
@@ -1245,6 +1337,13 @@ def write_markdown(
             "path validation confirms hit rate/access behavior for that mode.\n"
         )
         f.write(
+            "- `external_memory_read_path` is `dram_cg_load_only - "
+            "global_addr_only`, normalized only by NCU `dram__bytes_read.sum`. "
+            "It includes SM issue/stall behavior, L1/L2 miss handling, on-chip "
+            "interconnect, memory controller/PHY, external memory, and GPU-device "
+            "power-delivery overhead. It is not pure HBM/GDDR device energy.\n"
+        )
+        f.write(
             "- `delta_signal_fraction` is `delta_E_J / max(treatment_E, "
             "scaled_control_E)`. Rows below the configured signal gate are "
             "reported but excluded from component summaries.\n"
@@ -1311,6 +1410,8 @@ def run_self_test() -> None:
         same_working_set_ncu_scales={},
         min_elapsed_s=1.0,
         tensor_control_min_elapsed_s=0.05,
+        shared_control_min_elapsed_s=0.05,
+        l1_control_min_elapsed_s=0.05,
         l2_control_min_elapsed_s=0.05,
         dram_control_min_elapsed_s=0.05,
         max_elapsed_ratio=3.0,
@@ -1322,6 +1423,8 @@ def run_self_test() -> None:
         expected_power_semantics="instant",
         exclude_power_state_rejects=False,
         pairing="nearest-control",
+        shared_pair_policy="duration-scaled",
+        l1_pair_policy="duration-scaled",
         l2_pair_policy="duration-scaled",
         dram_pair_policy="duration-scaled",
         require_control_ncu_acceptance=False,
@@ -1488,6 +1591,34 @@ def run_self_test() -> None:
         "net_E_J": "20",
         "expected_dram_bytes": "0",
     }
+    dram_ncu_row = {
+        **dram_common,
+        "mode": "dram_cg_load_only",
+        "status": "ok",
+        "dram_read_bytes": "100",
+        "dram_read_bytes_source": "dram__bytes_read.sum",
+        "dram_write_bytes": "0",
+        "dram_write_bytes_source": "dram__bytes_write.sum",
+        "dram_bytes": "1000",
+    }
+    with tempfile.TemporaryDirectory() as temp_dir:
+        ncu_path = Path(temp_dir) / "ncu_summary.csv"
+        with ncu_path.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(dram_ncu_row))
+            writer.writeheader()
+            writer.writerow(dram_ncu_row)
+        exact_scales, working_set_scales = read_ncu_denominator_scales(
+            [str(ncu_path)]
+        )
+    expected_ncu_bytes = ncu_expected_bytes(dram_ncu_row)
+    exact_scale, exact_actual = exact_scales[exact_config_key(dram_ncu_row)]
+    working_set_scale, working_set_actual = working_set_scales[
+        working_set_config_key(dram_ncu_row)
+    ]
+    assert exact_actual == 100.0
+    assert working_set_actual == 100.0
+    assert abs(exact_scale - (100.0 / expected_ncu_bytes)) < 1.0e-15
+    assert abs(working_set_scale - exact_scale) < 1.0e-15
     dram_matched = make_detail_rows(
         [dram_treatment, dram_control],
         tensor_pair_policy="duration-scaled",
@@ -1536,7 +1667,7 @@ def run_self_test() -> None:
         },
     )
     assert control_rejected == []
-    print("matched-control Tensor/L2/DRAM pair-policy self-test passed")
+    print("matched-control Tensor/all-memory pair-policy self-test passed")
 
 
 def main() -> int:
@@ -1608,6 +1739,21 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--shared-control-min-elapsed-s",
+        type=float,
+        default=0.5,
+        help=(
+            "Minimum elapsed time for a matched-ITER "
+            "shared_scalar_addr_only control."
+        ),
+    )
+    parser.add_argument(
+        "--l1-control-min-elapsed-s",
+        type=float,
+        default=0.5,
+        help="Minimum elapsed time for a matched-ITER Global-L1 address control.",
+    )
+    parser.add_argument(
         "--l2-control-min-elapsed-s",
         type=float,
         default=0.5,
@@ -1660,10 +1806,28 @@ def main() -> int:
     parser.add_argument(
         "--tensor-pair-policy",
         choices=["duration-scaled", "matched-iters"],
-        default="duration-scaled",
+        default="matched-iters",
         help=(
-            "Use matched-iters for Tensor finalplan rows. It requires equal ITER "
-            "and subtracts net energies directly instead of scaling control power."
+            "Tensor final rows require equal ITER and direct net-energy subtraction. "
+            "duration-scaled is retained only for explicit legacy diagnostics."
+        ),
+    )
+    parser.add_argument(
+        "--shared-pair-policy",
+        choices=["duration-scaled", "matched-iters"],
+        default="matched-iters",
+        help=(
+            "Shared final rows require equal ITER and direct net-energy "
+            "subtraction against shared_scalar_addr_only."
+        ),
+    )
+    parser.add_argument(
+        "--l1-pair-policy",
+        choices=["duration-scaled", "matched-iters"],
+        default="matched-iters",
+        help=(
+            "Global-L1 final rows require equal ITER and direct net-energy "
+            "subtraction against global_addr_only."
         ),
     )
     parser.add_argument(
@@ -1678,18 +1842,19 @@ def main() -> int:
     parser.add_argument(
         "--dram-pair-policy",
         choices=["duration-scaled", "matched-iters"],
-        default="duration-scaled",
+        default="matched-iters",
         help=(
-            "Use matched-iters for dram_cg_load_only/global_addr_only rows. "
-            "It requires equal ITER and directly subtracts net energies."
+            "External-memory effective-path rows require equal ITER and direct "
+            "net-energy subtraction. duration-scaled is legacy diagnostics only."
         ),
     )
     parser.add_argument(
         "--require-control-ncu-acceptance",
         action="store_true",
         help=(
-            "Require exact-coordinate accepted NCU rows for reg_operand_only and "
-            "global_addr_only controls. Final component packages must enable this."
+            "Require exact-coordinate accepted NCU rows for reg_operand_only, "
+            "shared_scalar_addr_only, and global_addr_only controls. Final "
+            "component packages must enable this."
         ),
     )
     args = parser.parse_args()
@@ -1730,6 +1895,8 @@ def main() -> int:
         same_working_set_ncu_scales=same_working_set_ncu_scales,
         min_elapsed_s=args.min_elapsed_s,
         tensor_control_min_elapsed_s=args.tensor_control_min_elapsed_s,
+        shared_control_min_elapsed_s=args.shared_control_min_elapsed_s,
+        l1_control_min_elapsed_s=args.l1_control_min_elapsed_s,
         l2_control_min_elapsed_s=args.l2_control_min_elapsed_s,
         dram_control_min_elapsed_s=args.dram_control_min_elapsed_s,
         max_elapsed_ratio=args.max_elapsed_ratio,
@@ -1742,6 +1909,8 @@ def main() -> int:
         exclude_power_state_rejects=args.exclude_power_state_rejects,
         pairing=args.pairing,
         tensor_pair_policy=args.tensor_pair_policy,
+        shared_pair_policy=args.shared_pair_policy,
+        l1_pair_policy=args.l1_pair_policy,
         l2_pair_policy=args.l2_pair_policy,
         dram_pair_policy=args.dram_pair_policy,
         require_control_ncu_acceptance=args.require_control_ncu_acceptance,

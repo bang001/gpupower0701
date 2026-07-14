@@ -50,16 +50,16 @@ The original A100 v2 design is historical background under
 | Component | Treatment | Control | Final work policy | Unit |
 |---|---|---|---|---|
 | Tensor MMA increment | `reg_mma` | `reg_operand_only` | equal pair-locked ITER, direct net-energy subtraction | pJ/FLOP |
-| Shared scalar path | `shared_scalar_load_only` | `clocked_empty` | mode-duration calibration and elapsed-aware control power | pJ/bit |
-| Global L1-hit path | `global_l1_load_only` | `global_addr_only` | mode-duration calibration and elapsed-aware control power | pJ/bit |
+| Shared scalar path | `shared_scalar_load_only` | `shared_scalar_addr_only` | equal pair-locked ITER, direct net-energy subtraction | pJ/bit |
+| Global L1-hit path | `global_l1_load_only` | `global_addr_only` | equal pair-locked ITER, direct net-energy subtraction | pJ/bit |
 | L2 CG-hit path | `l2_cg_load_only` | `global_addr_only` | equal pair-locked ITER, direct net-energy subtraction | pJ/bit |
-| DRAM CG sanity path | `dram_cg_load_only` | `global_addr_only` | equal pair-locked ITER, direct net-energy subtraction | pJ/bit |
+| External-memory read path | `dram_cg_load_only` | `global_addr_only` | equal pair-locked ITER, NCU read-only denominator | effective pJ/bit; not physical memory-device energy |
 
-For L2 final rows, run the energy pair with
+For every memory-path final row, run the energy pair with
 `--memory-pair-lock-iters` and analyze it with
-`--l2-pair-policy matched-iters`. A duration-scaled L2 row or
-`iter_ratio != 1` is invalid even when NCU reports a perfect L2-hit path.
-The runner mode pair is `--modes global_addr_only,l2_cg_load_only`.
+the corresponding `--shared-pair-policy`, `--l1-pair-policy`,
+`--l2-pair-policy`, or `--dram-pair-policy matched-iters`. A duration-scaled
+final row or `iter_ratio != 1` is invalid even when NCU reports a clean path.
 
 ## Profile Boundaries
 
@@ -159,8 +159,24 @@ Reports must include, with units:
 | SMID/occupancy/resources | placement and actual residency context |
 
 For `.cg` L2 loads, L1TEX request bytes are normal. L2 acceptance requires
-near-zero L1 hit bytes/rate, high path-specific L2 read hit rate, expected-byte
-conservation, and low DRAM leakage. It does not require zero L1 request traffic.
+near-zero L1 hit bytes/rate, architecture-correct final L2 service evidence,
+expected-byte conservation, hit+miss/read sector conservation, and low DRAM-read
+leakage. It does not require zero L1 request traffic. Strict L2 rows use
+`NCU_METRIC_PROFILE=l2_path_minimal` and require
+`l2_path_counter_coherent=1`; full-bundle L2 replay is diagnostic and cannot
+override this gate. Platform plans run full non-L2 and minimal L2 sidecars
+separately, then merge disjoint rows with source provenance.
+
+GA100 is fabric-aware: collect device/TEX source lookup and
+`srcunit_ltcfabric` read/hit/miss sectors in the same minimal replay. Require
+`(source_hit + fabric_hit) / source_read >= 95%`, source and fabric conservation
+in 0.98-1.02, coherent fabric routing, native-vs-fabric-model delta <=2
+percentage points, and DRAM read/source L2 read <=2%. Do not require either the
+direct source hit or native lookup-level hit to be >=95%; a first-partition miss
+can be recovered in another L2 partition. Other profiles retain their reviewed
+architecture-specific direct/native policy. GV100 may omit the native metric;
+missing native evidence is never replaced with an invented pass value. All
+profiles require observed/expected L2 read bytes in 0.95-1.05.
 
 If NCU reports `ERR_NVGPUCTRPERM`, use the generated sudo fallback. Explicit
 privileged execution is:
@@ -180,14 +196,15 @@ numbers. At minimum, use this current table:
 
 | Mode | Meaning | Status |
 |---|---|---|
-| `clocked_empty` | clocked persistent-loop control | primary Shared control |
+| `clocked_empty` | clocked persistent-loop baseline | diagnostic; no longer the Shared final control |
 | `reg_operand_only` | live WMMA/register loop without workload-proportional MMA | primary Tensor control |
 | `reg_mma` | FP16 WMMA loop | primary Tensor treatment |
 | `global_addr_only` | same global address/tile/repeat loop without data load | primary Global L1/L2/DRAM control |
+| `shared_scalar_addr_only` | same shared allocation/init/address/checksum loop without repeated shared reads | primary Shared control |
 | `shared_scalar_load_only` | software-managed shared scalar loads | primary Shared treatment |
 | `global_l1_load_only` | normal global load selected and verified as L1-hit path | primary Global L1 treatment |
 | `l2_cg_load_only` | cache-global load selected and verified as L2-hit path | primary L2 treatment |
-| `dram_cg_load_only` | cache-global streaming load larger than L2 | DRAM sanity treatment |
+| `dram_cg_load_only` | cache-global streaming load over an architecture-specific L2-multiple sweep | external-memory effective-path treatment (legacy mode name) |
 
 `idle`, `empty`, `reg_fragment_only`, `reg_pressure`, `addr_only`, `shared_load_only`,
 `shared_mma`, `l2_load_only`, `l2_mma`, `dram_load_only`, `dram_mma`,
@@ -204,7 +221,7 @@ acceptance gates explicitly select them.
 - Exclude placement failures and power-state rejects from primary summaries.
 - Memory coefficients require `denominator_source=ncu_actual_exact` for strict
   reporting.
-- Tensor, L2, and DRAM pair details require
+- Tensor, Shared, Global L1, L2, and DRAM pair details require
   `pair_energy_basis=matched_iters_net_energy`, equal positive ITER, and
   `iter_ratio=1`.
 - A negative coefficient is a failed pair/signal result. Never take its absolute

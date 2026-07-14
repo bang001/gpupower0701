@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Select the first fully validated platform L2 topology/policy candidate.
 
-The selector never lowers the 95% L2 hit-rate requirement. It searches an
-explicitly ordered candidate list and records why every rejected candidate
-failed before the energy sweep is allowed to start.
+The selector preserves a 95% final-service L2 requirement. GA100 derives that
+rate from the source-partition and LTC-fabric lookup populations; other current
+profiles use the direct path-specific rate. Every rejected coordinate remains
+visible before the energy sweep is allowed to start.
 """
 
 from __future__ import annotations
@@ -46,8 +47,8 @@ def parse_candidate(
     if layout not in {"contiguous", "sm_interleaved"}:
         raise ValueError(f"unsupported L2 layout: {layout}")
     blocks = int(blocks_text)
-    if blocks not in {4, 8, 16, 32}:
-        raise ValueError("L2 candidate blocks/SM must be 4, 8, 16, or 32")
+    if blocks not in {1, 2, 4, 8, 16, 32}:
+        raise ValueError("L2 candidate blocks/SM must be 1, 2, 4, 8, 16, or 32")
     return policy, layout, blocks, Path(path_text)
 
 
@@ -103,6 +104,8 @@ def evaluate_candidate(
                 reasons.append(f"{row_name}_not_application_replay")
             if row.get("ncu_cache_control") != "none":
                 reasons.append(f"{row_name}_cache_control_not_none")
+            if row.get("ncu_metric_profile") != "l2_path_minimal":
+                reasons.append(f"{row_name}_not_l2_path_minimal_profile")
             if row.get("l2_residency_policy") != policy:
                 reasons.append(f"{row_name}_policy_mismatch")
             if row.get("l2_address_layout") != layout:
@@ -111,6 +114,16 @@ def evaluate_candidate(
         derived_hit = number(treatment, "l2_path_hit_rate_pct")
         native_hit = number(treatment, "l2_native_read_hit_rate_pct")
         native_delta = number(treatment, "l2_native_vs_derived_hit_delta_pct")
+        logical_hit = number(treatment, "l2_logical_read_hit_rate_pct")
+        fabric_hit = number(treatment, "l2_fabric_hit_rate_pct")
+        fabric_metrics_present = number(treatment, "l2_fabric_metrics_present")
+        fabric_counter_coherent = number(
+            treatment, "l2_fabric_counter_coherent"
+        )
+        fabric_model_coherent = number(treatment, "l2_fabric_model_coherent")
+        native_fabric_delta = number(
+            treatment, "l2_native_vs_fabric_model_hit_delta_pct"
+        )
         conservation = number(treatment, "l2_read_sector_conservation_ratio")
         traffic_ratio = number(treatment, "l2_read_bytes_to_expected")
         persisting_size = number(
@@ -118,27 +131,48 @@ def evaluate_candidate(
         )
         if not math.isfinite(l1_hit) or l1_hit > 1.0:
             reasons.append("l1_bypass_failed")
-        if not math.isfinite(derived_hit) or derived_hit < 95.0:
-            reasons.append("derived_l2_hit_below_95pct")
-        native_required = target_profile != "v100"
-        native_gate = "required" if native_required else "optional_unavailable"
-        if native_required:
+        if not math.isfinite(derived_hit):
+            reasons.append("missing_derived_l2_hit")
+        if target_profile == "a100":
+            native_gate = "ga100_fabric_model"
+            if not math.isfinite(logical_hit) or logical_hit < 95.0:
+                reasons.append("logical_l2_hit_below_95pct")
+            elif logical_hit > 100.5:
+                reasons.append("logical_l2_hit_above_100_5pct")
+            if fabric_metrics_present != 1.0:
+                reasons.append("missing_required_l2_fabric_metrics")
+            if fabric_counter_coherent != 1.0:
+                reasons.append("l2_fabric_counters_incoherent")
+            if fabric_model_coherent != 1.0:
+                reasons.append("l2_fabric_model_incoherent")
             if not math.isfinite(native_hit):
                 reasons.append("missing_required_native_l2_hit")
-            elif native_hit < 95.0:
-                reasons.append("native_l2_hit_below_95pct")
-            if not math.isfinite(native_delta):
-                reasons.append("missing_required_native_derived_delta")
-            elif native_delta > 2.0:
-                reasons.append("native_derived_delta_above_2pp")
-        elif math.isfinite(native_hit):
-            native_gate = "optional_present_cross_checked"
-            if native_hit < 95.0:
-                reasons.append("optional_native_l2_hit_below_95pct")
-            if not math.isfinite(native_delta):
-                reasons.append("missing_optional_native_derived_delta")
-            elif native_delta > 2.0:
-                reasons.append("optional_native_derived_delta_above_2pp")
+            if not math.isfinite(native_fabric_delta):
+                reasons.append("missing_native_fabric_model_delta")
+            elif native_fabric_delta > 2.0:
+                reasons.append("native_fabric_model_delta_above_2pp")
+        else:
+            if math.isfinite(derived_hit) and derived_hit < 95.0:
+                reasons.append("derived_l2_hit_below_95pct")
+            native_required = target_profile != "v100"
+            native_gate = "required" if native_required else "optional_unavailable"
+            if native_required:
+                if not math.isfinite(native_hit):
+                    reasons.append("missing_required_native_l2_hit")
+                elif native_hit < 95.0:
+                    reasons.append("native_l2_hit_below_95pct")
+                if not math.isfinite(native_delta):
+                    reasons.append("missing_required_native_derived_delta")
+                elif native_delta > 2.0:
+                    reasons.append("native_derived_delta_above_2pp")
+            elif math.isfinite(native_hit):
+                native_gate = "optional_present_cross_checked"
+                if native_hit < 95.0:
+                    reasons.append("optional_native_l2_hit_below_95pct")
+                if not math.isfinite(native_delta):
+                    reasons.append("missing_optional_native_derived_delta")
+                elif native_delta > 2.0:
+                    reasons.append("optional_native_derived_delta_above_2pp")
         if not math.isfinite(conservation) or not 0.98 <= conservation <= 1.02:
             reasons.append("l2_sector_conservation_failed")
         if not math.isfinite(traffic_ratio) or not 0.95 <= traffic_ratio <= 1.05:
@@ -154,13 +188,41 @@ def evaluate_candidate(
                 "blocks_per_SM": str(blocks_per_sm),
                 "W_SM_KiB": str(w_sm_kib),
                 "load_repeat": str(load_repeat),
+                "ncu_metric_profile": treatment.get("ncu_metric_profile", ""),
                 "l1_path_hit_rate_pct": treatment.get("l1_path_hit_rate_pct", ""),
                 "l2_path_hit_rate_pct": treatment.get("l2_path_hit_rate_pct", ""),
+                "l2_tex_path_hit_rate_pct": treatment.get(
+                    "l2_tex_path_hit_rate_pct", ""
+                ),
+                "l2_device_path_hit_rate_pct": treatment.get(
+                    "l2_device_path_hit_rate_pct", ""
+                ),
                 "l2_native_read_hit_rate_pct": treatment.get(
                     "l2_native_read_hit_rate_pct", ""
                 ),
                 "l2_native_vs_derived_hit_delta_pct": treatment.get(
                     "l2_native_vs_derived_hit_delta_pct", ""
+                ),
+                "l2_logical_read_hit_rate_pct": treatment.get(
+                    "l2_logical_read_hit_rate_pct", ""
+                ),
+                "l2_fabric_hit_rate_pct": treatment.get(
+                    "l2_fabric_hit_rate_pct", ""
+                ),
+                "l2_fabric_read_fraction": treatment.get(
+                    "l2_fabric_read_fraction", ""
+                ),
+                "l2_fabric_read_to_source_miss_ratio": treatment.get(
+                    "l2_fabric_read_to_source_miss_ratio", ""
+                ),
+                "l2_fabric_counter_coherent": treatment.get(
+                    "l2_fabric_counter_coherent", ""
+                ),
+                "l2_fabric_model_coherent": treatment.get(
+                    "l2_fabric_model_coherent", ""
+                ),
+                "l2_native_vs_fabric_model_hit_delta_pct": treatment.get(
+                    "l2_native_vs_fabric_model_hit_delta_pct", ""
                 ),
                 "native_l2_gate": native_gate,
                 "l2_read_sector_conservation_ratio": treatment.get(
@@ -171,6 +233,18 @@ def evaluate_candidate(
                 ),
                 "dram_read_to_l2_read_ratio": (
                     f"{dram_ratio:.9g}" if math.isfinite(dram_ratio) else ""
+                ),
+                "dram_read_to_l2_miss_bytes_ratio": treatment.get(
+                    "dram_read_to_l2_miss_bytes_ratio", ""
+                ),
+                "l2_evict_first_read_pct": treatment.get(
+                    "l2_evict_first_read_pct", ""
+                ),
+                "l2_evict_normal_read_pct": treatment.get(
+                    "l2_evict_normal_read_pct", ""
+                ),
+                "l2_evict_last_read_pct": treatment.get(
+                    "l2_evict_last_read_pct", ""
                 ),
                 "launch_persisting_l2_cache_size_bytes": treatment.get(
                     "launch_persisting_l2_cache_size_bytes", ""
@@ -200,9 +274,11 @@ def write_markdown(
     with path.open("w", encoding="utf-8") as out:
         out.write(f"# {target_profile.upper()} L2 Path Configuration Selection\n\n")
         out.write(
-            "Candidates are evaluated in command-line order. The selector does not "
-            "relax the 95% L2 hit gate; it changes blocks/SM, address topology, and "
-            "then residency policy to isolate the source of the prior 59-60% result.\n\n"
+            "Candidates are evaluated in command-line order using the minimal, "
+            "counter-coherent L2 metric profile. The 95% requirement applies to "
+            "final L2 service. On GA100 this combines direct-partition and explicit "
+            "LTC-fabric hits; native and first-lookup rates are not substituted for "
+            "that model.\n\n"
         )
         if selected:
             out.write(
@@ -212,24 +288,39 @@ def write_markdown(
         else:
             out.write("Selected: `none`; L2 energy measurement must not run.\n\n")
         out.write(
-            "| policy | layout | blocks/SM | W_SM (KiB/SM) | LR | L1 hit (%) | "
-            "L2 derived/native hit (%) | native gate | delta (pp) | conservation | traffic/expected | "
-            "DRAM-read/L2-read | persisting bytes | selected | status | reason |\n"
+            "| policy | layout | blocks/SM | W_SM (KiB/SM) | LR | metric profile | L1 hit (%) | "
+            "L2 device/TEX/native/logical hit (%) | fabric hit/fraction (%) | native gate | "
+            "native-direct/native-model delta (pp) | source/fabric/model coherent | traffic/expected | "
+            "DRAM-read/L2-read | DRAM-read/L2-miss | eviction F/N/L (%) | "
+            "persisting bytes | selected | status | reason |\n"
         )
         out.write(
-            "|---|---|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---|---|---|---|\n"
+            "|---|---|---:|---:|---:|---|---:|---:|---:|---|---:|---:|---:|---:|---|---|---|---|\n"
         )
         for row in rows:
             out.write(
                 f"| {row['policy']} | {row['layout']} | {row['blocks_per_SM']} | "
                 f"{row['W_SM_KiB']} | {row['load_repeat']} | "
-                f"{row['l1_path_hit_rate_pct']} | {row['l2_path_hit_rate_pct']}/"
-                f"{row['l2_native_read_hit_rate_pct']} | "
+                f"{row['ncu_metric_profile']} | "
+                f"{row['l1_path_hit_rate_pct']} | "
+                f"{row['l2_device_path_hit_rate_pct']}/"
+                f"{row['l2_tex_path_hit_rate_pct']}/"
+                f"{row['l2_native_read_hit_rate_pct']}/"
+                f"{row['l2_logical_read_hit_rate_pct']} | "
+                f"{row['l2_fabric_hit_rate_pct']}/"
+                f"{row['l2_fabric_read_fraction']} | "
                 f"{row['native_l2_gate']} | "
-                f"{row['l2_native_vs_derived_hit_delta_pct']} | "
-                f"{row['l2_read_sector_conservation_ratio']} | "
+                f"{row['l2_native_vs_derived_hit_delta_pct']}/"
+                f"{row['l2_native_vs_fabric_model_hit_delta_pct']} | "
+                f"{row['l2_read_sector_conservation_ratio']}/"
+                f"{row['l2_fabric_counter_coherent']}/"
+                f"{row['l2_fabric_model_coherent']} | "
                 f"{row['l2_read_bytes_to_expected']} | "
                 f"{row['dram_read_to_l2_read_ratio']} | "
+                f"{row['dram_read_to_l2_miss_bytes_ratio']} | "
+                f"{row['l2_evict_first_read_pct']}/"
+                f"{row['l2_evict_normal_read_pct']}/"
+                f"{row['l2_evict_last_read_pct']} | "
                 f"{row['launch_persisting_l2_cache_size_bytes']} | "
                 f"{row['selected_candidate']} | {row['status']} | "
                 f"{row['reason']} |\n"
@@ -241,14 +332,23 @@ def self_test() -> None:
         "acceptance": "accepted",
         "ncu_replay_mode": "application",
         "ncu_cache_control": "none",
+        "ncu_metric_profile": "l2_path_minimal",
         "l2_residency_policy": "normal",
         "l2_address_layout": "sm_interleaved",
         "blocks_per_SM": "8",
         "load_repeat": "4",
         "l1_path_hit_rate_pct": "0",
-        "l2_path_hit_rate_pct": "99.5",
-        "l2_native_read_hit_rate_pct": "99.4",
-        "l2_native_vs_derived_hit_delta_pct": "0.1",
+        "l2_path_hit_rate_pct": "55",
+        "l2_native_read_hit_rate_pct": "68.6207",
+        "l2_native_vs_derived_hit_delta_pct": "13.6207",
+        "l2_logical_read_hit_rate_pct": "99.5",
+        "l2_fabric_hit_rate_pct": "98.8889",
+        "l2_fabric_read_fraction": "0.310345",
+        "l2_fabric_read_to_source_miss_ratio": "1",
+        "l2_fabric_metrics_present": "1",
+        "l2_fabric_counter_coherent": "1",
+        "l2_fabric_model_coherent": "1",
+        "l2_native_vs_fabric_model_hit_delta_pct": "0",
         "l2_read_sector_conservation_ratio": "1",
         "l2_read_bytes_to_expected": "1.001",
         "l2_read_bytes": "1e12",
@@ -271,7 +371,7 @@ def self_test() -> None:
     assert choose([evaluated])["blocks_per_SM"] == "8"
     failed_rows = [dict(row) for row in rows]
     next(row for row in failed_rows if row["mode"] == "l2_cg_load_only")[
-        "l2_path_hit_rate_pct"
+        "l2_logical_read_hit_rate_pct"
     ] = "60"
     failed = evaluate_candidate(
         failed_rows,
@@ -283,10 +383,39 @@ def self_test() -> None:
         load_repeat=4,
     )
     assert not choose([failed])
+    over_recovered_rows = [dict(row) for row in rows]
+    next(
+        row for row in over_recovered_rows if row["mode"] == "l2_cg_load_only"
+    )["l2_logical_read_hit_rate_pct"] = "101"
+    over_recovered = evaluate_candidate(
+        over_recovered_rows,
+        target_profile="a100",
+        policy="normal",
+        layout="sm_interleaved",
+        blocks_per_sm=8,
+        expected_w=(16, 128),
+        load_repeat=4,
+    )
+    assert not choose([over_recovered])
+    full_profile_rows = [
+        {**row, "ncu_metric_profile": "full"} for row in rows
+    ]
+    full_profile_evaluated = evaluate_candidate(
+        full_profile_rows,
+        target_profile="a100",
+        policy="normal",
+        layout="sm_interleaved",
+        blocks_per_sm=8,
+        expected_w=(16, 128),
+        load_repeat=4,
+    )
+    assert not choose([full_profile_evaluated])
+    assert "not_l2_path_minimal_profile" in full_profile_evaluated[0]["reason"]
     v100_rows = [
         {
             **row,
             "W_SM_KiB": "32" if row["W_SM_KiB"] == "16" else "64",
+            "l2_path_hit_rate_pct": "99.5",
             "l2_native_read_hit_rate_pct": "",
             "l2_native_vs_derived_hit_delta_pct": "",
         }

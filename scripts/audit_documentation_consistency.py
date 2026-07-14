@@ -69,6 +69,7 @@ CANONICAL_FILES = (
     "docs/methodology/component_energy_final_experiment_plan_ko.md",
     "docs/methodology/component_energy_method_comparison_ko.md",
     "docs/methodology/ncu_validation_energy_calculation_ko.md",
+    "docs/methodology/a100_l2_fabric_aware_experiment_design_ko.md",
     "docs/results/gpu_power_modeling_experiment_results_ko.md",
     "docs/platforms/cross_platform_component_experiment_guide_ko.md",
     "docs/platforms/a100_node_experiment_guide_ko.md",
@@ -97,11 +98,12 @@ REQUIRED_POLICY_TERMS = {
     "SKILL.md": (
         "docs/methodology/howitworks.md",
         "docs/platforms/cross_platform_component_experiment_guide_ko.md",
-        "--l2-pair-policy matched-iters",
-        "global_addr_only,l2_cg_load_only",
+        "--shared-pair-policy",
+        "--l2-pair-policy",
+        "shared_scalar_addr_only",
     ),
     "docs/methodology/component_energy_method_comparison_ko.md": (
-        "Tensor/L2 CG/DRAM CG",
+        "Tensor와 모든 memory pair",
         "matched_iters_net_energy",
         "L2 CG - address control",
     ),
@@ -110,19 +112,37 @@ REQUIRED_POLICY_TERMS = {
         "GA --> L1[global_l1_load_only",
         "GA --> L2[l2_cg_load_only",
         "GA --> DR[dram_cg_load_only",
+        "srcunit_ltcfabric",
+        "logical final L2 hit",
+    ),
+    "docs/methodology/a100_l2_fabric_aware_experiment_design_ko.md": (
+        "l2_logical_read_hit_rate_pct",
+        "l2_native_vs_fabric_model_hit_delta_pct",
+        "Not pure silicon-level energy",
+        "W_SM = 16, 32, 64, 128",
     ),
     "docs/results/gpu_power_modeling_experiment_results_ko.md": (
-        "Tensor, L2 CG, DRAM CG",
+        "Tensor와 모든 memory pair",
         "완전한 RTX 3090 component table은 없다",
     ),
     "docs/audits/component_energy_self_critique_ko.md": (
         "완전한 current-protocol component table은 아직 없다",
-        "L2 동일 ITER",
+        "모든 final pair의 matched ITER",
     ),
     "scripts/plan_platform_component_experiment.py": (
-        "Tensor/L2/DRAM final pairs use matched ITER",
+        "Shared scalar energy rows use",
+        "--shared-pair-policy",
         "--l2-pair-policy",
         "matched-iters",
+        "GA100 applies 95% to final service after LTC-fabric recovery",
+    ),
+    "scripts/run_ncu_validation.sh": (
+        "lts__t_sectors_srcunit_ltcfabric_op_read",
+        "lts__t_sectors_srcunit_ltcfabric_aperture_device_op_read",
+    ),
+    "scripts/summarize_ncu_cache_metrics.py": (
+        "l2_logical_read_hit_rate_pct",
+        "l2_native_vs_fabric_model_hit_delta_pct",
     ),
     "scripts/build_platform_intake_dashboard.py": (
         "historical_local_evidence",
@@ -140,6 +160,7 @@ FORBIDDEN_POLICY_PATTERNS = (
     re.compile(r"L2 CG hit path[^\n]*elapsed-aware control-power"),
     re.compile(r"Tensor와 DRAM은 동일 ITER"),
     re.compile(r"Shared/Global L1/L2는[^\n]*elapsed-aware"),
+    re.compile(r"Shared scalar path[^\n]*elapsed-aware control-power"),
 )
 
 EXPECTED_CPP_MODES = (
@@ -153,6 +174,7 @@ EXPECTED_CPP_MODES = (
     "addr_only",
     "global_addr_only",
     "global_l1_load_only",
+    "shared_scalar_addr_only",
     "shared_scalar_load_only",
     "shared_load_only",
     "shared_mma",
@@ -171,6 +193,7 @@ PRIMARY_MODES = (
     "reg_operand_only",
     "reg_mma",
     "global_addr_only",
+    "shared_scalar_addr_only",
     "shared_scalar_load_only",
     "global_l1_load_only",
     "l2_cg_load_only",

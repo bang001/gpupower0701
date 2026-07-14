@@ -118,12 +118,23 @@ STRICT_SUMMARY_NCU_EVIDENCE_COLUMNS = {
     "ncu_l2_read_miss_sectors_min_med_max",
     "ncu_dram_bytes_min_med_max",
     "ncu_tensor_hmma_inst_min_med_max",
+    "ncu_expected_logical_mma_min_med_max",
+    "ncu_tensor_hmma_per_logical_mma_min_med_max",
+    "ncu_tensor_pipe_active_pct_min_med_max",
+    "ncu_achieved_occupancy_pct_min_med_max",
+    "ncu_launch_warp_capacity_pct_min_med_max",
+    "ncu_registers_per_thread_min_med_max",
+    "ncu_control_tensor_hmma_inst_min_med_max",
+    "ncu_control_registers_per_thread_min_med_max",
     "ncu_stall_long_scoreboard_pct_min_med_max",
 }
 
 STRICT_SUMMARY_EVIDENCE_MODES = {
     "Tensor MMA incremental": {"reg_mma", "reg_operand_only"},
-    "Shared scalar path": {"shared_scalar_load_only"},
+    "Shared scalar path": {
+        "shared_scalar_load_only",
+        "shared_scalar_addr_only",
+    },
     "Global L1 hit path": {"global_l1_load_only", "global_addr_only"},
     "L2 CG hit path": {"l2_cg_load_only", "global_addr_only"},
 }
@@ -136,7 +147,13 @@ STRICT_SUMMARY_METRIC_MODES = {
 }
 
 STRICT_SUMMARY_REQUIRED_METRICS = {
-    "Tensor MMA incremental": {"ncu_tensor_hmma_inst_min_med_max"},
+    "Tensor MMA incremental": {
+        "ncu_tensor_hmma_inst_min_med_max",
+        "ncu_tensor_hmma_per_logical_mma_min_med_max",
+        "ncu_registers_per_thread_min_med_max",
+        "ncu_control_tensor_hmma_inst_min_med_max",
+        "ncu_control_registers_per_thread_min_med_max",
+    },
     "Shared scalar path": {"ncu_shared_bytes_min_med_max"},
     "Global L1 hit path": {
         "ncu_l1_path_hit_rate_pct_min_med_max",
@@ -227,6 +244,13 @@ REQUIRED_NCU_CANDIDATES = {
 NCU_ACCEPTANCE_REQUIRED_COLUMNS = {
     "mode",
     "status",
+    "W_SM_KiB",
+    "blocks_per_SM",
+    "active_SM",
+    "ITER",
+    "reuse_factor",
+    "load_repeat",
+    "ncu_metric_profile",
     "component_candidate",
     "acceptance",
     "acceptance_reason",
@@ -234,6 +258,8 @@ NCU_ACCEPTANCE_REQUIRED_COLUMNS = {
     "l1_path_hit_rate_pct",
     "l2_hit_rate_pct",
     "l2_path_hit_rate_pct",
+    "l2_native_read_hit_rate_pct",
+    "l2_native_vs_derived_hit_delta_pct",
     "shared_accesses",
     "shared_bytes",
     "shared_inst",
@@ -245,13 +271,48 @@ NCU_ACCEPTANCE_REQUIRED_COLUMNS = {
     "l2_read_bytes",
     "l2_read_hit_sectors",
     "l2_read_miss_sectors",
+    "l2_read_sector_conservation_ratio",
+    "l2_path_counter_coherent",
     "local_read_bytes",
     "local_write_bytes",
     "spill_zero_verified",
     "spill_evidence_source",
     "dram_bytes",
+    "dram_read_bytes",
+    "dram_read_bytes_source",
+    "dram_write_bytes",
+    "dram_write_bytes_source",
+    "dram_read_to_expected_ratio",
+    "dram_write_to_read_ratio",
+    "external_memory_coefficient_scope",
     "tensor_hmma_inst",
+    "expected_logical_mma",
+    "tensor_hmma_per_logical_mma",
+    "tensor_pipe_active_pct",
+    "achieved_occupancy_pct",
+    "launch_warp_capacity_pct",
+    "registers_per_thread",
+    "tensor_hmma_ratio_group_median",
+    "tensor_hmma_ratio_group_relative_spread",
+    "tensor_control_pair_status",
     "stall_long_scoreboard_pct",
+}
+
+A100_L2_FABRIC_REQUIRED_COLUMNS = {
+    "l2_logical_read_hit_rate_pct",
+    "l2_fabric_hit_rate_pct",
+    "l2_fabric_read_sectors",
+    "l2_fabric_read_hit_sectors",
+    "l2_fabric_read_miss_sectors",
+    "l2_fabric_metrics_present",
+    "l2_fabric_read_sector_conservation_ratio",
+    "l2_fabric_counter_coherent",
+    "l2_fabric_read_to_source_miss_ratio",
+    "l2_fabric_read_fraction",
+    "l2_fabric_model_native_hit_rate_pct",
+    "l2_native_vs_fabric_model_hit_delta_pct",
+    "l2_fabric_model_coherent",
+    "dram_read_bytes",
 }
 
 RAW_SUFFIXES = ("tensor", "shared", "l1", "l2", "dram")
@@ -323,10 +384,13 @@ NCU_REQUIRED_COLUMNS = {
     "ITER",
     "reuse_factor",
     "load_repeat",
+    "ncu_metric_profile",
     "l1_hit_rate_pct",
     "l1_path_hit_rate_pct",
     "l2_hit_rate_pct",
     "l2_path_hit_rate_pct",
+    "l2_native_read_hit_rate_pct",
+    "l2_native_vs_derived_hit_delta_pct",
     "l1_accesses",
     "l1_access_unit",
     "l2_accesses",
@@ -341,11 +405,26 @@ NCU_REQUIRED_COLUMNS = {
     "l2_read_bytes",
     "l2_read_hit_sectors",
     "l2_read_miss_sectors",
+    "l2_read_sector_conservation_ratio",
+    "l2_path_counter_coherent",
     "dram_bytes",
+    "dram_read_bytes",
+    "dram_read_bytes_source",
+    "dram_write_bytes",
+    "dram_write_bytes_source",
+    "dram_read_to_expected_ratio",
+    "dram_write_to_read_ratio",
+    "dram_read_bandwidth_GBps",
     "shared_accesses",
     "shared_bytes",
     "shared_inst",
     "tensor_hmma_inst",
+    "expected_logical_mma",
+    "tensor_hmma_per_logical_mma",
+    "tensor_pipe_active_pct",
+    "achieved_occupancy_pct",
+    "launch_warp_capacity_pct",
+    "registers_per_thread",
     "local_read_bytes",
     "local_write_bytes",
     "spill_zero_verified",
@@ -380,6 +459,7 @@ NCU_REQUIRED_MODES = {
 PROFILE_EXTRA_NCU_REQUIRED_MODES: dict[str, set[str]] = {}
 
 NCU_MIN_FACTOR_POINTS = 3
+NCU_TENSOR_HMMA_RATIO_RELATIVE_SPREAD_MAX = 0.10
 
 NCU_REUSE_SWEEP_MODES = {"reg_operand_only", "reg_mma"}
 
@@ -412,15 +492,22 @@ NCU_L2_L1_BYTES_RATIO_MAX = 0.01
 NCU_L2_L1_HIT_MAX_PCT = 1.0
 NCU_L2_HIT_MIN_PCT = 95.0
 NCU_L2_DRAM_RATIO_MAX = 0.02
+NCU_L2_SECTOR_CONSERVATION_MIN = 0.98
+NCU_L2_SECTOR_CONSERVATION_MAX = 1.02
+NCU_L2_EXPECTED_BYTES_RATIO_MIN = 0.95
+NCU_L2_EXPECTED_BYTES_RATIO_MAX = 1.05
 NCU_SHARED_GLOBAL_RATIO_MAX = 0.02
 NCU_DRAM_L1_HIT_MAX_PCT = 1.0
-NCU_DRAM_L2_HIT_MAX_PCT = 5.0
+NCU_DRAM_L2_HIT_MAX_PCT = 10.0
 NCU_DRAM_L2_EXPECTED_MULTIPLIER = 2.0
 NCU_DRAM_L2_EXPECTED_SLACK_PCT = 2.0
-NCU_CONTROL_HMMA_PER_BLOCK_MAX = 1.0
-NCU_CONTROL_HMMA_PER_REG_OP_MAX = 1.0e-5
 NCU_GLOBAL_ADDRESS_CONTROL_DRAM_RATIO_MAX = 1.0e-3
-NCU_DRAM_L2_RATIO_MIN = 0.5
+NCU_DRAM_L2_RATIO_MIN = 0.9
+NCU_DRAM_SOURCE_EXPECTED_RATIO_MIN = 0.95
+NCU_DRAM_SOURCE_EXPECTED_RATIO_MAX = 1.05
+NCU_DRAM_READ_EXPECTED_RATIO_MIN = 0.85
+NCU_DRAM_READ_EXPECTED_RATIO_MAX = 1.05
+NCU_DRAM_WRITE_READ_RATIO_MAX = 0.01
 NCU_TENSOR_MEMORY_BYTES_PER_HMMA_MAX = 1.0
 NCU_REGISTER_MEMORY_BYTES_PER_OP_MAX = 1.0
 TENSOR_CONTROL_MIN_ELAPSED_S = 0.8
@@ -430,6 +517,7 @@ CONTROL_NCU_REQUIRED_COMPONENTS = {
     "tensor_mma_increment",
     "global_l1_hit_path",
     "l2_hit_cg_path",
+    "external_memory_read_path",
     "dram_cg_stream_path",
 }
 
@@ -598,6 +686,17 @@ def audit_l2_path_selection(
         "status",
         "reason",
     }
+    if profile == "a100":
+        required.update(
+            {
+                "l2_logical_read_hit_rate_pct",
+                "l2_fabric_hit_rate_pct",
+                "l2_fabric_read_fraction",
+                "l2_fabric_counter_coherent",
+                "l2_fabric_model_coherent",
+                "l2_native_vs_fabric_model_hit_delta_pct",
+            }
+        )
     columns = set(selection_rows[0]) if selection_rows else set()
     missing = sorted(required - columns)
     add(
@@ -643,7 +742,7 @@ def audit_l2_path_selection(
         and any(row.get("policy") == "persisting" for row in selection_rows)
     )
     native_gate_valid = all(
-        row.get("native_l2_gate") == "required"
+        row.get("native_l2_gate") == "ga100_fabric_model"
         if profile == "a100"
         else row.get("native_l2_gate")
         in {"optional_unavailable", "optional_present_cross_checked"}
@@ -662,7 +761,11 @@ def audit_l2_path_selection(
         status="pass" if passed else "fail",
         expected=(
             f"exactly one selected candidate passes W_SM={','.join(str(v) for v in sorted(expected_w))} KiB/SM; "
-            + ("V100 policy must be normal" if profile == "v100" else "A100 policy may be normal or persisting")
+            + (
+                "V100 policy must be normal"
+                if profile == "v100"
+                else "A100 policy may be normal or persisting and must use the GA100 fabric model"
+            )
         ),
         actual=(
             "selected="
@@ -836,15 +939,30 @@ def audit_raw_energy(
                 )
             mode = row.get("mode", "")
             notes = row.get("notes", "")
-            if mode in {"reg_mma", "reg_operand_only"} and (
-                "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2"
-                not in notes
-            ):
-                problems.append(f"{prefix}:missing_tensor_kernel_revision")
+            if mode in {"reg_mma", "reg_operand_only"}:
+                tensor_markers = (
+                    "tensor_pair_kernel_revision="
+                    "matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
+                    "tensor_operand_source=register_fill_no_memory",
+                    "tensor_data_pattern=inplace_alternating_sign_a_fp16_v2",
+                    "tensor_accumulator_pattern=bounded_two_state",
+                    "tensor_codegen_control=no_dual_predicated_mma_path",
+                    "tensor_working_set_applicable=0",
+                    "tensor_reuse_semantics=inner_mma_grouping_not_cache_reuse",
+                )
+                for marker in tensor_markers:
+                    if marker not in notes:
+                        problems.append(
+                            f"{prefix}:missing_tensor_marker={marker}"
+                        )
             if mode in {"l2_cg_load_only", "dram_cg_load_only"} and (
                 "global_warmup_policy=ld_global_cg" not in notes
             ):
                 problems.append(f"{prefix}:missing_cg_warmup_policy")
+            if mode == "dram_cg_load_only" and (
+                "input_data_pattern=splitmix64_uniform_fp16_v1" not in notes
+            ):
+                problems.append(f"{prefix}:missing_external_memory_input_pattern")
             missing_measurement = sorted(
                 column for column in RAW_REQUIRED_MEASUREMENT_COLUMNS if column not in row
             )
@@ -935,7 +1053,8 @@ def audit_raw_energy(
             "delta, GPU/device scope, exact timed-kernel epoch interval, explicit "
             "measurement_scope, profile "
             "power semantics, positive counter delta, elapsed time, and iteration "
-            "count; Tensor rows carry the matched-add/scalar-epilogue revision and "
+            "count; Tensor rows carry the bounded alternating-sign v3 revision, "
+            "register-only operand source, and non-cache reuse semantics, while "
             "CG rows carry the ld.global.cg warm-up policy"
         ),
         actual=f"rows={total_rows}" if not problems else ";".join(problems[:12]),
@@ -1451,7 +1570,10 @@ def audit_ncu_acceptance(
         and row.get("component_candidate") != "not_selected"
     ]
     problems = []
-    missing_columns = sorted(NCU_ACCEPTANCE_REQUIRED_COLUMNS - fieldnames)
+    required_columns = set(NCU_ACCEPTANCE_REQUIRED_COLUMNS)
+    if profile == "a100":
+        required_columns.update(A100_L2_FABRIC_REQUIRED_COLUMNS)
+    missing_columns = sorted(required_columns - fieldnames)
     if missing_columns:
         problems.append("missing_columns=" + ",".join(missing_columns))
     if missing:
@@ -1468,6 +1590,23 @@ def audit_ncu_acceptance(
             problems.append(
                 f"{row.get('mode')}:{candidate}:reason={row.get('acceptance_reason')}"
             )
+        if row.get("mode") == "reg_mma":
+            ratio_spread = parse_float(
+                row.get("tensor_hmma_ratio_group_relative_spread", "")
+            )
+            if (
+                ratio_spread is None
+                or ratio_spread > NCU_TENSOR_HMMA_RATIO_RELATIVE_SPREAD_MAX
+            ):
+                problems.append(
+                    f"reg_mma:{candidate}:hmma_ratio_spread="
+                    f"{row.get('tensor_hmma_ratio_group_relative_spread', '')}"
+                )
+            if row.get("tensor_control_pair_status") != "accepted":
+                problems.append(
+                    f"reg_mma:{candidate}:control_pair="
+                    f"{row.get('tensor_control_pair_status', '')}"
+                )
         if not ncu_path_sanity_pass(row, profile=profile):
             problems.append(f"{row.get('mode')}:{candidate}:path_evidence_failed")
     if not csv_rows:
@@ -1543,10 +1682,20 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
     l2_bytes = ncu_value(row, "l2_bytes")
     l2_read_bytes = ncu_value(row, "l2_read_bytes")
     dram_bytes = ncu_value(row, "dram_bytes")
+    dram_read_bytes = ncu_value(row, "dram_read_bytes", math.nan)
+    dram_write_bytes = ncu_value(row, "dram_write_bytes", math.nan)
+    dram_read_bytes_source = row.get("dram_read_bytes_source", "").strip()
+    dram_write_bytes_source = row.get("dram_write_bytes_source", "").strip()
+    effective_dram_read_bytes = dram_read_bytes
     shared_bytes = ncu_value(row, "shared_bytes")
     shared_accesses = ncu_value(row, "shared_accesses")
     shared_inst = ncu_value(row, "shared_inst")
     tensor_hmma = ncu_value(row, "tensor_hmma_inst")
+    expected_logical_mma = ncu_value(row, "expected_logical_mma")
+    tensor_hmma_per_logical_mma = ncu_value(
+        row, "tensor_hmma_per_logical_mma", -1.0
+    )
+    registers_per_thread = ncu_value(row, "registers_per_thread", -1.0)
     local_read_bytes = ncu_value(row, "local_read_bytes")
     local_write_bytes = ncu_value(row, "local_write_bytes")
     spill_zero_verified = ncu_value(row, "spill_zero_verified", -1.0)
@@ -1573,15 +1722,73 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
             <= NCU_GLOBAL_ADDRESS_CONTROL_DRAM_RATIO_MAX
         )
     if mode == "l2_cg_load_only":
+        native_text = row.get("l2_native_read_hit_rate_pct", "").strip()
+        native_delta_text = row.get(
+            "l2_native_vs_derived_hit_delta_pct", ""
+        ).strip()
+        if profile == "a100":
+            logical_hit = ncu_value(
+                row, "l2_logical_read_hit_rate_pct", -1.0
+            )
+            native_fabric_delta_text = row.get(
+                "l2_native_vs_fabric_model_hit_delta_pct", ""
+            ).strip()
+            native_ok = (
+                bool(native_text)
+                and bool(native_fabric_delta_text)
+                and ncu_value(
+                    row,
+                    "l2_native_vs_fabric_model_hit_delta_pct",
+                    math.inf,
+                )
+                <= 2.0
+                and ncu_value(row, "l2_fabric_metrics_present", 0.0) == 1.0
+                and ncu_value(row, "l2_fabric_counter_coherent", -1.0)
+                == 1.0
+                and ncu_value(row, "l2_fabric_model_coherent", -1.0) == 1.0
+            )
+            accepted_l2_hit = logical_hit
+        else:
+            native_required = profile != "v100"
+            native_ok = (
+                bool(native_text)
+                and ncu_value(row, "l2_native_read_hit_rate_pct", -1.0)
+                >= NCU_L2_HIT_MIN_PCT
+                and bool(native_delta_text)
+                and ncu_value(
+                    row, "l2_native_vs_derived_hit_delta_pct", math.inf
+                )
+                <= 2.0
+            )
+            if not native_required and not native_text and not native_delta_text:
+                native_ok = True
+            accepted_l2_hit = l2_hit
+        sector_conservation = ncu_value(
+            row, "l2_read_sector_conservation_ratio", math.nan
+        )
+        expected_l2_bytes = ncu_expected_input_bytes(row)
+        observed_expected_ratio = ncu_ratio(l2_read_bytes, expected_l2_bytes)
         return (
-            l2_hit >= NCU_L2_HIT_MIN_PCT
+            row.get("ncu_metric_profile", "") == "l2_path_minimal"
+            and NCU_L2_HIT_MIN_PCT <= accepted_l2_hit <= 100.5
+            and native_ok
+            and ncu_value(row, "l2_path_counter_coherent", -1.0) == 1.0
+            and math.isfinite(sector_conservation)
+            and NCU_L2_SECTOR_CONSERVATION_MIN
+            <= sector_conservation
+            <= NCU_L2_SECTOR_CONSERVATION_MAX
             and l2_read_bytes > 0.0
+            and NCU_L2_EXPECTED_BYTES_RATIO_MIN
+            <= observed_expected_ratio
+            <= NCU_L2_EXPECTED_BYTES_RATIO_MAX
             and l1_request_bytes > 0.0
             and l1_hit >= 0.0
             and l1_hit <= NCU_L2_L1_HIT_MAX_PCT
             and ncu_ratio(l1_hit_bytes, l1_request_bytes)
             <= NCU_L2_L1_BYTES_RATIO_MAX
-            and ncu_ratio(dram_bytes, l2_read_bytes) <= NCU_L2_DRAM_RATIO_MAX
+            and math.isfinite(effective_dram_read_bytes)
+            and ncu_ratio(effective_dram_read_bytes, l2_read_bytes)
+            <= NCU_L2_DRAM_RATIO_MAX
         )
     if mode in {"shared_scalar_load_only", "shared_load_only"}:
         denominator = max(shared_bytes, 1.0)
@@ -1594,20 +1801,46 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
             and ncu_ratio(dram_bytes, denominator) <= NCU_SHARED_GLOBAL_RATIO_MAX
         )
     if mode == "dram_cg_load_only":
-        l2_limit = max(
+        l2_service_hit = (
+            ncu_value(row, "l2_logical_read_hit_rate_pct", -1.0)
+            if profile == "a100"
+            else l2_hit
+        )
+        l2_limit = min(
             NCU_DRAM_L2_HIT_MAX_PCT,
             ncu_expected_l2_residency_hit_pct(row, profile)
             * NCU_DRAM_L2_EXPECTED_MULTIPLIER
             + NCU_DRAM_L2_EXPECTED_SLACK_PCT,
         )
+        expected_source_bytes = ncu_expected_input_bytes(row)
         return (
             l1_hit <= NCU_DRAM_L1_HIT_MAX_PCT
-            and l2_hit <= l2_limit
-            and dram_bytes > 0.0
-            and ncu_ratio(dram_bytes, l2_bytes) >= NCU_DRAM_L2_RATIO_MIN
+            and l2_service_hit >= 0.0
+            and l2_service_hit <= l2_limit
+            and l2_read_bytes > 0.0
+            and math.isfinite(effective_dram_read_bytes)
+            and effective_dram_read_bytes > 0.0
+            and math.isfinite(dram_write_bytes)
+            and dram_read_bytes_source == "dram__bytes_read.sum"
+            and dram_write_bytes_source == "dram__bytes_write.sum"
+            and NCU_DRAM_SOURCE_EXPECTED_RATIO_MIN
+            <= ncu_ratio(l2_read_bytes, expected_source_bytes)
+            <= NCU_DRAM_SOURCE_EXPECTED_RATIO_MAX
+            and NCU_DRAM_READ_EXPECTED_RATIO_MIN
+            <= ncu_ratio(effective_dram_read_bytes, expected_source_bytes)
+            <= NCU_DRAM_READ_EXPECTED_RATIO_MAX
+            and ncu_ratio(effective_dram_read_bytes, l2_read_bytes)
+            >= NCU_DRAM_L2_RATIO_MIN
+            and ncu_ratio(dram_write_bytes, effective_dram_read_bytes)
+            <= NCU_DRAM_WRITE_READ_RATIO_MAX
         )
     if mode == "reg_mma":
-        if tensor_hmma <= 0.0:
+        if (
+            tensor_hmma <= 0.0
+            or expected_logical_mma <= 0.0
+            or tensor_hmma_per_logical_mma <= 0.0
+            or registers_per_thread <= 0.0
+        ):
             return False
         return (
             ncu_ratio(l2_read_bytes, tensor_hmma)
@@ -1617,16 +1850,8 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
         )
     if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}:
         expected_ops = ncu_expected_ops(row)
-        if mode == "reg_operand_only" and tensor_hmma > 0.0:
-            return False
-        fixed_epilogue_limit = (
-            ncu_value(row, "active_SM")
-            * ncu_value(row, "blocks_per_SM")
-            * NCU_CONTROL_HMMA_PER_BLOCK_MAX
-        )
-        if (
-            tensor_hmma > fixed_epilogue_limit
-            and ncu_ratio(tensor_hmma, expected_ops) > NCU_CONTROL_HMMA_PER_REG_OP_MAX
+        if mode == "reg_operand_only" and (
+            tensor_hmma > 0.0 or registers_per_thread <= 0.0
         ):
             return False
         if expected_ops <= 0.0:
@@ -1659,7 +1884,10 @@ def audit_ncu_summary_quality(
         csv_rows = list(reader)
 
     problems: list[str] = []
-    missing_columns = sorted(NCU_REQUIRED_COLUMNS - fieldnames)
+    required_columns = set(NCU_REQUIRED_COLUMNS)
+    if profile == "a100":
+        required_columns.update(A100_L2_FABRIC_REQUIRED_COLUMNS)
+    missing_columns = sorted(required_columns - fieldnames)
     if missing_columns:
         problems.append("missing_columns=" + ",".join(missing_columns))
 
@@ -1687,6 +1915,86 @@ def audit_ncu_summary_quality(
         count = len(load_by_mode.get(mode, set()))
         if count < NCU_MIN_FACTOR_POINTS:
             problems.append(f"{mode}:load_repeat_points={count}")
+
+    tensor_controls = {
+        tuple(
+            row.get(column, "")
+            for column in (
+                "W_SM_KiB",
+                "blocks_per_SM",
+                "active_SM",
+                "ITER",
+                "reuse_factor",
+                "load_repeat",
+            )
+        ): row
+        for row in csv_rows
+        if row.get("mode") == "reg_operand_only"
+    }
+    tensor_groups: dict[tuple[str, str, str], list[dict[str, str]]] = {}
+    for row in csv_rows:
+        if row.get("mode") != "reg_mma":
+            continue
+        group_key = tuple(
+            row.get(column, "")
+            for column in ("W_SM_KiB", "blocks_per_SM", "active_SM")
+        )
+        tensor_groups.setdefault(group_key, []).append(row)
+    for group_key, group_rows in tensor_groups.items():
+        ratios = [
+            value
+            for value in (
+                parse_float(row.get("tensor_hmma_per_logical_mma", ""))
+                for row in group_rows
+            )
+            if value is not None and value > 0.0
+        ]
+        group_label = "/".join(group_key)
+        if len(ratios) < NCU_MIN_FACTOR_POINTS:
+            problems.append(
+                f"reg_mma:{group_label}:hmma_ratio_points={len(ratios)}"
+            )
+        else:
+            ordered = sorted(ratios)
+            midpoint = len(ordered) // 2
+            ratio_median = (
+                ordered[midpoint]
+                if len(ordered) % 2
+                else (ordered[midpoint - 1] + ordered[midpoint]) / 2.0
+            )
+            relative_spread = (
+                (max(ratios) - min(ratios)) / ratio_median
+                if ratio_median > 0.0
+                else math.inf
+            )
+            if relative_spread > NCU_TENSOR_HMMA_RATIO_RELATIVE_SPREAD_MAX:
+                problems.append(
+                    f"reg_mma:{group_label}:hmma_ratio_relative_spread="
+                    f"{relative_spread:.6g}"
+                )
+        for treatment in group_rows:
+            coord = tuple(
+                treatment.get(column, "")
+                for column in (
+                    "W_SM_KiB",
+                    "blocks_per_SM",
+                    "active_SM",
+                    "ITER",
+                    "reuse_factor",
+                    "load_repeat",
+                )
+            )
+            control = tensor_controls.get(coord)
+            if control is None:
+                problems.append(
+                    "reg_mma:missing_exact_reg_operand_only_control="
+                    + "/".join(coord)
+                )
+            elif not ncu_path_sanity_pass(control, profile=profile):
+                problems.append(
+                    "reg_mma:invalid_exact_reg_operand_only_control="
+                    + "/".join(coord)
+                )
 
     path_sanity_modes = {
         "reg_operand_only",
@@ -1720,6 +2028,17 @@ def audit_ncu_summary_quality(
             if active_sm != expected_active_sm:
                 problems.append(f"{prefix}:active_SM={row.get('active_SM', '')}")
         for column in NCU_COMMON_NUMERIC_COLUMNS:
+            if column == "l1_hit_rate_pct" and row.get("mode", "") not in {
+                "global_l1_load_only",
+                "l2_cg_load_only",
+                "dram_cg_load_only",
+            }:
+                continue
+            if column == "l2_hit_rate_pct" and row.get("mode", "") not in {
+                "l2_cg_load_only",
+                "dram_cg_load_only",
+            }:
+                continue
             value = parse_float(row.get(column, ""))
             if value is None or value < 0.0:
                 problems.append(f"{prefix}:{column}={row.get(column, '')}")
@@ -1741,7 +2060,8 @@ def audit_ncu_summary_quality(
         expected=(
             "NCU summary exposes L1/L2 hit rates, L1/L2/DRAM access counts, "
             "bytes, stall counters, run coordinates, required finalplan modes, "
-            "and profile-specific mode coverage, factor sweeps, and mode-specific "
+            "and profile-specific mode coverage, factor sweeps, architecture-local "
+            "HMMA/logical-MMA stability, exact no-HMMA controls, and mode-specific "
             "positive path counters plus at least one mode-level path-sanity "
             "row matching the final NCU acceptance thresholds"
         ),
@@ -1831,11 +2151,13 @@ def audit_matched_control(
         if component in {
             "tensor_mma_increment",
             "l2_hit_cg_path",
+            "external_memory_read_path",
             "dram_cg_stream_path",
         }:
             component_label = {
                 "tensor_mma_increment": "tensor",
                 "l2_hit_cg_path": "l2",
+                "external_memory_read_path": "external_memory",
                 "dram_cg_stream_path": "dram",
             }[component]
             if row.get("pair_energy_basis", "") != "matched_iters_net_energy":

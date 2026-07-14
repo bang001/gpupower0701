@@ -13,17 +13,22 @@
 | A100 | Global L1 hit path | 0.327 pJ/bit | `accepted_low_stability` | 안정성 후속 측정 전 final 금지 |
 | A100 | Shared scalar path | - | 유일 후보가 legacy `pair_start_distance_ms>30000` | 새 timing 규칙으로 재분석 전 결론 금지 |
 | A100 | L2 CG hit path | - | 20/20 NCU reject, L2 hit 58-72% | coefficient 없음 |
-| A100 | DRAM sanity | 11.99 pJ/bit | `accepted_low_stability` | sanity/provisional만 가능 |
+| A100 | External-memory read path | 11.925 pJ/bit | legacy `accepted_low_stability` | historical effective-path observation; strict 재실험 필요 |
 | V100 | Tensor MMA increment | 1.034 pJ/FLOP | `accepted_with_caution` | provisional effective coefficient; raw/NCU package 확인 필요 |
 | V100 | Global L1 hit path | 0.672 pJ/bit | `accepted_low_stability` | 안정성 후속 측정 전 final 금지 |
 | V100 | Shared scalar path | 1.124 pJ/bit | 유일 후보가 legacy `pair_start_distance_ms>30000` | 값은 탈락 row의 진단값이며 coefficient로 인용 금지 |
 | V100 | L2 CG hit path | 2.272 pJ/bit | 20/20 NCU reject, L2 hit 58-72% | 값은 경로 미검증 row이며 인용 금지 |
-| V100 | DRAM sanity | 8.131 pJ/bit | `accepted_low_stability` | sanity/provisional만 가능 |
+| V100 | External-memory read path | 8.131 pJ/bit | legacy `accepted_low_stability` | historical effective-path observation; strict 재실험 필요 |
 
 `accepted_low_stability`는 “물리적으로 확정”이 아니라 power/NCU 기본 gate를 통과한
 row의 분포가 불안정하다는 뜻이다. 이 실험값은 순수 SRAM/Tensor/HBM 회로 에너지가
 아니라 board-level 차분과 NCU traffic denominator로 얻은 workload-dependent effective
 coefficient다.
+
+External-memory 값은 strict NCU `dram__bytes_read.sum`, high-entropy input,
+architecture별 L2 배수 W sweep을 적용하지 않은 기존 protocol 결과다. 따라서 물리
+HBM2 pJ/bit와 직접 비교하지 않으며 최신 재실행은
+[external-memory 설계](../methodology/external_memory_read_path_experiment_design_ko.md)를 따른다.
 
 ## 2. 확인된 원인
 
@@ -41,7 +46,7 @@ legacy distance = abs(treatment completion - control completion)
 시간이 모두 포함되어 30초를 넘을 수 있다. 이것은 thermal adjacency 실패의 증거가
 아니며 gate 정의 오류다.
 
-수정 후에는 raw CSV가 timed kernel 직전/직후의
+수정 후에는 raw CSV가 timed kernel 직전의 epoch와 monotonic elapsed 기반 종료값인
 `measurement_start_epoch_ms`/`measurement_end_epoch_ms`를 기록한다. analyzer는 두
 간격 `pair_transition_gap_ms`만 한계와 비교한다. 이전 CSV는
 다음 fallback으로 재분석한다.
@@ -65,11 +70,13 @@ binary로 exact epoch interval을 기록한 재실행이 필요하다.
 한계를 늘려서 통과시키는 우회가 되지 않도록 각 detail row에
 `pair_transition_gap_limit_ms`를 남기고 package audit가 gap과 한계를 함께 검증한다.
 
-### 2.2 L2는 threshold 문제가 아니라 경로 생성 실패
+### 2.2 L2는 A100 counter 모집단 오류와 V100 경로 검증을 분리해야 함
 
-L2 hit 58-72%를 95%로 간주할 수 없다. `l2_cg_load_only` 값이 양수여도 해당 bytes가
-지속적으로 L2 hit로 끝났다는 증거가 없으므로 A100/V100의 전달된 L2 pJ/bit는 모두
-무효다.
+A100의 source direct 51-62%와 native 67-72.5%는 서로 다른 lookup 모집단이며,
+둘 중 하나를 logical final hit로 간주할 수 없다. 동시에 두 값에 95%를 요구한 것도
+GA100 partition-fabric 구조에는 잘못이었다. 기존 report에는 `srcunit_ltcfabric` evidence가
+없으므로 전달된 A100 L2 pJ/bit는 여전히 미승인이다. V100은 기존 architecture-specific
+direct path 기준을 별도로 유지한다.
 
 기존 standard finalplan은 A100 remediation에 있던 topology/policy selector를 실제
 표준 실행 앞단에 연결하지 않았다. normal/contiguous 고정 좌표로 긴 energy sweep을
@@ -79,7 +86,7 @@ L2 hit 58-72%를 95%로 간주할 수 없다. `l2_cg_load_only` 값이 양수여
 
 | GPU | anchor W_SM | candidate 순서 | 금지 조건 |
 |---|---:|---|---|
-| A100 | 16, 128 KiB/SM | normal contiguous B16 -> normal sm_interleaved B16/B8/B4 -> persisting contiguous B16 -> persisting sm_interleaved B16/B8/B4 | 95% gate 완화 금지 |
+| A100 | 16, 128 KiB/SM | normal contiguous B16/B8/B4/B2/B1 -> normal sm_interleaved B16/B8/B4 -> persisting contiguous B16/B8/B4/B1 -> persisting sm_interleaved B8/B4 | logical final-service 95% gate 완화 금지 |
 | V100 | 32, 64 KiB/SM | normal contiguous B32 -> normal sm_interleaved B32/B16/B4 | persisting 사용 금지(CC 7.0) |
 
 각 후보는 두 W anchor 모두에서 다음을 통과해야 한다.
@@ -87,22 +94,23 @@ L2 hit 58-72%를 95%로 간주할 수 없다. `l2_cg_load_only` 값이 양수여
 | evidence | strict gate |
 |---|---:|
 | path-specific L1 hit | <=1% |
-| derived L2 read hit | >=95% |
-| native L2 read hit | A100 >=95% 필수; V100은 GV100 metric이 있을 때만 >=95% 교차검증 |
-| native-derived 차이 | native metric을 사용한 경우 <=2 percentage points |
-| `(hit+miss)/read sectors` | 0.98-1.02 |
+| A100 source direct hit | 보고값, 단독 threshold 없음 |
+| A100 logical final hit | `(source hit + fabric hit)/source read >=95%` |
+| A100 native-model 차이 | <=2 percentage points |
+| A100 source/fabric `(hit+miss)/read` | 각각 0.98-1.02 |
+| V100 derived L2 read hit | >=95%; native는 제공될 때만 교차검증 |
 | observed/expected L2 bytes | 0.95-1.05 |
 | DRAM read/L2 read | <=2% |
 | treatment/control acceptance | 둘 다 accepted |
 
-첫 통과 후보의 policy/layout/blocks-SM만 L2 energy와 full NCU에 동일 전달한다. 후보가
+첫 통과 후보의 policy/layout/blocks-SM만 L2 energy와 `l2_path_minimal` NCU에 동일 전달한다. 후보가
 없으면 L2 energy 전에 종료한다. 이는 실패가 아니라 “현재 microbenchmark로 해당
 노드의 strict L2-hit coefficient를 식별하지 못했다”는 올바른 결과다.
 
 V100에서 `lts__t_sector_op_read_hit_rate` native metric을 제공하지 않는
 GV100/NCU 조합이 있다. 공통 selector가 이 값을 A100처럼 필수로 요구하면
 derived hit가 99%여도 V100은 항상 탈락한다. 수정본은
-`native_l2_gate=required`를 A100에만 적용하고, V100은
+`native_l2_gate=ga100_fabric_model`을 A100에 적용하고, V100은
 `optional_unavailable` 또는 `optional_present_cross_checked`를 기록한다.
 V100에서 native metric이 없음은 95% 통과로 위조하는 것이 아니라,
 path-specific hit/miss-derived ratio, sector 보존, expected traffic, DRAM 비율로

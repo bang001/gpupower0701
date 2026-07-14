@@ -122,7 +122,7 @@ def plot_wsm_paths(out_dir: Path) -> Path:
         ("Shared 명시 경로", "shared_w", TEAL, "s"),
         ("Global L1", "l1_w", BLUE, "o"),
         ("L2 (.cg)", "l2_w", PURPLE, "D"),
-        ("DRAM sanity", "dram_w", AMBER, "^"),
+        ("External memory", "dram_w", AMBER, "^"),
     ]
     y_positions = {name: 3 - idx for idx, (name, *_rest) in enumerate(paths)}
     for ax, profile_name in zip(axes.flat, PLATFORM_ORDER):
@@ -152,7 +152,7 @@ def plot_wsm_paths(out_dir: Path) -> Path:
         ax.spines[["top", "right", "left"]].set_visible(False)
 
     for ax in axes[:, 0]:
-        ax.set_yticks([3, 2, 1, 0], ["Shared 명시 경로", "Global L1", "L2 (.cg)", "DRAM sanity"])
+        ax.set_yticks([3, 2, 1, 0], ["Shared 명시 경로", "Global L1", "L2 (.cg)", "External memory"])
     for ax in axes[1, :]:
         ax.set_xlabel("W_SM [KiB/SM, log2 scale]")
         ax.set_xticks([8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192], ["8", "16", "32", "64", "128", "256", "512", "1K", "2K", "4K", "8K"])
@@ -161,7 +161,7 @@ def plot_wsm_paths(out_dir: Path) -> Path:
         0.05,
         0.015,
         "Shared는 별도 주소 공간이므로 W_SM 변화로 Global L1이 되지 않는다. Global load는 W_SM과 cache policy(.cg)로 후보를 만들고, "
-        "NCU hit/access/bytes가 L1·L2·DRAM 채택을 결정한다.",
+        "NCU hit/access/read-write bytes가 L1·L2·external-memory 채택을 결정한다.",
         color=RED,
         fontsize=10,
     )
@@ -224,7 +224,12 @@ def self_test() -> None:
         assert int(p["shared_ncu_w"]) + b <= int(p["shared_capacity_kib"])
         full_l2_mib = p["active_sm"] * int(p["l2_ncu_w"]) / 1024.0
         assert full_l2_mib <= float(p["l2_mib"])
-        assert int(p["dram_w"]) > float(p["l2_mib"]) * 1024.0 / p["active_sm"]
+        external_w = ints(p["dram_w"])
+        assert len(external_w) >= 3
+        assert all(
+            value > float(p["l2_mib"]) * 1024.0 / p["active_sm"]
+            for value in external_w
+        )
     assert math.isclose(82 * 64 / 1024, 5.125)
     assert math.isclose(80 * 32 / 1024, 2.5)
     assert math.isclose(108 * 128 / 1024, 13.5)

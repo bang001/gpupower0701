@@ -1,0 +1,1 @@
+label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,ncu_replay_mode,ncu_cache_control,global_warmup_passes,l2_residency_policy,l2_address_layout,report
