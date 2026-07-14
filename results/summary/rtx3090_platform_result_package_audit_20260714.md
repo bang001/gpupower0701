@@ -1,0 +1,61 @@
+# RTX3090 Platform Result Package Audit
+
+| item | value |
+|---|---|
+| target profile | `rtx3090` |
+| tag | `20260714` |
+| expected chip | `ga102` |
+| expected compute capability | `8.6` |
+| expected L2 | `6 MiB` |
+| expected unified L1/shared per SM | `128 KiB` |
+| expected shared per SM | `100 KiB` |
+| expected active SM | `82` |
+| expected runtime SM count | `not exact-checked` |
+| expected power semantics | `one_sec_average` |
+| final numerator policy | `nvml_total_energy` + `total_energy_mj_delta` + `gpu_device_total_energy_counter` |
+
+## Verdict
+
+This package passes the intake checks. It is eligible for the broader goal readiness audit and report review.
+
+## Status Counts
+
+| status | checks |
+|---|---:|
+| `pass` | 31 |
+
+## Checks
+
+| area | check | status | expected | actual | evidence | action |
+|---|---|---|---|---|---|---|
+| `files` | `command_shell_present` | `pass` | file exists | exists | `results/summary/rtx3090_component_finalplan_20260714_commands.sh` | run the generated command package or copy the artifact from the node |
+| `files` | `command_plan_present` | `pass` | file exists | exists | `results/summary/rtx3090_component_finalplan_20260714_command_plan.md` | run the generated command package or copy the artifact from the node |
+| `files` | `preflight_present` | `pass` | file exists | exists | `results/summary/rtx3090_component_finalplan_20260714_preflight.md` | run the generated command package or copy the artifact from the node |
+| `files` | `raw_present` | `pass` | all expected files exist | ok | `results/raw/rtx3090_component_finalplan_20260714_tensor.csv;results/raw/rtx3090_component_finalplan_20260714_shared.csv;results/raw/rtx3090_component_finalplan_20260714_l1.csv;results/raw/rtx3090_component_finalplan_20260714_l2.csv;results/raw/rtx3090_component_finalplan_20260714_dram.csv` | copy the missing platform result files back from the target node |
+| `files` | `tensor_pair_calibration_present` | `pass` | file exists | exists | `results/raw/rtx3090_component_finalplan_20260714_tensor_pair_calibration.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `l2_pair_calibration_present` | `pass` | file exists | exists | `results/raw/rtx3090_component_finalplan_20260714_l2_pair_calibration.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `dram_pair_calibration_present` | `pass` | file exists | exists | `results/raw/rtx3090_component_finalplan_20260714_dram_pair_calibration.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `power_api_present` | `pass` | file exists | exists | `results/summary/rtx3090_component_finalplan_20260714_power_api_audit.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `power_state_present` | `pass` | file exists | exists | `results/summary/rtx3090_component_finalplan_20260714_power_state_audit.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `ncu_summary_present` | `pass` | file exists | exists | `results/ncu/rtx3090_component_finalplan_ncu_factor_20260714/ncu_cache_validation_summary.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `ncu_acceptance_present` | `pass` | file exists | exists | `results/summary/rtx3090_component_finalplan_20260714_ncu_acceptance.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `matched_summary_present` | `pass` | file exists | exists | `results/summary/rtx3090_component_finalplan_20260714_matched_control_summary.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `matched_detail_present` | `pass` | file exists | exists | `results/summary/rtx3090_component_finalplan_20260714_matched_control_detail.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `reliability_present` | `pass` | file exists | exists | `results/summary/rtx3090_component_finalplan_20260714_component_reliability_audit.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `instability_present` | `pass` | file exists | exists | `results/summary/rtx3090_component_finalplan_20260714_matched_control_instability_audit.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `strict_summary_present` | `pass` | file exists | exists | `results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260714.csv` | run the generated command package or copy the artifact from the node |
+| `files` | `strict_audit_present` | `pass` | file exists | exists | `results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_20260714.csv` | run the generated command package or copy the artifact from the node |
+| `preflight` | `preflight_power_scope_policy` | `pass` | preflight records profile, power scope, NCU metric support, driver/UUID, module/memory power metadata, power semantics, target architecture metadata, active SM, and binary dry-run success | ok | `results/summary/rtx3090_component_finalplan_20260714_preflight.md` | rerun scripts/preflight_gpu_support.py on the target node and keep the generated markdown with the result package |
+| `raw` | `raw_energy_power_policy` | `pass` | raw rows use target profile metadata, target active SM, total-energy delta, GPU/device scope, exact timed-kernel epoch interval, explicit measurement_scope, profile power semantics, positive counter delta, elapsed time, and iteration count; Tensor rows carry the observable-control fixed-RF v5 revision, register-only operand source, and non-cache reuse semantics, while CG rows carry the ld.global.cg warm-up policy | rows=360 | `results/raw/rtx3090_component_finalplan_20260714_tensor.csv;results/raw/rtx3090_component_finalplan_20260714_shared.csv;results/raw/rtx3090_component_finalplan_20260714_l1.csv;results/raw/rtx3090_component_finalplan_20260714_l2.csv;results/raw/rtx3090_component_finalplan_20260714_dram.csv` | rerun energy sweep with the correct target profile and NVML policy |
+| `analysis` | `tensor_pair_calibration_policy` | `pass` | one treatment/control-floor dual calibration per Tensor coordinate, resolved ITER=max(candidate ITERs), pair_locked manifest, and identical positive ITER in reg_mma/reg_operand_only raw rows | coordinates=15, calibrations=15 | `results/raw/rtx3090_component_finalplan_20260714_tensor_pair_calibration.csv;results/raw/rtx3090_component_finalplan_20260714_tensor.csv` | rerun the Tensor sweep with --tensor-pair-lock-iters and do not append to raw rows from a duration-calibrated run |
+| `analysis` | `l2_pair_calibration_policy` | `pass` | one dual calibration per L2 coordinate, resolved ITER=max(candidate ITERs), and identical positive ITER in l2_cg_load_only/global_addr_only | coordinates=6, calibrations=6 | `results/raw/rtx3090_component_finalplan_20260714_l2_pair_calibration.csv;results/raw/rtx3090_component_finalplan_20260714_l2.csv` | rerun the L2 sweep with --memory-pair-lock-iters and do not append duration-calibrated L2 rows |
+| `analysis` | `dram_pair_calibration_policy` | `pass` | one dual calibration per DRAM coordinate, resolved ITER=max(candidate ITERs), and identical positive ITER in dram_cg_load_only/global_addr_only | coordinates=9, calibrations=9 | `results/raw/rtx3090_component_finalplan_20260714_dram_pair_calibration.csv;results/raw/rtx3090_component_finalplan_20260714_dram.csv` | rerun the DRAM sweep with --memory-pair-lock-iters and do not append duration-calibrated DRAM rows |
+| `power` | `power_api_audit_policy` | `pass` | all rows final_candidate with total-energy GPU/device scope | rows=360 | `results/summary/rtx3090_component_finalplan_20260714_power_api_audit.csv` | rerun scripts/audit_power_api_measurements.py with --fail-on-provisional |
+| `power` | `power_state_audit_policy` | `pass` | no reject or coefficient-ineligible rows, plus power-state evidence columns for average power, run coordinates, temperature, and SM clock | rows=360 | `results/summary/rtx3090_component_finalplan_20260714_power_state_audit.csv` | exclude rejected rows before pairing or rerun unstable conditions |
+| `ncu` | `ncu_cache_counter_schema` | `pass` | NCU summary exposes L1/L2 hit rates, L1/L2/DRAM access counts, bytes, stall counters, run coordinates, required finalplan modes, and profile-specific mode coverage, factor sweeps, architecture-local HMMA/logical-MMA stability, exact no-HMMA controls, and mode-specific positive path counters plus at least one mode-level path-sanity row matching the final NCU acceptance thresholds | rows=73 | `results/ncu/rtx3090_component_finalplan_ncu_factor_20260714/ncu_cache_validation_summary.csv` | rerun scripts/run_ncu_validation.sh and scripts/summarize_ncu_cache_metrics.py with explicit cache/access metrics |
+| `ncu` | `ncu_path_acceptance` | `pass` | accepted tensor/control/shared/global-L1/L2 path candidates | accepted=8 | `results/summary/rtx3090_component_finalplan_20260714_ncu_acceptance.csv` | rerun NCU sidecar with matching W_SM, blocks/SM, active SM, and factors |
+| `analysis` | `matched_control_summary_policy` | `pass` | Tensor, Shared, Global L1, and L2 matched-control summary rows with positive median, total-energy GPU/device scope, matching power semantics, and NCU denominator rows for memory components | rows=5 | `results/summary/rtx3090_component_finalplan_20260714_matched_control_summary.csv` | rerun matched-control summary generation after power, NCU, and matched-control detail gates pass |
+| `analysis` | `matched_control_detail_policy` | `pass` | Tensor, L2, and DRAM rows use matched_iters_net_energy with identical positive ITER; Tensor/global-memory controls have exact-coordinate NCU acceptance; memory paths use exact NCU denominators; valid deltas are positive; pair adjacency uses benchmark transition gap; strict components retain valid rows in both execution orders | rows=180 | `results/summary/rtx3090_component_finalplan_20260714_matched_control_detail.csv` | rerun Tensor sweeps with --tensor-pair-lock-iters and L2/DRAM sweeps with --memory-pair-lock-iters; analyze with matched-iters pair policies and --require-control-ncu-acceptance; retain exact NCU denominators, total-energy scope, expected power semantics, and the current pair timing fields and alternating pair execution orders |
+| `analysis` | `component_reliability` | `pass` | Tensor, Shared, Global L1, and L2 accepted with no rejects | accepted=4 | `results/summary/rtx3090_component_finalplan_20260714_component_reliability_audit.csv` | rerun targeted conditions or keep weak components out of the strict summary |
+| `summary` | `strict_summary_policy` | `pass` | all reported components accepted, positive, total-energy scoped, hierarchy-consistent, within broad plausibility ranges, exposing same-coordinate NCU evidence, and limited to Tensor/Shared/L1/L2 strict components | rows=4 | `results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260714.csv` | rebuild strict summary from accepted evidence only |
+| `summary` | `strict_summary_audit_clean` | `pass` | 0 fail/warning rows and required hierarchy/plausibility checks present | rows=193, failures=0, warnings=0 | `results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_20260714.csv` | fix strict summary audit failures before publication |

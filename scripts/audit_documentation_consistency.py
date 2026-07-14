@@ -92,7 +92,7 @@ FORBIDDEN_ACTIVE_TERMS = {
 
 REQUIRED_POLICY_TERMS = {
     "README.md": (
-        "rtx3090_current_protocol_reaudit_20260714.md",
+        "rtx3090_strict_scope_fresh_ncu_component_coefficients_20260714.md",
         "component_energy_goal_readiness_audit_20260714.md",
     ),
     "SKILL.md": (
@@ -122,11 +122,11 @@ REQUIRED_POLICY_TERMS = {
         "W_SM = 16, 128",
     ),
     "docs/results/gpu_power_modeling_experiment_results_ko.md": (
-        "Tensor와 모든 memory pair",
-        "완전한 RTX 3090 component table은 없다",
+        "180/180 valid",
+        "24.949 pJ/bit",
     ),
     "docs/audits/component_energy_self_critique_ko.md": (
-        "완전한 current-protocol component table은 아직 없다",
+        "RTX 3090은 2026-07-14 현행 v5 package",
         "모든 final pair의 matched ITER",
     ),
     "scripts/plan_platform_component_experiment.py": (
@@ -161,6 +161,21 @@ FORBIDDEN_POLICY_PATTERNS = (
     re.compile(r"Tensor와 DRAM은 동일 ITER"),
     re.compile(r"Shared/Global L1/L2는[^\n]*elapsed-aware"),
     re.compile(r"Shared scalar path[^\n]*elapsed-aware control-power"),
+)
+
+CURRENT_TENSOR_REVISION = (
+    "matched_inplace_signflip_observable_control_fixed_rf_v5"
+)
+SUPERSEDED_TENSOR_REVISION = (
+    "matched_inplace_signflip_fragment_epilogue_fixed_rf_v4"
+)
+TENSOR_REVISION_FILES = (
+    "README.md",
+    "src/main.cu",
+    "scripts/plan_platform_component_experiment.py",
+    "docs/platforms/a100_node_experiment_guide_ko.md",
+    "docs/platforms/v100_node_experiment_guide_ko.md",
+    "docs/platforms/h100_node_experiment_guide_ko.md",
 )
 
 EXPECTED_CPP_MODES = (
@@ -399,6 +414,33 @@ def audit_policy_text(repo: Path, rows: list[dict[str, str]]) -> None:
         actual="none" if not stale_policy else ";".join(stale_policy),
         evidence="README.md;SKILL.md;docs/**/*.md",
         action="remove duration-scaled L2 final-policy statements",
+    )
+
+    revision_missing: list[str] = []
+    revision_stale: list[str] = []
+    for relative in TENSOR_REVISION_FILES:
+        path = repo / relative
+        text = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+        if CURRENT_TENSOR_REVISION not in text:
+            revision_missing.append(relative)
+        if SUPERSEDED_TENSOR_REVISION in text:
+            revision_stale.append(relative)
+    revision_ok = not revision_missing and not revision_stale
+    add(
+        rows,
+        area="policy",
+        check="current_tensor_revision_v5",
+        status="pass" if revision_ok else "fail",
+        expected=(
+            f"{CURRENT_TENSOR_REVISION} present and superseded exact v4 marker absent"
+        ),
+        actual=(
+            "all current"
+            if revision_ok
+            else f"missing={revision_missing};stale={revision_stale}"
+        ),
+        evidence=";".join(TENSOR_REVISION_FILES),
+        action="synchronize source, planner, README, and node guides to Tensor v5",
     )
 
     for relative, terms in REQUIRED_POLICY_TERMS.items():

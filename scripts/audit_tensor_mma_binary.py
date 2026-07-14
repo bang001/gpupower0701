@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -34,6 +36,68 @@ OPCODE_PATTERNS = {
     "ldl_static": re.compile(r"\bLDL(?:\.|\b)"),
     "stl_static": re.compile(r"\bSTL(?:\.|\b)"),
 }
+SASS_ADDRESS_PATTERN = re.compile(r"/\*(?P<address>[0-9a-fA-F]+)\*/")
+BRANCH_TARGET_PATTERN = re.compile(r"\bBRA\s+0x(?P<target>[0-9a-fA-F]+)\b")
+
+
+def find_cuobjdump(explicit: str = "") -> str:
+    if explicit:
+        resolved = shutil.which(explicit)
+        return resolved or explicit
+
+    resolved = shutil.which("cuobjdump")
+    if resolved:
+        return resolved
+
+    candidates: list[Path] = []
+    for env_name in ("CUDA_HOME", "CUDA_PATH", "CUDAToolkit_ROOT", "CONDA_PREFIX"):
+        root = os.environ.get(env_name, "").strip()
+        if root:
+            candidates.append(Path(root) / "bin" / "cuobjdump")
+
+    nvcc = os.environ.get("NVCC", "").strip() or shutil.which("nvcc") or ""
+    if nvcc and " " not in nvcc:
+        candidates.append(Path(nvcc).resolve().parent / "cuobjdump")
+
+    prefix = Path(sys.prefix)
+    candidates.extend(
+        [
+            prefix / "bin" / "cuobjdump",
+            prefix / "targets" / "x86_64-linux" / "bin" / "cuobjdump",
+        ]
+    )
+    candidates.extend(
+        sorted(
+            prefix.glob(
+                "lib/python*/site-packages/triton/backends/nvidia/bin/cuobjdump"
+            )
+        )
+    )
+    candidates.extend(
+        sorted(
+            prefix.glob(
+                "lib/python*/site-packages/triton/third_party/cuda/bin/cuobjdump"
+            )
+        )
+    )
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return ""
+
+
+def count_backward_branches(sass: str) -> int:
+    count = 0
+    for line in sass.splitlines():
+        address_match = SASS_ADDRESS_PATTERN.search(line)
+        target_match = BRANCH_TARGET_PATTERN.search(line)
+        if not address_match or not target_match:
+            continue
+        address = int(address_match.group("address"), 16)
+        target = int(target_match.group("target"), 16)
+        if target < address:
+            count += 1
+    return count
 
 
 def run_cuobjdump(cuobjdump: str, binary: str, option: str) -> str:
@@ -120,6 +184,7 @@ def build_rows(
                 if "HMMA" in line
                 and re.search(r"@[!]?P\d+\s+HMMA(?:\.|\b)", line)
             )
+            counts["backward_branch_static"] = count_backward_branches(sass)
             reasons: list[str] = []
             if not symbol:
                 reasons.append("kernel_symbol_missing")
@@ -141,6 +206,8 @@ def build_rows(
                     or counts["tma_static"] > 0
                 ):
                     reasons.append("tensor_opcode_present_in_control")
+                if counts["backward_branch_static"] <= 0:
+                    reasons.append("control_loop_missing_after_ptxas")
             if resource.get("local", -1) != 0 or resource.get("stack", -1) != 0:
                 reasons.append("local_or_stack_allocation_present")
             if counts["ldl_static"] > 0 or counts["stl_static"] > 0:
@@ -199,10 +266,10 @@ def write_markdown(path: Path, rows: list[dict[str, str]]) -> None:
         )
         out.write(
             "| RF | treatment HMMA | control HMMA | treatment/control registers/thread | "
-            "predicated treatment HMMA | WGMMA/TMA | LDG/LDS treatment | "
+            "predicated treatment HMMA | control backward branches | WGMMA/TMA | LDG/LDS treatment | "
             "local treatment/control | status |\n"
         )
-        out.write("|---:|---:|---:|---|---:|---|---|---|---|\n")
+        out.write("|---:|---:|---:|---|---:|---:|---|---|---|---|\n")
         for rf in FIXED_REUSE_FACTORS:
             treatment = by_key.get((str(rf), "reg_mma"), {})
             control = by_key.get((str(rf), "reg_operand_only"), {})
@@ -213,6 +280,7 @@ def write_markdown(path: Path, rows: list[dict[str, str]]) -> None:
                 f"{treatment.get('registers_per_thread', '')}/"
                 f"{control.get('registers_per_thread', '')} | "
                 f"{treatment.get('hmma_predicated_static', '')} | "
+                f"{control.get('backward_branch_static', '')} | "
                 f"{treatment.get('wgmma_static', '')}/"
                 f"{treatment.get('tma_static', '')} | "
                 f"{treatment.get('ldg_static', '')}/"
@@ -243,6 +311,7 @@ def run_self_test() -> None:
  /*0000*/ HMMA.16816.F32 R0, R2, R4, R0;
  Function : xxxreg_operand_only_kernelILi1EEEfoo
  /*0000*/ IADD3 R0, R0, R1, RZ;
+ /*0010*/ BRA 0x0;
 """
     resources = parse_resource_usage(resource)
     functions = parse_sass_functions(sass)
@@ -264,6 +333,7 @@ def run_self_test() -> None:
     assert rf1_treatment["hmma_static"] == "1"
     assert rf1_treatment["hmma_predicated_static"] == "0"
     assert rf1_control["hmma_static"] == "0"
+    assert rf1_control["backward_branch_static"] == "1"
     assert all(
         row["status"] == "fail" for row in rows if row["reuse_factor"] != "1"
     )
@@ -304,7 +374,7 @@ def main() -> int:
     binary = Path(args.binary)
     if not binary.exists():
         parser.error(f"binary does not exist: {binary}")
-    cuobjdump = args.cuobjdump or shutil.which("cuobjdump") or ""
+    cuobjdump = find_cuobjdump(args.cuobjdump)
     if not cuobjdump:
         parser.error("cuobjdump was not found; pass --cuobjdump")
 

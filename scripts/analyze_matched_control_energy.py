@@ -119,6 +119,12 @@ NCU_VALIDATED_CONTROL_MODES = {
     "global_addr_only",
 }
 LOGICAL_OPERAND_BITS_PER_REG_OP = 8192.0
+COEFFICIENT_METADATA_FIELDS = (
+    "coefficient_semantics",
+    "external_memory_technology",
+    "external_memory_topology",
+    "denominator_metric",
+)
 
 
 def as_float(row: dict[str, str], key: str, default: float = 0.0) -> float:
@@ -1629,6 +1635,10 @@ def run_self_test() -> None:
     assert dram_matched[0]["pair_energy_basis"] == "matched_iters_net_energy"
     assert abs(float(dram_matched[0]["delta_E_J"]) - 60.0) < 1.0e-9
     assert dram_matched[0]["valid_component_estimate"]
+    assert set(COEFFICIENT_METADATA_FIELDS).issubset(dram_matched[0])
+    dram_summary = make_summary_rows(dram_matched)
+    assert len(dram_summary) == 1
+    assert set(COEFFICIENT_METADATA_FIELDS).issubset(dram_summary[0])
     dram_mismatch = make_detail_rows(
         [dram_treatment, {**dram_control, "ITER": "199"}],
         tensor_pair_policy="duration-scaled",
@@ -1928,6 +1938,7 @@ def main() -> int:
         "load_repeat",
         "store_repeat",
         "component",
+        *COEFFICIENT_METADATA_FIELDS,
         "pair",
         "pairing",
         "pair_energy_basis",
@@ -1990,6 +2001,7 @@ def main() -> int:
     ]
     summary_fields = [
         "component",
+        *COEFFICIENT_METADATA_FIELDS,
         "rows",
         "ncu_denominator_rows",
         "expected_denominator_rows",

@@ -48,6 +48,7 @@ python3 -m py_compile \
   scripts/plan_platform_component_experiment.py \
   scripts/audit_documentation_consistency.py \
   scripts/plot_platform_sweep_design.py \
+  scripts/plot_current_rtx3090_results.py \
   scripts/plot_dram_reporting_policy.py \
   scripts/build_gpu_component_energy_presentation.py
 
@@ -71,6 +72,7 @@ python3 scripts/summarize_platform_package_gaps.py --self-test
 python3 scripts/build_platform_intake_dashboard.py --self-test
 python3 scripts/audit_documentation_consistency.py --self-test
 python3 scripts/plot_platform_sweep_design.py --self-test
+python3 scripts/plot_current_rtx3090_results.py --self-test
 python3 scripts/plot_dram_reporting_policy.py --self-test
 
 echo "[readiness] generated command shell syntax"

@@ -10,6 +10,10 @@
 `--require-control-ncu-acceptance`를 사용해 Tensor의 `reg_operand_only`, Shared의
 `shared_scalar_addr_only`, Global L1/L2/DRAM의 `global_addr_only`도 treatment와 같은 좌표에서 NCU `accepted`인지
 확인한다. control evidence가 없거나 오염되면 coefficient를 만들지 않는다.
+Tensor control은 여기에 더해 runtime 총 SASS instruction이
+`active_SM x blocks/SM x ITER x RF`에 비례해야 한다. Static backward loop가 없거나
+`SASS instructions/expected register op < 0.1`이면 launch-only control로 판정하고
+Tensor pair 전체를 reject한다.
 
 현재 채택 가능한 component 후보는 다음이다.
 
@@ -39,6 +43,7 @@ energy gate는 서로 대체할 수 없으며 둘 다 통과해야 한다.
 |---|---|---|---|
 | static readiness | `scripts/audit_platform_power_readiness.py` | `results/summary/platform_power_readiness_audit_*.md` | profile, power API 의미, 문서, 생성 command plan 정합성 확인 |
 | preflight | `scripts/preflight_gpu_support.py` | `results/summary/*_preflight.md` | profile, CC, SM 수, NVML, CUDA target, NCU 상태 기록 |
+| Tensor binary audit | `scripts/audit_tensor_mma_binary.py` | `results/summary/*_tensor_mma_binary_audit.md` | ptxas 후 treatment HMMA, control HMMA=0/local=0/backward loop 확인 |
 | energy sweep | `scripts/run_component_regression_sweep.py` | `results/raw/*_component_finalplan_*.csv` | NCU 없이 실행, `seconds>=10`, `repeats>=5` 권장 |
 | power API audit | `scripts/audit_power_api_measurements.py` | `results/summary/*_power_api_audit.md` | `nvml_total_energy`, integration, profile power semantics 확인 |
 | power-state audit | `scripts/audit_power_state_stability.py` | `results/summary/*_power_state_audit.md` | raw row 평균 전력/endpoint power outlier 확인 |
@@ -667,7 +672,7 @@ resident block 수는 ptxas register count와 NCU의 registers/thread, achieved 
 판정하며, 요청 B 값만으로 residency를 확정하지 않는다.
 
 아래 RTX 3090 행은 v2 historical snapshot이다. 양의 상수 operand를 장시간 누적해 FP32
-accumulator update가 정지할 수 있으므로 현재 v4 coefficient로 인용하지 않는다.
+accumulator update가 정지할 수 있으므로 현재 v5 coefficient로 인용하지 않는다.
 
 | RTX 3090 accepted component | 실제 선택 좌표 | factor | 상태 |
 |---|---|---|---|

@@ -40,8 +40,8 @@ NCU가 측정한 L1 energy
    - 의도한 경로가 counter로 확인된 row만 accepted
 
 4. Matched-control 계산
-   - Shared/Global L1은 control energy rate를 treatment 시간으로 보정
-   - Tensor/L2 CG/DRAM CG는 동일 ITER로 실행한 treatment-control net energy를 직접 차감
+   - Tensor/Shared/Global L1/L2 CG/DRAM CG 모두 동일 ITER로 실행
+   - treatment-control net energy를 직접 차감하며 duration-scaled power 보정은 사용하지 않음
 
 5. pJ/FLOP, pJ/byte, pJ/bit 계산
    - Tensor는 logical FLOP denominator 사용
@@ -52,7 +52,7 @@ NCU가 측정한 L1 energy
 
 | Component/path | NCU에서 확인한 항목 | 채택 의도 |
 |---|---|---|
-| Tensor MMA incremental | Tensor/HMMA instruction, spill/local memory, L1/L2/DRAM traffic | `reg_mma`가 실제 Tensor instruction을 실행하고, control에는 Tensor instruction이 없어야 한다. |
+| Tensor MMA incremental | Tensor/HMMA instruction, control total SASS instruction, spill/local memory, L1/L2/DRAM traffic | `reg_mma`가 Tensor instruction을 실행하고, control은 HMMA 없이 expected register work에 비례해 실행되어야 한다. |
 | Shared scalar path | shared accesses, shared bytes, shared instruction count, bank conflict | shared memory scalar load path가 충분히 발생하고 bank conflict가 낮아야 한다. |
 | Global L1-hit path | path-specific L1 hit rate, L1 accesses, L1 request/hit bytes, L2 read/DRAM bytes | global load가 L1 lookup hit 중심이어야 하며 L2/DRAM leakage가 낮아야 한다. |
 | L2 CG hit path | path-specific L1 hit bytes, L2 source read hit/miss, architecture-specific fabric/remote lookup, native hit, DRAM read | `.cg` 요청은 L1TEX를 통과하되 L1 cache hit는 거의 없어야 한다. GA100/GH100은 첫 partition miss와 최종 L2 miss를 구분한다. |
@@ -76,6 +76,12 @@ L1 access는 NCU가 request counter를 제공하면 request를 쓰고, 없으면
 fallback한다. L2/DRAM access는 sector counter다. byte counter가 없으면 sector를
 32 bytes로 환산하지만, 보고서에는 이 값이 NCU-derived effective denominator임을
 명시한다.
+
+NCU CSV의 `gpu__time_duration.sum` 단위는 버전에 따라 `ns`, `us`, `ms`, `s` 또는
+긴 이름(`nsecond`, `usecond`, `msecond`, `second`)으로 기록된다. Summarizer는 이
+표기를 모두 초로 변환한 뒤 bandwidth를 계산한다. 시간 단위 변환 오류는 pJ/bit의
+energy/byte 분자·분모에는 직접 영향을 주지 않지만, 보고된 GB/s를 1,000배 이상
+왜곡할 수 있으므로 `gpu_duration_s`와 bandwidth sanity를 함께 확인한다.
 
 `lts__t_sector_op_read_hit_rate` native ratio는 확인한 GA100/GA102/GH100 NCU catalog에는
 있지만 GV100 catalog에는 없다. GA100 native ratio는 source와 LTC-fabric lookup을 함께
@@ -291,10 +297,11 @@ Tensor finalplan은 각 RF에서 treatment 목표시간의 `reg_mma` ITER와 con
 `reg_operand_only` ITER를 각각 구하고, 둘 중 큰 값을 두 mode에 동일 적용한다. 서로 다른
 ITER를 각 mode에 적용한 뒤 elapsed time으로 보정하는 이전 방식은 A100 RF4
 이상에서 work mismatch와 음수 delta를 만들 수 있어 final 경로에서 제외했다.
-`reg_operand_only`의 기존 RF 비례 FP32 FMA/checksum/memory는 제거했다. v4는
+`reg_operand_only`의 기존 RF 비례 FP32 FMA/checksum/memory는 제거했다. v5는
 A/B/C fragment, A fragment in-place sign flip, dependent scalar update, C epilogue를
 source상 공통으로 두고 treatment만 MMA를 발행한다. A 부호를 매 logical MMA마다 교대해 FP32 accumulator가
-bounded 상태를 유지한다. 다만 ptxas가 control fragment를 줄여 treatment/control의 실제
+bounded 상태를 유지한다. Scalar sink는 공통 output에 기록해 ptxas가 no-MMA control
+반복문을 제거하지 못하게 한다. 다만 ptxas가 control fragment를 줄여 treatment/control의 실제
 registers/thread는 다르므로 차분값은 pure Tensor 회로 에너지가 아니다.
 
 ```text
@@ -351,7 +358,7 @@ pJ/FLOP = delta_E_J * 1e12 / FLOP
 ```
 
 이 `0.1467 pJ/FLOP`와 broad/targeted duration-scaling에서 얻은
-`0.077-0.170 pJ/FLOP` 범위는 current v4 이전의 historical
+`0.077-0.170 pJ/FLOP` 범위는 current v5 이전의 historical
 method-sensitivity 자료다. v1 dynamic loop는 GA102 RF2에서 `HMMA/logical MMA=3`,
 다른 primary RF에서 2를 보여 logical FLOP과 issued HMMA의 비례가 깨졌다. 따라서
 이 과거 값을 현행 Tensor coefficient로 인용하거나 다른 revision과 평균하지 않는다.
@@ -372,9 +379,11 @@ method-sensitivity 자료다. v1 dynamic loop는 GA102 RF2에서 `HMMA/logical M
 v2는 당시 동일 ITER와 NCU instruction gate를 통과했지만, positive-only FP32
 accumulator가 장시간 반복에서 더 이상 수치적으로 갱신되지 않을 수 있어 superseded됐다.
 v3의 A+/A- branch도 RF2 이상에서 두 HMMA 경로가 predication으로 함께 발행돼 reject됐다.
-현행 v4는 단일 A fragment의 FP16 sign bit를 매 MMA 후 in-place로 뒤집는다. RTX 3090
-RF1/2/4/8/16에서 `HMMA/logical MMA=2`, control HMMA=0을 확인했고 RF1/2의
-FP16-to-FP32 ops/expected FLOP도 1.0이다. 새 v4 energy run 전에는 current pJ/FLOP이 없다.
+v4는 단일 A fragment의 FP16 sign bit를 뒤집었지만 scalar sink가 empty asm에만 연결되어
+RTX 3090 ptxas가 `reg_operand_only` 반복문 전체를 제거했다. HMMA=0과 spill=0만 보던
+기존 gate는 launch-only control을 검출하지 못했다. 현행 v5는 sink를 output에 저장하고,
+static backward branch와 runtime `SASS instructions/expected register op >= 0.1`을
+추가로 요구한다. v4 Tensor energy/NCU acceptance는 현행 계수로 사용할 수 없다.
 
 ## Tensor에서 NCU의 역할
 
@@ -384,6 +393,8 @@ Tensor pJ/FLOP의 분모는 NCU byte가 아니라 logical FLOP다. 따라서 Ten
 |---|---|
 | `reg_mma`에서 Tensor/HMMA instruction > 0 | 실제 WMMA가 architecture별 HMMA path로 실행됐는지 확인 |
 | `reg_operand_only`에서 Tensor/HMMA instruction = 0 | control이 no-MMA control인지 확인 |
+| control static backward branch > 0 | ptxas 후에도 control loop가 남았는지 확인 |
+| control SASS instruction / expected register op >= 0.1 | loop가 runtime work에 비례해 실행되는지 확인 |
 | treatment/control registers/thread | register footprint 불일치를 숨기지 않고 coefficient 범위를 규정 |
 | spill/local memory = 0 | register spill로 L2/DRAM traffic이 섞이는 것을 방지 |
 | L1/L2/DRAM traffic이 작음 | Tensor coefficient가 memory traffic에 오염되지 않았는지 확인 |
@@ -391,7 +402,7 @@ Tensor pJ/FLOP의 분모는 NCU byte가 아니라 logical FLOP다. 따라서 Ten
 RF sweep에서는 각 row의 HMMA 존재만으로 부족하다. `expected_logical_mma = active_SM x
 blocks/SM x ITER x RF`를 계산하고 `HMMA/logical MMA` 비율이 RF1/2/4/8/16에서 일정한지
 확인한다. GA102의 기존 runtime loop와 v3 dual-branch codegen은 strict 선형성을
-깨뜨렸다. 현재 RF1/2/4/8/16은 모두 fixed-trip v4 kernel이며, 절대 비율을 GPU 간
+깨뜨렸다. 현재 RF1/2/4/8/16은 모두 fixed-trip v5 kernel이며, 절대 비율을 GPU 간
 같게 강제하지 않고 각 target GPU 내부의 상대 spread 10% 이하를 요구한다. H100에서도
 현재 실험은 WGMMA/TMA가 아니라 FP16 WMMA가 lowering된 HMMA compatibility path다.
 
@@ -407,12 +418,17 @@ reg_operand_only 대비 reg_mma의 effective WMMA/HMMA + register/scheduler-path
 순수 Tensor Core transistor-level energy
 ```
 
+2026-07-14 RTX 3090 v5 full package는 75/75 matched pair와 30/30 Tensor
+treatment/control NCU row를 통과해 **2.140 pJ/FLOP**(95% bootstrap median CI
+2.114-2.170)을 얻었다. 이 값은 위 범위의 current effective coefficient이며, 아래
+2026-07-08/13 수치와 평균하지 않는다.
+
 ## 2026-07-08 RTX 3090 historical finalplan 예시
 
 아래 표는 2026-07-08 protocol의 matched-control 요약이며 현행 component table이
-아니다. 위 2026-07-13 fixed-RF v2 표도 현행 v4 이전의 historical evidence다.
-Tensor와 Shared/Global L1/L2는 current-protocol 전체 package를 재실행해야 하며, DRAM 행만
-현재 provisional reporting policy를 함께 표시한다.
+아니다. 위 2026-07-13 fixed-RF v2 표와 v4 dead-control 결과도 현행 v5 이전의 historical
+evidence다. RTX 3090 current 결과는
+`docs/results/gpu_power_modeling_experiment_results_ko.md`의 2026-07-14 표만 사용한다.
 
 | Component/path | median | unit | median pJ/bit | 해석 |
 |---|---:|---|---:|---|
@@ -425,15 +441,15 @@ Tensor와 Shared/Global L1/L2는 current-protocol 전체 package를 재실행해
 | Shared scalar LR4/LR8 fixed-ITER focus auxiliary | 1.190 | pJ/byte | 0.149 | LR4/LR8만 5 cycles 반복. 10/10 valid, power-state 30/30 ok, LR4 0.179/LR8 0.142 pJ/bit로 primary 0.152를 직접 지지 |
 | Global L1-hit path | 1.188 | pJ/byte | 0.148 | NCU L1 bytes 기준 effective path coefficient. C-T-C paired 30초 combined primary |
 | L2 CG hit path | 8.132 | pJ/byte | 1.017 | NCU L2 bytes 기준 effective path coefficient. C-T-C paired LR4/LR8 30초 combined primary |
-| RTX 3090 external-memory read path | 204.080 | pJ/byte 산술 환산 | 25.510 | 사용자 전달 historical observation; strict raw package 재실행 필요 |
+| RTX 3090 external-memory read path | 204.080 | pJ/byte 산술 환산 | 25.510 | 사용자 전달 historical observation; 현행 24.949 pJ/bit 결과로 superseded |
 | A100 external-memory read path | 95.400 | pJ/byte 산술 환산 | 11.925 | 사용자 전달 historical observation; 원본 package 미확보 |
 | V100 external-memory read path | 65.048 | pJ/byte 산술 환산 | 8.131 | 사용자 전달 historical observation; 원본 package 미확보 |
 
 이 표는 순수 회로 에너지 표가 아니다. GPU/device-level energy, control 차분, NCU
-denominator가 결합된 microbenchmark coefficient 표다. External-memory 행은 모두
-사용자가 전달한 historical observation으로, 새 high-entropy input, 동일 ITER
-`global_addr_only` pair, exact NCU `dram__bytes_read.sum`, strict gate를 통과한
-median/CI가 아니다. 따라서 현재 final coefficient로 인용하지 않는다.
+denominator가 결합된 과거 microbenchmark coefficient 표다. RTX 3090 external-memory
+historical row는 새 high-entropy input, 동일 ITER `global_addr_only` pair, exact NCU
+`dram__bytes_read.sum`을 사용한 24.949 pJ/bit current effective-path 결과로 대체됐다.
+A100/V100 행은 여전히 원본 current package가 없는 historical observation이다.
 
 ## A100/V100/H100 적용 시 주의
 

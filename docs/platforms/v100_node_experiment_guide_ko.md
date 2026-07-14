@@ -332,7 +332,7 @@ python3 scripts/audit_power_api_measurements.py \
   --require-explicit-measurement-scope \
   --require-exact-measurement-interval \
   --require-mode-notes-marker \
-  reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4
+  reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5
 ```
 
 이 단계에서 모든 row가 `missing_column:measurement_scope`,
@@ -343,10 +343,13 @@ stale binary/schema 문제다. 현재 source를 pull한 뒤 `cmake --build build
 archive로 옮긴 뒤 재실행한다. 구버전 CSV에 새 row를 append하면 power API audit이
 전체 reject될 수 있다.
 
-`fixed_rf_v4`는 RF1/2/4/8/16 모두 fixed-trip `unroll 1` kernel을 사용하고 한 A
+`observable_control_fixed_rf_v5`는 RF1/2/4/8/16 모두 fixed-trip `unroll 1` kernel을 사용하고 한 A
 fragment의 sign bit를 in-place로 뒤집어 FP32 accumulator를 bounded 상태로 유지한다. V100의 SASS lowering을
 Ampere와 같다고 가정하지 않으며 V100 NCU에서
 predicated HMMA=0, RF별 `HMMA/logical MMA` 상대 spread<=10%, control HMMA=0을 다시 확인해야 한다.
+또한 `reg_operand_only`의 SASS에 backward loop가 있고 runtime
+`SASS instructions/expected register op >= 0.1`이어야 한다. 이 gate가 없던 v4에서는
+ptxas가 control 반복문을 제거할 수 있었으므로 v4 Tensor energy 결과를 재사용하지 않는다.
 
 ## 8. Full sweep 실행
 

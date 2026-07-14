@@ -201,6 +201,10 @@ def plot(rows: list[dict[str, str]], output: Path) -> None:
     fig.savefig(output, dpi=220, bbox_inches="tight", facecolor="white")
     svg_output = output.with_suffix(".svg")
     fig.savefig(svg_output, bbox_inches="tight", facecolor="white")
+    lines = svg_output.read_text(encoding="utf-8").splitlines()
+    svg_output.write_text(
+        "\n".join(line.rstrip() for line in lines) + "\n", encoding="utf-8"
+    )
     plt.close(fig)
 
 

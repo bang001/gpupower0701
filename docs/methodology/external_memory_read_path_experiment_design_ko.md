@@ -9,16 +9,15 @@ effective GPU-device external-memory read-path coefficient**다.
 
 따라서 다음 수치는 물리 HBM/GDDR pJ/bit로 인용하면 안 된다.
 
-| GPU | 전달받은 값 (pJ/bit) | provenance | 현재 판정 |
+| GPU | 값 (pJ/bit) | provenance | 현재 판정 |
 |---|---:|---|---|
-| RTX 3090 | 25.510 | 사용자 전달값 | external-memory effective path 후보, strict 재실험 필요 |
+| RTX 3090 | 24.949 | 2026-07-14 raw/NCU/audit package | `accepted_effective_path`; physical GDDR6X energy 아님 |
 | A100 | 11.925 | 사용자 전달값; 원본 raw/NCU package는 이 저장소에서 독립 재계산하지 못함 | 같은 조건으로 strict 재실험 필요 |
 | V100 | 8.131 | 사용자 전달값; 원본 raw/NCU package는 이 저장소에서 독립 재계산하지 못함 | 같은 조건으로 strict 재실험 필요 |
 
-위 값이 크다는 관찰은 맞지만, 그 자체가 계산 오류의 증거는 아니다. 범위가
-다른 물리 DRAM reference와 직접 비교했기 때문이다. 다만 기존 코드에는 분모,
-압축 가능 입력, 단일 working-set, 느슨한 acceptance gate 문제가 실제로 있었으므로
-기존 값은 재실험 전까지 확정값으로 사용하지 않는다.
+위 값이 물리 DRAM reference보다 크다는 사실만으로 계산 오류라고 할 수 없다.
+측정 범위가 다르기 때문이다. RTX 3090은 기존 25.510 observation을 현행 protocol로
+재측정했으며, A100/V100은 아직 current package가 없어 확정값으로 사용하지 않는다.
 
 ## 2. Reference와 측정 범위
 
@@ -44,7 +43,7 @@ NVML `nvmlDeviceGetTotalEnergyConsumption`은 device의 누적 total energy를
 | DRAM device reference | DRAM device/access 모델 | device가 전송한 bit | HBM2/GDDR5 device pJ/bit |
 | 본 microbenchmark | NVML GPU-device total energy 차분 | strict NCU external read bit | effective external-memory read-path pJ/bit |
 
-## 3. 기존 25.510 / 11.925 / 8.131 pJ/bit가 큰 이유
+## 3. Effective-path pJ/bit가 device reference보다 큰 이유
 
 현재 차분은 다음 항을 함께 포함한다.
 
@@ -200,5 +199,5 @@ power model이 추가로 필요하다.
    load_repeat (count), NCU read GB/s를 기록한다.
 5. 문헌 device pJ/bit는 reference band로만 그리고 회귀 target이나 clamp로 쓰지
    않는다.
-6. 기존 25.510/11.925/8.131은 새 high-entropy input과 strict read-byte gate로
-   재실험하기 전에는 historical/user-reported observation으로만 남긴다.
+6. RTX 3090 24.949는 current effective path로, A100/V100 11.925/8.131은
+   재실험 전 historical/user-reported observation으로 구분한다.

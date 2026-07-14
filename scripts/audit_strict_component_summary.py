@@ -93,6 +93,9 @@ NCU_SUMMARY_BASE_REQUIRED_COLUMNS = {
 }
 
 NCU_SUMMARY_PATH_REQUIRED_COLUMNS = {
+    "shared_bytes",
+    "shared_read_bytes",
+    "shared_write_bytes",
     "l1_path_hit_rate_pct",
     "l2_path_hit_rate_pct",
     "l1_request_bytes",
@@ -101,6 +104,14 @@ NCU_SUMMARY_PATH_REQUIRED_COLUMNS = {
     "l2_read_bytes",
     "l2_read_hit_sectors",
     "l2_read_miss_sectors",
+    "local_read_bytes",
+    "local_write_bytes",
+    "spill_zero_verified",
+    "spill_local_read_inst",
+    "spill_local_write_inst",
+    "sass_inst_executed",
+    "expected_register_ops",
+    "sass_inst_per_expected_reg_op",
 }
 
 NCU_SUMMARY_REQUIRED_COLUMNS = (
@@ -143,6 +154,80 @@ NCU_METRIC_MODES = {
     "L2 CG hit path": {"l2_cg_load_only"},
 }
 
+NCU_REQUIRED_VALUE_COLUMNS_BY_MODE = {
+    "reg_mma": {
+        "tensor_hmma_inst",
+        "expected_logical_mma",
+        "tensor_hmma_per_logical_mma",
+        "tensor_pipe_active_pct",
+        "achieved_occupancy_pct",
+        "launch_warp_capacity_pct",
+        "registers_per_thread",
+        "local_read_bytes",
+        "local_write_bytes",
+        "spill_zero_verified",
+        "spill_local_read_inst",
+        "spill_local_write_inst",
+        "stall_long_scoreboard_pct",
+    },
+    "reg_operand_only": {
+        "tensor_hmma_inst",
+        "registers_per_thread",
+        "local_read_bytes",
+        "local_write_bytes",
+        "spill_zero_verified",
+        "spill_local_read_inst",
+        "spill_local_write_inst",
+        "sass_inst_executed",
+        "expected_register_ops",
+        "sass_inst_per_expected_reg_op",
+        "stall_long_scoreboard_pct",
+    },
+    "shared_scalar_load_only": {
+        "shared_bytes",
+        "shared_read_bytes",
+        "shared_write_bytes",
+        "l1_accesses",
+        "l2_accesses",
+        "dram_accesses",
+        "l1_bytes",
+        "l2_bytes",
+        "dram_bytes",
+        "stall_long_scoreboard_pct",
+    },
+    "global_l1_load_only": {
+        "l1_hit_rate_pct",
+        "l1_path_hit_rate_pct",
+        "l1_accesses",
+        "l2_accesses",
+        "dram_accesses",
+        "l1_bytes",
+        "l1_request_bytes",
+        "l1_hit_bytes",
+        "l1_miss_bytes",
+        "l2_bytes",
+        "dram_bytes",
+        "stall_long_scoreboard_pct",
+    },
+    "l2_cg_load_only": {
+        "l1_path_hit_rate_pct",
+        "l2_hit_rate_pct",
+        "l2_path_hit_rate_pct",
+        "l1_accesses",
+        "l2_accesses",
+        "dram_accesses",
+        "l1_request_bytes",
+        "l1_hit_bytes",
+        "l1_miss_bytes",
+        "l2_bytes",
+        "l2_read_bytes",
+        "l2_read_hit_sectors",
+        "l2_read_miss_sectors",
+        "dram_bytes",
+        "stall_long_scoreboard_pct",
+    },
+}
+
 STRICT_SUMMARY_BASE_NCU_EVIDENCE_COLUMNS = {
     "ncu_coordinate_rows",
     "ncu_metric_rows",
@@ -155,6 +240,8 @@ STRICT_SUMMARY_BASE_NCU_EVIDENCE_COLUMNS = {
     "denominator_scale_min_med_max",
     "ncu_denominator_bytes_representative_min_med_max",
     "ncu_shared_bytes_min_med_max",
+    "ncu_shared_read_bytes_min_med_max",
+    "ncu_shared_write_bytes_min_med_max",
     "ncu_l1_hit_rate_pct_min_med_max",
     "ncu_l2_hit_rate_pct_min_med_max",
     "ncu_l1_accesses_min_med_max",
@@ -204,7 +291,11 @@ BASE_REQUIRED_SUMMARY_METRICS = {
         "ncu_control_tensor_hmma_inst_min_med_max",
         "ncu_control_registers_per_thread_min_med_max",
     ],
-    "Shared scalar path": ["ncu_shared_bytes_min_med_max"],
+    "Shared scalar path": [
+        "ncu_shared_bytes_min_med_max",
+        "ncu_shared_read_bytes_min_med_max",
+        "ncu_shared_write_bytes_min_med_max",
+    ],
     "Global L1 hit path": [
         "ncu_l1_hit_rate_pct_min_med_max",
         "ncu_l1_bytes_min_med_max",
@@ -225,7 +316,11 @@ PATH_REQUIRED_SUMMARY_METRICS = {
         "ncu_control_registers_per_thread_min_med_max",
         "ncu_spill_zero_verified_min_med_max",
     ],
-    "Shared scalar path": ["ncu_shared_bytes_min_med_max"],
+    "Shared scalar path": [
+        "ncu_shared_bytes_min_med_max",
+        "ncu_shared_read_bytes_min_med_max",
+        "ncu_shared_write_bytes_min_med_max",
+    ],
     "Global L1 hit path": [
         "ncu_l1_path_hit_rate_pct_min_med_max",
         "ncu_l1_request_bytes_min_med_max",
@@ -528,6 +623,7 @@ def check_ncu_summary_artifact(
     rows_seen = 0
     modes_seen: set[str] = set()
     missing_files: list[str] = []
+    required_modes = NCU_SUMMARY_REQUIRED_MODES.get(component, set())
     for path in paths:
         if not path_exists(path):
             missing_files.append(path)
@@ -540,30 +636,18 @@ def check_ncu_summary_artifact(
                 problems.append(f"{path}:missing_columns=" + ",".join(missing_columns))
                 continue
             for ncu_row in reader:
-                rows_seen += 1
                 if ncu_row.get("status") != "ok":
                     continue
                 mode = ncu_row.get("mode", "")
+                if mode not in required_modes:
+                    continue
+                rows_seen += 1
                 modes_seen.add(mode)
-                for column in required_columns - {"mode", "status"}:
-                    tensor_only = {
-                        "expected_logical_mma",
-                        "tensor_hmma_per_logical_mma",
-                        "tensor_pipe_active_pct",
-                        "achieved_occupancy_pct",
-                        "launch_warp_capacity_pct",
-                        "registers_per_thread",
-                    }
-                    if column in tensor_only and mode not in {
-                        "reg_mma",
-                        "reg_operand_only",
-                    }:
-                        continue
-                    if (
-                        column == "tensor_hmma_per_logical_mma"
-                        and mode == "reg_operand_only"
-                    ):
-                        continue
+                value_columns = (
+                    NCU_REQUIRED_VALUE_COLUMNS_BY_MODE.get(mode, set())
+                    & required_columns
+                )
+                for column in value_columns:
                     value = as_float(ncu_row, column)
                     if not math.isfinite(value) or value < 0.0:
                         problems.append(f"{path}:{mode}:{column}={ncu_row.get(column, '')}")
@@ -571,7 +655,6 @@ def check_ncu_summary_artifact(
     if missing_files:
         problems.append("missing_files=" + ",".join(missing_files))
 
-    required_modes = NCU_SUMMARY_REQUIRED_MODES.get(component, set())
     missing_modes = sorted(required_modes - modes_seen)
     if missing_modes:
         problems.append("missing_modes=" + ",".join(missing_modes))
@@ -1521,6 +1604,9 @@ def run_self_test() -> None:
                 }
             ],
         )
+        unrelated_row = make_ncu_selftest_row(mode="clocked_empty")
+        for column in NCU_SUMMARY_PATH_REQUIRED_COLUMNS:
+            unrelated_row[column] = ""
         ncu_fields = sorted(NCU_SUMMARY_REQUIRED_COLUMNS)
         write_selftest_csv(
             ncu_good,
@@ -1529,6 +1615,7 @@ def run_self_test() -> None:
                 make_ncu_selftest_row(mode="reg_mma"),
                 make_ncu_selftest_row(mode="reg_operand_only"),
                 make_ncu_selftest_row(mode="reg_mma", blocks_per_sm="4"),
+                unrelated_row,
             ],
         )
         write_selftest_csv(
@@ -1599,6 +1686,17 @@ def run_self_test() -> None:
         if strict_schema_checks[-1]["status"] != "fail":
             raise AssertionError(
                 f"expected path-specific schema failure, got {strict_schema_checks}"
+            )
+        current_schema_checks: list[dict[str, str]] = []
+        check_ncu_summary_artifact(
+            current_schema_checks,
+            {**row, "ncu_summary_artifact": str(ncu_good)},
+            require_path_specific_cache_evidence=True,
+        )
+        if current_schema_checks[-1]["status"] != "pass":
+            raise AssertionError(
+                "expected component-scoped current schema pass even when an "
+                f"unrelated mode has blank path metrics, got {current_schema_checks}"
             )
 
         evidence_row = {

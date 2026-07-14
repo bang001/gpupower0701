@@ -21,7 +21,7 @@ NCU로 treatment와 control 경로가 검증된 board-level effective microbench
 순수 Tensor Core 회로 에너지
 순수 register-file access energy
 순수 L1/L2 SRAM bitcell energy
-순수 DRAM/HBM device energy
+순수 DRAM/HBM/GDDR device energy
 ```
 
 ## Component 정의
@@ -31,80 +31,78 @@ NCU로 treatment와 control 경로가 검증된 board-level effective microbench
 | Tensor MMA incremental | `reg_mma` | `reg_operand_only` | pJ/FLOP | no-MMA register/control 대비 FP16 WMMA/HMMA 증분 |
 | Shared scalar path | `shared_scalar_load_only` | `shared_scalar_addr_only` | pJ/bit | matched shared-address loop 대비 software-managed shared scalar-read path |
 | Global L1 hit path | `global_l1_load_only` | `global_addr_only` | pJ/bit | global load가 L1 hit로 끝나는 path |
-| L2 CG hit path | `l2_cg_load_only` | `global_addr_only` | pJ/bit | L1 hit를 낮춘 L2 read-hit path |
-| External-memory read path | `dram_cg_load_only` | `global_addr_only` | effective pJ/bit | strict NCU read bytes로 정규화한 GPU-device path; 물리 HBM/GDDR energy 아님 |
+| L2 CG hit path | `l2_cg_load_only` | `global_addr_only` | pJ/bit | path-specific L1 hit를 낮춘 L2 read-hit path |
+| External-memory read path | `dram_cg_load_only` | `global_addr_only` | effective pJ/bit | GPU-device global-read path; 물리 HBM/GDDR energy 아님 |
 
 Shared와 Global L1은 unified L1/shared subsystem과 관련되지만 주소 공간, instruction
-path, arbitration, denominator가 다르므로 별도 effective coefficient로 보고한다.
+path, arbitration, denominator가 다르므로 별도 effective coefficient로 보고한다. 두
+coefficient의 차이를 SRAM bitcell energy 차이라고 해석하지 않는다.
 
 ## 측정 및 검증 구조
 
 ```text
 profile/preflight
-  -> treatment/control sweep
-  -> NVML total-energy delta + idle subtraction
-  -> NCU sidecar: HMMA, shared bytes, L1/L2 hit+bytes, DRAM bytes, spill, stall
-  -> treatment와 control의 exact-coordinate acceptance
-  -> matched-control coefficient
-  -> reliability + strict summary + package audit
+  -> treatment/control parameter sweep
+  -> pair-locked 동일 ITER energy run
+  -> NVML GPU/device total-energy delta + idle subtraction
+  -> 별도 NCU sidecar: HMMA, shared/L1/L2/DRAM bytes, hit, spill, stall
+  -> treatment와 control exact-coordinate acceptance
+  -> matched-control coefficient와 반복 통계
+  -> reliability + strict-summary + platform-package audit
 ```
 
-Tensor와 모든 memory final pair는 동일 ITER의 net energy를 직접 차분한다. 모든 memory final row는 NCU actual bytes를
-분모로 사용한다. V100 L2처럼 path acceptance가 성공했더라도 treatment/control ITER가
-다르면 같은 작업량 비교가 아니므로 coefficient를 폐기한다.
+NCU replay는 power numerator와 분리한다. Profiler overhead를 energy에 넣지 않되,
+energy run과 동일한 좌표에서 실행 경로와 분모를 검증한다. 모든 final pair는 동일
+ITER를 사용한다. V100 과거 L2처럼 path acceptance가 성공했더라도 treatment/control
+ITER가 다르면 같은 작업량 비교가 아니므로 coefficient를 폐기한다.
 
-## 현재 결과 상태
+## RTX 3090 현행 결과
 
-현행 protocol을 모두 통과한 RTX 3090/V100/A100/H100 coefficient table은 아직 없다.
+2026-07-14 RTX 3090 v5 finalplan은 strict 4-component와 별도 external-memory
+effective path를 완주했다.
 
-| Platform | command readiness | measured current-protocol package | 상태 |
+| path | median | 95% bootstrap median CI | rows | 상태 |
+|---|---:|---:|---:|---|
+| Tensor MMA incremental | **2.140 pJ/FLOP** | 2.114-2.170 | 75 | strict accepted |
+| Shared scalar | **0.714 pJ/bit** | 0.680-0.923 | 15 | strict accepted |
+| Global L1 | **0.852 pJ/bit** | 0.813-0.888 | 15 | strict accepted |
+| L2 CG | **9.078 pJ/bit** | 8.935-9.299 | 30 | strict accepted |
+| External-memory read | **24.949 pJ/bit** | 24.864-25.101 | 45 | accepted effective path |
+
+![RTX 3090 current coefficients](../assets/component_energy_method/rtx3090_current_component_coefficients_20260714.png)
+
+Tensor v5 control은 static SASS에서 RF1/2/4/8/16 backward loop와 HMMA=0을 보이고,
+runtime NCU에서 operation-proportional SASS와 spill/local=0을 통과했다. Treatment의
+HMMA/logical MMA는 2로 선형이다. 그러나 treatment/control register footprint가
+완전히 같지 않으므로 Tensor 값에는 WMMA operand/accumulator register 및 scheduler
+path가 포함된다.
+
+Memory NCU는 Shared read traffic, Global-L1 path hit 99.9998-99.9999%, L2 path의
+L1 hit 0%와 L2 hit 99.9974-100%, external read의 DRAM traffic 정합을 확인했다.
+
+![RTX 3090 current NCU evidence](../assets/component_energy_method/rtx3090_current_ncu_path_evidence_20260714.png)
+
+360/360 power row가 explicit GPU/device total-energy scope를 사용했고, 180/180
+matched pair가 valid였다. NCU는 final treatment/control 72개가 accepted였으며
+비교용 baseline 한 개만 not-selected였다. Strict audit는 193/193, package audit는
+31/31 check를 통과했다.
+
+상세 sweep, raw counter 표, 그림 해석은
+`docs/results/gpu_power_modeling_experiment_results_ko.md`에 있다.
+
+## 플랫폼 상태
+
+| Platform | command readiness | current measured package | 상태 |
 |---|---|---|---|
-| RTX 3090 | ready | Tensor v4 NCU path/FLOP evidence, Shared/L1 targeted | Tensor v4 board-energy와 Shared/Global-L1/L2 전체 package 재실행 필요 |
-| V100 32GB | ready | 없음 | target node 실행/반입 필요 |
-| A100 | ready | 없음 | target node 실행/반입 필요 |
-| H100 | ready | 없음 | target node 실행/반입 필요 |
+| RTX 3090 | ready | 있음, 2026-07-14 | complete |
+| V100 32GB | ready | 없음 | target node 재실행/반입 필요 |
+| A100 | ready | 없음 | target node 재실행/반입 필요 |
+| H100 SXM5 profile | ready | 없음 | target node 실행/반입 필요 |
 
-기존 RTX 3090 strict summary를 현행 기준으로 재감사한 결과는 189 checks 중 8
-failures다. Global L1/L2의 `clocked_empty` control과 과거 NCU schema가 원인이다.
-
-| 과거 path | 과거 값 | 단위 | 현행 해석 |
-|---|---:|---|---|
-| Tensor MMA incremental | 0.129216 | pJ/FLOP | historical evidence |
-| Shared scalar | 0.170590 | pJ/bit | historical evidence |
-| Global L1 | 0.173483 | pJ/bit | provisional; address control 없음 |
-| L2 CG | 1.131073 | pJ/bit | provisional; address control 없음 |
-| RTX/A100/V100 external-memory 전달값 | **25.510 / 11.925 / 8.131** | effective pJ/bit | user-reported historical observations; 새 high-entropy/read-only strict protocol로 재실험 필요 |
-
-fixed-RF v2 median **2.252501 pJ/FLOP**은 accumulator 정체 가능성이 확인되어
-superseded historical evidence로만 남긴다. 현행 v4는 RTX 3090 RF1-16에서
-`HMMA/logical MMA=2`, control HMMA=0, local read/write=0을 확인했고 RF1/2의
-ops/expected-FLOP=1.0을 교차검증했다. 그러나 v4 board-energy run은 아직 없으므로
-현재 인용 가능한 Tensor pJ/FLOP은 없다. 상세는
-`docs/audits/tensor_mma_cross_architecture_implementation_audit_ko.md`를 따른다.
-
-2026-07-14 matched-control targeted run에서는 Shared scalar가 **0.637283 pJ/bit**
-(15/15 valid, accepted), Global L1이 **0.430305 pJ/bit**(14/15 valid,
-accepted_with_caution)였다. NCU는 Shared control read 0 B와 Global L1 hit
-99.9992-99.9999%를 확인했다. 이는 5 s targeted remediation evidence이며 표준 10 s
-full-package final table은 아니다. 상세는
-`results/summary/rtx3090_shared_l1_matched_pair_report_20260714_ko.md`를 따른다.
-
-External-memory 전달값은 strict coefficient가 아니다. 목표 pair는
-`dram_cg_load_only - global_addr_only`이며, 동일 ITER의 energy 차분과 exact NCU
-`dram__bytes_read.sum * 8` 분모, read dominance/write 오염 gate를 확보하기 전에는
-historical observation으로만 보고한다. 최신 설계는
-`docs/methodology/external_memory_read_path_experiment_design_ko.md`를 따른다.
-
-![External-memory observation과 scope별 문헌 reference](../assets/component_energy_method/external_memory_scope_comparison.png)
-
-위 그림은 GPU-device effective path, transaction/system path, memory-device/access
-model을 서로 다른 패널로 분리한다. 패널 간 간격을 순수
-controller/PHY energy로 해석하지 않는다.
-
-과거 결과의 전체 분석과 시각화는
-`archive/pre_current_protocol_20260712/docs/reports/gpu_power_modeling_whitepaper_synthesis_ko.md`와
-`archive/pre_current_protocol_20260712/docs/results/gpu_power_modeling_experiment_results_ko.md`에
-보존한다.
+Command package가 있다는 것은 코드와 실행 순서가 준비됐다는 뜻이지, 해당 GPU의
+coefficient가 측정됐다는 뜻은 아니다. V100/A100/H100은 각 architecture의 capacity,
+NVML semantics, NCU metric availability 및 L2 path selector를 적용한 뒤 동일 audit를
+통과해야 한다.
 
 ## 보고 원칙
 
@@ -112,27 +110,32 @@ controller/PHY energy로 해석하지 않는다.
 
 | 필드 | 이유 |
 |---|---|
-| GPU/profile, SM 수 | architecture/runtime 조건 고정 |
+| GPU/profile, active SM | architecture/runtime 조건 고정 |
 | treatment-control pair | coefficient 의미 결정 |
-| W_SM (KiB/SM), blocks/SM, RF/LR | sweep 좌표와 occupancy/working-set 해석 |
+| W_SM (KiB/SM), blocks/SM, RF/LR | sweep 좌표와 working-set 해석 |
 | seconds (s), repeats (count), ITER | 측정 신호와 work-count 검증 |
 | NCU treatment/control acceptance | path와 control contamination 검증 |
 | denominator source와 bytes/FLOP | pJ 단위 계산 추적 |
 | min/median/mean/max, CI, valid/invalid rows | 분산과 재현성 표시 |
 | NVML source/integration/scope | GPU 세대별 API 의미 구분 |
-| long-scoreboard stall | memory-path stall context 표시 |
+| access/bytes/hit/long-scoreboard | memory-path 증거 표시 |
 
-문헌 pJ/bit는 sanity/order-of-magnitude 비교에만 사용한다. GPUJoule의 transaction-path
-값과 HBM device/access 값은 measurement boundary가 다르므로 목표값으로 fitting하지
-않는다.
+문헌 pJ/bit는 sanity와 measurement-boundary 비교에만 사용한다. GPUJoule의
+transaction-path 값과 HBM device/access 값은 scope가 다르므로 목표값으로 fitting하지
+않는다. RTX 3090 external 24.949 pJ/bit와 HBM device 약 3.9 pJ/bit가 다르다는 사실만으로
+측정이 틀렸거나 맞았다고 판정할 수 없다.
 
 ## 다음 실험
 
-1. RTX 3090은 `results/summary/rtx3090_component_finalplan_20260712_commands.sh`로
-   현행 protocol을 재실행한다.
-2. V100/A100/H100은 각 generated command package를 target node에서 실행한다.
-3. 결과 반입 후 `scripts/run_local_readiness_checks.sh`를 실행한다.
-4. 모든 strict/package gate가 통과한 플랫폼만 component table과 visualization을 만든다.
+1. V100은 CUDA 12.x `sm_70` build와 NCU permission preflight 후 current package를
+   다시 실행한다.
+2. A100은 NCU-first L2 selector로 source+LTC-fabric logical service plateau를 먼저
+   통과시킨다.
+3. H100은 현행 WMMA compatibility result와 향후 native WGMMA/TMA/FP8 연구를
+   분리한다.
+4. 외부 플랫폼 결과 반입 후 `scripts/run_local_readiness_checks.sh`와 package/goal
+   audit를 다시 실행한다.
 
-현재 감사 근거는 `docs/audits/current_goal_alignment_audit_ko.md`와
-`results/summary/component_energy_goal_readiness_audit_20260714.md`다.
+과거 2026-07-08 protocol의 수치와 그림은
+`archive/pre_current_protocol_20260712/`에 보존한다. 현행 v5 결과와 합산하거나
+평균내지 않는다.

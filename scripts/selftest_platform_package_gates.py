@@ -780,7 +780,7 @@ def write_raw_files(
         note_parts: list[str] = []
         if mode == "reg_mma" and not omit_tensor_revision:
             note_parts.append(
-                "tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4"
+                "tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5"
             )
         if mode in {"l2_cg_load_only", "dram_cg_load_only"} and not omit_cg_warmup_policy:
             note_parts.append("global_warmup_policy=ld_global_cg")
@@ -2775,7 +2775,7 @@ def main() -> int:
         omit_tensor_revision=True,
         expected_raw_text=(
             "missing_tensor_marker=tensor_pair_kernel_revision="
-            "matched_inplace_signflip_fragment_epilogue_fixed_rf_v4"
+            "matched_inplace_signflip_observable_control_fixed_rf_v5"
         ),
     )
     run_raw_policy_case(

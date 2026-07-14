@@ -1,304 +1,180 @@
-# GPU Power Modeling 실험 결과 상태
+# GPU Power Modeling 실험 결과
 
 갱신일: 2026-07-14
+현재 측정 플랫폼: RTX 3090 (GA102, 82 active SM, GDDR6X)
 
 ## 현재 결론
 
-현행 protocol을 통과한 **완전한 RTX 3090 component table은 없다**. Tensor,
-Shared, Global L1, L2를 모두 같은 tag의 표준 10 s package로 재실행하지 않았기 때문이다.
-2026-07-13 Tensor fixed-RF v2 energy run은 당시 gate를 통과했지만, 이후 accumulator
-정체 가능성과 v3 predicated-HMMA codegen 오류를 확인해 현행 계수에서 제외했다.
-현행 v4는 RTX 3090 RF1/2/4/8/16 NCU 경로와 FLOP 선형성은 통과했으나 새 power run을
-하지 않았으므로 current Tensor pJ/FLOP은 없다. 2026-07-14에는 새 matched control의
-유효성을 확인하기 위해 Shared와 Global L1만 5 s targeted run으로 재측정했다.
+2026-07-14 RTX 3090 finalplan은 현행 Tensor v5 control, matched ITER,
+GPU/device total-energy counter, treatment/control exact-coordinate NCU acceptance를
+사용했다. 네 strict component와 별도 external-memory effective path가 모두 reliability
+gate를 통과했다.
 
-### 현행 Shared/Global-L1 targeted 결과
+이 값은 순수 회로 또는 SRAM/GDDR6X bitcell energy가 아니다. 다음과 같이 표현해야
+한다.
 
-| Component/path | 값 | 단위 | 조건 | reliability | 지위 |
-|---|---:|---|---|---|---|
-| Shared scalar path | **0.637283** | pJ/bit | W64 KiB/SM, B8, LR4/8/16, 5 s x 5, 15/15 valid | accepted, medium-high | current targeted evidence |
-| Global L1 hit path | **0.430305** | pJ/bit | W8 KiB/SM, B8, LR4/8/16, 5 s x 5, 14/15 valid | accepted_with_caution, medium | current targeted evidence |
+> NCU로 treatment와 control 경로를 검증한 workload-dependent effective
+> board-level microbenchmark coefficient
 
-Power API는 60/60 final candidate였고 NCU treatment/control은 12/12 accepted였다.
-Shared control의 반복 shared read는 0 B, treatment read는 LR4/8/16에서 각각 약
-0.269/0.537/1.075 TB였다. Global L1 treatment hit는 99.9992-99.9999%였다. 모든 valid
-coefficient denominator는 `ncu_actual_exact`다. 상세 sweep, min/median/mean/max와 제외된
-한 Global L1 pair는
-[targeted report](../../results/summary/rtx3090_shared_l1_matched_pair_report_20260714_ko.md)에
-기록했다. 이 두 값은 표준 10 s full-package final table로 확대 해석하지 않는다.
+## 최종 계수
 
-### L2 최소-counter protocol 검증
+| component | treatment - control | median | 95% bootstrap median CI | min-max | valid pairs | 판정 |
+|---|---|---:|---:|---:|---:|---|
+| Tensor MMA incremental | `reg_mma - reg_operand_only` | **2.140 pJ/FLOP** | 2.114-2.170 pJ/FLOP | 1.907-2.314 pJ/FLOP | 75/75 | strict accepted |
+| Shared scalar path | `shared_scalar_load_only - shared_scalar_addr_only` | **0.714 pJ/bit** | 0.680-0.923 pJ/bit | 0.484-1.027 pJ/bit | 15/15 | strict accepted |
+| Global L1 hit path | `global_l1_load_only - global_addr_only` | **0.852 pJ/bit** | 0.813-0.888 pJ/bit | 0.667-0.947 pJ/bit | 15/15 | strict accepted |
+| L2 CG hit path | `l2_cg_load_only - global_addr_only` | **9.078 pJ/bit** | 8.935-9.299 pJ/bit | 8.668-9.672 pJ/bit | 30/30 | strict accepted |
+| External-memory read path | `dram_cg_load_only - global_addr_only` | **24.949 pJ/bit** | 24.864-25.101 pJ/bit | 24.229-26.038 pJ/bit | 45/45 | accepted effective path |
 
-최종 L2 coefficient가 아니라 NCU 판정 방식 자체를 검증하기 위해 RTX 3090에서
-W64 KiB/SM, B8, LR4, ITER 100,000을 `l2_path_minimal`로 실행했다.
+External-memory 값은 strict 4-component 표 밖의 sanity/effective-path 결과다. GPU core의
+global-load 발행부터 L1TEX, L2, controller/PHY 및 GDDR6X board path 변화가 포함될 수
+있으므로 **물리 GDDR6X device energy**라고 부르면 안 된다.
 
-| 항목 | treatment 결과 | 기준 | 판정 |
-|---|---:|---:|---|
-| application replay | 4 회 | 적을수록 counter cross-pass 위험 감소 | 기록 |
-| L1 path hit | 0 % | <=1 % | pass |
-| device/all-TEX L2 hit | 99.9991 % | >=95 % | pass |
-| native L2 hit | 99.9451 % | >=95 % | pass |
-| `(hit+miss)/read` | 0.99998 | 0.98-1.02 | coherent |
-| observed/expected L2 bytes | 1.00002 | 0.95-1.05 | pass |
-| long scoreboard | 369.971 | NCU per-issue-active signal | 진단값, elapsed-time % 아님 |
+![RTX 3090 현행 component coefficient](../assets/component_energy_method/rtx3090_current_component_coefficients_20260714.png)
 
-같은 address control은 global input load가 0이고 acceptance를 통과했다. 이는 전체
-metric bundle에서 보였던 counter 불일치를 피하는 새 protocol의 GA102 검증이며,
-A100 L2가 통과했다는 뜻은 아니다. A100은 동일 최소 profile로 새로 실행해야 한다.
-원본은 `results/ncu/rtx3090_l2_minimal_stall_profile_20260714/`에 있다.
+그림의 Tensor 패널은 pJ/FLOP, memory 패널은 pJ/bit이므로 서로 막대 높이를 직접
+비교하지 않는다. Memory 패널은 값 범위가 넓어 log scale이다. 빈 마름모로 표시한
+external-memory 값은 strict 네 component와 측정 경계가 다르다는 뜻이다.
 
-### A100 L2 외부 실행 상태
+Shared와 Global L1의 median은 다르지만 CI가 겹친다. 따라서 이 run만으로
+`Shared가 Global L1보다 확실히 저전력`이라고 결론 내릴 수 없다. 두 값은 같은 unified
+L1/shared 물리 자원의 순수 SRAM energy가 아니라, 서로 다른 instruction/address-space,
+arbitration, request denominator를 가진 두 **effective path**다.
 
-사용자가 외부 A100 노드에서 전달한 기존 범위는 아래와 같다. 같은 tag의 raw
-`.ncu-rep`가 이 저장소에 반입되지 않았으므로 독립 재계산값이 아니라 reported external
-evidence로 구분한다.
+## Parameter Sweep
 
-| 지표 | 관찰 범위 | 교정된 strict 사용법 | 현재 상태 |
-|---|---:|---:|---|
-| source/TEX direct L2 read hit | 51-62 % | 첫 partition 진단값, 단독 95% gate 아님 | reported only |
-| native op-read hit | 67-72.5 % | source+fabric lookup model 교차검증값, 단독 95% gate 아님 | reported only |
-| logical final-service hit | 미수집 | `(source hit + fabric hit)/source read >=95%` | 재실행 필요 |
-| native-fabric-model 차이 | 미수집 | <=2 percentage points | 재실행 필요 |
+실험자가 바꾼 값과 최종 선택 좌표를 단위와 함께 기록한다. 모든 pair는 treatment와
+control에 같은 ITER를 적용했고, 각 좌표를 5회 반복했다. 목표 timed-kernel 구간은 약
+10 s다.
 
-두 범위는 모든 첫-partition miss가 LTC fabric의 다른 partition에서 hit할 때의
-`native ~= 1/(2-direct)` 관계와 일치한다. 그러나 raw `srcunit_ltcfabric` counter가
-없으므로 기존 실행을 소급 accepted로 바꾸지는 않는다. 현행 재실행은
-`l2_path_minimal`에서 source/fabric hit/miss, logical final hit, source/fabric sector
-보존성, native-model 오차, observed/expected bytes와 DRAM-read leakage를 동시에 통과한
-candidate만 energy sweep에 전달한다. 상세 설계는
-[A100 L2 fabric-aware 설계](../methodology/a100_l2_fabric_aware_experiment_design_ko.md),
-감사 이력은
-[A100 L2 counter scope 감사](../audits/a100_l2_counter_scope_and_rtx_pair_remediation_ko.md)에
-정리했다.
+| component | W_SM sweep (KiB/SM) | blocks/SM sweep | RF/LR sweep (count) | 선택/사용 좌표 | pair rows | raw rows |
+|---|---:|---:|---:|---|---:|---:|
+| Tensor MMA | 1 | 4, 8, 16 | RF 1, 2, 4, 8, 16 | 전 좌표; W_SM은 CLI placeholder이고 register working set이 아님 | 75 | 150 |
+| Shared scalar | 64 | 8 | LR 4, 8, 16 | 전 좌표 | 15 | 30 |
+| Global L1 | 8 | 8 | LR 4, 8, 16 | 전 좌표 | 15 | 30 |
+| L2 CG | 32, 64 | 8 | LR 4, 8, 16 | 전 좌표 | 30 | 60 |
+| External-memory read | 256, 512, 2,048 | 8 | LR 4, 8, 16 | 전 좌표 | 45 | 90 |
+| **합계** | - | - | - | 36 configuration coordinates x 5 repeats | **180** | **360** |
 
-### Tensor fixed-RF v2 역사적 결과와 v4 상태
+`RF`는 Tensor inner MMA grouping 수이고 cache 랜덤화 비율이 아니다. `LR`은 한 loop
+body에서 같은 경로의 load를 반복 발행하는 수다. W_SM은 memory mode에서 SM당 목표
+working set이고, Tensor mode에서는 register 용량을 의미하지 않는다.
 
-| Component/path | 값 | 단위 | pair | 근거 | 상태 |
-|---|---:|---|---|---|---|
-| Tensor MMA incremental v2 | **2.252501** | pJ/FLOP | `reg_mma - reg_operand_only`, matched ITER | RF1/2/4/8/16, 33 valid pair, 당시 NCU 10/10 accepted | superseded historical; 현행 계수로 인용 금지 |
-| Tensor MMA incremental v4 | - | pJ/FLOP | same pair, in-place sign-flip A fragment | RTX 3090 RF1-16 NCU accepted, RF1/2 ops/FLOP=1.0 | 새 board-energy run 필요 |
+Sweep의 목적은 한 좌표의 숫자를 골라내는 것이 아니라 다음을 확인하는 데 있다.
 
-v2 RF별 median은 RF1 `1.9754`, RF2 `2.3211`, RF4 `2.2733`, RF8 `2.2525`, RF16
-`2.2458 pJ/FLOP`이었다. 당시 treatment의 `HMMA/logical MMA=2`, control HMMA=0,
-local read/write=0이었지만 positive-only FP32 누적의 장시간 수치 정체를 NCU instruction
-count만으로 검출할 수 없었다. v4 구현과 새 gate는
-[Tensor 교차 아키텍처 감사](../audits/tensor_mma_cross_architecture_implementation_audit_ko.md)를
-따른다. v2 상세 조건은 역사적 재현 자료로
-[`results/summary/rtx3090_tensor_fixedrf_v2_report_20260713_ko.md`](../../results/summary/rtx3090_tensor_fixedrf_v2_report_20260713_ko.md)에
-정리했다.
+| 실험자가 조절한 것 | 관찰한 것 | 해석 |
+|---|---|---|
+| Tensor blocks/SM | Tensor pipe activity, occupancy, pJ/FLOP 분산 | GPU utilization 변화에도 계수가 유지되는지 |
+| Tensor RF | HMMA/logical MMA 선형성, control SASS scaling | treatment work와 no-MMA control work가 실제로 증가하는지 |
+| Memory W_SM | L1/L2/DRAM service 위치 | capacity 이름만 믿지 않고 NCU로 실제 residency를 확인 |
+| Memory LR | traffic bytes와 energy delta | 분모와 신호가 반복량에 따라 함께 증가하는지 |
+| 5 repeats | min/median/max, CI, power-state outlier | drift와 단일 측정 우연성을 확인 |
 
-2026-07-08 Global L1/L2 energy pair는 `clocked_empty` control을 사용했고,
-`global_addr_only`의 동일 좌표 NCU acceptance와 현행 path-specific counter schema가
-없다.
+## 측정과 계산
 
-따라서 아래 과거 수치는 현행 final 값으로 인용하지 않는다.
+각 raw row의 numerator는 NVML `nvmlDeviceGetTotalEnergyConsumption`의 timed-kernel
+구간 전후 차이인 `total_energy_mj_delta`다. scope는
+`gpu_device_total_energy_counter`이며 RTX 3090의 보조 power semantics metadata는
+`one_sec_average`다. `GetPowerUsage` 적분값을 final numerator로 섞지 않았다.
 
-| Component/path | 과거 보고값 | 단위 | 과거 pair | 현행 상태 |
-|---|---:|---|---|---|
-| Tensor MMA incremental | 0.129216 | pJ/FLOP | `reg_mma - reg_operand_only` | superseded historical; v2와 커널/프로토콜이 다름 |
-| Shared scalar path | 0.170590 | pJ/bit | `shared_scalar_load_only - clocked_empty` | superseded historical; 현행 matched shared-address control 재실행 필요 |
-| Global L1 hit path | 0.173483 | pJ/bit | `global_l1_load_only - clocked_empty` | provisional; address control 누락 |
-| L2 CG hit path | 1.131073 | pJ/bit | `l2_cg_load_only - clocked_empty` | provisional; address control 누락 |
-| RTX 3090 external-memory read path | **25.510** | effective pJ/bit | 사용자 전달값; `dram_cg_load_only - global_addr_only` 계열 | historical observation; high-entropy/read-only strict 재실험 전 확정 금지 |
-| A100 external-memory read path | **11.925** | effective pJ/bit | 사용자 전달값; 원본 package 저장소 미포함 | historical observation; 독립 재계산 불가 |
-| V100 external-memory read path | **8.131** | effective pJ/bit | 사용자 전달값; 원본 package 저장소 미포함 | historical observation; 독립 재계산 불가 |
+Treatment-control 계산의 의미는 다음과 같다.
 
-이 표의 memory 값은 pure circuit/bitcell energy가 아니라 NVML GPU-device energy
-차분으로 얻은 effective microbenchmark coefficient다. 특히 25.510/11.925/8.131은
-물리 GDDR6X/HBM2 energy가 아니며 새 strict protocol의 accepted 결과도 아니다.
+```text
+net energy(mode) = measured GPU/device energy - idle baseline energy
+delta E = net energy(treatment) - net energy(control)
+Tensor coefficient = delta E / logical FP16 MMA FLOP
+Memory coefficient = delta E / NCU-validated path bytes / 8
+```
 
-![External-memory observation과 scope별 문헌 reference](../assets/component_energy_method/external_memory_scope_comparison.png)
+분자는 board/device-level energy 차분이고, 분모는 실제 늘어난 Tensor FLOP 또는 NCU
+path byte다. 값이 작을수록 이 microbenchmark 조건에서 한 FLOP 또는 한 bit를 처리하는
+증분 board energy가 작다는 뜻이다. 다른 GPU나 일반 application에 그대로 적용되는
+물리 상수라는 뜻은 아니다.
 
-그림의 A/B/C 패널은 각각 본 실험과 같은 GPU-device effective-path
-관측, transaction/system-path 문헌 값, memory-device model을 뜻한다. 관측값이
-HBM2 device 3.97 pJ/bit보다 크더라도, GPUJoule K40 DRAM-to-L2
-30.55 pJ/bit 및 modeled HBM GPU-system 21.1 pJ/bit과 비교하면 경로 계수로서
-불가능한 크기는 아니다. 다만 architecture·process·memory·workload·meter
-범위가 다르므로 문헌값에 맞춰 current 결과로 승인할 수도 없다.
+## NCU 검증
 
-과거 `clocked_empty` DRAM 수치는 pJ/byte에서 pJ/bit로 환산한 산술 자체보다 control
-정책이 문제다. 현행 설계는 동일 ITER의 address control을 요구하므로 그 값을
-external-memory effective-path coefficient로 재사용하지 않는다. 최신 정책은
-[External-Memory Read-Path 설계](../methodology/external_memory_read_path_experiment_design_ko.md)를 따른다.
+NCU는 power run과 분리한 sidecar replay에서 수집했다. profiler overhead를 energy
+numerator에 넣지 않으면서도, energy와 동일한
+`mode,W_SM,blocks/SM,active_SM,RF,LR` 좌표를 검증한다. 전체 73 NCU row 중 final path와
+control 72개가 accepted였고, 비교용 `clocked_empty` 1개만 `not_selected`로 reject됐다.
 
-과거 전체 표, sweep, 그래프, 해석은
-`archive/pre_current_protocol_20260712/docs/results/gpu_power_modeling_experiment_results_ko.md`에
-보존한다. 옛 DRAM 막대가 최신값처럼 보이지 않도록 historical coefficient 그림은
-active 결과 문서에서 제거하고 scope 비교 그림으로 대체했다.
+![RTX 3090 현행 NCU path evidence](../assets/component_energy_method/rtx3090_current_ncu_path_evidence_20260714.png)
 
-## 현행 재감사 결과
+위 그림 A/B는 accepted treatment row의 median traffic과 access count다. byte cell과
+access cell의 색은 log scale이다. 그림 C의 long-scoreboard 값은 NCU
+`per_issue_active` 계열의 percent-like 신호로, 100을 넘어도 실행 시간의 100%를
+뜻하지 않는다.
 
-| Audit | 결과 | 의미 |
+### Path Acceptance
+
+| component | treatment/control NCU rows | 핵심 acceptance evidence | 결과 |
+|---|---:|---|---|
+| Tensor MMA | 15/15 | treatment HMMA/logical MMA=2, control HMMA=0, control SASS/expected op>=0.1, spill/local=0 | accepted |
+| Shared scalar | 3/3 | shared read bytes>0, address control shared read=0, bank conflict=0, global L1 request=0 | accepted |
+| Global L1 | 3/3 | path-specific L1 hit 99.9998-99.9999%, L1 hit bytes nearly equal request bytes | accepted |
+| L2 CG | 6/6 | path-specific L1 hit=0%, final L2 read hit 99.9974-100%, low DRAM leakage | accepted |
+| External read | 9/9 | L1 hit=0%, external read/expected traffic 정합, write/read<=0.0045% | accepted effective path |
+
+Tensor static binary audit도 RF 1/2/4/8/16에서 treatment HMMA>0, control HMMA=0,
+control backward branch>0, local allocation=0을 확인했다. 이는 v4에서 ptxas가
+`reg_operand_only` loop를 제거했던 문제를 v5가 해결했음을 보여준다. 다만 treatment는
+WMMA fragment를 유지하고 control은 더 작은 scalar footprint를 사용하므로 2.140
+pJ/FLOP에는 Tensor Core뿐 아니라 unmatched register/operand/scheduler path가 포함된다.
+
+### 실제 Access/Byte/Stall 값
+
+다음 값은 accepted treatment row의 median이다. RTX 3090 summary의 access unit은
+sector이고 traffic unit은 byte(B)다.
+
+| path | shared read accesses | L1 accesses | L2 accesses | DRAM accesses | shared read bytes | L1 request bytes | L2 read bytes | DRAM read bytes | long-SB signal |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Shared scalar | 4.198 G | 0 | 0 | 3.735 M | 537.395 GB | 0 | 0 | 119.531 MB | 0.001231 |
+| Global L1 | 0 | 16.794 G | 20.992 k | 4.398 M | 0 | 537.395 GB | 0.672 MB | 140.728 MB | 2.040 |
+| L2 CG | 0 | 16.794 G | 16.794 G | 8.595 M | 0 | 537.395 GB | 537.398 GB | 271.764 MB | 396.113 |
+| External read | 0 | 16.794 G | 16.794 G | 16.803 G | 0 | 537.395 GB | 537.400 GB | 537.677 GB | 670.066 |
+
+`ld.global.cg`도 request 발행 과정에서 L1TEX를 통과하므로 L2/External row에 L1 request
+access/bytes가 보이는 것은 정상이다. 실제 L1 hit bytes가 0에 가깝고 L2 또는 DRAM
+service counter가 증가하는지로 경로를 구분한다.
+
+## 품질 감사
+
+| audit | 결과 | 해석 |
 |---|---:|---|
-| old strict summary current-protocol reaudit | 181 pass, 8 fail | old path-specific schema와 address-control evidence 부족 |
-| current goal readiness | 4 fail, 6 missing, 0 warning | RTX 3090 재실행 및 외부 V100/A100/H100 결과 필요 |
-| platform implementation readiness | all pass | profile/command package 구현은 정적 기준 통과 |
+| Power API | 360/360 `final_candidate` | 모든 raw row가 explicit GPU/device total-energy delta 사용 |
+| Power state | 358 `ok`, 2 `caution`, 0 `reject` | 2개 temperature outlier를 기록했으나 hard reject는 없음 |
+| Matched-control detail | 180/180 valid | 음수, ITER mismatch, NCU/control mismatch 없음 |
+| Component reliability | strict 4/4 accepted | external은 별도 `accepted_effective_path` |
+| NCU acceptance | 72 accepted, 1 not-selected reject | final treatment/control은 모두 accepted |
+| Strict summary audit | 193 checks, 0 failures, 0 warnings | schema, counter, scope, pair 증거 통과 |
+| Platform package audit | 31 checks, 0 failures, 0 missing, 0 warnings | RTX 3090 결과 package 완결 |
 
-근거:
+## 결론 내릴 수 있는 것과 없는 것
 
-- `results/summary/rtx3090_current_protocol_reaudit_20260714.md`
-- `results/summary/component_energy_goal_readiness_audit_20260714.md`
-- `docs/audits/current_goal_alignment_audit_ko.md`
-
-## 보존된 RTX 3090 NCU 경로 검증 결과
-
-아래 내용은 2026-07-08 factor sidecar와 2026-07-09 **실제 RTX 3090 live
-NCU run**에서 얻은 historical path evidence다. 원본 NCU CSV와 `.ncu-rep`가 저장소에
-남아 있어 재검산할 수 있으므로, 현행 결과 문서에도 보존한다.
-
-다만 여기서 `accepted`는 **당시 treatment kernel의 경로 판정 기준을 통과했다**는
-뜻이다. Global L1/L2/DRAM의 동일 좌표 `global_addr_only` control acceptance까지
-요구하는 2026-07-12 현행 protocol의 final coefficient 승인을 뜻하지 않는다.
-
-| 증거 층 | 실행일 | 검증한 내용 | 재사용 가능한 결론 | 재사용하면 안 되는 결론 |
-|---|---|---|---|---|
-| factor sidecar | 2026-07-08 | RF/LR별 treatment path, hit rate, access/byte traffic, stall | 당시 선택한 kernel이 Tensor/Shared/L1/L2/DRAM 방향으로 동작했는지 | 현행 control gate까지 통과한 최종 pJ/FLOP 또는 pJ/bit |
-| live evidence run | 2026-07-09 | 실제 NCU output에서 필수 필드가 채워지는지 | access count, bytes, shared bytes, stall/status counter의 실재와 대표 경로 | 반복 energy run과 결합된 새 coefficient 또는 순수 회로 에너지 |
-
-### NCU 검증 이미지
-
-![RTX 3090 NCU hit-rate, access, byte 및 status 검증](../assets/component_energy_method/ncu_hit_rate_validation.png)
-
-![RTX 3090 live NCU evidence fields](../assets/component_energy_method/ncu_live_evidence_fields.png)
-
-![RTX 3090 NCU path별 byte traffic](../assets/component_energy_method/ncu_path_validation_bytes.png)
-
-첫 그림은 2026-07-08 factor sidecar의 대표 RF/LR=4 row와 reject 예시를 함께
-보여준다. 두 번째 그림은 2026-07-09 live run 6개 대표 row에서 요청한 evidence
-field가 실제로 채워졌는지를 보여준다. 세 번째 그림은 Shared/L1/L2/DRAM byte
-traffic의 크기 차이를 log scale로 비교한다. 이 그림들은 energy coefficient 그래프가
-아니며, NCU 경로 증거 시각화다.
-
-### 확인 필드와 단위
-
-| 확인 항목 | NCU 요약 열 | 단위/해석 |
-|---|---|---|
-| L1 access count | `l1_accesses` | 이 RTX 3090 run에서는 sector. 다른 metric set에서는 request일 수 있어 `l1_access_unit`을 함께 확인 |
-| L2 access count | `l2_accesses` | sector |
-| DRAM access count | `dram_accesses` | sector |
-| Shared traffic | `shared_bytes` | byte (B), SASS shared data byte counter 기반 |
-| L1/L2/DRAM traffic | `l1_bytes`, `l2_bytes`, `dram_bytes` | byte (B) |
-| Long scoreboard | `stall_long_scoreboard_pct` | `%` 표기의 NCU `per_issue_active` 파생 신호. 단순 시간 점유율이 아님 |
-| Path 판정 | `acceptance`, `acceptance_reason` | 당시 path gate의 accepted/rejected와 이유 |
-| Evidence 완전성 | `status`, `reason` | 필수 열이 실제 live NCU 결과에 존재하는지 |
-
-`stall_long_scoreboard_pct`는 이름에 `%`가 있지만 active issue당 stall된 warp 수를
-정규화한 파생 metric이므로 100을 넘을 수 있다. 예를 들어 L2/DRAM의 864.97와
-1784.08을 각각 실행 시간의 864.97%, 1784.08%로 읽으면 안 된다. 여기서는 memory
-dependency가 강한 path인지 비교하는 **percent-like stall signal**로만 사용한다.
-
-### 2026-07-08 factor sidecar 대표 결과
-
-아래 표는 RF/LR=4 treatment/control 대표 row다. `l2_cg_load_only`와
-`dram_cg_load_only`에서 L1 access가 커도 L1 hit가 거의 0이므로, 그 수는 L1에
-데이터가 머물렀다는 뜻이 아니라 L1TEX request-side sector traffic으로 해석한다.
-
-| mode | 좌표 | 당시 acceptance | L1 hit (%) | L2 hit (%) | L1 accesses | L2 accesses | DRAM accesses | shared bytes (B) | L1 bytes (B) | L2 bytes (B) | DRAM bytes (B) | long SB signal (%) | field status |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `reg_mma` | RF=4 | accepted | 34.9586 | 77.5795 | 0 sectors | 0 sectors | 1.99776e6 sectors | 0 | 0 | 8.02851e7 | 6.39284e7 | 0.010039 | pass |
-| `reg_operand_only` | RF=4 | accepted | 31.1890 | 26.0331 | 0 sectors | 9.03367e5 sectors | 3.19101e6 sectors | 0 | 0 | 1.87625e8 | 1.47636e8 | 0.009723 | pass |
-| `shared_scalar_load_only` | LR=4 | accepted | 21.0747 | 42.0761 | 0 sectors | 4.14979e6 sectors | 5.72894e6 sectors | 5.37401e11 | 0 | 4.05844e8 | 3.02841e8 | 0.002106 | pass |
-| `global_l1_load_only` | LR=4 | accepted | 99.9982 | 66.9942 | 3.35872e10 sectors | 5.66108e6 sectors | 7.19713e6 sectors | 0 | 1.07479e12 | 5.92794e8 | 4.52661e8 | 17.4469 | pass |
-| `l2_cg_load_only` | LR=4 | accepted | 0.000006 | 99.8978 | 1.67936e10 sectors | 1.67970e10 sectors | 1.19183e7 sectors | 0 | 5.37395e11 | 5.37997e11 | 5.40672e8 | 867.454 | pass |
-| `dram_cg_load_only` | LR=4 | accepted | 0.000006 | 0.104067 | 1.67936e10 sectors | 1.68016e10 sectors | 1.68197e10 sectors | 0 | 5.37395e11 | 5.38836e11 | 5.38608e11 | 1747.88 | pass |
-
-당시 reject된 비교 후보도 path 선정 근거로 남긴다.
-
-| mode | 좌표 | 당시 acceptance | L1 hit (%) | L2 hit (%) | shared bytes (B) | L1 bytes (B) | L2 bytes (B) | DRAM bytes (B) | long SB signal (%) | reject reason |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| `l2_load_only` | W_SM=64 KiB, B=16 | rejected | 88.3689 | 99.7936 | 0 | 1.07479e12 | 1.25376e11 | 2.95498e8 | 70.7279 | L1 hit가 너무 높아 L2-only 후보가 아님 |
-| `shared_load_only` | W_SM=64 KiB, B=16 | rejected | 26.8489 | 57.6059 | 5.37401e11 | 0 | 4.56121e8 | 3.19504e8 | 0.000554 | shared bank conflict 4.1984e9가 검출됨 |
-
-이 두 row는 capacity와 mode 이름만으로 path를 확정할 수 없고, hit/access/byte 및 bank
-conflict counter를 함께 봐야 한다는 근거로만 사용한다.
-
-원본 요약은
-[factor stability acceptance CSV](../../results/summary/rtx3090_finalplan_ncu_factor_stability_acceptance_20260708.csv)와
-[evidence field check](../../results/summary/rtx3090_ncu_evidence_field_check_20260709.md)에
-있다. 전체 factor sidecar는 Tensor RF=1,2,4,8,16과 memory LR=4,8,16을 포함한다.
-
-### 2026-07-09 실제 live NCU run
-
-이 run은 coefficient를 다시 계산하기 위한 power 반복 실험이 아니라, 보고서에 쓰는
-필드가 실제 NCU output에서 수집되는지 double-check한 실험이다. 공통 조건은 RTX 3090
-82 active SM과 blocks/SM=16이며, 각 mode의 상세 좌표는 다음과 같다.
-
-| mode | W_SM (KiB/SM) | ITER (count) | RF (unitless) | LR (count) |
-|---|---:|---:|---:|---:|
-| `reg_mma` | 2048 | 100,000 | 4 | 1 |
-| `reg_operand_only` | 2048 | 100,000 | 4 | 1 |
-| `shared_scalar_load_only` | 64 | 100,000 | 1 | 4 |
-| `global_l1_load_only` | 16 | 100,000 | 1 | 4 |
-| `l2_cg_load_only` | 64 | 100,000 | 1 | 4 |
-| `dram_cg_load_only` | 8192 | 100,000 | 1 | 4 |
-
-| mode | 당시 acceptance | L1 hit (%) | L2 hit (%) | L1 accesses | L2 accesses | DRAM accesses | shared bytes (B) | L1 bytes (B) | L2 bytes (B) | DRAM bytes (B) | long SB signal (%) | live field status |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `reg_mma` | accepted | 36.2957 | 32.3856 | 0 sectors | 431,231 sectors | 2.16480e6 sectors | 0 | 0 | 1.20292e8 | 9.38189e7 | 0.010564 | pass |
-| `reg_operand_only` | accepted | 31.7291 | 63.2529 | 0 sectors | 427,908 sectors | 2.11342e6 sectors | 0 | 0 | 1.21160e8 | 9.01961e7 | 0.009671 | pass |
-| `shared_scalar_load_only` | accepted | 20.8079 | 15.0719 | 0 sectors | 724,793 sectors | 3.04068e6 sectors | 5.37401e11 | 0 | 1.55649e8 | 1.19054e8 | 0.001967 | pass |
-| `global_l1_load_only` | accepted | 99.9998 | 57.2715 | 3.35872e10 sectors | 41,984 sectors | 4.38920e6 sectors | 0 | 1.07479e12 | 1.79393e8 | 1.40454e8 | 17.4343 | pass |
-| `l2_cg_load_only` | accepted | 0.000007 | 99.9066 | 1.67936e10 sectors | 1.67994e10 sectors | 1.40017e7 sectors | 0 | 5.37395e11 | 5.38188e11 | 7.19515e8 | 864.970 | pass |
-| `dram_cg_load_only` | accepted | 0.000007 | 0.038381 | 1.67936e10 sectors | 1.67998e10 sectors | 1.68180e10 sectors | 0 | 5.37395e11 | 5.38663e11 | 5.38470e11 | 1784.08 | pass |
-
-필수 evidence field는 6/6 대표 row에서 모두 `pass`였다. 해석 가능한 핵심은 다음과
-같다.
-
-| path | live NCU에서 확인된 사실 | 현재 사용할 때의 제한 |
-|---|---|---|
-| Tensor treatment/control | `reg_mma`에 HMMA 1.0496e9, `reg_operand_only`에 HMMA 0; 두 mode 모두 당시 spill/local counter 0 | 현행 kernel revision과 treatment-control pair lock으로 재실행 필요 |
-| Shared scalar | shared 5.37401e11 B, shared bank conflict 0, global traffic은 shared traffic보다 매우 작음 | Shared SRAM bitcell 단독 에너지가 아니라 scalar shared load path 증거 |
-| Global L1 | L1 hit 99.9998%, L1 1.07479e12 B, L2/DRAM leakage는 훨씬 작음 | 당시 energy control이 `clocked_empty`; 현행 `global_addr_only` control 재실행 필요 |
-| L2 CG | L1 hit 약 0%, L2 hit 99.9066%, DRAM/L2 bytes 약 0.134% | stall-heavy effective path이며 pure L2 SRAM energy가 아님 |
-| External-memory CG | L1/L2 hit가 거의 0%, DRAM 5.38470e11 B | 과거 traffic 경로 증거일 뿐 현행 read-only strict coefficient는 아님 |
-
-Live run의 재검산 경로:
-
-| artifact | 경로와 역할 |
+| 결론 내릴 수 있는 것 | 결론 내리면 안 되는 것 |
 |---|---|
-| NCU summary CSV | [ncu_cache_validation_summary.csv](../../results/ncu/rtx3090_ncu_evidence_check_20260709/ncu_cache_validation_summary.csv): live raw metric을 mode별 열로 정규화 |
-| NCU path acceptance | [rtx3090_ncu_evidence_check_acceptance_20260709.md](../../results/summary/rtx3090_ncu_evidence_check_acceptance_20260709.md): 당시 path gate 결과 |
-| Evidence field audit | [rtx3090_ncu_evidence_live_field_check_20260709.md](../../results/summary/rtx3090_ncu_evidence_live_field_check_20260709.md): 요청 필드 6/6 pass 확인 |
-| NCU details/raw metrics | [live NCU directory](../../results/ncu/rtx3090_ncu_evidence_check_20260709/): mode별 `.ncu-rep`, `_details.csv`, `_raw_metrics.csv` |
+| 현행 RTX 3090 microbenchmark 조건의 effective coefficient | 순수 Tensor transistor energy 또는 순수 register energy |
+| NCU상 Shared, Global-L1, L2, External 경로가 의도대로 분리됨 | Shared SRAM과 L1 SRAM의 물리 bitcell energy가 서로 다르다는 주장 |
+| L2 path가 Global L1보다 이 실험에서 큰 board-level 증분을 보임 | 모든 application에서 고정된 L1:L2 에너지 비율 |
+| external read path가 약 24.95 pJ/bit임 | GDDR6X chip 자체가 24.95 pJ/bit라는 주장 |
+| RTX 3090 package가 current gate를 통과함 | V100/A100/H100에도 같은 계수를 복사 가능하다는 주장 |
 
-## RTX 3090 재실행 조건
+V100/A100/H100 command package는 준비되어 있으나 해당 target node의 current-protocol
+측정 package가 이 저장소에 아직 반입되지 않았다. 플랫폼별 결과는 각 GPU에서 다시
+측정하고 같은 audit를 통과시켜야 한다.
 
-| Component | modes | energy W_SM (KiB/SM) | energy blocks/SM | strict NCU W/B | sweep |
-|---|---|---:|---|---|---|
-| Tensor | `reg_operand_only,reg_mma` | 2048 | 8,16 | 2048/8 | RF 1,2,4,8,16 |
-| Shared scalar | `shared_scalar_addr_only,shared_scalar_load_only` | 32,64 | 8,16 | 64/8 | LR 4,8,16; NCU 1,2,4,8,16; 동일 pair ITER |
-| Global L1 | `global_addr_only,global_l1_load_only` | 8,16 | 8,16 | 8/8 | LR 4,8,16; NCU 1,2,4,8,16 |
-| L2 CG | `global_addr_only,l2_cg_load_only` | 64 | 8,16 | 64/8 | LR 4,8,16; NCU 1,2,4,8,16 |
-| External-memory read | `global_addr_only,dram_cg_load_only` | 256,512,1024,2048 | 8,16 | W2048/B8 anchor | LR 4,8,16; NCU 1,4,8,16; read-only denominator |
+## 재검산 경로
 
-공통 energy 조건은 target 10 s, 5 repeats다. Tensor와 모든 memory pair는 treatment/control-floor
-dual calibration 후 큰 동일 ITER를 두 mode에 적용한다. Final analyzer는
-`--require-control-ncu-acceptance`를 사용한다.
+| artifact | 경로 |
+|---|---|
+| strict component summary | [Markdown](../../results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260714.md) / [CSV](../../results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260714.csv) |
+| matched-control summary/detail | [summary](../../results/summary/rtx3090_component_finalplan_20260714_matched_control_summary.csv) / [detail](../../results/summary/rtx3090_component_finalplan_20260714_matched_control_detail.csv) |
+| NCU acceptance | [Markdown](../../results/summary/rtx3090_component_finalplan_20260714_ncu_acceptance.md) / [CSV](../../results/summary/rtx3090_component_finalplan_20260714_ncu_acceptance.csv) |
+| NCU normalized counters | [CSV](../../results/ncu/rtx3090_component_finalplan_ncu_factor_20260714/ncu_cache_validation_summary.csv) |
+| Tensor binary audit | [Markdown](../../results/summary/rtx3090_component_finalplan_20260714_tensor_mma_binary_audit.md) |
+| Power API/state audit | [API](../../results/summary/rtx3090_component_finalplan_20260714_power_api_audit.md) / [state](../../results/summary/rtx3090_component_finalplan_20260714_power_state_audit.md) |
+| Reliability/instability audit | [reliability](../../results/summary/rtx3090_component_finalplan_20260714_component_reliability_audit.md) / [instability](../../results/summary/rtx3090_component_finalplan_20260714_matched_control_instability_audit.md) |
+| Strict/package audit | [strict](../../results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_20260714.md) / [package](../../results/summary/rtx3090_platform_result_package_audit_20260714.md) |
 
-실행:
-
-```bash
-bash results/summary/rtx3090_component_finalplan_20260712_commands.sh
-```
-
-NCU 권한 오류가 있을 때만 NCU 경로를 sudo로 실행한다.
-
-```bash
-NCU_USE_SUDO=1 bash results/summary/rtx3090_component_finalplan_20260712_commands.sh
-```
-
-상세 명령과 acceptance 기준은
-`results/summary/rtx3090_component_finalplan_20260712_command_plan.md`를 따른다.
-
-## Final 인정 조건
-
-1. Power row가 explicit GPU/device total-energy counter scope를 사용한다.
-2. Tensor/Shared/Global L1/L2 treatment NCU path가 exact coordinate에서 accepted다.
-3. `reg_operand_only`와 `global_addr_only` control도 같은 좌표에서 accepted다.
-4. Memory denominator가 `ncu_actual_exact`이고 단위가 표에 기록된다.
-5. matched-control, reliability, strict summary, strict summary audit, package audit가
-   모두 통과한다.
-6. 숫자의 hierarchy가 그럴듯하다는 이유로 실패 gate를 무시하지 않는다.
-
-새 결과가 생성되기 전까지 보고서에는 “RTX 3090 historical/provisional result”라고
-표기한다.
+과거 protocol의 수치와 그림은 `archive/pre_current_protocol_20260712/` 및
+`results/archive/`에 보존한다. 현행 결과와 합쳐 평균내지 않는다.

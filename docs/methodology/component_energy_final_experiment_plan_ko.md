@@ -43,10 +43,10 @@
 
 | 기존 항목 | 판정 | 이유 | 새 처리 |
 |---|---|---|---|
-| Tensor v1 `0.077-0.170`, v2 `2.2525 pJ/FLOP` | superseded historical | v1은 RF별 HMMA 비례성이 깨졌고, v2는 장시간 양의 FP32 누적이 정체될 수 있다. v3의 A+/A- branch는 RF2 이상에서 predicated HMMA 두 경로를 발행했다. | v4는 한 A fragment의 sign bit를 매 MMA 후 뒤집는다. RTX 3090 NCU에서 RF1/2/4/8/16 모두 `HMMA/logical=2`, control HMMA=0을 확인했지만 새 energy run 전이므로 current pJ/FLOP은 없음 |
+| Tensor v1 `0.077-0.170`, v2 `2.2525 pJ/FLOP`, v4 | superseded/rejected | v1은 RF별 HMMA 비례성이 깨졌고, v2는 장시간 양의 FP32 누적이 정체될 수 있다. v3는 predicated HMMA 두 경로를 발행했다. v4는 ptxas가 no-MMA control loop를 제거했다. | v5는 A sign flip을 유지하고 scalar sink를 output에 저장한다. Static control backward loop와 runtime SASS/register-op 비례성을 모두 검증한 fresh run만 채택 |
 | Global L1 `0.449 pJ/bit` | 후보값 미만 | L1 hit path는 맞지만 energy row 6개 중 2개가 음수였다. | 음수 row가 사라지는지 seconds/repeats를 늘려 재실험한다. |
 | L2 `0.798 pJ/bit` | 후보값 | CG L2 path는 맞지만 long scoreboard가 크고 1개 음수 row가 있었다. | L2는 stall을 보고하고, pJ/bit를 L2 SRAM 단독값으로 부르지 않는다. |
-| External-memory 기존 전달값: RTX 25.510, A100 11.925, V100 8.131 pJ/bit | strict 재검증 전 historical observation | raw/NCU scope가 완전히 재현되지 않았고 total/expected denominator, 압축 가능 입력, 단일 W 문제가 있었다. | high-entropy input, architecture별 W sweep, NCU read-only denominator로 재실험한다. |
+| External-memory 기존 전달값: RTX 25.510, A100 11.925, V100 8.131 pJ/bit | historical observation | raw/NCU scope가 완전히 재현되지 않았고 total/expected denominator, 압축 가능 입력, 단일 W 문제가 있었다. | RTX는 high-entropy/W sweep/read-only denominator로 24.949 pJ/bit 재측정 완료; A100/V100은 재실험한다. |
 | Register direct `263 pJ/update` | 폐기 | scalar ALU, dependency, scheduler/control, active power를 작은 update 수로 나눈 값이다. | pure register-file energy로 쓰지 않는다. |
 
 ## 4. 실험 분리 원칙
@@ -58,7 +58,7 @@ energy 계수는 아래 NCU 기준을 통과한 mode만 사용한다.
 | Path | mode | NCU 채택 기준 |
 |---|---|---|
 | Tensor | `reg_mma` | HMMA instruction > 0, spill/local memory 0, L1/L2/DRAM traffic이 작음 |
-| Tensor control | `reg_operand_only` | 새 final run은 HMMA=정확히 0, spill/local=0, treatment와 동일 ITER. legacy fixed epilogue 완화는 과거 결과 설명에만 사용 |
+| Tensor control | `reg_operand_only` | HMMA=정확히 0, spill/local=0, static backward loop>0, runtime SASS/expected register op>=0.1, treatment와 동일 ITER |
 | Shared scalar | `shared_scalar_load_only` | shared bytes/accesses 존재, expected shared bytes와 같은 order, bank conflict 0 또는 매우 낮음 |
 | Global L1 | `global_l1_load_only` | path-specific L1 hit >=95%, L1 request/hit bytes 존재, L2 read/L1 request <=1%, DRAM/L1 request <=1% |
 | L2 hit | `l2_cg_load_only` | architecture-specific final L2 service >=95%, L1 path hit <=1%, L1 hit/request bytes <=1%, DRAM-read/source-L2-read <=2%. GA100은 source+LTC-fabric logical hit와 native-model coherence 사용 |
@@ -88,7 +88,8 @@ control에 동일하게 적용한 뒤 net energy를 직접 차분한다.
 `reg_mma`와 `reg_operand_only`는 A/B/C fragment 선언, dependent scalar update,
 in-place A-sign flip, source epilogue를 공통으로 두되 treatment만 MMA를 발행한다.
 A fragment의 FP16 sign bit를 매 logical MMA 후 뒤집어 accumulator를 bounded 상태로
-유지한다. ptxas 최적화 후 control의
+유지한다. v5는 최종 scalar sink를 공통 output에 기록해 control 반복문의 제거를
+막는다. ptxas 최적화 후 control의
 register footprint가 더 작으므로 결과는 pure Tensor 회로 에너지가 아니다.
 Shared는 동일 dynamic shared allocation, 초기화, index/checksum loop를 유지하되
 반복 shared read만 제거한 `shared_scalar_addr_only`를 control로 쓴다. Global L1/L2/DRAM은
@@ -189,15 +190,16 @@ board baseline/scheduler 시간까지 포함한 effective completion-energy coef
 `2.2525 pJ/FLOP`는 모두 역사적 민감도 자료다. v2는 NCU 10/10과 energy pair
 33/35를 통과했지만 장시간 constant-positive FP32 accumulation 정체 가능성이 뒤늦게
 확인되어 superseded되었다. v3도 predicated dual-HMMA codegen 때문에 reject했다.
-현행 v4는 RTX 3090 RF1/2/4/8/16에서 runtime NCU 선형성을 통과했으며, 각 GPU에서
-v4 binary/NCU gate를 통과한 뒤 새 board-energy run으로만 coefficient를 만든다.
+v4의 RTX 3090 treatment NCU 선형성은 통과했지만 control loop 제거를 검출하지 못해
+현행 근거로 사용할 수 없다. 각 GPU에서 v5 binary backward-loop audit과 runtime
+SASS/register-op 및 HMMA/FLOP gate를 통과한 새 board-energy run으로만 coefficient를 만든다.
 
 성공 기준:
 
 | 기준 | 통과 조건 |
 |---|---|
 | execution | 모든 row `smid_histogram_ok=true`, elapsed >= 4 s |
-| Tensor | 동일 ITER, control HMMA=0, treatment `HMMA/logical MMA` RF spread<=10%, spill/local=0, RF별 최소 5 valid pair, pair timestamp gate, `delta_E>=10 J`, coefficient>0 |
+| Tensor | 동일 ITER, control HMMA=0, control backward loop>0, control SASS/expected-op>=0.1, treatment `HMMA/logical MMA` RF spread<=10%, spill/local=0, RF별 최소 5 valid pair, pair timestamp gate, `delta_E>=10 J`, coefficient>0 |
 | Shared scalar | 모든 load_repeat에서 양수, NCU shared path accepted |
 | Global L1 | 음수 row가 남으면 final에서 제외 또는 control 재설계 |
 | L2 | final L2 service >=95%, DRAM-read/source-L2-read <=2%, long scoreboard를 결과 표에 포함. GA100은 direct/native lookup 수치를 final hit로 오인하지 않음 |

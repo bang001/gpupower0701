@@ -20,7 +20,7 @@ from typing import Any, Iterable
 
 TENSOR_MARKER = (
     "tensor_pair_kernel_revision="
-    "matched_inplace_signflip_fragment_epilogue_fixed_rf_v4"
+    "matched_inplace_signflip_observable_control_fixed_rf_v5"
 )
 CG_MARKER = "global_warmup_policy=ld_global_cg"
 L2_REVISION_MARKER = "l2_residency_revision=topology_policy_warmup_v2"

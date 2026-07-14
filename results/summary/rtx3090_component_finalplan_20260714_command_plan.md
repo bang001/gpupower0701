@@ -301,7 +301,7 @@ no-MMA control can still compile to fewer registers than treatment; therefore th
 coefficient includes WMMA/HMMA operand and accumulator RF activity and is not a
 pure Tensor circuit coefficient. Report both launch register counts.
 The raw Tensor rows must contain
-`tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4`
+`tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5`
 and `tensor_operand_source=register_fill_no_memory` in `notes`.
 CG rows must contain `global_warmup_policy=ld_global_cg`. The package audit
 rejects either missing marker so a stale binary with the same CSV schema cannot

@@ -1177,7 +1177,7 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
         }
         if (is_register_operand_mode(opts.mode)) {
           extra +=
-              "tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4;"
+              "tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5;"
               "tensor_instruction_api=wmma_m16n16k16_f16_f32;"
               "tensor_instruction_scope=architecture_lowered_hmma_compatibility;"
               "tensor_operand_source=register_fill_no_memory;"

@@ -421,6 +421,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     schema_smoke_csv = f"{raw_prefix}_schema_smoke.csv"
     schema_smoke_audit_csv = f"{summary_prefix}_schema_smoke_power_api_audit.csv"
     schema_smoke_audit_md = f"{summary_prefix}_schema_smoke_power_api_audit.md"
+    tensor_binary_audit_csv = f"{summary_prefix}_tensor_mma_binary_audit.csv"
+    tensor_binary_audit_md = f"{summary_prefix}_tensor_mma_binary_audit.md"
     matched_summary = f"{summary_prefix}_matched_control_summary.csv"
     matched_detail = f"{summary_prefix}_matched_control_detail.csv"
     matched_md = f"{summary_prefix}_matched_control_report.md"
@@ -487,6 +489,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         schema_smoke_csv,
         schema_smoke_audit_csv,
         schema_smoke_audit_md,
+        tensor_binary_audit_csv,
+        tensor_binary_audit_md,
         tensor_pair_calibration_csv,
         shared_pair_calibration_csv,
         l1_pair_calibration_csv,
@@ -850,6 +854,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         line(["python3", "scripts/summarize_ncu_cache_metrics.py", "--self-test"]),
         line(["python3", "scripts/merge_ncu_validation_summaries.py", "--self-test"]),
         line(["python3", "scripts/analyze_ncu_path_acceptance.py", "--self-test"]),
+        line(["python3", "scripts/audit_tensor_mma_binary.py", "--self-test"]),
         line(["python3", "scripts/select_l2_path_configuration.py", "--self-test"]),
         line(["python3", "scripts/analyze_matched_control_energy.py", "--self-test"]),
         line(["python3", "scripts/audit_power_api_measurements.py", "--self-test"]),
@@ -1036,15 +1041,29 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--require-explicit-measurement-scope",
                 "--require-exact-measurement-interval",
                 "--require-mode-notes-marker",
-                "reg_operand_only=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
+                "reg_operand_only=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5",
                 "--require-mode-notes-marker",
-                "reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
+                "reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5",
                 "--require-mode-notes-marker",
                 "l2_cg_load_only=global_warmup_policy=ld_global_cg",
                 "--require-mode-notes-marker",
                 "dram_cg_load_only=global_warmup_policy=ld_global_cg",
                 "--require-mode-notes-marker",
                 "dram_cg_load_only=input_data_pattern=splitmix64_uniform_fp16_v1",
+            ]
+        ),
+        line(
+            [
+                "python3",
+                "scripts/audit_tensor_mma_binary.py",
+                "--binary",
+                q(binary),
+                "--profile",
+                q(args.target_profile),
+                "--out-csv",
+                q(tensor_binary_audit_csv),
+                "--out-md",
+                q(tensor_binary_audit_md),
             ]
         ),
         "",
@@ -1187,9 +1206,9 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--require-explicit-measurement-scope",
                 "--require-exact-measurement-interval",
                 "--require-mode-notes-marker",
-                "reg_operand_only=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
+                "reg_operand_only=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5",
                 "--require-mode-notes-marker",
-                "reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
+                "reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5",
                 "--require-mode-notes-marker",
                 "shared_scalar_addr_only=shared_pair_kernel_revision=matched_shared_addr_v1",
                 "--require-mode-notes-marker",
@@ -1801,6 +1820,7 @@ summary self-tests. In particular,
 `scripts/summarize_ncu_cache_metrics.py --self-test`,
 `scripts/merge_ncu_validation_summaries.py --self-test`,
 `scripts/analyze_ncu_path_acceptance.py --self-test`,
+`scripts/audit_tensor_mma_binary.py --self-test`,
 `scripts/analyze_matched_control_energy.py --self-test`,
 `scripts/audit_power_api_measurements.py --self-test`, and
 `scripts/remediate_wsl_wallclock_intervals.py --self-test`,
@@ -1910,8 +1930,12 @@ no-MMA control can still compile to fewer registers than treatment; therefore th
 coefficient includes WMMA/HMMA operand and accumulator RF activity and is not a
 pure Tensor circuit coefficient. Report both launch register counts.
 The raw Tensor rows must contain
-`tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4`
+`tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5`
 and `tensor_operand_source=register_fill_no_memory` in `notes`.
+Before the energy sweep, `audit_tensor_mma_binary.py` must also find a backward
+branch in every RF1/2/4/8/16 control kernel after ptxas. Runtime NCU then requires
+`smsp__sass_inst_executed.sum / expected register operations >= 0.1`; HMMA=0 by
+itself is not proof that a no-MMA control loop executed.
 CG rows must contain `global_warmup_policy=ld_global_cg`. The package audit
 rejects either missing marker so a stale binary with the same CSV schema cannot
 silently pass.

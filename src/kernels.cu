@@ -133,8 +133,15 @@ __device__ __forceinline__ void toggle_fragment_sign(
 __device__ __forceinline__ void store_register_pair_output(
     fragment<accumulator, 16, 16, 16, float>& c, unsigned sink,
     float* output) {
-  consume_uint(sink);
-  if (!output) return;
+  if (!output) {
+    consume_uint(sink);
+    return;
+  }
+
+  // Make the no-MMA control loop observable to ptxas. Without this store,
+  // ptxas can delete every register_control_step even though the CUDA source
+  // contains volatile inline PTX, leaving a launch-only control kernel.
+  c.x[0] = __uint_as_float(sink);
 #pragma unroll
   for (int k = 0; k < c.num_elements; ++k) {
     output[blockIdx.x * 256 + threadIdx.x * c.num_elements + k] = c.x[k];

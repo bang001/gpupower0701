@@ -6,9 +6,9 @@ warp-level FP16 `m16n16k16` MMA operation on NVIDIA Tensor Core GPUs.
 ## Presentation
 
 GPU component/path별 effective microbenchmark coefficient가 만들어지는 전체 과정을
-22장 PowerPoint로 정리했다. 현행 finalplan과 2026-07-08 RTX 3090 historical snapshot을
-분리하고, NVML measurement scope, treatment-control, NCU denominator/path 검증 및
-strict/package audit를 단계별로 설명한다.
+22장 PowerPoint로 정리했다. 현행 finalplan과 2026-07-14 RTX 3090 v5 결과를 중심으로
+NVML measurement scope, treatment-control, NCU denominator/path 검증 및
+strict/package audit를 단계별로 설명한다. 이전 protocol은 historical로만 구분한다.
 
 - [PowerPoint](docs/presentations/gpu_component_energy_experiment_whitepaper_ko.pptx)
 - [Rendered PDF](docs/presentations/gpu_component_energy_experiment_whitepaper_ko.pdf)
@@ -42,6 +42,8 @@ git pull --ff-only origin main
 nvidia-smi
 nvcc --version
 ncu --version
+NCU_BIN="$(command -v ncu)"
+test -n "$NCU_BIN"
 TAG="$(date +%Y%m%d)"
 ```
 
@@ -78,6 +80,7 @@ cmake --build build --clean-first -j
 python3 scripts/plan_platform_component_experiment.py \
   --target-profile rtx3090 \
   --binary ./build/a100_fp16_energy_v2 \
+  --ncu "$NCU_BIN" \
   --tag "$TAG"
 
 bash "results/summary/rtx3090_component_finalplan_${TAG}_commands.sh"
@@ -97,6 +100,7 @@ cmake --build build-v100 --clean-first -j
 python3 scripts/plan_platform_component_experiment.py \
   --target-profile v100 \
   --binary ./build-v100/a100_fp16_energy_v2 \
+  --ncu "$NCU_BIN" \
   --tag "$TAG"
 
 bash "results/summary/v100_component_finalplan_${TAG}_commands.sh"
@@ -113,6 +117,7 @@ cmake --build build-a100 --clean-first -j
 python3 scripts/plan_platform_component_experiment.py \
   --target-profile a100 \
   --binary ./build-a100/a100_fp16_energy_v2 \
+  --ncu "$NCU_BIN" \
   --tag "$TAG"
 
 bash "results/summary/a100_component_finalplan_${TAG}_commands.sh"
@@ -129,6 +134,7 @@ cmake --build build-h100 --clean-first -j
 python3 scripts/plan_platform_component_experiment.py \
   --target-profile h100 \
   --binary ./build-h100/a100_fp16_energy_v2 \
+  --ncu "$NCU_BIN" \
   --tag "$TAG"
 
 bash "results/summary/h100_component_finalplan_${TAG}_commands.sh"
@@ -136,7 +142,10 @@ bash "results/summary/h100_component_finalplan_${TAG}_commands.sh"
 
 생성된 shell은 strict preflight, power/energy 측정, treatment-control NCU
 검증, matched-control 분석, reliability audit, strict summary 및 package
-audit를 순서대로 수행한다. NCU가 `ERR_NVGPUCTRPERM`을 반환하면 기본 자동
+audit를 순서대로 수행한다. Energy sweep 전에는 `cuobjdump` 기반 Tensor binary
+audit도 실행해 treatment HMMA, control HMMA=0, local spill=0뿐 아니라
+`reg_operand_only`의 backward loop가 ptxas 후에도 남아 있는지 확인한다. NCU가
+`ERR_NVGPUCTRPERM`을 반환하면 기본 자동
 재시도가 `sudo -E`를 사용한다. 처음부터 sudo NCU를 강제하려면 다음처럼
 실행한다. 전체 energy harness가 아니라 NCU invocation만 권한 상승 대상이다.
 
@@ -171,69 +180,36 @@ Do not equate API visibility with coefficient validity: `power.draw.*`,
 or provisional fallbacks, but the current final denominator policy requires a
 GPU/device total-energy mJ delta plus NCU path validation.
 
-**Current protocol status (2026-07-14):** the RTX 3090 coefficients produced on
-2026-07-08 are historical evidence, not current strict-final values. Their
-Global L1/L2 energy pairs use `clocked_empty` and do not carry same-coordinate
-`global_addr_only` NCU acceptance. The current protocol requires address
-controls, exact control NCU acceptance, and pair-locked Tensor/Shared/Global-L1/L2/external-memory work. See
-`docs/audits/current_goal_alignment_audit_ko.md` and rerun
-`results/summary/rtx3090_component_finalplan_20260714_commands.sh` before
-publishing updated RTX 3090 coefficients.
+**Current protocol status (2026-07-14):** the RTX 3090 v5 finalplan package is
+complete. All four strict components passed reliability, strict-summary, and
+platform-package audits. The external-memory row passed separately as an
+effective GPU-device read path, not physical GDDR6X energy.
 
-Historical RTX 3090 result artifacts:
+| Path | Current result | Scope/status |
+|---|---:|---|
+| Tensor MMA incremental | `2.140 pJ/FLOP` | strict accepted; includes unmatched WMMA register/scheduler path |
+| Shared scalar | `0.714 pJ/bit` | strict accepted effective path |
+| Global L1 hit | `0.852 pJ/bit` | strict accepted effective path |
+| L2 CG hit | `9.078 pJ/bit` | strict accepted effective path |
+| External-memory read | `24.949 pJ/bit` | `accepted_effective_path`; not GDDR6X device energy |
+
+The run contains 360 raw energy rows, 180/180 valid matched pairs, and 73 NCU
+rows. Final treatment/control evidence accounts for 72 accepted NCU rows; the
+remaining `clocked_empty` baseline is intentionally `not_selected`. The strict
+summary audit passed 193 checks with no failures or warnings, and the platform
+package audit passed 31 checks with no failures, missing artifacts, or warnings.
+
+Current RTX 3090 artifacts:
 
 | artifact | path |
 |---|---|
-| current-protocol alignment audit | `docs/audits/current_goal_alignment_audit_ko.md` |
-| current-protocol reaudit of old strict result | `results/summary/rtx3090_current_protocol_reaudit_20260714.md` |
-| current-protocol rerun plan | `results/summary/rtx3090_component_finalplan_20260714_command_plan.md` |
-| historical 2026-07-08 component summary | `results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md` |
-| historical 2026-07-08 reliability audit | `results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.md` |
-| historical 2026-07-08 NCU acceptance CSV | `results/summary/rtx3090_strict_scope_fresh_ncu_combined_acceptance_20260708.csv` |
-| historical 2026-07-08 summary audit | `results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_20260708.md` |
-| legacy explicit-scope component summary | `results/summary/rtx3090_strict_scope_component_coefficients_20260708.md` |
-| legacy explicit-scope component CSV | `results/summary/rtx3090_strict_scope_component_coefficients_20260708.csv` |
-| strict report | `results/summary/rtx3090_finalplan_stability_strict_report_20260708_ko.md` |
-| strict summary CSV | `results/summary/rtx3090_finalplan_stability_strict_matched_control_summary_20260708.csv` |
-| factor exact-NCU report | `results/summary/rtx3090_finalplan_stability_factor_exactncu_report_20260708_ko.md` |
-| factor exact-NCU CSV | `results/summary/rtx3090_finalplan_stability_factor_exactncu_matched_control_summary_20260708.csv` |
-| power API audit | `results/summary/rtx3090_finalplan_stability_power_api_audit_20260708.md` |
-| power-state audit | `results/summary/rtx3090_finalplan_stability_power_state_audit_20260708.md` |
-| component reliability audit | `results/summary/rtx3090_finalplan_stability_component_reliability_audit_20260708.md` |
-| matched-control instability audit | `results/summary/rtx3090_finalplan_stability_matched_control_instability_audit_20260708.md` |
-| platform power/readiness audit | `results/summary/platform_power_readiness_audit_20260708.md` |
-| current component-energy goal readiness audit | `results/summary/component_energy_goal_readiness_audit_20260714.md` |
-| current Shared/Global-L1 matched-pair targeted report | `results/summary/rtx3090_shared_l1_matched_pair_report_20260714_ko.md` |
-| Tensor targeted rerun | `results/summary/rtx3090_tensor_targeted_rf8_rf16_report_20260708_ko.md` |
-| Tensor fixed-ITER check | `results/summary/rtx3090_tensor_fixed_iter_rf8_rf16_report_20260708_ko.md` |
-| Tensor RF8 duration-scaling check | `results/summary/rtx3090_tensor_rf8_duration_scaling_report_20260708_ko.md` |
-| Tensor RF16 duration-scaling check | `results/summary/rtx3090_tensor_rf16_duration_scaling_report_20260708_ko.md` |
-| Shared/L1 targeted rerun | `results/summary/rtx3090_targeted_shared_l1_stability_report_20260708_ko.md` |
-| Shared duration-scaling check | `results/summary/rtx3090_shared_duration_scaling_report_20260708_ko.md` |
-| Shared LR4 paired 30 s stability auxiliary check | `results/summary/rtx3090_shared_paired_lr4_30s_stability_report_20260708_ko.md` |
-| Shared LR8 paired 30 s combined auxiliary check | `results/summary/rtx3090_shared_paired_lr8_30s_combined_report_20260708_ko.md` |
-| Shared LR16 paired 30 s combined auxiliary check | `results/summary/rtx3090_shared_paired_lr16_30s_combined_report_20260708_ko.md` |
-| Shared LR16 paired 60 s low-stability auxiliary check | `results/summary/rtx3090_shared_paired_lr16_60s_stability_report_20260708_ko.md` |
-| Shared LR4/LR8/LR16 interleaved 30 s auxiliary check | `results/summary/rtx3090_shared_interleaved_lr4_lr8_lr16_30s_report_20260708_ko.md` |
-| Shared LR4/LR8/LR16 fixed-ITER auxiliary check | `results/summary/rtx3090_shared_fixediter_lr4_lr8_lr16_report_20260708_ko.md` |
-| Shared LR16 fixed-ITER focus check | `results/summary/rtx3090_shared_fixediter_lr16_focus_report_20260708_ko.md` |
-| Shared LR4/LR8 fixed-ITER focus check | `results/summary/rtx3090_shared_fixediter_lr4_lr8_focus_report_20260708_ko.md` |
-| L1 duration-scaling check | `results/summary/rtx3090_l1_duration_scaling_report_20260708_ko.md` |
-| L1 30 s stability check | `results/summary/rtx3090_l1_30s_stability_report_20260708_ko.md` |
-| L1 60 s stability auxiliary check | `results/summary/rtx3090_l1_60s_stability_report_20260708_ko.md` |
-| L1 paired 30 s combined primary check | `results/summary/rtx3090_l1_paired_30s_combined_report_20260708_ko.md` |
-| L1 LR8 paired 30 s auxiliary check | `results/summary/rtx3090_l1_paired_lr8_30s_stability_report_20260708_ko.md` |
-| Shared/L2 LR4 30 s stability check | `results/summary/rtx3090_shared_l2_30s_stability_report_20260708_ko.md` |
-| L2 targeted rerun | `results/summary/rtx3090_targeted_l2_stability_report_20260708_ko.md` |
-| L2 LR4/LR8 paired 30 s combined primary check | `results/summary/rtx3090_l2_paired_lr4_lr8_30s_combined_report_20260708_ko.md` |
-| L2 LR4 paired 30 s auxiliary check | `results/summary/rtx3090_l2_paired_lr4_30s_stability_report_20260708_ko.md` |
-| L2 LR8 paired 30 s auxiliary check | `results/summary/rtx3090_l2_paired_lr8_30s_stability_report_20260708_ko.md` |
-| historical 2026-07-08 reporting CSV | `results/summary/rtx3090_current_reporting_component_coefficients_20260708.csv` |
-| historical 2026-07-08 evidence matrix | `results/summary/rtx3090_current_reporting_evidence_matrix_20260708.md` |
-| historical 2026-07-08 sanity audit | `results/summary/rtx3090_current_component_sanity_audit_20260708.md` |
-| historical 2026-07-08 primary selection audit | `results/summary/rtx3090_current_primary_selection_audit_20260708_ko.md` |
-| current DRAM reporting policy | `results/summary/rtx3090_dram_current_reporting_policy_20260712.md` |
-| result overview | `docs/results/gpu_power_modeling_experiment_results_ko.md` |
+| readable result report and figures | `docs/results/gpu_power_modeling_experiment_results_ko.md` |
+| strict component summary | `results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260714.md` |
+| NCU acceptance and raw counter table | `results/summary/rtx3090_component_finalplan_20260714_ncu_acceptance.md` |
+| Tensor v5 binary audit | `results/summary/rtx3090_component_finalplan_20260714_tensor_mma_binary_audit.md` |
+| power API / power-state audits | `results/summary/rtx3090_component_finalplan_20260714_power_api_audit.md`, `results/summary/rtx3090_component_finalplan_20260714_power_state_audit.md` |
+| strict/package audits | `results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_20260714.md`, `results/summary/rtx3090_platform_result_package_audit_20260714.md` |
+| multi-platform readiness audit | `results/summary/component_energy_goal_readiness_audit_20260714.md` |
 
 Experiment setup and method documents:
 
@@ -242,68 +218,22 @@ Experiment setup and method documents:
 | How does the current experiment work? | `docs/methodology/howitworks.md` |
 | What are the final sweep/settings and gates? | `docs/methodology/component_energy_final_experiment_plan_ko.md` |
 | How are NCU counters used for pJ/FLOP and pJ/bit? | `docs/methodology/ncu_validation_energy_calculation_ko.md` |
-| What does the external-memory pJ/bit mean and how is it swept? | `docs/methodology/external_memory_read_path_experiment_design_ko.md` |
-| How is GA100 L2 partition-fabric traffic separated and accepted? | `docs/methodology/a100_l2_fabric_aware_experiment_design_ko.md` |
-| Why did the A100 Tensor RF/L2 strict run fail, and what changed? | `docs/audits/a100_strict_summary_failure_remediation_ko.md` |
-| How should A100/V100/H100 be run? | `docs/platforms/cross_platform_component_experiment_guide_ko.md` |
-| How do RTX 3090/A100/V100 parameters and experiment counts differ? | `docs/platforms/cross_platform_component_experiment_guide_ko.md` sections 4.0-4.5 |
-| What power APIs are available by GPU generation, and which ones can be final numerators? | `docs/platforms/power_measurement_api_matrix_ko.md` |
-| How do I check profile/power readiness before a new platform run? | `results/summary/platform_power_readiness_audit_20260708.md` and `scripts/audit_platform_power_readiness.py` |
-| How do I refresh local audits, external package gap reports, and the dashboard? | `scripts/run_local_readiness_checks.sh` |
-| Is the broader multi-platform goal complete? | `results/summary/component_energy_goal_readiness_audit_20260714.md` and `scripts/audit_component_goal_readiness.py` |
+| How are platform capacities, sweeps, and NCU differences handled? | `docs/platforms/cross_platform_component_experiment_guide_ko.md` |
+| What power APIs and semantics apply by GPU generation? | `docs/platforms/power_measurement_api_matrix_ko.md` |
 | Where is the full documentation map? | `docs/README.md` |
 
-The goal readiness audit treats a platform result package as valid only when the
-component summary policy, strict summary audit artifact, reliability artifact,
-power API audit artifact, power-state audit artifact, and fresh NCU acceptance
-artifact all pass under the power measurement matrix. New platform packages
-should build their report summary with `scripts/build_strict_component_summary.py`
-from the accepted reliability, matched-control, power API, power-state, and NCU
-acceptance artifacts before running `scripts/audit_strict_component_summary.py`.
-It also checks that A100/V100/H100 generated command packages exist and contain
-the expected finalplan gates; that check proves execution readiness, not measured
-component coefficients.
+The current Tensor revision is
+`matched_inplace_signflip_observable_control_fixed_rf_v5`. Static binary audit
+requires treatment HMMA, control HMMA=0, no local allocation, and a backward
+branch in every no-MMA control. Runtime NCU additionally requires
+HMMA/logical-MMA linearity, operation-proportional control SASS, and zero
+spill/local traffic. `W_SM=1 KiB` is only a Tensor CLI placeholder and RF means
+inner MMA grouping. The coefficient is not pure Tensor circuitry because WMMA
+operand/accumulator registers and scheduler behavior are not fully matched.
 
-The current Tensor kernel revision is
-`tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4`.
-It fills operands directly into WMMA register fragments, alternates the sign of
-operand A so the FP32 accumulator remains bounded, and uses `W_SM=1 KiB` only as
-a CLI placeholder; Tensor memory working set is not applicable. RF means inner
-MMA grouping, not cache reuse. Static sm_86/sm_80/sm_90 binary audits show HMMA
-in every treatment, zero HMMA in controls, no LDG/LDS operand load, and no local
-allocation. They also show different treatment/control register footprints, so
-the coefficient includes the WMMA/HMMA register and scheduler path and is not
-pure Tensor Core circuit energy.
-
-The older fixed-RF v2 RTX 3090 result (`2.2525 pJ/FLOP`) is superseded because
-its constant positive accumulation can stop changing in FP32 during long energy
-runs. It remains historical sensitivity evidence only. A current v4 energy
-coefficient requires a fresh power run plus NCU HMMA/logical-MMA linearity at
-RF1/2/4/8/16. See
-`docs/audits/tensor_mma_cross_architecture_implementation_audit_ko.md`.
-
-Older RTX 3090 Tensor and memory experiments remain useful only as historical
-method-sensitivity and path evidence. They do not form a current full component
-table:
-
-| Path | Historical observation | Current status |
-|---|---:|---|
-| Tensor v1 | `0.077-0.170 pJ/FLOP` | superseded historical; v2도 v4 구현 감사로 superseded됨 |
-| Shared scalar | roughly `0.06-0.24 pJ/bit` across LR/order/control variants | historical and strongly method-sensitive; full current package rerun required |
-| Global L1 | roughly `0.11-0.17 pJ/bit` | historical/provisional; current `global_addr_only` control evidence is missing |
-| L2 CG | roughly `0.96-1.13 pJ/bit` | historical/provisional; current matched-ITER address control is missing |
-| External-memory read path | RTX 3090 `25.510`, A100 `11.925`, V100 `8.131 pJ/bit` | user-reported historical observations; not strict coefficients or pure HBM/GDDR energy; rerun with the current read-only protocol |
-
-The 2026-07-08 strict snapshot did use `nvml_total_energy`,
-`total_energy_mj_delta`, and explicit GPU/device scope, so it is retained as API
-and historical treatment-path evidence. It predates the current address-control,
-control-NCU, current Tensor v4, and path-specific schema gates. Detailed historical
-sweeps and interpretations are preserved in
-`archive/pre_current_protocol_20260712/docs/results/gpu_power_modeling_experiment_results_ko.md`.
-The active status and allowed reporting language are in
-`docs/results/gpu_power_modeling_experiment_results_ko.md`.
-The architecture-aware external-memory protocol and interpretation boundary are
-in `docs/methodology/external_memory_read_path_experiment_design_ko.md`.
+The v4 control loop was removed by ptxas and is invalid. Earlier RTX 3090
+snapshots and figures remain under `archive/pre_current_protocol_20260712/` and
+`results/archive/`; they must not be averaged with the current v5 result.
 
 Platform guides:
 
@@ -788,6 +718,14 @@ Generated plots include:
 - feasibility heatmap
 - regression residual plot when `predicted_E_J` exists in the CSV
 
+현행 RTX 3090 coefficient 및 NCU access/byte/stall 그림은 accepted summary에서
+직접 다시 생성한다.
+
+```bash
+python3 scripts/plot_current_rtx3090_results.py --self-test
+python3 scripts/plot_current_rtx3090_results.py --tag 20260714
+```
+
 ## CSV Notes
 
 Rows are per GPU. For multi-GPU runs, active GPU rows use per-GPU operation
@@ -820,11 +758,11 @@ elapsed-time-scaled `idle_baseline_J`. `net_E_J = delta_E_J - idle_baseline_J`.
   energy unless elapsed-time matching and NCU traffic validation pass. Large
   elapsed ratios or negative `*_mma - *_load_only` coefficients mean the pair is
   diagnostic-only.
-- Current final packages require pair-locked identical ITER for Tensor, L2 CG,
-  and DRAM CG. L2/DRAM use `--memory-pair-lock-iters` plus their corresponding
-  `--l2-pair-policy matched-iters` or `--dram-pair-policy matched-iters` analyzer
-  gate. A duration-scaled L2/DRAM row or `iter_ratio != 1` is rejected even when
-  NCU shows the intended cache/memory path.
+- Current final packages require pair-locked identical ITER for Tensor and every
+  final memory pair: Shared scalar, Global L1, L2 CG, and external-memory CG.
+  The planner uses matched-ITER pair policies and analyzer hard gates; a
+  duration-scaled row or `iter_ratio != 1` is rejected even when NCU shows the
+  intended path.
 
 ## Included Reference Assets
 

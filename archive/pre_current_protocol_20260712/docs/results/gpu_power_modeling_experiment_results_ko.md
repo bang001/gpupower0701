@@ -498,9 +498,9 @@ Global L1은 9개 중 2개가 negative 또는 weak-signal gate에 걸렸다. 이
 
 ![Finalplan sweep conditions](../assets/component_energy_method/finalplan_sweep_design_matrix.png)
 
-![NCU hit-rate validation](../../../../docs/assets/component_energy_method/ncu_hit_rate_validation.png)
+![NCU hit-rate validation](../assets/component_energy_method/ncu_hit_rate_validation.png)
 
-![Live NCU evidence fields](../../../../docs/assets/component_energy_method/ncu_live_evidence_fields.png)
+![Live NCU evidence fields](../assets/component_energy_method/ncu_live_evidence_fields.png)
 
 ![NCU traffic validation](../../../../docs/assets/component_energy_method/ncu_path_validation_bytes.png)
 
@@ -581,7 +581,7 @@ acceptance report에 표시하는 필드가 실제 NCU output에서 채워지는
 
 Live NCU check에서 확인한 필드:
 
-![Live NCU evidence fields](../../../../docs/assets/component_energy_method/ncu_live_evidence_fields.png)
+![Live NCU evidence fields](../assets/component_energy_method/ncu_live_evidence_fields.png)
 
 | 확인 항목 | 표의 열 |
 |---|---|

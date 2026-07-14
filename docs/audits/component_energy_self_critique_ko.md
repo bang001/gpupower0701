@@ -4,11 +4,14 @@
 
 ## 현재 판정
 
-완전한 current-protocol component table은 아직 없다. RTX 3090 Tensor v4는 runtime
-NCU path/FLOP 검증까지만 현행 근거가 있고 새 board-energy coefficient는 없다.
-Shared/Global-L1/L2도 새 address-control 및 package gate로 다시 실행해야 한다.
-V100/A100/H100도 코드와 command package는 준비됐지만
-각 target node의 accepted 전체 package가 저장소에 반입되지 않았다.
+RTX 3090은 2026-07-14 현행 v5 package에서 Tensor, Shared scalar, Global L1, L2
+strict table과 별도 external-memory effective path를 생성했다. Fresh runtime NCU,
+board-energy, reliability, strict-summary, package audit가 모두 통과했다. 따라서
+`RTX 3090 current-protocol result가 없다`는 과거 상태 설명은 더 이상 유효하지 않다.
+
+다만 V100/A100/H100은 코드와 command package만 준비됐고, 각 target node의 accepted
+전체 package가 저장소에 반입되지 않았다. RTX 3090 결과도 pure circuit energy가
+아니며, 특히 Tensor treatment/control register footprint가 완전히 같지 않다.
 
 따라서 “코드가 구현됐다”, “NCU path가 통과했다”, “component coefficient가 확정됐다”를
 서로 다른 상태로 구분한다.
@@ -22,8 +25,9 @@ V100/A100/H100도 코드와 command package는 준비됐지만
 | 일반 `l2_load_only`를 L2-only로 간주 | RTX 3090에서 L1 hit가 높았음 | `l2_cg_load_only`와 path-specific counter 사용 | GPU별 exact-coordinate NCU 필요 |
 | `shared_load_only`를 clean shared path로 간주 | bank conflict가 커 경로가 오염됨 | `shared_scalar_load_only`를 primary로 선택 | bank conflict와 global leakage 계속 보고 |
 | expected bytes만으로 pJ/bit 계산 | 실제 transaction 수와 다를 수 있음 | strict memory row는 `ncu_actual_exact` 요구 | metric availability와 sector 단위 GPU별 확인 |
-| Global L1/L2에 `clocked_empty` control 사용 | 주소 생성과 global loop 비용이 treatment에만 남음 | `global_addr_only` exact-coordinate control로 변경 | RTX 3090 memory 전체 재실행 |
+| Global L1/L2에 `clocked_empty` control 사용 | 주소 생성과 global loop 비용이 treatment에만 남음 | `global_addr_only` exact-coordinate control로 변경 | RTX 3090 통과; 외부 플랫폼 재실행 |
 | Tensor mode별 독립 ITER | control/treatment logical work가 달라질 수 있음 | RF별 dual calibration의 최대 동일 ITER | 플랫폼별 새 raw/calibration manifest |
+| v4 Tensor control loop 제거 | scalar sink가 empty asm에만 연결돼 ptxas가 `reg_operand_only` 반복문을 삭제; HMMA=0/spill=0 gate는 이를 놓침 | v5 sink를 output에 저장하고 static backward branch + runtime SASS/register-op gate 추가 | RTX 3090 통과; 외부 플랫폼 clean build와 fresh NCU |
 | V100 L2 mode별 독립 ITER | NCU L2 hit는 통과했지만 control ITER가 약 2배라 9개 음수 | L2 동일 ITER, direct net-energy 차분, mismatch hard reject | V100 L2 energy와 downstream package 재실행 |
 | DRAM duration-scaled pair | address control과 treatment work count가 다를 수 있음 | DRAM도 동일 ITER 직접 차분 | DRAM은 strict 4-component 표 밖 sanity로 유지 |
 | 음수 또는 작은 양수를 결과로 승격 | drift/noise/control mismatch 신호일 수 있음 | negative, minimum delta/fraction, power-state gate 적용 | 반복과 confidence interval 계속 필요 |
@@ -36,10 +40,12 @@ V100/A100/H100도 코드와 command package는 준비됐지만
 | 코드가 RTX 3090/V100/A100/H100 profile과 finalplan을 생성함 | 높음, 정적 구현 | profile/preflight/planner audit과 self-test 기준; target-node 실행 성공과는 다름 |
 | historical RTX 3090 NCU가 Shared/L1/L2/DRAM 방향의 path를 보여줌 | 높음, 역사적 path evidence | current control acceptance와 새 binary revision 전체를 보증하지 않음 |
 | RTX 3090 fixed-RF v2 Tensor median 2.252501 pJ/FLOP | historical only | 당시 power/NCU pair gate는 통과했지만 accumulator 정체 가능성 때문에 superseded |
-| RTX 3090 fixed-RF v4 Tensor path/FLOP | 높음, 경로 검증 | RF1-16 NCU accepted; 새 power run 전이므로 coefficient 없음 |
-| 과거 RTX 3090 Shared/L1/L2 coefficient | 낮음, current final로는 불가 | 과거 control/schema 사용; 현행 재실행 전 역사적 값 |
+| RTX 3090 fixed-RF v4 Tensor path/FLOP | 무효 | treatment counter는 선형이었지만 control이 launch-only여서 pair 검증 실패 |
+| RTX 3090 v5 Tensor 2.140 pJ/FLOP | medium-high, current effective coefficient | static control loop, runtime HMMA/SASS/spill, 75/75 pair 및 strict/package audit 통과; pure Tensor circuit은 아님 |
+| RTX 3090 Shared/L1/L2 0.714/0.852/9.078 pJ/bit | medium-high, current effective paths | address control, NCU actual denominator, 60/60 pair 및 strict/package audit 통과; SRAM bitcell energy는 아님 |
 | V100 L2 구형 음수 계수 | 무효 | NCU path 성공과 별개로 ITER mismatch |
-| External-memory 25.510/11.925/8.131 pJ/bit | historical/user-reported | GPU-device effective path 후보이며 raw package 미확보; strict 재실험 전 final 사용 금지 |
+| RTX 3090 external-memory 24.949 pJ/bit | medium-high, accepted effective path | 45/45 pair와 read-path NCU 통과; strict 4-component 밖이며 physical GDDR6X energy 아님 |
+| A100/V100 external-memory 11.925/8.131 pJ/bit | historical/user-reported | current raw package 미확보; 재실험 전 final 사용 금지 |
 | Register file pJ/access | 미확정 | 현재 kernel로 RF 단독 분리가 불가능 |
 | Physical HBM/GDDR energy | 미확정 | NVML GPU/device-level path delta의 경계 밖 |
 
@@ -59,7 +65,7 @@ V100/A100/H100도 코드와 command package는 준비됐지만
 
 | 약점 | 영향 | 필요한 후속 작업 |
 |---|---|---|
-| Shared/Global L1의 기존 duration-scaled 결과는 구조적으로 불안정 | memory stall이 issue/clock power를 바꾸므로 독립 control-power 가정이 성립하지 않음 | 현행 matched-address control + 동일 ITER 직접 차분으로 재측정; 그래도 elapsed/state 차이는 명시 |
+| Shared/Global L1은 같은 unified L1/shared 자원을 일부 공유하지만 coefficient가 다름 | instruction/address-space, arbitration, denominator와 stall이 달라 순수 SRAM 비교가 아님 | RTX 3090 matched-address/동일 ITER 결과의 겹치는 CI를 보고하고 path coefficient로만 해석 |
 | Tensor control도 scheduler/register/final-store가 완전히 같지 않음 | coefficient에 Tensor 외 증분이 남음 | SASS와 operation-proportional counter 비교 유지 |
 | L2/DRAM matched ITER에서 elapsed가 다름 | 같은 work여도 clock/temperature 상태가 다를 수 있음 | control floor, pair adjacency, repeats, power-state filtering |
 | A100 L2 source 51-62%, native 67-72.5% | source와 lookup-level native에 동일 95% gate를 적용해 remote-partition recovery를 놓침 | B16/B8/B4/B2/B1 sweep에서 source+`srcunit_ltcfabric` logical final hit, native-model, DRAM read를 검증; logical 95% plateau가 없으면 energy 전에 중단 |
@@ -82,7 +88,8 @@ V100/A100/H100도 코드와 command package는 준비됐지만
 
 1. V100 L2를 동일 ITER 정책으로 재실행하고 기존 NCU path evidence와 새 energy package를
    구분한다.
-2. A100은 targeted L2 precheck에서 95% hit/byte-conservation plateau를 먼저 확보한다.
-3. RTX 3090은 Shared/Global-L1/L2 current-protocol full package를 재실행한다.
-4. 각 플랫폼에서 min/median/mean/max와 rejected 좌표를 단위 포함 표로 작성한다.
+2. A100은 targeted L2 precheck에서 logical final-service hit/byte-conservation plateau를
+   먼저 확보한다.
+3. 각 외부 플랫폼에서 min/median/mean/max와 rejected 좌표를 단위 포함 표로 작성한다.
+4. RTX 3090 결과는 다른 날짜/thermal state에서 독립 재현성을 확인한다.
 5. H100 native WGMMA/TMA/FP8는 현재 WMMA 실험과 별도 연구 축으로 설계한다.

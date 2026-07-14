@@ -92,7 +92,7 @@ python3 scripts/plan_platform_component_experiment.py \
 | audits | `a100_strict_summary_failure_remediation_ko.md` | A100 Tensor/L2 실패 교정 |
 | audits | `a100_v100_external_result_remediation_ko.md` | A100/V100 pair timing 및 L2 58-72% 외부 결과 교정 |
 | audits | `a100_l2_counter_scope_and_rtx_pair_remediation_ko.md` | A100 L2 counter scope와 RTX matched-control 교정 |
-| audits | `tensor_mma_cross_architecture_implementation_audit_ko.md` | Tensor v2/v3 오류, v4 구현, FLOP/cache 및 GPU별 검증 상태 |
+| audits | `tensor_mma_cross_architecture_implementation_audit_ko.md` | Tensor v2/v3/v4 오류, v5 observable control, FLOP/cache 및 GPU별 검증 상태 |
 | audits | `memory_path_cross_architecture_sweep_audit_ko.md` | Shared/Global-L1/L2/external path 논리, exact-NCU coverage, 제거/유지 sweep |
 | audits | `v100_l2_iter_mismatch_remediation_ko.md` | V100 L2 동일 ITER 교정 |
 | audits | `v100_32gb_platform_review_ko.md` | V100 32GB SKU/toolchain 검토 |
@@ -103,11 +103,13 @@ python3 scripts/plan_platform_component_experiment.py \
 
 | 결과 | 현재 지위 |
 |---|---|
-| RTX 3090 fixed-RF v2 Tensor | superseded historical energy evidence; v4 accumulator/codegen 수정 전 값이므로 현행 계수로 인용 금지 |
-| RTX 3090 fixed-RF v4 Tensor | runtime NCU path/FLOP 검증 완료; 새 board-energy run 전이므로 pJ/FLOP 없음 |
-| RTX 3090 Shared/Global-L1 matched-pair 5 s run | current targeted evidence; Shared 0.637283 pJ/bit accepted, Global L1 0.430305 pJ/bit accepted_with_caution; 10 s full package 아님 |
+| RTX 3090 fixed-RF v2 Tensor | superseded historical energy evidence; 현행 계수로 인용 금지 |
+| RTX 3090 fixed-RF v4 Tensor | rejected; ptxas가 no-MMA control loop를 제거했으므로 이전 NCU acceptance와 energy pair 무효 |
+| RTX 3090 fixed-RF v5 Tensor | 2026-07-14 full package에서 2.140 pJ/FLOP, strict accepted; pure Tensor circuit은 아님 |
+| RTX 3090 Shared/Global-L1/L2 | 0.714/0.852/9.078 pJ/bit, strict accepted effective paths |
+| RTX 3090 external-memory read | 24.949 pJ/bit, `accepted_effective_path`; physical GDDR6X energy가 아님 |
 | 2026-07-08 RTX 3090 component coefficients | historical/provisional; current control/schema gate 미충족 |
-| RTX 3090/A100/V100 external-memory observations | `25.510 / 11.925 / 8.131 pJ/bit`; user-reported historical candidates, strict rerun required; physical memory-device energy 아님 |
+| A100/V100 external-memory observations | `11.925 / 8.131 pJ/bit`; user-reported historical candidates, strict rerun required; physical memory-device energy 아님 |
 | V100/A100/H100 generated command package | 실행 준비 상태; target-node accepted 결과 증거 아님 |
 
 Current 여부는 파일의 이름이나 숫자 모양이 아니라 같은 profile/tag의 power API,

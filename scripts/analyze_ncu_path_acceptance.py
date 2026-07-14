@@ -163,6 +163,8 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
     shared_bank_conflicts = f(row, "shared_bank_conflicts")
     shared_inst = f(row, "shared_inst")
     tensor_hmma = f(row, "tensor_hmma_inst")
+    has_sass_inst_executed = bool(row.get("sass_inst_executed", "").strip())
+    sass_inst_executed = f(row, "sass_inst_executed")
     has_tensor_fp16_f32_ops = bool(
         row.get("tensor_fp16_f32_ops", "").strip()
     )
@@ -411,6 +413,7 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
         if has_tensor_fp16_f32_ops and tensor_fp16_f32_ops > 0.0:
             reasons.append("tensor_ops_present_in_control")
         expected_ops = expected_register_ops(row)
+        sass_inst_per_reg_op = ratio(sass_inst_executed, expected_ops)
         control_hmma_per_block = ratio(tensor_hmma, launched_blocks(row))
         control_hmma_per_reg_op = ratio(tensor_hmma, expected_ops)
         if mode == "reg_operand_only" and tensor_hmma > 0.0:
@@ -432,6 +435,13 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
             control_hmma_class = "strict_no_hmma_pass"
         if mode == "reg_operand_only" and registers_per_thread <= 0.0:
             reasons.append("missing_control_register_footprint")
+        if mode == "reg_operand_only":
+            if not has_sass_inst_executed:
+                reasons.append("missing_control_sass_instruction_count")
+            elif expected_ops <= 0.0:
+                reasons.append("missing_expected_register_ops")
+            elif sass_inst_per_reg_op < args.control_sass_inst_per_reg_op_min:
+                reasons.append("control_sass_instruction_count_below_expected")
         for value, reason in [
             (l1_bytes, "l1_traffic_too_high_for_register_control"),
             (l2_bytes, "l2_traffic_too_high_for_register_control"),
@@ -639,6 +649,19 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
                 if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
                 else ""
             ),
+            "register_sass_inst_executed": (
+                f"{sass_inst_executed:.6g}"
+                if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
+                and has_sass_inst_executed
+                else ""
+            ),
+            "register_sass_inst_per_expected_op": (
+                f"{sass_inst_per_reg_op:.6g}"
+                if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
+                and has_sass_inst_executed
+                and expected_ops > 0.0
+                else ""
+            ),
             "tensor_hmma_ratio_group_median": "",
             "tensor_hmma_ratio_group_relative_spread": "",
             "tensor_control_pair_status": "",
@@ -766,10 +789,10 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
         out.write(
             "| mode | blocks/SM | RF | HMMA | logical MMA | HMMA/logical | "
             "FP16-to-FP32 ops | expected FLOP | ops/expected | group median | "
-            "relative spread | control pair | Tensor pipe active (%) | "
+            "relative spread | control SASS inst | SASS/reg-op | control pair | Tensor pipe active (%) | "
             "registers/thread | acceptance |\n"
         )
-        out.write("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---|\n")
+        out.write("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---|\n")
         for row in rows:
             if row.get("mode") not in {"reg_mma", "reg_operand_only"}:
                 continue
@@ -783,6 +806,8 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
                 f"{row.get('tensor_ops_to_expected_flop','')} | "
                 f"{row.get('tensor_hmma_ratio_group_median','')} | "
                 f"{row.get('tensor_hmma_ratio_group_relative_spread','')} | "
+                f"{row.get('register_sass_inst_executed','')} | "
+                f"{row.get('register_sass_inst_per_expected_op','')} | "
                 f"{row.get('tensor_control_pair_status','')} | "
                 f"{row.get('tensor_pipe_active_pct','')} | "
                 f"{row.get('registers_per_thread','')} | "
@@ -887,6 +912,7 @@ def self_test_args() -> argparse.Namespace:
         register_memory_bytes_per_op_max=1.0,
         control_hmma_per_block_max=1.0,
         control_hmma_per_reg_op_max=1.0e-5,
+        control_sass_inst_per_reg_op_min=0.1,
         dram_l1_hit_max_pct=1.0,
         dram_l2_hit_max_pct=10.0,
         dram_l2_expected_multiplier=2.0,
@@ -1198,6 +1224,19 @@ def run_self_test() -> None:
         "acceptance_reason"
     ]
 
+    dead_tensor_control = classify(
+        {
+            **strict_tensor_control,
+            "tensor_hmma_inst": "0",
+            "sass_inst_executed": "1000",
+        },
+        args,
+    )
+    assert dead_tensor_control["acceptance"] == "rejected"
+    assert "control_sass_instruction_count_below_expected" in dead_tensor_control[
+        "acceptance_reason"
+    ]
+
     tensor_rows: list[dict[str, str]] = []
     for reuse in (1, 2, 4):
         expected_mma = 108 * 16 * 100000 * reuse
@@ -1232,6 +1271,7 @@ def run_self_test() -> None:
                     "expected_logical_flop": "0",
                     "tensor_hmma_per_logical_mma": "",
                     "tensor_ops_to_expected_flop": "",
+                    "sass_inst_executed": str(expected_mma),
                     "registers_per_thread": "16",
                 },
                 args,
@@ -1360,6 +1400,15 @@ def main() -> int:
     parser.add_argument("--register-memory-bytes-per-op-max", type=float, default=1.0)
     parser.add_argument("--control-hmma-per-block-max", type=float, default=1.0)
     parser.add_argument("--control-hmma-per-reg-op-max", type=float, default=1.0e-5)
+    parser.add_argument(
+        "--control-sass-inst-per-reg-op-min",
+        type=float,
+        default=0.1,
+        help=(
+            "Minimum total SASS instructions / expected register-control operation. "
+            "This rejects controls whose source loop was eliminated by ptxas."
+        ),
+    )
     parser.add_argument("--dram-l1-hit-max-pct", type=float, default=1.0)
     parser.add_argument("--dram-l2-hit-max-pct", type=float, default=10.0)
     parser.add_argument("--dram-l2-expected-multiplier", type=float, default=2.0)

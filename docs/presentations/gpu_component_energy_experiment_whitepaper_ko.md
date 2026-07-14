@@ -37,12 +37,12 @@
 18. **Memory denominator** — `scripts/analyze_matched_control_energy.py:339-399,643-658`. `expected_no_ncu_match` is not eligible for strict memory coefficients.
 19. **NCU acceptance** — `scripts/analyze_ncu_path_acceptance.py`. Acceptance uses path-specific rates plus access/byte/local/stall evidence, not aggregate hit rate alone.
 20. **Audit states** — each audit script owns a distinct state vocabulary; states are not collapsed into one grade.
-21. **RTX 3090 current/historical boundary and external-memory observations** — fixed-RF v2 Tensor 2.2525 pJ/FLOP is superseded historical evidence. Tensor v4 has runtime NCU/FLOP validation but no new board-energy coefficient. Shared, Global L1, and L2 values are the historical strict snapshot. RTX 3090/A100/V100 external-memory values 25.510/11.925/8.131 pJ/bit are user-reported historical GPU-device effective-path observations; none is strict-eligible or a physical HBM/GDDR value.
+21. **RTX 3090 current v5 results** — Tensor 2.140 pJ/FLOP and Shared/Global-L1/L2 0.714/0.852/9.078 pJ/bit passed current strict gates. External read 24.949 pJ/bit is an accepted GPU-device effective path, not physical GDDR6X energy.
 22. **Cross-platform state** — current readiness/package audits. A command package is not evidence that a target-node experiment completed.
 
 ## Corrected statements
 
-- The strict RTX 3090 snapshot has four historical components, not five. External-memory observations are displayed separately and are not strict coefficients.
+- The current RTX 3090 strict table has four components. External memory is displayed separately as an accepted effective path, not a strict component or physical GDDR6X coefficient.
 - Global L1 and L2 historical rows used `clocked_empty`; active finalplan uses `global_addr_only`.
 - Current L2 CG and external-memory finalplans use pair-locked identical ITER; they are not duration-scaled.
 - `l2_load_only` is a normal global-load capacity diagnostic, not automatic strict L2-only evidence.

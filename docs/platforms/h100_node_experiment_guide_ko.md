@@ -220,7 +220,7 @@ python3 scripts/audit_power_api_measurements.py \
   --require-explicit-measurement-scope \
   --require-exact-measurement-interval \
   --require-mode-notes-marker \
-  reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4
+  reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5
 ```
 
 이 단계에서 모든 row가 `missing_column:measurement_scope` 또는
@@ -230,11 +230,14 @@ stale binary/schema 문제다. 현재 source를 pull한 뒤 `cmake --build build
 archive로 옮긴 뒤 재실행한다. 구버전 CSV에 새 row를 append하면 power API audit이
 전체 reject될 수 있다.
 
-`fixed_rf_v4`는 RF1/2/4/8/16 모두 fixed-trip `unroll 1` kernel을 사용하고 한 A
+`observable_control_fixed_rf_v5`는 RF1/2/4/8/16 모두 fixed-trip `unroll 1` kernel을 사용하고 한 A
 fragment의 sign bit를 in-place로 뒤집어 accumulator를 bounded 상태로 유지한다. Hopper에서의 lowering을
 Ampere와 같다고 가정하지 않으며 H100 NCU에서 RF별
 predicated HMMA=0, `HMMA/logical MMA` 상대 spread<=10%, control HMMA=0을 다시 확인한다. 이 검사는 여전히
-WMMA compatibility path 검증이며 Hopper-native WGMMA 검증은 아니다.
+WMMA compatibility path 검증이며 Hopper-native WGMMA 검증은 아니다. Static binary
+audit에서 control backward loop를 확인하고 runtime NCU에서
+`SASS instructions/expected register op >= 0.1`도 통과해야 한다. 이 gate가 없던 v4
+Tensor energy 결과는 재사용하지 않는다.
 
 ## 6. Component finalplan 실행
 

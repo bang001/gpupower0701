@@ -30,9 +30,13 @@ BYTE_UNIT_SCALE = {
     "tbyte": 1.0e12,
 }
 TIME_UNIT_SCALE_SECONDS = {
+    "ns": 1.0e-9,
     "nsecond": 1.0e-9,
+    "us": 1.0e-6,
     "usecond": 1.0e-6,
+    "ms": 1.0e-3,
     "msecond": 1.0e-3,
+    "s": 1.0,
     "second": 1.0,
 }
 
@@ -976,13 +980,34 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     tensor_fp16_f32_ops = metrics.sum_names(
         ["sm__ops_path_tensor_src_fp16_dst_fp32.sum"]
     )
+    sass_inst_executed = metrics.sum_names(["smsp__sass_inst_executed.sum"])
     tensor_pipe_active_pct = metrics.first_names(
         ["sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active"]
     )
     expected_logical_mma = None
     expected_logical_flop = None
+    expected_register_ops = None
+    sass_inst_per_expected_reg_op = None
     tensor_hmma_per_logical_mma = None
     tensor_ops_to_expected_flop = None
+    if manifest.get("mode", "") in {
+        "reg_mma",
+        "reg_operand_only",
+        "reg_fragment_only",
+        "reg_pressure",
+    }:
+        geometry = [
+            parse_float(manifest.get(name, ""))
+            for name in ("active_SM", "blocks_per_SM", "ITER", "reuse_factor")
+        ]
+        if all(value is not None and value > 0.0 for value in geometry):
+            expected_register_ops = math.prod(
+                value for value in geometry if value is not None
+            )
+            if sass_inst_executed is not None and expected_register_ops > 0.0:
+                sass_inst_per_expected_reg_op = (
+                    sass_inst_executed / expected_register_ops
+                )
     if manifest.get("mode", "") == "reg_mma":
         geometry = [
             parse_float(manifest.get(name, ""))
@@ -1296,6 +1321,9 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         ),
         "tensor_hmma_inst": fmt(tensor_hmma_inst),
         "tensor_fp16_f32_ops": fmt(tensor_fp16_f32_ops),
+        "sass_inst_executed": fmt(sass_inst_executed),
+        "expected_register_ops": fmt(expected_register_ops),
+        "sass_inst_per_expected_reg_op": fmt(sass_inst_per_expected_reg_op),
         "expected_logical_mma": fmt(expected_logical_mma),
         "expected_logical_flop": fmt(expected_logical_flop),
         "tensor_hmma_per_logical_mma": fmt(tensor_hmma_per_logical_mma),
@@ -1511,11 +1539,11 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
         )
         f.write(
             "| label | mode | replay | cache control | metric profile | warm-up passes | L2 residency | L2 layout | "
-            "persisting L2 size (bytes) | HMMA inst | logical MMA | HMMA/logical MMA | "
+            "persisting L2 size (bytes) | SASS inst | expected register ops | SASS/reg-op | HMMA inst | logical MMA | HMMA/logical MMA | "
             "FP16-to-FP32 Tensor ops | expected FLOP | ops/expected FLOP | "
             "Tensor pipe active (%) | achieved occupancy (%) | launch warp capacity (%) | registers/thread |\n"
         )
-        f.write("|---|---|---|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+        f.write("|---|---|---|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
         for row in rows:
             f.write(
                 f"| {row['label']} | {row['mode']} | {row['ncu_replay_mode']} | "
@@ -1524,6 +1552,9 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
                 f"{row['l2_residency_policy']} | "
                 f"{row['l2_address_layout']} | "
                 f"{row['launch_persisting_l2_cache_size_bytes']} | "
+                f"{row['sass_inst_executed']} | "
+                f"{row['expected_register_ops']} | "
+                f"{row['sass_inst_per_expected_reg_op']} | "
                 f"{row['tensor_hmma_inst']} | "
                 f"{row['expected_logical_mma']} | "
                 f"{row['tensor_hmma_per_logical_mma']} | "
@@ -1571,6 +1602,8 @@ def run_self_test() -> None:
     assert first_non_none(0.0, 1.0) == 0.0
     assert convert_value(8.192, "Kbyte/block") == 8192.0
     assert convert_value(26.0, "register/thread") == 26.0
+    assert math.isclose(convert_value(4.8, "us"), 4.8e-6)
+    assert math.isclose(convert_value(12.5, "ms"), 0.0125)
     with tempfile.TemporaryDirectory() as temp_dir:
         raw = Path(temp_dir) / "ga100_raw_metrics.csv"
         native_model = 100.0 * (550.0 + 445.0) / (1000.0 + 450.0)
@@ -1754,6 +1787,9 @@ def main() -> int:
         "dram_read_to_l2_logical_miss_bytes_ratio",
         "tensor_hmma_inst",
         "tensor_fp16_f32_ops",
+        "sass_inst_executed",
+        "expected_register_ops",
+        "sass_inst_per_expected_reg_op",
         "expected_logical_mma",
         "expected_logical_flop",
         "tensor_hmma_per_logical_mma",

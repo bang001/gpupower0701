@@ -15,8 +15,8 @@
 | power API audit | `audit_power_api_measurements.py` | raw energy CSV가 power measurement matrix 기준 final/provisional/reject인지 판정하고 새 finalplan에서는 explicit `measurement_scope`와 exact timed-kernel interval을 요구하며 `--self-test`로 A100 semantics, fallback numerator, H100 module scope 혼입 회귀를 검증 |
 | power-state audit | `audit_power_state_stability.py` | raw row의 평균 전력/endpoint power outlier를 찾아 측정 품질 문제와 weak-signal 문제를 분리 |
 | NCU sidecar | `run_ncu_validation.sh` | chip별 metric availability를 확인한 뒤 counter 수집. L2와 external-memory strict gate는 coherent `NCU_METRIC_PROFILE=l2_path_minimal`, Tensor/Shared/Global-L1은 `full`을 사용하며 `NCU_COMPONENTS=tensor,l2`처럼 subset 선택 가능 |
-| Tensor binary audit | `audit_tensor_mma_binary.py` | target binary의 RF1/2/4/8/16 treatment/control SASS와 resource usage를 검사해 control HMMA, predicated dual-HMMA, operand LDG/LDS, local/stack allocation을 거부. runtime NCU를 대체하지 않음 |
-| NCU summary | `summarize_ncu_cache_metrics.py` | NCU raw export를 cache/path, source/native L2 hit, GA100/GH100 LTC-fabric recovery와 logical final hit, sector conservation, observed/expected traffic, DRAM read, occupancy/register/shared-block summary로 정리 |
+| Tensor binary audit | `audit_tensor_mma_binary.py` | target binary의 RF1/2/4/8/16 treatment/control SASS와 resource usage를 검사해 control HMMA, predicated dual-HMMA, operand LDG/LDS, local/stack allocation과 control backward-loop 누락을 거부. runtime NCU를 대체하지 않음 |
+| NCU summary | `summarize_ncu_cache_metrics.py` | NCU raw export를 cache/path, source/native L2 hit, GA100/GH100 LTC-fabric recovery와 logical final hit, sector conservation, observed/expected traffic, DRAM read, Tensor/control SASS execution, occupancy/register/shared-block summary로 정리 |
 | NCU summary merge | `merge_ncu_validation_summaries.py` | disjoint full Tensor/Shared/L1, minimal L2, minimal external-memory summary를 row source를 보존해 canonical CSV로 병합하고 duplicate label을 거부 |
 | path acceptance | `analyze_ncu_path_acceptance.py` | accepted/provisional/rejected path 판정. A100/H100 L2는 source+LTC-fabric logical final hit, native-model, selected layout, observed/expected byte gate를 강제 |
 | matched-control | `analyze_matched_control_energy.py` | NCU byte denominator 기반 pJ/FLOP, pJ/byte, pJ/bit 계산. 실제 benchmark interval의 `pair_transition_gap_ms`로 pair 인접성을 검사하고 legacy CSV는 `run_id-elapsed_s`로 명시적 추정 |
@@ -48,6 +48,7 @@
 | `summarize_matched_control_by_factor.py` | matched-control detail을 RF/LR별 min/median/max와 invalid diagnostics 표로 요약하는 선택적 sweep 보고 도구 |
 | `plot_platform_sweep_design.py` | planner profile에서 플랫폼별 blocks/SM, W_SM path, capacity-context 그래프 생성. `--self-test`로 좌표 feasibility와 용량 산술 검증 |
 | `plot_external_memory_scope_review.py` | RTX 3090/A100/V100 user-reported effective-path observation과 HBM2/GDDR5 device reference를 measurement scope별 분리 시각화하고 `--self-test`로 값·scope·strict 상태 검증 |
+| `plot_current_rtx3090_results.py` | 2026-07-14 current matched-control CSV와 NCU acceptance CSV에서 coefficient CI 및 Shared/L1/L2/DRAM access·byte·long-scoreboard 그림 생성. `--self-test`는 5개 coefficient row와 72 accepted/1 baseline reject를 검증 |
 | `plot_dram_reporting_policy.py` | 2026-07-12 `26.709-28.409 pJ/bit` legacy provisional band 재현 전용; active 계수/그림 생성에 사용 금지 |
 | `build_gpu_component_energy_presentation.py` | sweep 그래프를 재생성하고 22장 기술백서 PPT/PDF와 렌더 검토 이미지를 빌드 |
 | `selftest_ncu_permission_fallback.sh` | 부모 sudo 환경을 격리하고 fake NCU/sudo로 동기식 stderr 판정, `ERR_NVGPUCTRPERM` 자동 재시도와 `NCU_AUTO_SUDO=0` hard-fail을 회귀 검증 |
@@ -83,15 +84,16 @@ raw CSV의 power API audit, NCU path acceptance, matched-control/reliability aud
 goal readiness가 찾는 `*_strict_scope_fresh_ncu_component_coefficients_*.csv` 패키지를
 만든다.
 
-2026-07-08 기준으로 생성해 둔 persistent command package는 아래와 같다. 이 파일들은
+2026-07-14 기준으로 생성한 current command package는 아래와 같다. 이 파일들은
 측정 결과가 아니라 target node에서 실행할 계획이다.
 
 | GPU | command plan | executable shell |
 |---|---|---|
-| A100 | `results/summary/a100_component_finalplan_20260708_command_plan.md` | `results/summary/a100_component_finalplan_20260708_commands.sh` |
+| RTX 3090 | `results/summary/rtx3090_component_finalplan_20260714_command_plan.md` | `results/summary/rtx3090_component_finalplan_20260714_commands.sh` |
+| A100 | `results/summary/a100_component_finalplan_20260714_command_plan.md` | `results/summary/a100_component_finalplan_20260714_commands.sh` |
 | A100 Tensor/L2 remediation | `results/summary/a100_tensor_l2_remediation_20260710_command_plan.md` | `results/summary/a100_tensor_l2_remediation_20260710_commands.sh` |
-| V100 | `results/summary/v100_component_finalplan_20260708_command_plan.md` | `results/summary/v100_component_finalplan_20260708_commands.sh` |
-| H100 | `results/summary/h100_component_finalplan_20260708_command_plan.md` | `results/summary/h100_component_finalplan_20260708_commands.sh` |
+| V100 | `results/summary/v100_component_finalplan_20260714_command_plan.md` | `results/summary/v100_component_finalplan_20260714_commands.sh` |
+| H100 | `results/summary/h100_component_finalplan_20260714_command_plan.md` | `results/summary/h100_component_finalplan_20260714_commands.sh` |
 
 L1처럼 treatment-control drift가 의심되는 component는 factor sweep runner 대신
 paired stability runner를 사용할 수 있다. 이 runner는 각 repeat를

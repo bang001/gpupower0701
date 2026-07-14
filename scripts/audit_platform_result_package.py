@@ -952,7 +952,7 @@ def audit_raw_energy(
             if mode in {"reg_mma", "reg_operand_only"}:
                 tensor_markers = (
                     "tensor_pair_kernel_revision="
-                    "matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
+                    "matched_inplace_signflip_observable_control_fixed_rf_v5",
                     "tensor_operand_source=register_fill_no_memory",
                     "tensor_data_pattern=inplace_alternating_sign_a_fp16_v2",
                     "tensor_accumulator_pattern=bounded_two_state",
@@ -1063,7 +1063,7 @@ def audit_raw_energy(
             "delta, GPU/device scope, exact timed-kernel epoch interval, explicit "
             "measurement_scope, profile "
             "power semantics, positive counter delta, elapsed time, and iteration "
-            "count; Tensor rows carry the bounded alternating-sign v3 revision, "
+            "count; Tensor rows carry the observable-control fixed-RF v5 revision, "
             "register-only operand source, and non-cache reuse semantics, while "
             "CG rows carry the ld.global.cg warm-up policy"
         ),

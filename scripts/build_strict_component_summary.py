@@ -158,6 +158,8 @@ FIELDNAMES = [
     "denominator_scale_min_med_max",
     "ncu_denominator_bytes_representative_min_med_max",
     "ncu_shared_bytes_min_med_max",
+    "ncu_shared_read_bytes_min_med_max",
+    "ncu_shared_write_bytes_min_med_max",
     "ncu_l1_hit_rate_pct_min_med_max",
     "ncu_l1_path_hit_rate_pct_min_med_max",
     "ncu_l2_hit_rate_pct_min_med_max",
@@ -587,8 +589,9 @@ def counter_caveat_text(component_key: str) -> str:
             "An ld.global.cg request still traverses L1TEX, so L1 request bytes are "
             "expected. Bypass is shown by near-zero path-specific L1 hit bytes and a "
             "high final-service L2 read hit rate; L2 read bytes are the denominator. "
-            "On GA100, final service combines direct-partition and LTC-fabric hits, "
-            "so the coefficient includes partition-fabric traffic."
+            "On GA100/GH100 fabric-aware profiles, final service combines direct-"
+            "partition and LTC-fabric hits, so those coefficients include partition-"
+            "fabric traffic; GA102/GV100 direct-path profiles do not use that model."
         )
     return "Cache hit/access/byte fields are path-relevant for this global-memory candidate."
 
@@ -867,6 +870,16 @@ def ncu_selftest_row(
 
 
 def run_self_test() -> None:
+    expected_ncu_fields = {
+        f"ncu_{column}_min_med_max" for column in NCU_METRIC_COLUMNS
+    }
+    missing_ncu_fields = sorted(expected_ncu_fields - set(FIELDNAMES))
+    if missing_ncu_fields:
+        raise AssertionError(
+            "strict summary output schema is missing NCU fields: "
+            + ",".join(missing_ncu_fields)
+        )
+
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         fields = ["mode", "status", *NCU_COORDINATE_COLUMNS, *NCU_METRIC_COLUMNS]
@@ -957,6 +970,8 @@ def run_self_test() -> None:
                     w_sm_kib="64",
                     load_repeat="4",
                     shared_bytes="1000000",
+                    shared_read_bytes="1000000",
+                    shared_write_bytes="0",
                     l1_bytes="0",
                 ),
                 ncu_selftest_row(
@@ -964,6 +979,8 @@ def run_self_test() -> None:
                     w_sm_kib="64",
                     load_repeat="8",
                     shared_bytes="2000000",
+                    shared_read_bytes="2000000",
+                    shared_write_bytes="0",
                     l1_bytes="0",
                 ),
                 ncu_selftest_row(
@@ -1098,6 +1115,13 @@ def run_self_test() -> None:
         )
         if shared_selected != str(memory):
             raise AssertionError(f"expected shared memory artifact only, got {shared_selected}")
+        shared_evidence = ncu_evidence_summary(
+            "shared_l1_scalar_path", shared_details, shared_selected
+        )
+        if shared_evidence["ncu_shared_read_bytes_min_med_max"] != "2000000":
+            raise AssertionError(f"missing shared-read evidence: {shared_evidence}")
+        if shared_evidence["ncu_shared_write_bytes_min_med_max"] != "0":
+            raise AssertionError(f"unexpected shared-write evidence: {shared_evidence}")
         global_l1_selected = select_ncu_summary_artifacts(
             "global_l1_hit_path", global_l1_details, paths
         )
@@ -1213,12 +1237,13 @@ def write_md(path: str | Path, rows: list[dict[str, str]], *, target_profile: st
         f.write(
             "| component | coord rows | metric rows | metric modes | L1 path hit % | "
             "L2 read hit % | L1 accesses | L2 accesses | DRAM accesses | shared bytes | "
+            "shared read bytes | shared write bytes | "
             "L1 request bytes | L1 hit bytes | L2 read bytes | DRAM bytes | HMMA inst | "
             "HMMA/logical MMA | Tensor/control regs/thread | Tensor pipe active % | "
             "achieved occupancy % | launch warp capacity % | long scoreboard % |\n"
         )
         f.write(
-            "|---|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+            "|---|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         )
         for row in rows:
             f.write(
@@ -1235,6 +1260,8 @@ def write_md(path: str | Path, rows: list[dict[str, str]], *, target_profile: st
                         row["ncu_l2_accesses_min_med_max"],
                         row["ncu_dram_accesses_min_med_max"],
                         row["ncu_shared_bytes_min_med_max"],
+                        row["ncu_shared_read_bytes_min_med_max"],
+                        row["ncu_shared_write_bytes_min_med_max"],
                         row["ncu_l1_request_bytes_min_med_max"],
                         row["ncu_l1_hit_bytes_min_med_max"],
                         row["ncu_l2_read_bytes_min_med_max"],

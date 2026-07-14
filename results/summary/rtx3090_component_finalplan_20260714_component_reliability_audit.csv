@@ -1,0 +1,6 @@
+component,status,median,unit,rows,valid_detail_rows,invalid_detail_rows,ncu_denominator_rows,ncu_accepted_rows,confidence_class,energy_source,energy_integration_method,measurement_scope,power_semantics,reasons,cautions
+external_memory_read_path,accepted_effective_path,24.9485633919,pJ/bit,45,45,0,45,27,medium-high,nvml_total_energy,total_energy_mj_delta,gpu_device_total_energy_counter,one_sec_average,,effective_external_read_path_not_physical_memory_energy
+global_l1_hit_path,accepted,0.85247325547,pJ/bit,15,15,0,15,21,medium-high,nvml_total_energy,total_energy_mj_delta,gpu_device_total_energy_counter,one_sec_average,,
+l2_hit_cg_path,accepted,9.0784023317,pJ/bit,30,30,0,30,24,medium-high,nvml_total_energy,total_energy_mj_delta,gpu_device_total_energy_counter,one_sec_average,,
+shared_l1_scalar_path,accepted,0.713811591343,pJ/bit,15,15,0,15,6,medium-high,nvml_total_energy,total_energy_mj_delta,gpu_device_total_energy_counter,one_sec_average,,
+tensor_mma_increment,accepted,2.14027815652,pJ/FLOP,75,75,0,0,30,medium-high,nvml_total_energy,total_energy_mj_delta,gpu_device_total_energy_counter,one_sec_average,,

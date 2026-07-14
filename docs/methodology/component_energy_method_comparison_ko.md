@@ -133,25 +133,25 @@ pJ/bit  = pJ/byte / 8
 
 ## 현재 결과 상태
 
-2026-07-14 기준, 현행 protocol로 Tensor/Shared/Global-L1/L2를 모두 재실행한 RTX 3090
-전체 component table은 없다.
+2026-07-14 RTX 3090 v5 package는 현행 protocol의 strict 4-component와 별도
+external-memory effective path를 모두 생성했다.
 
 | 항목 | 값 | 단위 | 상태 |
 |---|---:|---|---|
-| RTX 3090 Tensor fixed-RF v2 median | 2.252501 | pJ/FLOP | superseded historical; accumulator 정체 가능성 때문에 v4 power 재실행 전 인용 금지 |
-| RTX 3090 Tensor fixed-RF v4 | - | pJ/FLOP | RF1-16 runtime NCU/FLOP path 검증 완료, board-energy 미실행 |
-| RTX 3090 Shared/Global-L1/L2 과거 계수 | 문서상 historical 값 | pJ/bit | current control/schema gate 미충족, final 인용 금지 |
-| RTX 3090 external-memory observation | 25.510 | effective pJ/bit | 사용자 전달 historical candidate; strict raw package 재실행 필요 |
+| RTX 3090 Tensor v5 | 2.140 | pJ/FLOP | strict accepted effective coefficient; register/scheduler path 포함 |
+| RTX 3090 Shared / Global L1 / L2 | 0.714 / 0.852 / 9.078 | pJ/bit | strict accepted effective paths |
+| RTX 3090 external-memory read | 24.949 | effective pJ/bit | accepted effective path; physical GDDR6X energy 아님 |
+| RTX 3090 Tensor v2/v4와 2026-07-08 memory | historical | - | superseded/rejected; 현행 값과 평균 금지 |
 | A100 external-memory observation | 11.925 | effective pJ/bit | 사용자 전달 historical candidate; 현 저장소에서 원본 package 독립 재계산 불가 |
 | V100 external-memory observation | 8.131 | effective pJ/bit | 사용자 전달 historical candidate; 현 저장소에서 원본 package 독립 재계산 불가 |
 | V100/A100/H100 전체 계수 | 문서상 명확한 accepted package 없음 | - | 각 target node에서 재실행 필요 |
 
 ![External-memory effective path와 memory-device reference의 scope 비교](../assets/component_energy_method/external_memory_scope_comparison.png)
 
-위 그림의 A 패널은 NVML GPU-device 전체 energy 차분을 NCU external
-read bit로 나눈 관측값, B는 문헌의 transaction/system-path 값, C는
-memory-device/access model이다. 패널 간 간격을 controller/PHY의 순수
-energy로 차분하면 안 된다. 상세 재실험 설계는
+위 그림의 A 패널은 current package 이전 사용자 전달 관측값, B는 문헌의
+transaction/system-path 값, C는 memory-device/access model이다. 현행 RTX 3090
+24.949 pJ/bit은 별도 current 결과 그림을 사용한다. 패널 간 간격을 controller/PHY의
+순수 energy로 차분하면 안 된다. 상세 설계는
 [`external_memory_read_path_experiment_design_ko.md`](external_memory_read_path_experiment_design_ko.md)를 따른다.
 
 과거 coefficient가 문헌의 계층 순서와 비슷하더라도 current protocol gate를 대신하지

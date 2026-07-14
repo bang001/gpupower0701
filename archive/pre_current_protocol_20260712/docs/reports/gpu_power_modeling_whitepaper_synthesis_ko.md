@@ -344,7 +344,7 @@ NCU는 energy를 직접 측정하지 않는다. NCU의 역할은 treatment kerne
 | L2 CG | L1 hit rate near 0, L2 hit rate high | L1을 우회하고 L2 hit path가 지배적인지 확인 |
 | DRAM CG | DRAM bytes, L2 hit rate low | streaming traffic이 DRAM까지 내려가는지 확인 |
 
-![NCU hit-rate validation](../../../../docs/assets/component_energy_method/ncu_hit_rate_validation.png)
+![NCU hit-rate validation](../assets/component_energy_method/ncu_hit_rate_validation.png)
 
 ![NCU traffic validation](../../../../docs/assets/component_energy_method/ncu_path_validation_bytes.png)
 

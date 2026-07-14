@@ -86,7 +86,7 @@ COMMAND_SHELL_TERMS = [
     "--fail-on-provisional",
     "--require-explicit-measurement-scope",
     "--require-mode-notes-marker",
-    "reg_operand_only=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
+    "reg_operand_only=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5",
     "l2_cg_load_only=global_warmup_policy=ld_global_cg",
     "scripts/audit_power_state_stability.py",
     "scripts/run_ncu_validation.sh",
@@ -154,7 +154,7 @@ COMMAND_PLAN_TERMS = [
     "complete control-treatment coordinate pairs",
     "path-specific L1 hit",
     "path-specific L2 read hit",
-    "tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4",
+    "tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5",
     "global_warmup_policy=ld_global_cg",
     "spill_evidence_source=local_memory_bytes_zero_inference",
     "ncu_actual_exact",
@@ -165,7 +165,7 @@ COMMAND_PLAN_TERMS = [
     "board-level effective coefficients",
     "L1/L2 hit rates",
     "L1/L2/DRAM access counts",
-    "global-memory pairs use `global_addr_only`",
+    "Global L1/L2/DRAM use `global_addr_only`",
     "reuse_factor` points",
     "load_repeat` points",
     "hard_plausibility_range",
@@ -2381,8 +2381,16 @@ def audit_tooling(repo: Path, rows: list[dict[str, str]], ncu: str) -> None:
 
 
 def audit_rtx3090_strict(repo: Path, rows: list[dict[str, str]]) -> None:
-    summary_path = repo / STRICT_RTX3090_SUMMARY
-    audit_path = repo / STRICT_RTX3090_AUDIT
+    summary_path = latest_platform_summary(repo, "rtx3090") or (
+        repo / STRICT_RTX3090_SUMMARY
+    )
+    audit_path = latest_artifact(
+        repo,
+        [
+            "results/summary/"
+            "rtx3090_strict_scope_fresh_ncu_component_summary_audit_*.csv"
+        ],
+    ) or (repo / STRICT_RTX3090_AUDIT)
 
     if not summary_path.exists():
         add(
@@ -2495,8 +2503,29 @@ def audit_rtx3090_strict(repo: Path, rows: list[dict[str, str]]) -> None:
 
 
 def audit_rtx3090_fresh_ncu(repo: Path, rows: list[dict[str, str]]) -> None:
-    reliability_path = repo / FRESH_NCU_RELIABILITY
-    acceptance_path = repo / FRESH_NCU_ACCEPTANCE
+    reliability_path = latest_artifact(
+        repo,
+        [
+            "results/summary/"
+            "rtx3090_component_finalplan_*_component_reliability_audit.csv"
+        ],
+    ) or latest_artifact(
+        repo,
+        [
+            "results/summary/"
+            "rtx3090_strict_scope_fresh_ncu_component_reliability_audit_*.csv"
+        ],
+    ) or (repo / FRESH_NCU_RELIABILITY)
+    acceptance_path = latest_artifact(
+        repo,
+        ["results/summary/rtx3090_component_finalplan_*_ncu_acceptance.csv"],
+    ) or latest_artifact(
+        repo,
+        [
+            "results/summary/"
+            "rtx3090_strict_scope_fresh_ncu_combined_acceptance_*.csv"
+        ],
+    ) or (repo / FRESH_NCU_ACCEPTANCE)
 
     if not reliability_path.exists():
         add(
