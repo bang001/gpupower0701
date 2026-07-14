@@ -1,0 +1,8 @@
+label,architecture,memory_technology,value_pj_per_bit,evidence_class,coefficient_scope,provenance,strict_eligible,allowed_interpretation
+RTX 3090,GA102,GDDR6X,25.510,user_reported_observation,effective_gpu_device_external_read_path,user_reported_raw_package_unavailable,false,historical candidate; strict rerun required
+A100,GA100,HBM2,11.925,user_reported_observation,effective_gpu_device_external_read_path,user_reported_raw_package_unavailable,false,historical candidate; strict rerun required
+V100,GV100,HBM2,8.131,user_reported_observation,effective_gpu_device_external_read_path,user_reported_raw_package_unavailable,false,historical candidate; strict rerun required
+K40 DRAM-to-L2,Kepler K40,GDDR5,30.55,literature_path_reference,effective_dram_to_l2_transaction,GPUJoule HPCA 2019 hardware EPT,false,historical path context only
+Modeled HBM GPU system,HPCA 2019 future GPM,HBM,21.1,literature_path_reference,modeled_dram_to_l2_gpu_system,Understanding Future Energy Efficiency HPCA 2019,false,model context only; not direct A100 or V100 measurement
+HBM2 device model,MICRO 2017,HBM2,3.97,literature_reference,memory_device_access_model,Fine-Grained DRAM MICRO 2017,false,reference only; not a regression target
+GDDR5 device model,MICRO 2017,GDDR5,14.0,literature_reference,memory_device_access_model,Fine-Grained DRAM MICRO 2017,false,reference only; not a GDDR6X value

@@ -83,6 +83,12 @@ NCU_SUMMARY_BASE_REQUIRED_COLUMNS = {
     "l2_bytes",
     "dram_bytes",
     "tensor_hmma_inst",
+    "expected_logical_mma",
+    "tensor_hmma_per_logical_mma",
+    "tensor_pipe_active_pct",
+    "achieved_occupancy_pct",
+    "launch_warp_capacity_pct",
+    "registers_per_thread",
     "stall_long_scoreboard_pct",
 }
 
@@ -103,7 +109,10 @@ NCU_SUMMARY_REQUIRED_COLUMNS = (
 
 NCU_SUMMARY_REQUIRED_MODES = {
     "Tensor MMA incremental": {"reg_mma", "reg_operand_only"},
-    "Shared scalar path": {"shared_scalar_load_only"},
+    "Shared scalar path": {
+        "shared_scalar_load_only",
+        "shared_scalar_addr_only",
+    },
     "Global L1 hit path": {"global_l1_load_only", "global_addr_only"},
     "L2 CG hit path": {"l2_cg_load_only", "global_addr_only"},
 }
@@ -119,7 +128,10 @@ NCU_COORDINATE_COLUMNS = [
 
 NCU_EXACT_COORDINATE_MODES = {
     "Tensor MMA incremental": {"reg_mma", "reg_operand_only"},
-    "Shared scalar path": {"shared_scalar_load_only"},
+    "Shared scalar path": {
+        "shared_scalar_load_only",
+        "shared_scalar_addr_only",
+    },
     "Global L1 hit path": {"global_l1_load_only", "global_addr_only"},
     "L2 CG hit path": {"l2_cg_load_only", "global_addr_only"},
 }
@@ -152,6 +164,14 @@ STRICT_SUMMARY_BASE_NCU_EVIDENCE_COLUMNS = {
     "ncu_l2_bytes_min_med_max",
     "ncu_dram_bytes_min_med_max",
     "ncu_tensor_hmma_inst_min_med_max",
+    "ncu_expected_logical_mma_min_med_max",
+    "ncu_tensor_hmma_per_logical_mma_min_med_max",
+    "ncu_tensor_pipe_active_pct_min_med_max",
+    "ncu_achieved_occupancy_pct_min_med_max",
+    "ncu_launch_warp_capacity_pct_min_med_max",
+    "ncu_registers_per_thread_min_med_max",
+    "ncu_control_tensor_hmma_inst_min_med_max",
+    "ncu_control_registers_per_thread_min_med_max",
     "ncu_spill_local_read_inst_min_med_max",
     "ncu_spill_local_write_inst_min_med_max",
     "ncu_stall_long_scoreboard_pct_min_med_max",
@@ -177,7 +197,13 @@ STRICT_SUMMARY_NCU_EVIDENCE_COLUMNS = (
 )
 
 BASE_REQUIRED_SUMMARY_METRICS = {
-    "Tensor MMA incremental": ["ncu_tensor_hmma_inst_min_med_max"],
+    "Tensor MMA incremental": [
+        "ncu_tensor_hmma_inst_min_med_max",
+        "ncu_tensor_hmma_per_logical_mma_min_med_max",
+        "ncu_registers_per_thread_min_med_max",
+        "ncu_control_tensor_hmma_inst_min_med_max",
+        "ncu_control_registers_per_thread_min_med_max",
+    ],
     "Shared scalar path": ["ncu_shared_bytes_min_med_max"],
     "Global L1 hit path": [
         "ncu_l1_hit_rate_pct_min_med_max",
@@ -192,6 +218,11 @@ BASE_REQUIRED_SUMMARY_METRICS = {
 PATH_REQUIRED_SUMMARY_METRICS = {
     "Tensor MMA incremental": [
         "ncu_tensor_hmma_inst_min_med_max",
+        "ncu_expected_logical_mma_min_med_max",
+        "ncu_tensor_hmma_per_logical_mma_min_med_max",
+        "ncu_registers_per_thread_min_med_max",
+        "ncu_control_tensor_hmma_inst_min_med_max",
+        "ncu_control_registers_per_thread_min_med_max",
         "ncu_spill_zero_verified_min_med_max",
     ],
     "Shared scalar path": ["ncu_shared_bytes_min_med_max"],
@@ -256,6 +287,18 @@ def truthy(value: str) -> bool:
 def median(values: list[float]) -> float:
     finite = [value for value in values if math.isfinite(value)]
     return statistics.median(finite) if finite else float("nan")
+
+
+def min_med_max_values(value: str) -> list[float]:
+    parsed: list[float] = []
+    for item in value.split("/"):
+        try:
+            number = float(item)
+        except ValueError:
+            continue
+        if math.isfinite(number):
+            parsed.append(number)
+    return parsed
 
 
 def detail_path_from_summary(path_text: str) -> Path:
@@ -503,6 +546,24 @@ def check_ncu_summary_artifact(
                 mode = ncu_row.get("mode", "")
                 modes_seen.add(mode)
                 for column in required_columns - {"mode", "status"}:
+                    tensor_only = {
+                        "expected_logical_mma",
+                        "tensor_hmma_per_logical_mma",
+                        "tensor_pipe_active_pct",
+                        "achieved_occupancy_pct",
+                        "launch_warp_capacity_pct",
+                        "registers_per_thread",
+                    }
+                    if column in tensor_only and mode not in {
+                        "reg_mma",
+                        "reg_operand_only",
+                    }:
+                        continue
+                    if (
+                        column == "tensor_hmma_per_logical_mma"
+                        and mode == "reg_operand_only"
+                    ):
+                        continue
                     value = as_float(ncu_row, column)
                     if not math.isfinite(value) or value < 0.0:
                         problems.append(f"{path}:{mode}:{column}={ncu_row.get(column, '')}")
@@ -565,9 +626,7 @@ def check_ncu_summary_coordinate_alignment(
         if not truthy(detail.get("valid_component_estimate", "")):
             continue
         # Exact-coordinate modes deliberately include the treatment and every
-        # control whose lack of Tensor/global traffic is part of the claim.
-        # Shared keeps clocked_empty outside this set because it has no
-        # path-specific byte denominator.
+        # control whose lack of Tensor/shared/global traffic is part of the claim.
         modes = {detail.get("numerator_mode", ""), detail.get("control_mode", "")}
         for mode in modes & exact_modes:
             expected_coords.add(coord_key(mode, detail))
@@ -681,6 +740,44 @@ def check_ncu_evidence_summary_fields(
         blank_metrics = [column for column in required_metrics if not row.get(column, "").strip()]
         if blank_metrics:
             problems.append("blank_metrics=" + ",".join(blank_metrics))
+        if component == "Tensor MMA incremental" and not blank_metrics:
+            treatment_hmma = min_med_max_values(
+                row.get("ncu_tensor_hmma_inst_min_med_max", "")
+            )
+            logical_mma = min_med_max_values(
+                row.get("ncu_expected_logical_mma_min_med_max", "")
+            )
+            ratios = min_med_max_values(
+                row.get("ncu_tensor_hmma_per_logical_mma_min_med_max", "")
+            )
+            control_hmma = min_med_max_values(
+                row.get("ncu_control_tensor_hmma_inst_min_med_max", "")
+            )
+            treatment_regs = min_med_max_values(
+                row.get("ncu_registers_per_thread_min_med_max", "")
+            )
+            control_regs = min_med_max_values(
+                row.get("ncu_control_registers_per_thread_min_med_max", "")
+            )
+            if not treatment_hmma or min(treatment_hmma) <= 0.0:
+                problems.append("tensor_hmma_not_positive")
+            if not logical_mma or min(logical_mma) <= 0.0:
+                problems.append("logical_mma_not_positive")
+            if not control_hmma or any(value != 0.0 for value in control_hmma):
+                problems.append("tensor_control_hmma_not_zero")
+            if not treatment_regs or min(treatment_regs) <= 0.0:
+                problems.append("tensor_treatment_registers_missing")
+            if not control_regs or min(control_regs) <= 0.0:
+                problems.append("tensor_control_registers_missing")
+            if not ratios or min(ratios) <= 0.0:
+                problems.append("hmma_logical_ratio_not_positive")
+            else:
+                ratio_median = statistics.median(ratios)
+                ratio_spread = (max(ratios) - min(ratios)) / ratio_median
+                if ratio_spread > 0.10:
+                    problems.append(
+                        f"hmma_logical_ratio_relative_spread={ratio_spread:.6g}"
+                    )
         for column in ("ncu_path_evidence", "ncu_counter_caveat"):
             if not row.get(column, "").strip():
                 problems.append(f"{column}=blank")
@@ -1353,7 +1450,7 @@ def write_selftest_csv(path: Path, fieldnames: list[str], rows: list[dict[str, s
 def make_ncu_selftest_row(
     *,
     mode: str,
-    w_sm_kib: str = "2048",
+    w_sm_kib: str = "1",
     blocks_per_sm: str = "16",
     active_sm: str = "82",
     reuse_factor: str = "8",
@@ -1372,6 +1469,12 @@ def make_ncu_selftest_row(
             "load_repeat": load_repeat,
             "store_repeat": store_repeat,
             "tensor_hmma_inst": "1024" if mode == "reg_mma" else "0",
+            "expected_logical_mma": "512" if mode == "reg_mma" else "0",
+            "tensor_hmma_per_logical_mma": "2" if mode == "reg_mma" else "",
+            "tensor_pipe_active_pct": "80" if mode == "reg_mma" else "0",
+            "achieved_occupancy_pct": "25",
+            "launch_warp_capacity_pct": "25",
+            "registers_per_thread": "32" if mode == "reg_mma" else "16",
             "l1_hit_rate_pct": "0",
             "l2_hit_rate_pct": "0",
             "l1_accesses": "1",
@@ -1409,7 +1512,7 @@ def run_self_test() -> None:
                     "valid_component_estimate": "True",
                     "numerator_mode": "reg_mma",
                     "control_mode": "reg_operand_only",
-                    "W_SM_KiB": "2048",
+                    "W_SM_KiB": "1",
                     "blocks_per_SM": "16",
                     "active_SM": "82",
                     "reuse_factor": "8",
@@ -1510,6 +1613,12 @@ def run_self_test() -> None:
                 "ncu_metric_modes": "reg_mma",
                 "ncu_path_evidence": "selftest",
                 "ncu_counter_caveat": "selftest",
+                "ncu_tensor_hmma_inst_min_med_max": "1024",
+                "ncu_expected_logical_mma_min_med_max": "512",
+                "ncu_tensor_hmma_per_logical_mma_min_med_max": "2",
+                "ncu_registers_per_thread_min_med_max": "32",
+                "ncu_control_tensor_hmma_inst_min_med_max": "0",
+                "ncu_control_registers_per_thread_min_med_max": "16",
             }
         )
         legacy_evidence_row = {

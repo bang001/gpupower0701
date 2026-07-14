@@ -72,7 +72,7 @@ def audit_row(
     target_profile: str,
     require_explicit_measurement_scope: bool,
     require_exact_measurement_interval: bool = False,
-    required_mode_notes_markers: dict[str, str] | None = None,
+    required_mode_notes_markers: dict[str, str | list[str]] | None = None,
 ) -> dict[str, str]:
     marker_rules = required_mode_notes_markers or {}
     required_columns = set(REQUIRED_COLUMNS)
@@ -93,9 +93,12 @@ def audit_row(
     notes: list[str] = []
 
     mode = row.get("mode", "")
-    required_marker = marker_rules.get(mode, "")
-    if required_marker and required_marker not in row.get("notes", ""):
-        reasons.append(f"missing_mode_notes_marker:{mode}:{required_marker}")
+    required_markers = marker_rules.get(mode, [])
+    if isinstance(required_markers, str):
+        required_markers = [required_markers]
+    for required_marker in required_markers:
+        if required_marker and required_marker not in row.get("notes", ""):
+            reasons.append(f"missing_mode_notes_marker:{mode}:{required_marker}")
 
     expected, expected_profile = expected_semantics(row, target_profile)
     actual_semantics = row.get("nvml_power_usage_semantics", "")
@@ -224,7 +227,7 @@ def read_rows(
     *,
     require_explicit_measurement_scope: bool,
     require_exact_measurement_interval: bool = False,
-    required_mode_notes_markers: dict[str, str] | None = None,
+    required_mode_notes_markers: dict[str, str | list[str]] | None = None,
 ) -> list[dict[str, str]]:
     audited: list[dict[str, str]] = []
     for path_str in paths:
@@ -579,16 +582,21 @@ def run_self_test() -> None:
 
     marker_rules = {
         "reg_operand_only": (
-            "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2"
+            "tensor_pair_kernel_revision="
+            "matched_inplace_signflip_fragment_epilogue_fixed_rf_v4"
         ),
         "l2_cg_load_only": "global_warmup_policy=ld_global_cg",
+        "dram_cg_load_only": [
+            "global_warmup_policy=ld_global_cg",
+            "input_data_pattern=splitmix64_uniform_fp16_v1",
+        ],
     }
     good_marker = audit_row(
         selftest_row(
             mode="reg_operand_only",
             notes=(
                 "tensor_pair_kernel_revision="
-                "matched_add_scalar_epilogue_fixed_rf_v2;other=value"
+                "matched_inplace_signflip_fragment_epilogue_fixed_rf_v4;other=value"
             ),
         ),
         input_file="selftest.csv",
@@ -617,6 +625,25 @@ def run_self_test() -> None:
         in stale_marker["reasons"],
         "stale_cg_warmup_revision_marker",
         stale_marker["reasons"],
+    )
+
+    stale_input_pattern = audit_row(
+        selftest_row(
+            mode="dram_cg_load_only",
+            notes="global_warmup_policy=ld_global_cg;input_data_pattern=legacy32;",
+        ),
+        input_file="selftest.csv",
+        row_index=2,
+        target_profile="a100",
+        require_explicit_measurement_scope=True,
+        required_mode_notes_markers=marker_rules,
+    )
+    assert_selftest(
+        stale_input_pattern["status"] == "reject"
+        and "missing_mode_notes_marker:dram_cg_load_only:input_data_pattern=splitmix64_uniform_fp16_v1"
+        in stale_input_pattern["reasons"],
+        "stale_external_memory_input_pattern_marker",
+        stale_input_pattern["reasons"],
     )
 
     print("power API measurement audit self-test passed")
@@ -688,19 +715,16 @@ def main() -> int:
     if not args.csv_paths:
         parser.error("csv_paths are required unless --self-test is used")
 
-    required_mode_notes_markers: dict[str, str] = {}
+    required_mode_notes_markers: dict[str, list[str]] = {}
     for value in args.require_mode_notes_marker:
         mode, separator, marker = value.partition("=")
         if not separator or not mode or not marker:
             parser.error(
                 "--require-mode-notes-marker must use non-empty MODE=MARKER"
             )
-        previous = required_mode_notes_markers.get(mode)
-        if previous is not None and previous != marker:
-            parser.error(
-                f"conflicting notes markers supplied for mode {mode!r}"
-            )
-        required_mode_notes_markers[mode] = marker
+        markers = required_mode_notes_markers.setdefault(mode, [])
+        if marker not in markers:
+            markers.append(marker)
 
     rows = read_rows(
         args.csv_paths,

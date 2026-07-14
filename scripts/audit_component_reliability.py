@@ -12,16 +12,25 @@ from pathlib import Path
 
 COMPONENT_TO_NCU = {
     "tensor_mma_increment": ["tensor_increment_candidate", "register_control_candidate"],
-    "shared_l1_scalar_path": ["shared_memory_path"],
+    "shared_l1_scalar_path": ["shared_memory_path", "shared_address_control"],
     "global_l1_hit_path": ["global_l1_hit_path", "global_address_control"],
     "l2_hit_cg_path": ["l2_hit_path", "global_address_control"],
-    "dram_cg_stream_path": ["dram_sanity_path", "global_address_control"],
+    "external_memory_read_path": [
+        "external_memory_read_path",
+        "global_address_control",
+    ],
+    # Read-only aliases for historical result packages.
+    "dram_cg_stream_path": [
+        "external_memory_read_path",
+        "global_address_control",
+    ],
 }
 
 MEMORY_COMPONENTS = {
     "shared_l1_scalar_path",
     "global_l1_hit_path",
     "l2_hit_cg_path",
+    "external_memory_read_path",
     "dram_cg_stream_path",
 }
 
@@ -71,6 +80,8 @@ def ncu_counts(rows: list[dict[str, str]]) -> dict[str, Counter[str]]:
     counts: dict[str, Counter[str]] = defaultdict(Counter)
     for row in rows:
         component = row.get("component_candidate", "")
+        if component == "dram_sanity_path":
+            component = "external_memory_read_path"
         acceptance = row.get("acceptance", "")
         counts[component][acceptance] += 1
     return counts
@@ -80,6 +91,8 @@ def detail_counts(rows: list[dict[str, str]]) -> dict[str, Counter[str]]:
     counts: dict[str, Counter[str]] = defaultdict(Counter)
     for row in rows:
         component = row.get("component", "")
+        if component == "dram_cg_stream_path":
+            component = "external_memory_read_path"
         valid = truthy(row.get("valid_component_estimate", ""))
         counts[component]["valid" if valid else "invalid"] += 1
     return counts
@@ -98,6 +111,8 @@ def hierarchy_warnings(summary_rows: list[dict[str, str]]) -> dict[str, list[str
     values: dict[str, float] = {}
     for row in summary_rows:
         component = row.get("component", "")
+        if component == "dram_cg_stream_path":
+            component = "external_memory_read_path"
         value, unit = component_value(row)
         if unit == "pJ/bit" and math.isfinite(value):
             values[component] = value
@@ -106,7 +121,7 @@ def hierarchy_warnings(summary_rows: list[dict[str, str]]) -> dict[str, list[str
     shared = values.get("shared_l1_scalar_path")
     l1 = values.get("global_l1_hit_path")
     l2 = values.get("l2_hit_cg_path")
-    dram = values.get("dram_cg_stream_path")
+    dram = values.get("external_memory_read_path", values.get("dram_cg_stream_path"))
 
     if l2 is not None:
         if shared is not None and l2 <= shared:
@@ -116,7 +131,9 @@ def hierarchy_warnings(summary_rows: list[dict[str, str]]) -> dict[str, list[str
             warnings["l2_hit_cg_path"].append("hierarchy_l2_not_greater_than_l1")
             warnings["global_l1_hit_path"].append("hierarchy_l2_not_greater_than_l1")
     if dram is not None and l2 is not None and dram <= l2:
-        warnings["dram_cg_stream_path"].append("hierarchy_dram_not_greater_than_l2")
+        warnings["external_memory_read_path"].append(
+            "hierarchy_external_memory_not_greater_than_l2"
+        )
         warnings["l2_hit_cg_path"].append("hierarchy_dram_not_greater_than_l2")
     if shared is not None and l1 is not None:
         larger = max(shared, l1)
@@ -207,15 +224,20 @@ def audit_component(
     for warning in hierarchy_notes.get(component, []):
         cautions.append(warning)
 
-    if component == "dram_cg_stream_path":
-        cautions.append("dram_sanity_path_not_physical_dram_energy")
+    if component in {"external_memory_read_path", "dram_cg_stream_path"}:
+        cautions.append("effective_external_read_path_not_physical_memory_energy")
 
     if reasons:
         status = "reject"
+    elif (
+        component in {"external_memory_read_path", "dram_cg_stream_path"}
+        and confidence == "low"
+    ):
+        status = "accepted_effective_path_low_stability"
     elif confidence == "low":
         status = "accepted_low_stability"
-    elif component == "dram_cg_stream_path":
-        status = "accepted_sanity"
+    elif component in {"external_memory_read_path", "dram_cg_stream_path"}:
+        status = "accepted_effective_path"
     elif cautions:
         status = "accepted_with_caution"
     else:
@@ -330,8 +352,9 @@ def write_markdown(
             "coefficient distribution is still unstable. Report this separately.\n"
         )
         f.write(
-            "- `accepted_sanity` is used for DRAM streaming sanity. It should not "
-            "be described as physical DRAM device energy.\n"
+            "- `accepted_effective_path` is used for the NCU-validated external "
+            "memory read path. It includes GPU-device path overhead and must not "
+            "be described as physical HBM/GDDR device energy.\n"
         )
         f.write(
             "- `reject` means at least one required gate failed and the component "

@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 FINAL_CONTROL_BY_TREATMENT = {
-    "shared_scalar_load_only": "clocked_empty",
+    "shared_scalar_load_only": "shared_scalar_addr_only",
     "global_l1_load_only": "global_addr_only",
     "l2_cg_load_only": "global_addr_only",
     "dram_cg_load_only": "global_addr_only",

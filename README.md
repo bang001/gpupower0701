@@ -30,6 +30,115 @@ known limitations are tracked in `docs/audits/component_energy_self_critique_ko.
 For the detailed NCU validation and pJ/FLOP or pJ/byte calculation method, see
 `docs/methodology/ncu_validation_energy_calculation_ko.md`.
 
+## Platform별 빠른 실행 가이드
+
+항상 대상 GPU 노드에서 최신 `main`을 받은 뒤 **새로운 날짜 태그로 command
+package를 생성**한다. 저장소에 포함된 과거 날짜의 `*_commands.sh`는 당시
+프로토콜을 재현하기 위한 자료이며, 새 실험의 기본 진입점이 아니다.
+
+```bash
+git switch main
+git pull --ff-only origin main
+nvidia-smi
+nvcc --version
+ncu --version
+TAG="$(date +%Y%m%d)"
+```
+
+| GPU | planner profile | CUDA arch | build directory | 실행 전 핵심 확인 | 상세 가이드 |
+|---|---|---:|---|---|---|
+| RTX 3090 (GA102) | `rtx3090` | `sm_86` | `build` | 실험 중 다른 그래픽/compute 부하를 최소화하고 현재 strict protocol로 재측정 | [cross-platform guide](docs/platforms/cross_platform_component_experiment_guide_ko.md) |
+| V100 (GV100) | `v100` | `sm_70` | `build-v100` | `compute_70`을 지원하는 CUDA 12.x 사용; CUDA 13.x는 `sm_70` 빌드 불가 | [V100 node guide](docs/platforms/v100_node_experiment_guide_ko.md) |
+| A100 (GA100) | `a100` | `sm_80` | `build-a100` | L2 NCU-first selector와 fabric-aware acceptance를 임의로 우회하지 않음 | [A100 node guide](docs/platforms/a100_node_experiment_guide_ko.md) |
+| H100 (GH100) | `h100` | `sm_90` | `build-h100` | 현재 Tensor 계수는 WMMA/HMMA compatibility path이며 WGMMA/TMA 계수가 아님 | [H100 node guide](docs/platforms/h100_node_experiment_guide_ko.md) |
+
+### RTX 3090
+
+```bash
+cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES=86
+cmake --build build --clean-first -j
+
+python3 scripts/plan_platform_component_experiment.py \
+  --target-profile rtx3090 \
+  --binary ./build/a100_fp16_energy_v2 \
+  --tag "$TAG"
+
+bash "results/summary/rtx3090_component_finalplan_${TAG}_commands.sh"
+```
+
+### V100
+
+V100은 먼저 선택한 CUDA toolkit이 `compute_70`을 제공하는지 확인한다.
+
+```bash
+nvcc --list-gpu-arch | grep -q compute_70
+cmake -S . -B build-v100 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES=70
+cmake --build build-v100 --clean-first -j
+
+python3 scripts/plan_platform_component_experiment.py \
+  --target-profile v100 \
+  --binary ./build-v100/a100_fp16_energy_v2 \
+  --tag "$TAG"
+
+bash "results/summary/v100_component_finalplan_${TAG}_commands.sh"
+```
+
+### A100
+
+```bash
+cmake -S . -B build-a100 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES=80
+cmake --build build-a100 --clean-first -j
+
+python3 scripts/plan_platform_component_experiment.py \
+  --target-profile a100 \
+  --binary ./build-a100/a100_fp16_energy_v2 \
+  --tag "$TAG"
+
+bash "results/summary/a100_component_finalplan_${TAG}_commands.sh"
+```
+
+### H100
+
+```bash
+cmake -S . -B build-h100 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES=90
+cmake --build build-h100 --clean-first -j
+
+python3 scripts/plan_platform_component_experiment.py \
+  --target-profile h100 \
+  --binary ./build-h100/a100_fp16_energy_v2 \
+  --tag "$TAG"
+
+bash "results/summary/h100_component_finalplan_${TAG}_commands.sh"
+```
+
+생성된 shell은 strict preflight, power/energy 측정, treatment-control NCU
+검증, matched-control 분석, reliability audit, strict summary 및 package
+audit를 순서대로 수행한다. NCU가 `ERR_NVGPUCTRPERM`을 반환하면 기본 자동
+재시도가 `sudo -E`를 사용한다. 처음부터 sudo NCU를 강제하려면 다음처럼
+실행한다. 전체 energy harness가 아니라 NCU invocation만 권한 상승 대상이다.
+
+```bash
+NCU_USE_SUDO=1 bash \
+  "results/summary/<profile>_component_finalplan_${TAG}_commands.sh"
+```
+
+실험 완료는 단순히 shell이 끝났다는 뜻이 아니다. `results/summary/`에서
+power API audit, power-state audit, NCU acceptance, matched-control,
+reliability, strict component summary와 package audit가 모두 생성되고 각 필수
+gate가 통과했는지 확인해야 한다. 특정 경로가 reject되면 계수를 임의로 채우지
+말고 해당 경로를 미측정 상태로 보고한다. 플랫폼별 capacity, sweep 좌표,
+NVML 의미 및 NCU counter 차이는
+[cross-platform guide](docs/platforms/cross_platform_component_experiment_guide_ko.md)와
+[power API matrix](docs/platforms/power_measurement_api_matrix_ko.md)를 함께 확인한다.
+
 For a quick map of active vs archived material, start with `docs/README.md` and
 `scripts/README.md`. Legacy design/code paths are kept under
 `archive/legacy_20260707/`.
@@ -51,7 +160,7 @@ GPU/device total-energy mJ delta plus NCU path validation.
 2026-07-08 are historical evidence, not current strict-final values. Their
 Global L1/L2 energy pairs use `clocked_empty` and do not carry same-coordinate
 `global_addr_only` NCU acceptance. The current protocol requires address
-controls, exact control NCU acceptance, and pair-locked Tensor/L2/DRAM work. See
+controls, exact control NCU acceptance, and pair-locked Tensor/Shared/Global-L1/L2/external-memory work. See
 `docs/audits/current_goal_alignment_audit_ko.md` and rerun
 `results/summary/rtx3090_component_finalplan_20260712_commands.sh` before
 publishing updated RTX 3090 coefficients.
@@ -79,6 +188,7 @@ Historical RTX 3090 result artifacts:
 | matched-control instability audit | `results/summary/rtx3090_finalplan_stability_matched_control_instability_audit_20260708.md` |
 | platform power/readiness audit | `results/summary/platform_power_readiness_audit_20260708.md` |
 | current component-energy goal readiness audit | `results/summary/component_energy_goal_readiness_audit_20260714.md` |
+| current Shared/Global-L1 matched-pair targeted report | `results/summary/rtx3090_shared_l1_matched_pair_report_20260714_ko.md` |
 | Tensor targeted rerun | `results/summary/rtx3090_tensor_targeted_rf8_rf16_report_20260708_ko.md` |
 | Tensor fixed-ITER check | `results/summary/rtx3090_tensor_fixed_iter_rf8_rf16_report_20260708_ko.md` |
 | Tensor RF8 duration-scaling check | `results/summary/rtx3090_tensor_rf8_duration_scaling_report_20260708_ko.md` |
@@ -117,6 +227,8 @@ Experiment setup and method documents:
 | How does the current experiment work? | `docs/methodology/howitworks.md` |
 | What are the final sweep/settings and gates? | `docs/methodology/component_energy_final_experiment_plan_ko.md` |
 | How are NCU counters used for pJ/FLOP and pJ/bit? | `docs/methodology/ncu_validation_energy_calculation_ko.md` |
+| What does the external-memory pJ/bit mean and how is it swept? | `docs/methodology/external_memory_read_path_experiment_design_ko.md` |
+| How is GA100 L2 partition-fabric traffic separated and accepted? | `docs/methodology/a100_l2_fabric_aware_experiment_design_ko.md` |
 | Why did the A100 Tensor RF/L2 strict run fail, and what changed? | `docs/audits/a100_strict_summary_failure_remediation_ko.md` |
 | How should A100/V100/H100 be run? | `docs/platforms/cross_platform_component_experiment_guide_ko.md` |
 | How do RTX 3090/A100/V100 parameters and experiment counts differ? | `docs/platforms/cross_platform_component_experiment_guide_ko.md` sections 4.0-4.5 |
@@ -137,15 +249,23 @@ It also checks that A100/V100/H100 generated command packages exist and contain
 the expected finalplan gates; that check proves execution readiness, not measured
 component coefficients.
 
-The current standalone RTX 3090 Tensor rerun uses
-`tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2`. It
-accepted 33/35 power-state-filtered pairs and all 10 Tensor/control NCU rows;
-RF1/2/4/8/16 treatment rows all have `HMMA/logical MMA=2`, controls have HMMA=0,
-and local read/write traffic is zero. The resulting board-level effective MMA
-incremental median is `2.2525 pJ/FLOP` over `1.9454-2.3692 pJ/FLOP`. This is not
-pure Tensor Core circuit energy, and it does not make the still-historical
-Shared/Global-L1/L2 rows current. See
-`results/summary/rtx3090_tensor_fixedrf_v2_report_20260713_ko.md`.
+The current Tensor kernel revision is
+`tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4`.
+It fills operands directly into WMMA register fragments, alternates the sign of
+operand A so the FP32 accumulator remains bounded, and uses `W_SM=1 KiB` only as
+a CLI placeholder; Tensor memory working set is not applicable. RF means inner
+MMA grouping, not cache reuse. Static sm_86/sm_80/sm_90 binary audits show HMMA
+in every treatment, zero HMMA in controls, no LDG/LDS operand load, and no local
+allocation. They also show different treatment/control register footprints, so
+the coefficient includes the WMMA/HMMA register and scheduler path and is not
+pure Tensor Core circuit energy.
+
+The older fixed-RF v2 RTX 3090 result (`2.2525 pJ/FLOP`) is superseded because
+its constant positive accumulation can stop changing in FP32 during long energy
+runs. It remains historical sensitivity evidence only. A current v4 energy
+coefficient requires a fresh power run plus NCU HMMA/logical-MMA linearity at
+RF1/2/4/8/16. See
+`docs/audits/tensor_mma_cross_architecture_implementation_audit_ko.md`.
 
 Older RTX 3090 Tensor and memory experiments remain useful only as historical
 method-sensitivity and path evidence. They do not form a current full component
@@ -153,20 +273,22 @@ table:
 
 | Path | Historical observation | Current status |
 |---|---:|---|
-| Tensor v1 | `0.077-0.170 pJ/FLOP` | superseded by fixed-RF v2; do not average or compare directly |
+| Tensor v1 | `0.077-0.170 pJ/FLOP` | superseded historical; v2도 v4 구현 감사로 superseded됨 |
 | Shared scalar | roughly `0.06-0.24 pJ/bit` across LR/order/control variants | historical and strongly method-sensitive; full current package rerun required |
 | Global L1 | roughly `0.11-0.17 pJ/bit` | historical/provisional; current `global_addr_only` control evidence is missing |
 | L2 CG | roughly `0.96-1.13 pJ/bit` | historical/provisional; current matched-ITER address control is missing |
-| DRAM cumulative path | `26.709-28.409 pJ/bit` | provisional reference-aligned band, not an accepted measured coefficient |
+| External-memory read path | RTX 3090 `25.510`, A100 `11.925`, V100 `8.131 pJ/bit` | user-reported historical observations; not strict coefficients or pure HBM/GDDR energy; rerun with the current read-only protocol |
 
 The 2026-07-08 strict snapshot did use `nvml_total_energy`,
 `total_energy_mj_delta`, and explicit GPU/device scope, so it is retained as API
 and historical treatment-path evidence. It predates the current address-control,
-control-NCU, fixed-RF v2, and path-specific schema gates. Detailed historical
+control-NCU, current Tensor v4, and path-specific schema gates. Detailed historical
 sweeps and interpretations are preserved in
 `archive/pre_current_protocol_20260712/docs/results/gpu_power_modeling_experiment_results_ko.md`.
 The active status and allowed reporting language are in
 `docs/results/gpu_power_modeling_experiment_results_ko.md`.
+The architecture-aware external-memory protocol and interpretation boundary are
+in `docs/methodology/external_memory_read_path_experiment_design_ko.md`.
 
 Platform guides:
 
@@ -180,7 +302,7 @@ Generated cross-platform command packages:
 
 | GPU | command plan | executable shell |
 |---|---|---|
-| A100 | `results/summary/a100_component_finalplan_20260708_command_plan.md` | `results/summary/a100_component_finalplan_20260708_commands.sh` |
+| A100 | `results/summary/a100_component_finalplan_20260714_command_plan.md` | `results/summary/a100_component_finalplan_20260714_commands.sh` |
 | A100 Tensor/L2 remediation | `results/summary/a100_tensor_l2_remediation_20260710_command_plan.md` | `results/summary/a100_tensor_l2_remediation_20260710_commands.sh` |
 | V100 | `results/summary/v100_component_finalplan_20260708_command_plan.md` | `results/summary/v100_component_finalplan_20260708_commands.sh` |
 | H100 | `results/summary/h100_component_finalplan_20260708_command_plan.md` | `results/summary/h100_component_finalplan_20260708_commands.sh` |
@@ -190,15 +312,25 @@ them on the matching target node after building the profile-specific binary, the
 rerun the power API, power-state, NCU, reliability, strict-summary, and goal
 readiness audits.
 
-The standard A100 and V100 finalplans now run an NCU-first L2 selector before any
+The standard A100 and V100 finalplans run an NCU-first L2 selector before any
 long energy sweep. The standalone A100 remediation package remains a focused
-diagnostic for the observed 58.5-60.1% L2 path-hit failure. The selector runs application-replay NCU prechecks
-over an ordered policy/address-layout/blocks-per-SM candidate list while keeping
-the strict 95% L2 read-hit gate. It also requires observed L2 bytes to match
-logical expected traffic and verifies the persisting-cache size counter. It
+diagnostic for the previously observed direct-partition hit range. The selector
+runs application-replay NCU prechecks over an ordered
+policy/address-layout/blocks-per-SM candidate list. On GA100, the 95% gate applies
+to logical final service computed from source/TEX plus `srcunit_ltcfabric` hits;
+native lookup hit is checked against the reconstructed fabric model instead of
+being forced above 95%. It also requires observed L2 bytes to match logical
+expected traffic and verifies the persisting-cache size counter. It
 stops before the long energy sweep if no candidate passes. A persisting or
 `sm_interleaved` result is configuration-specific effective path evidence, not a
 universal default-L2 value.
+
+All platform packages now profile strict L2 rows with the smaller
+`NCU_METRIC_PROFILE=l2_path_minimal` bundle and require hit/miss/read sector
+conservation. Tensor/Shared/Global-L1/external-memory paths use a separate full diagnostic run;
+`merge_ncu_validation_summaries.py` combines the disjoint rows without mixing
+metrics from different replay passes into one row. A full-bundle L2 hit rate
+cannot override an incoherent minimal-profile result.
 
 Prompt templates:
 
@@ -216,7 +348,7 @@ Prompt templates:
 For V100, the general energy diagnostic sweep uses `blocks/SM=4,16,32` and the
 strict NCU sidecar uses B32 for Shared/Global-L1 at `W_SM=32 KiB`. L2 first tests
 normal-residency contiguous B32 and sm-interleaved B32/B16/B4 at W32/W64, then
-uses the first strict-pass B in both L2 energy and full NCU. V100 does not use
+uses the first strict-pass B in both L2 energy and minimal coherent L2 NCU. V100 does not use
 persisting-L2 controls. Because the
 kernel has one warp per block, B32 requests at most 32 warps/SM, or 50% of
 GV100's 64-warp limit. Register/shared-memory limits can reduce actual
@@ -424,14 +556,14 @@ Primary finalplan modes:
 | component/path | treatment mode | control mode | why it is used |
 |---|---|---|---|
 | Tensor MMA increment | `reg_mma` | `reg_operand_only` | RF별 treatment 목표와 control 최소시간을 각각 calibration하고 두 ITER 중 큰 값을 두 mode에 동일 적용한 뒤 direct net-energy 차분으로 extra WMMA/HMMA work를 추정 |
-| Shared scalar path | `shared_scalar_load_only` | `clocked_empty` | measures a simple shared-memory scalar load path without Tensor Core work |
-| Global L1 hit path | `global_l1_load_only` | `global_addr_only` | same address/tile/repeat control; NCU must show L1-hit-dominated traffic |
+| Shared scalar path | `shared_scalar_load_only` | `shared_scalar_addr_only` | same dynamic-shared allocation/init/index/checksum shape, equal ITER, direct net-energy difference; NCU must show treatment read traffic and no repeated control reads |
+| Global L1 hit path | `global_l1_load_only` | `global_addr_only` | same address/tile/repeat control, equal ITER, direct net-energy difference; NCU must show L1-hit-dominated traffic |
 | L2 hit path | `l2_cg_load_only` | `global_addr_only` | uses cache-global loads to reduce L1 participation and target L2-hit traffic |
 | L2 capacity diagnostic | `l2_load_only` | none | normal global-load diagnostic; excluded from strict L2 coefficient because it can hit L1 |
-| DRAM streaming sanity | `dram_cg_load_only` | `global_addr_only` | treatment/control-floor dual calibration, identical ITER, direct net-energy subtraction; NCU must show DRAM-dominant traffic |
+| External-memory read path | `dram_cg_load_only` | `global_addr_only` | identical ITER, architecture-specific W sweep, strict NCU `dram__bytes_read.sum`; effective GPU-device path, not physical HBM/GDDR energy |
 
 Final platform packages pass `--require-control-ncu-acceptance`. Consequently,
-`reg_operand_only` and `global_addr_only` must have an accepted NCU row at the
+`reg_operand_only`, `shared_scalar_addr_only`, and `global_addr_only` must have an accepted NCU row at the
 same `W_SM`, blocks/SM, active-SM, and RF/LR coordinate as the treatment. A
 clean treatment row is insufficient when its subtraction control is unverified.
 
@@ -441,10 +573,11 @@ Control and diagnostic modes:
 |---|---|---|
 | `idle` | support | no kernel; records NVML energy delta during sleep |
 | `empty` | diagnostic | same grid shape, persistent loop, no MMA; older control, not the final matched-control default |
-| `clocked_empty` | shared-path control | duration-calibrated scheduler/control loop with no operand traffic |
+| `clocked_empty` | baseline/diagnostic | clocked scheduler/control loop; no longer the Shared final subtraction control |
+| `shared_scalar_addr_only` | primary Shared control | same shared allocation, initialization, tile/index loop, and checksum dependency as the Shared treatment without repeated shared loads |
 | `global_addr_only` | primary global-memory control | same global address/tile/repeat/checksum loop without an input load |
 | `reg_fragment_only` | diagnostic | WMMA fragment/register setup without MMA |
-| `reg_operand_only` | primary control | one dependent register integer add per RF keeps the loop/fragments live without the former FP32 FMA/checksum or memory; `reg_mma` executes the same add so it cancels in the same-ITER direct difference |
+| `reg_operand_only` | primary control | declares the same A/B/C fragments, dependent scalar update, in-place A-sign flip, and source epilogue but issues no MMA; ptxas reduces it to fewer registers than treatment, so it is a lightweight no-MMA control rather than a register-footprint-matched pure Tensor control |
 | `reg_pressure` | diagnostic | scalar register-pressure payload sweep; do not report as pure register-file energy |
 | `addr_only` | diagnostic | global-memory tile address walk without issuing operand loads |
 | `shared_load_only` | diagnostic | shared WMMA operand loads without MMA; useful for NCU comparison, not primary coefficient |
@@ -506,13 +639,17 @@ For short sanity runs, constrain the matrix:
 ```bash
 python3 scripts/run_sweep.py --execute \
   --gpu-ids 0 \
-  --modes clocked_empty,shared_scalar_load_only \
+  --modes shared_scalar_addr_only,shared_scalar_load_only \
   --w-sm-kib-values 32,64 \
   --blocks-per-sm-values 8,16 \
   --active-sm-values 82 \
   --seconds 2 \
   --repeats 1
 ```
+
+위 명령은 kernel smoke test다. 최종 Shared coefficient는
+`run_component_regression_sweep.py --memory-pair-lock-iters`로 두 mode의 ITER를 같게
+만든 뒤 계산한다.
 
 Component-decomposition now uses an acceptance-first finalplan flow for primary
 results. Generate a platform-specific command plan, run energy sweeps without
@@ -602,8 +739,11 @@ sector counters otherwise.
 
 For `ld.global.cg`, L1 request bytes are expected because the request traverses
 L1TEX. They are not L1 cache-hit bytes. Strict L2 acceptance therefore checks
-near-zero path-specific L1 hit bytes and at least 95% path-specific L2 read hit
-rate instead of requiring total L1 request bytes to be near zero.
+near-zero path-specific L1 hit bytes instead of requiring total L1 request bytes
+to be near zero. GA100 additionally combines source/TEX and LTC-fabric lookup
+hit/miss counters: its >=95% requirement applies to logical final-service L2 hit,
+while direct and native lookup-level percentages are reported with their distinct
+denominators.
 The timed CG paths are preceded by an `ld.global.cg` warm-up kernel rather than
 a normal cached-load warm-up, avoiding pre-population of L1 by the harness.
 

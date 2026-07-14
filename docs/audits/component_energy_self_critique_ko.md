@@ -4,9 +4,10 @@
 
 ## 현재 판정
 
-완전한 current-protocol component table은 아직 없다. RTX 3090은 fixed-RF v2 Tensor
-standalone 결과만 현행 근거가 있고, Shared/Global-L1/L2는 새 address-control 및
-package gate로 다시 실행해야 한다. V100/A100/H100도 코드와 command package는 준비됐지만
+완전한 current-protocol component table은 아직 없다. RTX 3090 Tensor v4는 runtime
+NCU path/FLOP 검증까지만 현행 근거가 있고 새 board-energy coefficient는 없다.
+Shared/Global-L1/L2도 새 address-control 및 package gate로 다시 실행해야 한다.
+V100/A100/H100도 코드와 command package는 준비됐지만
 각 target node의 accepted 전체 package가 저장소에 반입되지 않았다.
 
 따라서 “코드가 구현됐다”, “NCU path가 통과했다”, “component coefficient가 확정됐다”를
@@ -34,10 +35,11 @@ package gate로 다시 실행해야 한다. V100/A100/H100도 코드와 command 
 |---|---|---|
 | 코드가 RTX 3090/V100/A100/H100 profile과 finalplan을 생성함 | 높음, 정적 구현 | profile/preflight/planner audit과 self-test 기준; target-node 실행 성공과는 다름 |
 | historical RTX 3090 NCU가 Shared/L1/L2/DRAM 방향의 path를 보여줌 | 높음, 역사적 path evidence | current control acceptance와 새 binary revision 전체를 보증하지 않음 |
-| RTX 3090 fixed-RF v2 Tensor median 2.252501 pJ/FLOP | 중간 이상, standalone | power/NCU pair gate 33/35 통과; pure Tensor 회로가 아니고 stability follow-up 필요 |
+| RTX 3090 fixed-RF v2 Tensor median 2.252501 pJ/FLOP | historical only | 당시 power/NCU pair gate는 통과했지만 accumulator 정체 가능성 때문에 superseded |
+| RTX 3090 fixed-RF v4 Tensor path/FLOP | 높음, 경로 검증 | RF1-16 NCU accepted; 새 power run 전이므로 coefficient 없음 |
 | 과거 RTX 3090 Shared/L1/L2 coefficient | 낮음, current final로는 불가 | 과거 control/schema 사용; 현행 재실행 전 역사적 값 |
 | V100 L2 구형 음수 계수 | 무효 | NCU path 성공과 별개로 ITER mismatch |
-| DRAM 26.709-28.409 pJ/bit | provisional | reference-aligned reporting band이며 accepted raw pair가 아님 |
+| External-memory 25.510/11.925/8.131 pJ/bit | historical/user-reported | GPU-device effective path 후보이며 raw package 미확보; strict 재실험 전 final 사용 금지 |
 | Register file pJ/access | 미확정 | 현재 kernel로 RF 단독 분리가 불가능 |
 | Physical HBM/GDDR energy | 미확정 | NVML GPU/device-level path delta의 경계 밖 |
 
@@ -49,7 +51,7 @@ package gate로 다시 실행해야 한다. V100/A100/H100도 코드와 command 
 | explicit total-energy scope | fallback/module/memory power 혼입 | GPU 내부 component 단독 측정 |
 | treatment/control exact NCU acceptance | 오염된 control 또는 잘못된 path | replay run과 energy run의 완전 동일성 |
 | NCU actual denominator | static byte 계산 오류 | metric 자체의 architecture 차이 |
-| Tensor/L2/DRAM matched ITER | 서로 다른 logical work 차분 | 두 mode의 elapsed/power-state 차이 |
+| 모든 final pair의 matched ITER | 서로 다른 logical work 차분 | 두 mode의 elapsed/power-state 차이 |
 | min delta 및 power-state audit | noise floor와 throttling 일부 | 모든 thermal/order effect |
 | strict/package/goal audit | 누락 artifact와 stale 결과 승격 | gate가 모델의 물리적 순수성을 보증하지는 않음 |
 
@@ -57,10 +59,10 @@ package gate로 다시 실행해야 한다. V100/A100/H100도 코드와 command 
 
 | 약점 | 영향 | 필요한 후속 작업 |
 |---|---|---|
-| Shared/Global L1은 duration-scaled control power 사용 | instruction mix와 drift가 완전히 제거되지 않음 | bracketed/interleaved control과 더 긴 반복 비교 |
+| Shared/Global L1의 기존 duration-scaled 결과는 구조적으로 불안정 | memory stall이 issue/clock power를 바꾸므로 독립 control-power 가정이 성립하지 않음 | 현행 matched-address control + 동일 ITER 직접 차분으로 재측정; 그래도 elapsed/state 차이는 명시 |
 | Tensor control도 scheduler/register/final-store가 완전히 같지 않음 | coefficient에 Tensor 외 증분이 남음 | SASS와 operation-proportional counter 비교 유지 |
 | L2/DRAM matched ITER에서 elapsed가 다름 | 같은 work여도 clock/temperature 상태가 다를 수 있음 | control floor, pair adjacency, repeats, power-state filtering |
-| A100 L2의 과거 약 60% hit | 단순 capacity 계산으로 L2 path를 보장하지 못함 | policy/layout/blocks sweep에서 95% path plateau가 없으면 energy 전에 중단 |
+| A100 L2 source 51-62%, native 67-72.5% | source와 lookup-level native에 동일 95% gate를 적용해 remote-partition recovery를 놓침 | B16/B8/B4/B2/B1 sweep에서 source+`srcunit_ltcfabric` logical final hit, native-model, DRAM read를 검증; logical 95% plateau가 없으면 energy 전에 중단 |
 | V100 NCU/CUDA 버전 제약 | permission/toolchain 실패가 coefficient 누락으로 이어짐 | CUDA 12.x `compute_70`, GV100 metric query, sudo fallback 확인 |
 | H100 native 경로 미구현 | WMMA 결과를 WGMMA/TMA/FP8로 확대 해석할 위험 | 별도 Hopper-native kernel/control/counter 설계 |
 | 여러 profile 정의가 C++/Python에 중복 | 수정 시 drift 가능 | `audit_documentation_consistency.py`와 platform readiness를 계속 gate로 사용 |

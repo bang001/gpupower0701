@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run component regression sweeps with optional pair-locked ITER.
 
-Tensor and selected global-memory finalplan runs can calibrate the treatment
+Tensor and memory-path finalplan runs can calibrate the treatment
 for the target duration and the control for a minimum duration, then apply the
 larger ITER to both modes. This keeps the work count comparable without
 allowing a faster control to fall below the energy counter/idle-subtraction
@@ -39,6 +39,7 @@ DEFAULT_MODES = [
     "reg_mma",
     "global_l1_load_only",
     "global_addr_only",
+    "shared_scalar_addr_only",
     "shared_scalar_load_only",
     "shared_load_only",
     "shared_mma",
@@ -52,11 +53,17 @@ DEFAULT_MODES = [
 ]
 
 TENSOR_PAIR_MODES = {"reg_operand_only", "reg_mma"}
-MEMORY_PAIR_TREATMENT_MODES = {"l2_cg_load_only", "dram_cg_load_only"}
+MEMORY_PAIR_SPECS = {
+    "shared_scalar_load_only": ("shared_scalar_addr_only", "shared"),
+    "global_l1_load_only": ("global_addr_only", "l1"),
+    "l2_cg_load_only": ("global_addr_only", "l2"),
+    "dram_cg_load_only": ("global_addr_only", "dram"),
+}
+MEMORY_PAIR_TREATMENT_MODES = set(MEMORY_PAIR_SPECS)
 ATOMIC_MODE_PAIRS = {
     frozenset({"reg_operand_only", "reg_mma"}): ("reg_operand_only", "reg_mma"),
-    frozenset({"clocked_empty", "shared_scalar_load_only"}): (
-        "clocked_empty",
+    frozenset({"shared_scalar_addr_only", "shared_scalar_load_only"}): (
+        "shared_scalar_addr_only",
         "shared_scalar_load_only",
     ),
     frozenset({"global_addr_only", "global_l1_load_only"}): (
@@ -464,13 +471,18 @@ def resolve_memory_pair_iters(
     treatment_mode: str,
     control_min_seconds: float = 0.0,
 ) -> tuple[int, dict[tuple[str, ...], int]]:
-    """Calibrate a global-memory treatment/control pair to identical ITER."""
+    """Calibrate a memory-path treatment/control pair to identical ITER."""
 
     if treatment_mode not in MEMORY_PAIR_TREATMENT_MODES:
         raise ValueError(f"unsupported memory-pair treatment mode: {treatment_mode}")
-    pair_modes = {"global_addr_only", treatment_mode}
-    pair_label = "L2" if treatment_mode == "l2_cg_load_only" else "DRAM"
-    policy_prefix = "l2" if treatment_mode == "l2_cg_load_only" else "dram"
+    control_mode, policy_prefix = MEMORY_PAIR_SPECS[treatment_mode]
+    pair_modes = {control_mode, treatment_mode}
+    pair_label = {
+        "shared": "Shared",
+        "l1": "Global L1",
+        "l2": "L2",
+        "dram": "DRAM",
+    }[policy_prefix]
 
     groups: dict[tuple[str, ...], dict[str, dict[str, Any]]] = {}
     for item in commands:
@@ -485,13 +497,13 @@ def resolve_memory_pair_iters(
         if missing:
             print(
                 f"{pair_label} pair-lock requires both {treatment_mode} and "
-                f"global_addr_only; missing={','.join(missing)} key={key}",
+                f"{control_mode}; missing={','.join(missing)} key={key}",
                 file=sys.stderr,
             )
             return 2, resolved
 
         treatment = by_mode[treatment_mode]
-        control = by_mode["global_addr_only"]
+        control = by_mode[control_mode]
         treatment_calibration_command = [*treatment["cmd"], "--calibrate-only"]
         proc = subprocess.run(
             treatment_calibration_command,
@@ -963,7 +975,7 @@ def main() -> int:
         default=0,
         help=(
             "Use fixed ITER for every command; 0 uses per-mode calibration unless "
-            "a Tensor or global-memory pair-lock option is enabled."
+            "a Tensor or memory-path pair-lock option is enabled."
         ),
     )
     parser.add_argument("--repeats", type=int, default=5)
@@ -995,9 +1007,8 @@ def main() -> int:
         "--memory-pair-lock-iters",
         action="store_true",
         help=(
-            "For a global_addr_only pair with l2_cg_load_only or "
-            "dram_cg_load_only, calibrate the treatment and run both modes "
-            "with identical ITER."
+            "For a documented Shared, Global-L1, L2, or DRAM treatment/control "
+            "pair, calibrate the treatment and run both modes with identical ITER."
         ),
     )
     parser.add_argument(
@@ -1005,14 +1016,14 @@ def main() -> int:
         type=float,
         default=0.0,
         help=(
-            "Minimum global_addr_only calibration duration before choosing the "
-            "shared global-memory-pair ITER."
+            "Minimum matched-control calibration duration before choosing the "
+            "shared memory-pair ITER."
         ),
     )
     parser.add_argument(
         "--memory-pair-calibration-csv",
         default="",
-        help="L2/DRAM pair calibration manifest path; defaults beside --matrix-csv.",
+        help="Memory-path pair calibration manifest path; defaults beside --matrix-csv.",
     )
     parser.add_argument(
         "--execute",
@@ -1073,11 +1084,15 @@ def main() -> int:
     memory_treatments = set(modes) & MEMORY_PAIR_TREATMENT_MODES
     if args.memory_pair_lock_iters and (
         len(memory_treatments) != 1
-        or set(modes) != {"global_addr_only", *memory_treatments}
+        or set(modes)
+        != {
+            MEMORY_PAIR_SPECS[next(iter(memory_treatments))][0],
+            *memory_treatments,
+        }
     ):
         raise ValueError(
-            "--memory-pair-lock-iters requires exactly global_addr_only plus one "
-            "of l2_cg_load_only or dram_cg_load_only"
+            "--memory-pair-lock-iters requires exactly one documented memory "
+            "treatment and its matched control"
         )
     memory_treatment_mode = (
         next(iter(memory_treatments)) if args.memory_pair_lock_iters else ""
@@ -1175,14 +1190,19 @@ def main() -> int:
                                                 if args.tensor_pair_lock_iters
                                                 and mode in TENSOR_PAIR_MODES
                                                 else (
-                                                    "l2_pair_locked_pending"
-                                                    if memory_treatment_mode
-                                                    == "l2_cg_load_only"
-                                                    else "dram_pair_locked_pending"
+                                                    MEMORY_PAIR_SPECS[
+                                                        memory_treatment_mode
+                                                    ][1]
+                                                    + "_pair_locked_pending"
                                                 )
                                                 if args.memory_pair_lock_iters
                                                 and mode
-                                                in {"global_addr_only", memory_treatment_mode}
+                                                in {
+                                                    MEMORY_PAIR_SPECS[
+                                                        memory_treatment_mode
+                                                    ][0],
+                                                    memory_treatment_mode,
+                                                }
                                                 else "per_mode_duration_calibrated"
                                             ),
                                             "resolved_iters": str(args.iters) if args.iters else "",
@@ -1233,11 +1253,9 @@ def main() -> int:
             if args.memory_pair_calibration_csv
             else matrix_path.with_name(
                 matrix_path.stem
-                + (
-                    "_l2_pair_calibration.csv"
-                    if memory_treatment_mode == "l2_cg_load_only"
-                    else "_dram_pair_calibration.csv"
-                )
+                + "_"
+                + MEMORY_PAIR_SPECS[memory_treatment_mode][1]
+                + "_pair_calibration.csv"
             )
         )
         calibration_rc, resolved = resolve_memory_pair_iters(
@@ -1251,11 +1269,13 @@ def main() -> int:
         update_matrix_with_resolved_iters(
             matrix_path,
             resolved,
-            pair_modes={"global_addr_only", memory_treatment_mode},
+            pair_modes={
+                MEMORY_PAIR_SPECS[memory_treatment_mode][0],
+                memory_treatment_mode,
+            },
             measurement_policy=(
-                "l2_pair_locked_iters"
-                if memory_treatment_mode == "l2_cg_load_only"
-                else "dram_pair_locked_iters"
+                MEMORY_PAIR_SPECS[memory_treatment_mode][1]
+                + "_pair_locked_iters"
             ),
         )
 

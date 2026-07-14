@@ -1,5 +1,8 @@
 # H100 노드 실험 실행 가이드
 
+External-memory 결과의 최신 명칭, read-only NCU 분모와 W sweep은
+[External-Memory Read-Path 설계](../methodology/external_memory_read_path_experiment_design_ko.md)를 우선 적용한다.
+
 작성일: 2026-07-08, updated 2026-07-14
 
 ## 목적
@@ -217,7 +220,7 @@ python3 scripts/audit_power_api_measurements.py \
   --require-explicit-measurement-scope \
   --require-exact-measurement-interval \
   --require-mode-notes-marker \
-  reg_mma=tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2
+  reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4
 ```
 
 이 단계에서 모든 row가 `missing_column:measurement_scope` 또는
@@ -227,9 +230,10 @@ stale binary/schema 문제다. 현재 source를 pull한 뒤 `cmake --build build
 archive로 옮긴 뒤 재실행한다. 구버전 CSV에 새 row를 append하면 power API audit이
 전체 reject될 수 있다.
 
-`fixed_rf_v2`는 RF1은 검증된 dynamic loop, RF2/4/8/16은 fixed-trip `unroll 1` kernel을
-사용한다. Hopper에서의 lowering을 Ampere와 같다고 가정하지 않으며 H100 NCU에서 RF별
-`HMMA/logical MMA` 상대 spread<=10%, control HMMA=0을 다시 확인한다. 이 검사는 여전히
+`fixed_rf_v4`는 RF1/2/4/8/16 모두 fixed-trip `unroll 1` kernel을 사용하고 한 A
+fragment의 sign bit를 in-place로 뒤집어 accumulator를 bounded 상태로 유지한다. Hopper에서의 lowering을
+Ampere와 같다고 가정하지 않으며 H100 NCU에서 RF별
+predicated HMMA=0, `HMMA/logical MMA` 상대 spread<=10%, control HMMA=0을 다시 확인한다. 이 검사는 여전히
 WMMA compatibility path 검증이며 Hopper-native WGMMA 검증은 아니다.
 
 ## 6. Component finalplan 실행
@@ -256,11 +260,11 @@ bash results/summary/h100_component_finalplan_$(date +%Y%m%d)_commands.sh
 
 | Component | modes | W_SM (KiB) | blocks/SM | factor |
 |---|---|---:|---:|---|
-| Tensor | `reg_operand_only,reg_mma` | 2048 | 16,32 | reuse 1,2,4,8,16 |
-| Shared scalar | `clocked_empty,shared_scalar_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
+| Tensor | `reg_operand_only,reg_mma` | N/A (CLI placeholder 1) | 4,16,32 | reuse 1,2,4,8,16 |
+| Shared scalar | `shared_scalar_addr_only,shared_scalar_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16; 동일 pair ITER |
 | Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
 | L2 CG | `global_addr_only,l2_cg_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; 동일 pair ITER; NCU 1,2,4,8,16 |
-| DRAM sanity | `global_addr_only,dram_cg_load_only` | 8192 | 16,32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
+| External-memory read path | `global_addr_only,dram_cg_load_only` | 2048,4096,8192 | 16,32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
 
 ### H100 sweep를 그래프로 해석하기
 
@@ -272,8 +276,8 @@ bash results/summary/h100_component_finalplan_$(date +%Y%m%d)_commands.sh
   제공한다.
 - L2 W64/W128은 전체 8.25/16.5 MiB로 50 MiB L2의 약 16.5/33%다. A100처럼 더 작은
   W를 포함하지 않은 것은 current heuristic이며 target-node NCU plateau 검증이 필요하다.
-- DRAM W8192는 전체 약 1,056 MiB다. HBM3 physical energy가 아니라 device-level
-  streaming sanity path로만 해석한다.
+- External-memory W2048/4096/8192는 전체 약 264/528/1,056 MiB다. HBM3 physical
+  energy가 아니라 effective GPU-device read path로 해석한다.
 
 현재 H100 좌표가 WGMMA/TMA용으로 별도 최적화된 것은 아니다. kernel은 FP16 WMMA
 compatibility path이며, WGMMA/TMA energy를 주장하려면 별도 kernel과 NCU instruction
@@ -290,12 +294,13 @@ L2 CG energy sweep는 각 W/B/LR 좌표에서 `l2_cg_load_only` treatment와
 `*_l2_pair_calibration.csv`, raw ITER equality, `pair_energy_basis=matched_iters_net_energy`,
 `iter_ratio=1`이 필수다. 이는 NCU L2-hit acceptance와 별개의 작업량 정합성 gate다.
 
-DRAM energy sweep는 mode별 duration calibration을 사용하지 않는다. 각 W/B/LR
+External-memory energy sweep는 mode별 duration calibration을 사용하지 않는다. 각 W/B/LR
 좌표에서 treatment와 address control을 dual-calibrate하고 동일한 resolved ITER를
 `dram_cg_load_only`와 `global_addr_only`에 전달한다. 분석은
 `--dram-pair-policy matched-iters`와 direct net-energy subtraction을 사용한다.
 `*_dram_pair_calibration.csv`, raw ITER equality, `pair_energy_basis=matched_iters_net_energy`,
-`iter_ratio=1`이 H100 DRAM sanity의 필수 gate다. 이 값도 HBM3 device 단독
+`iter_ratio=1`이 H100 external-memory path의 필수 gate다. 분모는 strict NCU
+`dram__bytes_read.sum`이다. 이 값도 HBM3 device 단독
 에너지가 아니라 Hopper GPU/device-level effective streaming-path coefficient다.
 
 ## 7. NCU validation
@@ -321,7 +326,7 @@ REG_W_SM_KIB=2048 \
 L1_W_SM_KIB=16 \
 SHARED_W_SM_KIB=128 \
 L2_W_SM_KIB=64 \
-DRAM_W_SM_KIB_OVERRIDE=8192 \
+DRAM_W_SM_KIB_VALUES=2048,4096,8192 \
 REUSE_FACTOR=1 \
 LOAD_REPEAT=1 \
 TENSOR_REUSE_FACTORS=1,2,4,8,16 \
@@ -362,7 +367,7 @@ REG_W_SM_KIB=2048 \
 L1_W_SM_KIB=16 \
 SHARED_W_SM_KIB=128 \
 L2_W_SM_KIB=64 \
-DRAM_W_SM_KIB_OVERRIDE=8192 \
+DRAM_W_SM_KIB_VALUES=2048,4096,8192 \
 REUSE_FACTOR=1 \
 LOAD_REPEAT=1 \
 TENSOR_REUSE_FACTORS=1,2,4,8,16 \

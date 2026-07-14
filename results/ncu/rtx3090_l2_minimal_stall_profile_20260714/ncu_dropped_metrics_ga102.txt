@@ -1,0 +1,4 @@
+launch__registers_per_thread
+launch__shared_mem_per_block_static
+launch__shared_mem_per_block_dynamic
+launch__persisting_l2_cache_size

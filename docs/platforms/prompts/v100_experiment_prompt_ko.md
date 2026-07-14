@@ -56,7 +56,7 @@ RTX 3090 값(sm_86, active_SM=82, blocks/SM max 16)이나 A100 값(sm_80, L2=40 
 6. dry-run과 smoke run 실행
 7. scripts/plan_platform_component_experiment.py로 V100 finalplan 생성
 8. energy sweep 실행
-9. NCU sidecar 실행. DRAM sanity는 DRAM_W_SM_KIB_OVERRIDE=8192 이상으로 확인
+9. NCU sidecar 실행. External-memory는 `DRAM_W_SM_KIB_VALUES=256,512,1024,2048`로 확인
 10. scripts/analyze_ncu_path_acceptance.py로 path acceptance 확인
 11. scripts/analyze_matched_control_energy.py로 accepted row만 coefficient 계산
 12. 결과 표에는 sweep 조건, 선택된 좌표, 단위, NCU hit/access/stall counter를 모두 포함
@@ -155,7 +155,7 @@ V100 전용 기준:
    - blocks/SM은 4,16,32를 energy sweep으로 수행한다. B4/B16은 utilization 민감도, B32는 strict anchor다.
    - strict coefficient는 generated sidecar의 exact NCU 좌표 B32와 일치하는 row만 우선 채택한다.
    - Tensor는 RF별로 reg_mma treatment 목표와 reg_operand_only control 최소시간을 각각 calibrate하고 두 ITER 중 큰 값을 두 mode에 적용한 뒤, duration scaling 없이 net-energy를 직접 차분한다. tensor_pair_calibration CSV의 두 candidate/max policy와 matched detail의 `pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1`을 확인한다.
-   - shared scalar는 clocked_empty와 shared_scalar_load_only 차분으로 본다.
+   - shared scalar는 shared_scalar_addr_only와 shared_scalar_load_only를 동일 ITER로 실행해 직접 차분한다.
    - global L1은 global_addr_only와 global_l1_load_only 차분으로 본다.
    - L2는 global_addr_only와 l2_cg_load_only를 W/B/LR별 dual-calibrate하고 두 candidate 중 큰 동일 ITER를 양쪽에 적용한 뒤 net-energy를 직접 차분한다. `*_l2_pair_calibration.csv`, raw ITER equality, `pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1`을 모두 확인한다.
    - DRAM도 global_addr_only와 dram_cg_load_only에 동일 ITER를 적용해 sanity로 보고, W_SM은 8192 KiB 이상으로 시작한다.
@@ -164,7 +164,7 @@ V100 전용 기준:
    - NCU_CHIP=gv100을 반드시 지정한다.
    - Nsight Compute 2024.3은 GV100 지원이 확인된다. 다른 버전은 `--list-chips`와 `--query-metrics --chips gv100` 성공을 먼저 확인한다.
    - generated package가 unavailable metric을 제외해도 필수 path evidence가 없으면 acceptance에서 reject한다.
-   - DRAM sanity는 DRAM_W_SM_KIB_OVERRIDE=8192 이상으로 실행한다.
+   - External-memory read path는 `DRAM_W_SM_KIB_VALUES=256,512,1024,2048`로 실행한다.
    - NCU replay에서 얻은 energy는 NVML energy CSV와 직접 합치지 않는다.
    - NCU는 경로 검증용이다.
    - B32가 실제 32 resident blocks라는 뜻은 아니다. achieved occupancy, registers/thread, static/dynamic shared/block을 기록한다.
@@ -174,7 +174,7 @@ V100 전용 기준:
    - Shared scalar: shared bytes가 존재하고 bank conflict가 0 또는 매우 낮아야 한다.
    - Global L1: L1 hit >= 95%, L2/L1 bytes <= 1% 수준이어야 한다.
    - L2 CG: path-specific L2 read hit >=95%, L1 path hit <=1%, L1 hit bytes/request bytes <=1%, DRAM/L2 read bytes <=2% 수준이어야 한다. `.cg`의 L1 request bytes 자체와 aggregate hit는 표시하되 hard gate로 쓰지 않는다.
-   - DRAM sanity: L2 hit가 낮고 DRAM bytes가 충분히 커야 하며, 그렇지 않으면 DRAM coefficient로 쓰지 않는다.
+   - External-memory: L1 hit <=1%, final L2 hit <=10%, DRAM read/source >=90%, write/read <=1%가 아니면 reject한다.
 
 10. coefficient 계산
    - accepted row만 scripts/analyze_matched_control_energy.py로 계산한다.
@@ -215,11 +215,11 @@ V100 전용 기준:
 
 | Component | 권장 mode pair | V100 우선 좌표 | NCU 채택 기준 | 결과 단위 |
 |---|---|---|---|---|
-| Tensor | `reg_mma - reg_operand_only` | energy B4/16/32; strict W2048/B32, reuse sweep | treatment HMMA 존재, control HMMA=0, spill/local 0, 두 mode ITER 동일 | pJ/FLOP |
-| Shared scalar | `shared_scalar_load_only - clocked_empty` | energy W32/64, B4/16/32; strict W32/B32 | shared bytes 존재, bank conflict 낮음 | pJ/bit, pJ/Byte |
+| Tensor | `reg_mma - reg_operand_only` | W N/A(CLI1), energy/NCU B4/16/32, RF1/2/4/8/16 | treatment HMMA 존재, control HMMA=0, HMMA/logical-MMA spread<=10%, spill/local 0, 두 mode ITER 동일 | pJ/FLOP |
+| Shared scalar | `shared_scalar_load_only - shared_scalar_addr_only` | energy W32/64, B4/16/32; strict W32/B32 | treatment shared read bytes 존재, control shared read bytes 0, bank conflict 낮음, 두 mode ITER 동일 | pJ/bit, pJ/Byte |
 | Global L1 | `global_l1_load_only - global_addr_only` | energy W8/16/32, B4/16/32; strict W32/B32 | L1 hit >= 95%, L2/DRAM 낮음 | pJ/bit, pJ/Byte |
 | L2 | `l2_cg_load_only - global_addr_only` | precheck W32/64에서 normal contiguous/sm_interleaved B32/B16/B4 중 통과 후보 선택; energy는 선택 B만 사용 | 두 mode 동일 ITER, derived L2 read path hit >=95%, sector/expected bytes 정합, L1 path hit와 hit/request bytes <=1%, DRAM 낮음. GV100 native op-read metric은 있을 때만 교차검증 | pJ/bit, pJ/Byte |
-| DRAM sanity | `dram_cg_load_only - global_addr_only` | energy B4/16/32; strict W8192/B32 | 두 mode 동일 ITER, DRAM bytes 충분, capacity-bound L2 residual hit 허용 | pJ/bit, pJ/Byte 후보 |
+| External-memory effective path | `dram_cg_load_only - global_addr_only` | energy B4/16/32, W256/512/1024/2048; strict large-W anchor B32 | 동일 ITER, NCU `dram__bytes_read.sum`, read dominance/write 오염 gate | effective pJ/bit, pJ/Byte 후보; physical HBM2 아님 |
 
 ## 해석 시 주의할 표현
 

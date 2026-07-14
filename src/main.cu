@@ -118,7 +118,7 @@ void print_usage(const char* argv0) {
       << "Usage: " << argv0 << " --gpu-list 0[,1,2] --mode MODE [options]\n\n"
       << "Required/primary options:\n"
       << "  --gpu-list <list|none>       CUDA/NVML ids for active GPUs\n"
-      << "  --mode idle|empty|clocked_empty|reg_fragment_only|reg_operand_only|reg_mma|reg_pressure|addr_only|global_addr_only|global_l1_load_only|shared_scalar_load_only|shared_load_only|shared_mma|l2_load_only|l2_cg_load_only|l2_mma|dram_load_only|dram_cg_load_only|dram_mma|store_only|store_path\n"
+      << "  --mode idle|empty|clocked_empty|reg_fragment_only|reg_operand_only|reg_mma|reg_pressure|addr_only|global_addr_only|global_l1_load_only|shared_scalar_addr_only|shared_scalar_load_only|shared_load_only|shared_mma|l2_load_only|l2_cg_load_only|l2_mma|dram_load_only|dram_cg_load_only|dram_mma|store_only|store_path\n"
       << "  --w-sm-kib <int>             1..131072 power-of-two KiB sweep point\n"
       << "  --blocks-per-sm <int>        power-of-two up to target resident block limit\n"
       << "  --active-sm <int>            default target full SM count\n"
@@ -299,6 +299,13 @@ std::uint64_t epoch_milliseconds() {
       std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
 }
 
+std::uint64_t anchored_end_epoch_milliseconds(
+    std::uint64_t start_epoch_ms, double elapsed_s) {
+  const auto elapsed_ms = static_cast<std::uint64_t>(
+      std::llround(std::max(0.0, elapsed_s) * 1000.0));
+  return start_epoch_ms + elapsed_ms;
+}
+
 double elapsed_seconds(Clock::time_point start, Clock::time_point stop) {
   return std::chrono::duration<double>(stop - start).count();
 }
@@ -325,6 +332,10 @@ bool is_shared_operand_mode(Mode mode) {
          mode == Mode::shared_load_only || mode == Mode::shared_mma;
 }
 
+bool is_shared_address_control_mode(Mode mode) {
+  return mode == Mode::shared_scalar_addr_only;
+}
+
 bool is_l1_operand_mode(Mode mode) {
   return mode == Mode::global_l1_load_only;
 }
@@ -346,7 +357,8 @@ bool is_global_operand_mode(Mode mode) {
 }
 
 bool is_address_control_mode(Mode mode) {
-  return mode == Mode::addr_only || mode == Mode::global_addr_only;
+  return mode == Mode::addr_only || mode == Mode::global_addr_only ||
+         is_shared_address_control_mode(mode);
 }
 
 bool has_operand_loads(Mode mode) {
@@ -368,6 +380,7 @@ bool has_single_scalar_store(Mode mode) {
          mode == Mode::reg_pressure ||
          mode == Mode::addr_only || mode == Mode::global_addr_only ||
          mode == Mode::global_l1_load_only ||
+         mode == Mode::shared_scalar_addr_only ||
          mode == Mode::shared_scalar_load_only ||
          mode == Mode::l2_cg_load_only || mode == Mode::dram_cg_load_only;
 }
@@ -381,6 +394,7 @@ std::string mode_family(Mode mode) {
   if (mode == Mode::empty || mode == Mode::clocked_empty) return "control";
   if (mode == Mode::addr_only) return "address_control";
   if (mode == Mode::global_addr_only) return "global_address_control";
+  if (is_shared_address_control_mode(mode)) return "shared_address_control";
   if (mode == Mode::reg_fragment_only || mode == Mode::reg_operand_only ||
       mode == Mode::reg_mma || mode == Mode::reg_pressure) {
     return "register_tensor";
@@ -977,6 +991,13 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
         << opts.profile.shared_capacity_per_sm_kib
         << ";target_max_shared_kib_per_block="
         << opts.profile.max_shared_per_block_kib
+        << ";external_memory_technology="
+        << opts.profile.external_memory_technology
+        << ";external_memory_topology="
+        << opts.profile.external_memory_topology
+        << ";external_memory_coefficient_scope="
+        << opts.profile.external_memory_coefficient_scope
+        << ";input_data_pattern=splitmix64_uniform_fp16_v1"
         << ";nvml_power_usage_semantics="
         << opts.profile.nvml_power_usage_semantics
         << ";tensor_modes=" << opts.profile.tensor_modes
@@ -1034,9 +1055,10 @@ int run_idle(const Options& opts, NvmlEnergy& nvml) {
     const auto t0 = Clock::now();
     sleep_seconds(opts.seconds);
     const auto t1 = Clock::now();
-    const std::uint64_t measurement_end_epoch_ms = epoch_milliseconds();
     const auto after = nvml.sample_all();
     const double elapsed = elapsed_seconds(t0, t1);
+    const std::uint64_t measurement_end_epoch_ms =
+        anchored_end_epoch_milliseconds(measurement_start_epoch_ms, elapsed);
     const auto delta = energy_delta_j(before, after);
     const std::string run_id =
         "idle_" + now_token() + "_r" + std::to_string(repeat);
@@ -1049,7 +1071,10 @@ int run_idle(const Options& opts, NvmlEnergy& nvml) {
       ResultRow row = make_row(opts, f, run_id, gpu, 0, false, before[gpu],
                                after[gpu], elapsed, measurement_start_epoch_ms,
                                measurement_end_epoch_ms, delta_j, delta_j, smid, 0,
-                               opts.profile.full_sm_count, "idle_measurement=1;");
+                               opts.profile.full_sm_count,
+                               "idle_measurement=1;"
+                               "measurement_interval_clock="
+                               "steady_clock_anchored_epoch;");
       writer.write(row);
     }
   }
@@ -1100,7 +1125,8 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
       const std::uint64_t measurement_start_epoch_ms = epoch_milliseconds();
       const double elapsed =
           launch_all(opts, f, states, iters, false);
-      const std::uint64_t measurement_end_epoch_ms = epoch_milliseconds();
+      const std::uint64_t measurement_end_epoch_ms =
+          anchored_end_epoch_milliseconds(measurement_start_epoch_ms, elapsed);
       synchronize_active_devices(states);
       const auto after = nvml.sample_all();
       const auto delta = energy_delta_j(before, after);
@@ -1150,8 +1176,21 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
         }
         if (is_register_operand_mode(opts.mode)) {
           extra +=
-              "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2;";
+              "tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4;"
+              "tensor_instruction_api=wmma_m16n16k16_f16_f32;"
+              "tensor_instruction_scope=architecture_lowered_hmma_compatibility;"
+              "tensor_operand_source=register_fill_no_memory;"
+              "tensor_data_pattern=inplace_alternating_sign_a_fp16_v2;"
+              "tensor_accumulator_pattern=bounded_two_state;"
+              "tensor_codegen_control=no_dual_predicated_mma_path;"
+              "tensor_working_set_applicable=0;"
+              "tensor_reuse_semantics=inner_mma_grouping_not_cache_reuse;";
         }
+        if (opts.mode == Mode::shared_scalar_addr_only ||
+            opts.mode == Mode::shared_scalar_load_only) {
+          extra += "shared_pair_kernel_revision=matched_shared_addr_v1;";
+        }
+        extra += "measurement_interval_clock=steady_clock_anchored_epoch;";
         ResultRow row =
             make_row(opts, f, run_id, gpu, static_cast<int>(opts.gpu_list.size()),
                      active, before[gpu], after[gpu], elapsed,

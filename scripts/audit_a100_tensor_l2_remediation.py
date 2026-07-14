@@ -18,7 +18,10 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-TENSOR_MARKER = "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2"
+TENSOR_MARKER = (
+    "tensor_pair_kernel_revision="
+    "matched_inplace_signflip_fragment_epilogue_fixed_rf_v4"
+)
 CG_MARKER = "global_warmup_policy=ld_global_cg"
 L2_REVISION_MARKER = "l2_residency_revision=topology_policy_warmup_v2"
 
@@ -50,7 +53,7 @@ class AuditConfig:
     l1_path_hit_max_pct: float
     l1_hit_bytes_ratio_max: float
     l2_path_hit_min_pct: float
-    l2_native_derived_hit_delta_max_pct: float
+    l2_native_fabric_model_hit_delta_max_pct: float
     l2_sector_conservation_tolerance: float
     dram_to_l2_bytes_max: float
     address_control_dram_ratio_max: float
@@ -244,6 +247,12 @@ def audit_data(
                 "l2_path_hit_rate_pct",
                 "l2_native_read_hit_rate_pct",
                 "l2_native_vs_derived_hit_delta_pct",
+                "l2_logical_read_hit_rate_pct",
+                "l2_fabric_hit_rate_pct",
+                "l2_fabric_metrics_present",
+                "l2_fabric_counter_coherent",
+                "l2_fabric_model_coherent",
+                "l2_native_vs_fabric_model_hit_delta_pct",
                 "l2_read_sector_conservation_ratio",
                 "l2_read_bytes_to_expected",
                 "l1_request_bytes",
@@ -746,8 +755,10 @@ def audit_data(
         path_ok = all(len(items) == 1 for items in by_lr.values())
         path_ok &= all(len(items) == 1 for items in control_by_lr.values())
         path_rates: list[float] = []
+        logical_path_rates: list[float] = []
+        fabric_hit_rates: list[float] = []
         native_path_rates: list[float] = []
-        native_derived_deltas: list[float] = []
+        native_fabric_model_deltas: list[float] = []
         sector_conservation_ratios: list[float] = []
         traffic_expected_ratios: list[float] = []
         persisting_sizes: list[float] = []
@@ -761,9 +772,11 @@ def audit_data(
             row = items[0]
             l1_path = as_float(row, "l1_path_hit_rate_pct")
             l2_path = as_float(row, "l2_path_hit_rate_pct")
+            l2_logical_path = as_float(row, "l2_logical_read_hit_rate_pct")
+            l2_fabric_hit = as_float(row, "l2_fabric_hit_rate_pct")
             l2_native_path = as_float(row, "l2_native_read_hit_rate_pct")
-            native_derived_delta = as_float(
-                row, "l2_native_vs_derived_hit_delta_pct"
+            native_fabric_model_delta = as_float(
+                row, "l2_native_vs_fabric_model_hit_delta_pct"
             )
             sector_conservation = as_float(
                 row, "l2_read_sector_conservation_ratio"
@@ -775,12 +788,14 @@ def audit_data(
             l1_request = as_float(row, "l1_request_bytes", 0.0)
             l1_hit = as_float(row, "l1_hit_bytes", 0.0)
             l2_read = as_float(row, "l2_read_bytes", 0.0)
-            dram = as_float(row, "dram_bytes", 0.0)
+            dram = as_float(row, "dram_read_bytes", float("inf"))
             hit_ratio = l1_hit / l1_request if l1_request > 0.0 else float("inf")
             dram_ratio = dram / l2_read if l2_read > 0.0 else float("inf")
             path_rates.append(l2_path)
+            logical_path_rates.append(l2_logical_path)
+            fabric_hit_rates.append(l2_fabric_hit)
             native_path_rates.append(l2_native_path)
-            native_derived_deltas.append(native_derived_delta)
+            native_fabric_model_deltas.append(native_fabric_model_delta)
             sector_conservation_ratios.append(sector_conservation)
             traffic_expected_ratios.append(traffic_expected_ratio)
             persisting_sizes.append(persisting_size)
@@ -798,10 +813,12 @@ def audit_data(
                 == config.global_warmup_passes
                 and 0.0 <= l1_path <= config.l1_path_hit_max_pct
                 and hit_ratio <= config.l1_hit_bytes_ratio_max
-                and l2_path >= config.l2_path_hit_min_pct
-                and l2_native_path >= config.l2_path_hit_min_pct
-                and native_derived_delta
-                <= config.l2_native_derived_hit_delta_max_pct
+                and config.l2_path_hit_min_pct <= l2_logical_path <= 100.5
+                and as_float(row, "l2_fabric_metrics_present") == 1.0
+                and as_float(row, "l2_fabric_counter_coherent") == 1.0
+                and as_float(row, "l2_fabric_model_coherent") == 1.0
+                and native_fabric_model_delta
+                <= config.l2_native_fabric_model_hit_delta_max_pct
                 and 1.0 - config.l2_sector_conservation_tolerance
                 <= sector_conservation
                 <= 1.0 + config.l2_sector_conservation_tolerance
@@ -846,8 +863,8 @@ def audit_data(
                     f"treatment/control all LR accepted; control L1 request=0 and DRAM/expected <= "
                     f"{100 * config.address_control_dram_ratio_max:g}%; L1 path hit <= {config.l1_path_hit_max_pct:g}%; "
                     f"L1 hit/request <= {100 * config.l1_hit_bytes_ratio_max:g}%; "
-                    f"derived/native L2 read hit >= {config.l2_path_hit_min_pct:g}%, "
-                    f"delta <= {config.l2_native_derived_hit_delta_max_pct:g}pp, "
+                    f"GA100 logical L2 read hit={config.l2_path_hit_min_pct:g}-100.5%, "
+                    f"native/fabric-model delta <= {config.l2_native_fabric_model_hit_delta_max_pct:g}pp, "
                     f"sector conservation=1+/-{100 * config.l2_sector_conservation_tolerance:g}%; "
                     f"NCU={config.ncu_replay_mode}/{config.ncu_cache_control}; "
                     f"residency={config.l2_residency_policy}; layout={config.l2_address_layout}; "
@@ -859,9 +876,11 @@ def audit_data(
                     f"control_DRAM/expected_max={fmt(100 * max(control_dram_ratios, default=float('nan')))}%; "
                     f"L1_path_max={fmt(max(l1_rates, default=float('nan')))}%; "
                     f"L1_hit/request_max={fmt(100 * max(hit_byte_ratios, default=float('nan')))}%; "
-                    f"L2_path_min={fmt(min(path_rates, default=float('nan')))}%; "
+                    f"L2_direct_min={fmt(min(path_rates, default=float('nan')))}%; "
+                    f"L2_logical_min={fmt(min(logical_path_rates, default=float('nan')))}%; "
+                    f"LTC_fabric_hit_min={fmt(min(fabric_hit_rates, default=float('nan')))}%; "
                     f"L2_native_min={fmt(min(native_path_rates, default=float('nan')))}%; "
-                    f"native_delta_max={fmt(max(native_derived_deltas, default=float('nan')))}pp; "
+                    f"native_fabric_model_delta_max={fmt(max(native_fabric_model_deltas, default=float('nan')))}pp; "
                     f"sector_conservation_min/max={fmt(min(sector_conservation_ratios, default=float('nan')))}/"
                     f"{fmt(max(sector_conservation_ratios, default=float('nan')))}; "
                     f"traffic/expected_min/max={fmt(min(traffic_expected_ratios, default=float('nan')))}/"
@@ -1139,6 +1158,12 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "l2_path_hit_rate_pct": "0",
                     "l2_native_read_hit_rate_pct": "",
                     "l2_native_vs_derived_hit_delta_pct": "",
+                    "l2_logical_read_hit_rate_pct": "",
+                    "l2_fabric_hit_rate_pct": "",
+                    "l2_fabric_metrics_present": "",
+                    "l2_fabric_counter_coherent": "",
+                    "l2_fabric_model_coherent": "",
+                    "l2_native_vs_fabric_model_hit_delta_pct": "",
                     "l2_read_sector_conservation_ratio": "",
                     "l2_read_bytes_to_expected": "",
                     "l1_request_bytes": "0",
@@ -1214,6 +1239,12 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "l2_path_hit_rate_pct": "0",
                     "l2_native_read_hit_rate_pct": "0",
                     "l2_native_vs_derived_hit_delta_pct": "0",
+                    "l2_logical_read_hit_rate_pct": "0",
+                    "l2_fabric_hit_rate_pct": "",
+                    "l2_fabric_metrics_present": "1",
+                    "l2_fabric_counter_coherent": "1",
+                    "l2_fabric_model_coherent": "1",
+                    "l2_native_vs_fabric_model_hit_delta_pct": "0",
                     "l2_read_sector_conservation_ratio": "1",
                     "l2_read_bytes_to_expected": "1",
                     "l1_request_bytes": "0",
@@ -1250,9 +1281,15 @@ def synthetic_data(config: AuditConfig) -> tuple[list[dict[str, str]], ...]:
                     "spill_zero_verified": "1",
                     "spill_evidence_source": "local_memory_bytes_zero_inference",
                     "l1_path_hit_rate_pct": "0",
-                    "l2_path_hit_rate_pct": "99",
-                    "l2_native_read_hit_rate_pct": "99.2",
-                    "l2_native_vs_derived_hit_delta_pct": "0.2",
+                    "l2_path_hit_rate_pct": "55",
+                    "l2_native_read_hit_rate_pct": "68.2759",
+                    "l2_native_vs_derived_hit_delta_pct": "13.2759",
+                    "l2_logical_read_hit_rate_pct": "99",
+                    "l2_fabric_hit_rate_pct": "97.7778",
+                    "l2_fabric_metrics_present": "1",
+                    "l2_fabric_counter_coherent": "1",
+                    "l2_fabric_model_coherent": "1",
+                    "l2_native_vs_fabric_model_hit_delta_pct": "0",
                     "l2_read_sector_conservation_ratio": "1",
                     "l2_read_bytes_to_expected": "1",
                     "l1_request_bytes": "100000",
@@ -1347,7 +1384,7 @@ def run_self_test() -> None:
         l1_path_hit_max_pct=1.0,
         l1_hit_bytes_ratio_max=0.01,
         l2_path_hit_min_pct=95.0,
-        l2_native_derived_hit_delta_max_pct=2.0,
+        l2_native_fabric_model_hit_delta_max_pct=2.0,
         l2_sector_conservation_tolerance=0.02,
         dram_to_l2_bytes_max=0.02,
         address_control_dram_ratio_max=0.001,
@@ -1484,7 +1521,7 @@ def run_self_test() -> None:
 
     bad_ncu = [dict(row) for row in data[3]]
     bad = next(row for row in bad_ncu if row["mode"] == "l2_cg_load_only" and row["W_SM_KiB"] == "32")
-    bad["l2_path_hit_rate_pct"] = "72"
+    bad["l2_logical_read_hit_rate_pct"] = "72"
     bad["acceptance"] = "reject"
     rows = audit_data(
         config,
@@ -1516,7 +1553,8 @@ def run_self_test() -> None:
         and row["W_SM_KiB"] == "32"
         and row["load_repeat"] == "4"
     )
-    bad["l2_native_vs_derived_hit_delta_pct"] = "5"
+    bad["l2_native_vs_fabric_model_hit_delta_pct"] = "5"
+    bad["l2_fabric_model_coherent"] = "0"
     bad["l2_read_sector_conservation_ratio"] = "0.8"
     rows = audit_data(
         config,
@@ -1645,7 +1683,16 @@ def main() -> int:
     parser.add_argument("--l1-hit-bytes-ratio-max", type=float, default=0.01)
     parser.add_argument("--l2-path-hit-min-pct", type=float, default=95.0)
     parser.add_argument(
-        "--l2-native-derived-hit-delta-max-pct", type=float, default=2.0
+        "--l2-native-fabric-model-hit-delta-max-pct",
+        "--l2-native-derived-hit-delta-max-pct",
+        dest="l2_native_fabric_model_hit_delta_max_pct",
+        type=float,
+        default=2.0,
+        help=(
+            "Maximum absolute delta between the native GA100 L2 read hit metric "
+            "and the source+LTC-fabric reconstructed metric. The old derived-name "
+            "option remains as a compatibility alias."
+        ),
     )
     parser.add_argument(
         "--l2-sector-conservation-tolerance", type=float, default=0.02
@@ -1697,8 +1744,10 @@ def main() -> int:
         parser.error("--tensor-control-calibration-min-seconds must be positive")
     if args.global_warmup_passes <= 0:
         parser.error("--global-warmup-passes must be positive")
-    if args.l2_native_derived_hit_delta_max_pct < 0.0:
-        parser.error("--l2-native-derived-hit-delta-max-pct cannot be negative")
+    if args.l2_native_fabric_model_hit_delta_max_pct < 0.0:
+        parser.error(
+            "--l2-native-fabric-model-hit-delta-max-pct cannot be negative"
+        )
     if not 0.0 <= args.l2_sector_conservation_tolerance < 1.0:
         parser.error("--l2-sector-conservation-tolerance must be in [0, 1)")
 
@@ -1742,8 +1791,8 @@ def main() -> int:
         l1_path_hit_max_pct=args.l1_path_hit_max_pct,
         l1_hit_bytes_ratio_max=args.l1_hit_bytes_ratio_max,
         l2_path_hit_min_pct=args.l2_path_hit_min_pct,
-        l2_native_derived_hit_delta_max_pct=(
-            args.l2_native_derived_hit_delta_max_pct
+        l2_native_fabric_model_hit_delta_max_pct=(
+            args.l2_native_fabric_model_hit_delta_max_pct
         ),
         l2_sector_conservation_tolerance=(
             args.l2_sector_conservation_tolerance

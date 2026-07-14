@@ -1,0 +1,2 @@
+mode=unprivileged
+command=/tmp/ncu-target-2025.4.1/ncu

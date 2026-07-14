@@ -40,8 +40,16 @@ __device__ __forceinline__ void record_smid(int* smid_by_block,
 
 __device__ __forceinline__ half pattern_half(std::uint64_t i,
                                              std::uint64_t seed) {
-  const unsigned v = static_cast<unsigned>((i * 1103515245ull + seed + 12345ull) & 31ull);
-  return __float2half_rn(0.03125f * static_cast<float>(v + 1));
+  // Deterministic high-entropy input reduces accidental benefits from GA100+
+  // compute-data compression. Initialization runs outside the measured kernel.
+  std::uint64_t x = i + seed * 0x9e3779b97f4a7c15ull;
+  x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
+  x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
+  x ^= x >> 31;
+  const unsigned mantissa = static_cast<unsigned>(x >> 40);
+  const float unit = (static_cast<float>(mantissa) + 0.5f) *
+                     (1.0f / 16777216.0f);
+  return __float2half_rn(unit * 2.0f - 1.0f);
 }
 
 __device__ __forceinline__ void do_mma(fragment<matrix_a, 16, 16, 16, half, row_major>& a,
@@ -80,12 +88,57 @@ __device__ __forceinline__ void consume_uint(unsigned value) {
 
 __device__ __forceinline__ unsigned register_control_step(
     unsigned sink, float a_value, float b_value, float c_value) {
-  // One dependent register instruction keeps the RF-scaled loop and fragment
-  // operands live without the former FP32 FMA/checksum or any memory access.
-  asm volatile("add.u32 %0, %0, 1;"
+  // Keep the scalar control data-dependent on the selected operand while
+  // issuing no memory or Tensor instruction.
+  const unsigned a_bits = __float_as_uint(a_value);
+  asm volatile("add.u32 %0, %0, %1;"
                : "+r"(sink)
-               : "f"(a_value), "f"(b_value), "f"(c_value));
+               : "r"(a_bits), "f"(b_value), "f"(c_value));
   return sink;
+}
+
+__device__ __forceinline__ void keep_register_fragments_live(
+    fragment<matrix_a, 16, 16, 16, half, row_major>& a,
+    fragment<matrix_b, 16, 16, 16, half, col_major>& b,
+    fragment<accumulator, 16, 16, 16, float>& c) {
+#pragma unroll
+  for (int k = 0; k < a.num_elements; ++k) {
+    unsigned short bits = __half_as_ushort(a.x[k]);
+    asm volatile("" : "+h"(bits));
+    a.x[k] = __ushort_as_half(bits);
+  }
+#pragma unroll
+  for (int k = 0; k < b.num_elements; ++k) {
+    unsigned short bits = __half_as_ushort(b.x[k]);
+    asm volatile("" : "+h"(bits));
+    b.x[k] = __ushort_as_half(bits);
+  }
+#pragma unroll
+  for (int k = 0; k < c.num_elements; ++k) {
+    asm volatile("" : "+f"(c.x[k]));
+  }
+}
+
+__device__ __forceinline__ void toggle_fragment_sign(
+    fragment<matrix_a, 16, 16, 16, half, row_major>& a) {
+#pragma unroll
+  for (int k = 0; k < a.num_elements; ++k) {
+    unsigned short bits = __half_as_ushort(a.x[k]);
+    bits ^= 0x8000u;
+    asm volatile("" : "+h"(bits));
+    a.x[k] = __ushort_as_half(bits);
+  }
+}
+
+__device__ __forceinline__ void store_register_pair_output(
+    fragment<accumulator, 16, 16, 16, float>& c, unsigned sink,
+    float* output) {
+  consume_uint(sink);
+  if (!output) return;
+#pragma unroll
+  for (int k = 0; k < c.num_elements; ++k) {
+    output[blockIdx.x * 256 + threadIdx.x * c.num_elements + k] = c.x[k];
+  }
 }
 
 __device__ __forceinline__ void compiler_barrier() {
@@ -206,7 +259,7 @@ __global__ void reg_mma_kernel(std::uint64_t iters, float* output,
   nvcuda::wmma::fill_fragment(b, __float2half_rn(0.0625f * block_scale));
   nvcuda::wmma::fill_fragment(c, 0.0f);
 
-  const float a_value = __half2float(a.x[0]);
+  float a_value = __half2float(a.x[0]);
   const float b_value = __half2float(b.x[0]);
   const float c_value = c.x[0];
   unsigned sink = __float_as_uint(a_value) ^ __float_as_uint(b_value) ^
@@ -219,22 +272,22 @@ __global__ void reg_mma_kernel(std::uint64_t iters, float* output,
       for (int r = 0; r < FixedReuseFactor; ++r) {
         do_mma(a, b, c);
         sink = register_control_step(sink, a_value, b_value, c_value);
+        keep_register_fragments_live(a, b, c);
+        toggle_fragment_sign(a);
+        a_value = -a_value;
       }
     } else {
       for (std::uint64_t r = 0; r < reuse_factor; ++r) {
         do_mma(a, b, c);
         sink = register_control_step(sink, a_value, b_value, c_value);
+        keep_register_fragments_live(a, b, c);
+        toggle_fragment_sign(a);
+        a_value = -a_value;
       }
     }
   }
 
-  consume_uint(sink);
-  if (output) {
-#pragma unroll
-    for (int k = 0; k < c.num_elements; ++k) {
-      output[blockIdx.x * 256 + threadIdx.x * c.num_elements + k] = c.x[k];
-    }
-  }
+  store_register_pair_output(c, sink, output);
 }
 
 __global__ void reg_fragment_only_kernel(std::uint64_t iters, float* output,
@@ -280,7 +333,7 @@ __global__ void reg_operand_only_kernel(std::uint64_t iters, float* output,
   nvcuda::wmma::fill_fragment(b, __float2half_rn(0.0625f * block_scale));
   nvcuda::wmma::fill_fragment(c, 0.0f);
 
-  const float a_value = __half2float(a.x[0]);
+  float a_value = __half2float(a.x[0]);
   const float b_value = __half2float(b.x[0]);
   const float c_value = c.x[0];
   unsigned sink = __float_as_uint(a_value) ^ __float_as_uint(b_value) ^
@@ -292,24 +345,21 @@ __global__ void reg_operand_only_kernel(std::uint64_t iters, float* output,
 #pragma unroll 1
       for (int r = 0; r < FixedReuseFactor; ++r) {
         sink = register_control_step(sink, a_value, b_value, c_value);
+        keep_register_fragments_live(a, b, c);
+        toggle_fragment_sign(a);
+        a_value = -a_value;
       }
     } else {
       for (std::uint64_t r = 0; r < reuse_factor; ++r) {
         sink = register_control_step(sink, a_value, b_value, c_value);
+        keep_register_fragments_live(a, b, c);
+        toggle_fragment_sign(a);
+        a_value = -a_value;
       }
     }
   }
 
-  consume_uint(sink);
-  if (output) {
-#pragma unroll
-    for (int k = 0; k < 8; ++k) {
-      const unsigned value =
-          sink ^ static_cast<unsigned>((k + 1) * 2654435761u);
-      output[blockIdx.x * 256 + threadIdx.x * 8 + k] =
-          __uint_as_float((value & 0x007fffffu) | 0x3f800000u);
-    }
-  }
+  store_register_pair_output(c, sink, output);
 }
 
 template <int PayloadRegsPerThread>
@@ -425,6 +475,55 @@ __global__ void shared_scalar_load_only_kernel(std::uint64_t iters,
             base + static_cast<std::uint64_t>(threadIdx.x) +
             static_cast<std::uint64_t>(k * kWarpSize);
         checksum ^= vsmem[word_index];
+        checksum = checksum * 1664525u + 1013904223u;
+      }
+    }
+  }
+
+  if (threadIdx.x == 0 && output) {
+    output[blockIdx.x * 256] =
+        static_cast<float>(checksum & 0x00ffffffu);
+  }
+}
+
+// Matched control for shared_scalar_load_only_kernel. It keeps the same
+// dynamic-shared allocation, initialization, tile/index loop, and dependent
+// checksum chain, but substitutes each shared load with its shared address.
+// Equal-ITER subtraction therefore measures completion-energy added by the
+// shared-load path without comparing against a different clocked loop.
+__global__ void shared_scalar_addr_only_kernel(
+    std::uint64_t iters, std::uint64_t tiles_per_block,
+    std::uint64_t load_repeat, float* output, int* smid_by_block,
+    int* rank_by_block, int* sm_counts, int sm_count_capacity) {
+  extern __shared__ __align__(16) unsigned char smem_raw[];
+  auto* smem = reinterpret_cast<std::uint32_t*>(smem_raw);
+  const std::uint64_t words_per_tile =
+      kLogicalMmaInputBytes / sizeof(std::uint32_t);
+  const std::uint64_t word_count = tiles_per_block * words_per_tile;
+
+  for (std::uint64_t i = threadIdx.x; i < word_count; i += blockDim.x) {
+    smem[i] = static_cast<std::uint32_t>(
+        (i + 1ull) * 1664525ull +
+        (static_cast<std::uint64_t>(blockIdx.x) + 17ull));
+  }
+  __syncthreads();
+
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+
+  std::uint32_t checksum =
+      static_cast<std::uint32_t>(threadIdx.x + 1) * 2654435761u;
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    for (std::uint64_t r = 0; r < load_repeat; ++r) {
+      const std::uint64_t tile = ((i * load_repeat) + r) % tiles_per_block;
+      const std::uint64_t base = tile * words_per_tile;
+#pragma unroll
+      for (int k = 0; k < 8; ++k) {
+        const std::uint64_t word_index =
+            base + static_cast<std::uint64_t>(threadIdx.x) +
+            static_cast<std::uint64_t>(k * kWarpSize);
+        const std::size_t shared_address =
+            __cvta_generic_to_shared(smem + word_index);
+        checksum ^= static_cast<std::uint32_t>(shared_address >> 2);
         checksum = checksum * 1664525u + 1013904223u;
       }
     }
@@ -780,7 +879,8 @@ __global__ void store_path_kernel(std::uint64_t iters, float* output,
 }  // namespace
 
 cudaError_t configure_kernel_attributes(Mode mode, std::size_t dynamic_smem_bytes) {
-  if (mode == Mode::shared_scalar_load_only ||
+  if (mode == Mode::shared_scalar_addr_only ||
+      mode == Mode::shared_scalar_load_only ||
       mode == Mode::shared_load_only || mode == Mode::shared_mma) {
     cudaError_t err = cudaFuncSetAttribute(
         shared_mma_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize,
@@ -794,6 +894,11 @@ cudaError_t configure_kernel_attributes(Mode mode, std::size_t dynamic_smem_byte
         shared_scalar_load_only_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize,
         static_cast<int>(dynamic_smem_bytes));
     if (err != cudaSuccess) return err;
+    err = cudaFuncSetAttribute(
+        shared_scalar_addr_only_kernel,
+        cudaFuncAttributeMaxDynamicSharedMemorySize,
+        static_cast<int>(dynamic_smem_bytes));
+    if (err != cudaSuccess) return err;
     err = cudaFuncSetAttribute(shared_mma_kernel,
                                cudaFuncAttributePreferredSharedMemoryCarveout,
                                cudaSharedmemCarveoutMaxShared);
@@ -803,6 +908,10 @@ cudaError_t configure_kernel_attributes(Mode mode, std::size_t dynamic_smem_byte
                                cudaSharedmemCarveoutMaxShared);
     if (err != cudaSuccess) return err;
     err = cudaFuncSetAttribute(shared_scalar_load_only_kernel,
+                               cudaFuncAttributePreferredSharedMemoryCarveout,
+                               cudaSharedmemCarveoutMaxShared);
+    if (err != cudaSuccess) return err;
+    err = cudaFuncSetAttribute(shared_scalar_addr_only_kernel,
                                cudaFuncAttributePreferredSharedMemoryCarveout,
                                cudaSharedmemCarveoutMaxShared);
     if (err != cudaSuccess) return err;
@@ -852,7 +961,7 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
     case Mode::reg_mma:
       switch (cfg.reuse_factor) {
         case 1:
-          reg_mma_kernel<0><<<grid_dim, block, 0, cfg.stream>>>(
+          reg_mma_kernel<1><<<grid_dim, block, 0, cfg.stream>>>(
               cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
               cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
           break;
@@ -891,7 +1000,7 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
     case Mode::reg_operand_only:
       switch (cfg.reuse_factor) {
         case 1:
-          reg_operand_only_kernel<0><<<grid_dim, block, 0, cfg.stream>>>(
+          reg_operand_only_kernel<1><<<grid_dim, block, 0, cfg.stream>>>(
               cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
               cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
           break;
@@ -984,6 +1093,13 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
           cfg.tiles_per_block, cfg.iters,
           cfg.load_repeat, cfg.output, cfg.smid_by_block, cfg.rank_by_block,
           cfg.sm_counts, cfg.sm_count_capacity);
+      break;
+    case Mode::shared_scalar_addr_only:
+      shared_scalar_addr_only_kernel<<<
+          grid_dim, block, static_cast<std::size_t>(cfg.w_block_bytes),
+          cfg.stream>>>(cfg.iters, cfg.tiles_per_block, cfg.load_repeat,
+                        cfg.output, cfg.smid_by_block, cfg.rank_by_block,
+                        cfg.sm_counts, cfg.sm_count_capacity);
       break;
     case Mode::shared_scalar_load_only:
       shared_scalar_load_only_kernel<<<grid_dim, block,

@@ -14,6 +14,7 @@ import csv
 import glob
 import math
 import re
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 from statistics import median
@@ -27,6 +28,12 @@ BYTE_UNIT_SCALE = {
     "mbyte": 1.0e6,
     "gbyte": 1.0e9,
     "tbyte": 1.0e12,
+}
+TIME_UNIT_SCALE_SECONDS = {
+    "nsecond": 1.0e-9,
+    "usecond": 1.0e-6,
+    "msecond": 1.0e-3,
+    "second": 1.0,
 }
 
 
@@ -102,8 +109,14 @@ def metric_unit_from_row(row: dict[str, str]) -> str:
 
 
 def convert_value(value: float, unit: str) -> float:
-    scale = BYTE_UNIT_SCALE.get(unit.strip().lower())
-    return value * scale if scale is not None else value
+    # NCU launch metrics use units such as Kbyte/block. The denominator suffix
+    # describes the launch object, not a different byte scale.
+    unit_key = unit.strip().lower().split("/", 1)[0]
+    scale = BYTE_UNIT_SCALE.get(unit_key)
+    if scale is not None:
+        return value * scale
+    time_scale = TIME_UNIT_SCALE_SECONDS.get(unit_key)
+    return value * time_scale if time_scale is not None else value
 
 
 class Metrics:
@@ -310,6 +323,27 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         else ""
     )
 
+    l2_device_read_sectors = first_metric_sum(
+        metrics,
+        [
+            "lts__t_sectors_srcunit_tex_aperture_device_op_read.sum",
+        ],
+    )
+    l2_device_read_hit_sectors = first_metric_sum(
+        metrics,
+        [
+            "lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_hit.sum",
+        ],
+    )
+    l2_device_read_miss_sectors = first_metric_sum(
+        metrics,
+        [
+            "lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_miss.sum",
+        ],
+    )
+    l2_device_path_hit_rate = percent_from_hit_miss(
+        l2_device_read_hit_sectors, l2_device_read_miss_sectors
+    )
     l2_read_hit_sectors = first_metric_sum(
         metrics,
         [
@@ -328,8 +362,70 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
             "lts__t_tag_requests_miss.sum",
         ],
     )
-    l2_path_hit_rate = percent_from_hit_miss(
+    l2_fabric_device_read_sectors = first_metric_sum(
+        metrics,
+        [
+            "lts__t_sectors_srcunit_ltcfabric_aperture_device_op_read.sum",
+        ],
+    )
+    l2_fabric_device_read_hit_sectors = first_metric_sum(
+        metrics,
+        [
+            "lts__t_sectors_srcunit_ltcfabric_aperture_device_op_read_lookup_hit.sum",
+        ],
+    )
+    l2_fabric_device_read_miss_sectors = first_metric_sum(
+        metrics,
+        [
+            "lts__t_sectors_srcunit_ltcfabric_aperture_device_op_read_lookup_miss.sum",
+        ],
+    )
+    l2_fabric_all_read_sectors = first_metric_sum(
+        metrics,
+        ["lts__t_sectors_srcunit_ltcfabric_op_read.sum"],
+    )
+    l2_fabric_all_read_hit_sectors = first_metric_sum(
+        metrics,
+        ["lts__t_sectors_srcunit_ltcfabric_op_read_lookup_hit.sum"],
+    )
+    l2_fabric_all_read_miss_sectors = first_metric_sum(
+        metrics,
+        ["lts__t_sectors_srcunit_ltcfabric_op_read_lookup_miss.sum"],
+    )
+    # Device-aperture traffic is the exact cudaMalloc path. Fall back to all
+    # LTC-fabric reads only when the aperture-specific events are unavailable.
+    l2_fabric_read_sectors = first_non_none(
+        l2_fabric_device_read_sectors, l2_fabric_all_read_sectors
+    )
+    l2_fabric_read_hit_sectors = first_non_none(
+        l2_fabric_device_read_hit_sectors, l2_fabric_all_read_hit_sectors
+    )
+    l2_fabric_read_miss_sectors = first_non_none(
+        l2_fabric_device_read_miss_sectors, l2_fabric_all_read_miss_sectors
+    )
+    l2_fabric_hit_rate = percent_from_hit_miss(
+        l2_fabric_read_hit_sectors, l2_fabric_read_miss_sectors
+    )
+    l2_fabric_metric_source = (
+        "srcunit_ltcfabric_device_read"
+        if l2_fabric_device_read_sectors is not None
+        else "srcunit_ltcfabric_read"
+        if l2_fabric_all_read_sectors is not None
+        else ""
+    )
+    l2_fabric_metrics_present = float(
+        l2_fabric_read_sectors is not None
+        and l2_fabric_read_hit_sectors is not None
+        and l2_fabric_read_miss_sectors is not None
+    )
+    l2_tex_path_hit_rate = percent_from_hit_miss(
         l2_read_hit_sectors, l2_read_miss_sectors
+    )
+    # Device-aperture TEX traffic is the exact path for cudaMalloc input. Fall
+    # back to all TEX read traffic only on architectures/tool versions where
+    # the aperture-specific events are unavailable.
+    l2_path_hit_rate = first_non_none(
+        l2_device_path_hit_rate, l2_tex_path_hit_rate
     )
     l2_native_read_hit_rate = metrics.first_names(
         [
@@ -346,11 +442,43 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     )
     l2_hit_rate = first_non_none(l2_path_hit_rate, l2_aggregate_hit_rate)
     l2_hit_rate_source = (
-        "srcunit_tex_read_lookup_hit_miss"
-        if l2_path_hit_rate is not None
+        "srcunit_tex_device_read_lookup_hit_miss"
+        if l2_device_path_hit_rate is not None
+        else "srcunit_tex_read_lookup_hit_miss"
+        if l2_tex_path_hit_rate is not None
         else "aggregate_fallback"
         if l2_aggregate_hit_rate is not None
         else ""
+    )
+
+    l2_evict_first_read_sectors = first_metric_sum(
+        metrics, ["lts__t_sectors_srcunit_tex_op_read_evict_first.sum"]
+    )
+    l2_evict_normal_read_sectors = first_metric_sum(
+        metrics, ["lts__t_sectors_srcunit_tex_op_read_evict_normal.sum"]
+    )
+    l2_evict_last_read_sectors = first_metric_sum(
+        metrics, ["lts__t_sectors_srcunit_tex_op_read_evict_last.sum"]
+    )
+    l2_policy_read_total = sum_non_none(
+        l2_evict_first_read_sectors,
+        l2_evict_normal_read_sectors,
+        l2_evict_last_read_sectors,
+    )
+    l2_evict_first_read_pct = (
+        100.0 * l2_evict_first_read_sectors / l2_policy_read_total
+        if l2_evict_first_read_sectors is not None and l2_policy_read_total
+        else None
+    )
+    l2_evict_normal_read_pct = (
+        100.0 * l2_evict_normal_read_sectors / l2_policy_read_total
+        if l2_evict_normal_read_sectors is not None and l2_policy_read_total
+        else None
+    )
+    l2_evict_last_read_pct = (
+        100.0 * l2_evict_last_read_sectors / l2_policy_read_total
+        if l2_evict_last_read_sectors is not None and l2_policy_read_total
+        else None
     )
 
     l1_read_requests = metrics.sum_names(
@@ -474,31 +602,46 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
             "l1tex__t_sectors_pipe_lsu_mem_shared_op_st.sum",
         ]
     )
-    shared_bytes_sass = first_non_none(
+    shared_read_bytes_sass = first_non_none(
         metrics.sum_names(
             [
                 "smsp__sass_data_bytes_mem_shared_op_ld.sum",
                 "smsp__sass_data_bytes_mem_shared_op_ldsm.sum",
-                "smsp__sass_data_bytes_mem_shared_op_st.sum",
-            ]
-        ),
-        metrics.sum_names(
-            [
-                "smsp__sass_data_bytes_mem_shared.sum",
             ]
         ),
         metrics.sum_names(
             [
                 "sm__sass_data_bytes_mem_shared_op_ld.sum",
                 "sm__sass_data_bytes_mem_shared_op_ldsm.sum",
-                "sm__sass_data_bytes_mem_shared_op_st.sum",
+            ]
+        ),
+    )
+    shared_write_bytes_sass = first_non_none(
+        metrics.sum_names(
+            [
+                "smsp__sass_data_bytes_mem_shared_op_st.sum",
             ]
         ),
         metrics.sum_names(
             [
+                "sm__sass_data_bytes_mem_shared_op_st.sum",
+            ]
+        ),
+    )
+    shared_bytes_sass = first_non_none(
+        sum_non_none(shared_read_bytes_sass, shared_write_bytes_sass),
+        metrics.sum_names(
+            [
+                "smsp__sass_data_bytes_mem_shared.sum",
                 "sm__sass_data_bytes_mem_shared.sum",
             ]
         ),
+    )
+    shared_read_bytes_l1tex = first_non_none(
+        metrics.sum_names(["l1tex__t_bytes_pipe_lsu_mem_shared_op_ld.sum"]),
+    )
+    shared_write_bytes_l1tex = first_non_none(
+        metrics.sum_names(["l1tex__t_bytes_pipe_lsu_mem_shared_op_st.sum"]),
     )
     shared_bytes_l1tex = first_non_none(
         metrics.sum_names(
@@ -510,6 +653,12 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         shared_sectors * SECTOR_BYTES if shared_sectors is not None else None,
     )
     shared_bytes = first_non_none(shared_bytes_sass, shared_bytes_l1tex)
+    shared_read_bytes = first_non_none(
+        shared_read_bytes_sass, shared_read_bytes_l1tex
+    )
+    shared_write_bytes = first_non_none(
+        shared_write_bytes_sass, shared_write_bytes_l1tex
+    )
     shared_bytes_source = (
         "sass"
         if shared_bytes_sass is not None
@@ -580,18 +729,140 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     l2_read_bytes = (
         l2_read_sectors * SECTOR_BYTES if l2_read_sectors is not None else None
     )
-    l2_read_miss_bytes = (
-        l2_read_miss_sectors * SECTOR_BYTES
-        if l2_read_miss_sectors is not None
-        else None
-    )
-    l2_read_sector_conservation_ratio = None
+    l2_tex_read_sector_conservation_ratio = None
     if l2_read_sectors is not None and l2_read_sectors > 0.0:
         hit_miss_sectors = sum_non_none(
             l2_read_hit_sectors, l2_read_miss_sectors
         )
         if hit_miss_sectors is not None:
-            l2_read_sector_conservation_ratio = hit_miss_sectors / l2_read_sectors
+            l2_tex_read_sector_conservation_ratio = hit_miss_sectors / l2_read_sectors
+    l2_device_read_sector_conservation_ratio = None
+    if l2_device_read_sectors is not None and l2_device_read_sectors > 0.0:
+        device_hit_miss_sectors = sum_non_none(
+            l2_device_read_hit_sectors, l2_device_read_miss_sectors
+        )
+        if device_hit_miss_sectors is not None:
+            l2_device_read_sector_conservation_ratio = (
+                device_hit_miss_sectors / l2_device_read_sectors
+            )
+    if l2_device_path_hit_rate is not None:
+        l2_read_sector_conservation_ratio = (
+            l2_device_read_sector_conservation_ratio
+        )
+        l2_path_read_sectors = l2_device_read_sectors
+        l2_path_read_hit_sectors = l2_device_read_hit_sectors
+        l2_path_read_miss_sectors = l2_device_read_miss_sectors
+    else:
+        l2_read_sector_conservation_ratio = l2_tex_read_sector_conservation_ratio
+        l2_path_read_sectors = l2_read_sectors
+        l2_path_read_hit_sectors = l2_read_hit_sectors
+        l2_path_read_miss_sectors = l2_read_miss_sectors
+    l2_path_counter_coherent = (
+        float(0.98 <= l2_read_sector_conservation_ratio <= 1.02)
+        if l2_read_sector_conservation_ratio is not None
+        else None
+    )
+    l2_read_miss_bytes = (
+        l2_path_read_miss_sectors * SECTOR_BYTES
+        if l2_path_read_miss_sectors is not None
+        else None
+    )
+
+    l2_fabric_read_sector_conservation_ratio = None
+    if l2_fabric_metrics_present == 1.0:
+        if l2_fabric_read_sectors and l2_fabric_read_sectors > 0.0:
+            l2_fabric_read_sector_conservation_ratio = (
+                (l2_fabric_read_hit_sectors + l2_fabric_read_miss_sectors)
+                / l2_fabric_read_sectors
+            )
+        elif (
+            l2_fabric_read_sectors == 0.0
+            and l2_fabric_read_hit_sectors == 0.0
+            and l2_fabric_read_miss_sectors == 0.0
+        ):
+            l2_fabric_read_sector_conservation_ratio = 1.0
+    l2_fabric_counter_coherent = (
+        float(0.98 <= l2_fabric_read_sector_conservation_ratio <= 1.02)
+        if l2_fabric_read_sector_conservation_ratio is not None
+        else None
+    )
+
+    l2_fabric_read_to_source_miss_ratio = None
+    l2_fabric_hit_to_source_miss_ratio = None
+    l2_fabric_read_fraction = None
+    l2_logical_read_hit_sectors = None
+    l2_logical_read_miss_sectors = None
+    l2_logical_read_hit_rate = None
+    l2_fabric_model_native_hit_rate = None
+    l2_native_vs_fabric_model_hit_delta_pct = None
+    l2_fabric_model_coherent = None
+    if (
+        l2_path_read_sectors is not None
+        and l2_path_read_sectors > 0.0
+        and l2_path_read_hit_sectors is not None
+        and l2_path_read_miss_sectors is not None
+        and l2_fabric_metrics_present == 1.0
+    ):
+        if l2_path_read_miss_sectors > 0.0:
+            l2_fabric_read_to_source_miss_ratio = (
+                l2_fabric_read_sectors / l2_path_read_miss_sectors
+            )
+            l2_fabric_hit_to_source_miss_ratio = (
+                l2_fabric_read_hit_sectors / l2_path_read_miss_sectors
+            )
+        elif l2_fabric_read_sectors == 0.0:
+            l2_fabric_read_to_source_miss_ratio = 0.0
+            l2_fabric_hit_to_source_miss_ratio = 0.0
+        total_l2_lookup_sectors = (
+            l2_path_read_sectors + l2_fabric_read_sectors
+        )
+        l2_fabric_read_fraction = (
+            l2_fabric_read_sectors / total_l2_lookup_sectors
+            if total_l2_lookup_sectors > 0.0
+            else None
+        )
+        l2_logical_read_hit_sectors = (
+            l2_path_read_hit_sectors + l2_fabric_read_hit_sectors
+        )
+        l2_logical_read_miss_sectors = (
+            l2_path_read_sectors - l2_logical_read_hit_sectors
+        )
+        l2_logical_read_hit_rate = (
+            100.0 * l2_logical_read_hit_sectors / l2_path_read_sectors
+        )
+        native_model_denominator = total_l2_lookup_sectors
+        if native_model_denominator > 0.0:
+            l2_fabric_model_native_hit_rate = (
+                100.0
+                * l2_logical_read_hit_sectors
+                / native_model_denominator
+            )
+        if (
+            l2_native_read_hit_rate is not None
+            and l2_fabric_model_native_hit_rate is not None
+        ):
+            l2_native_vs_fabric_model_hit_delta_pct = abs(
+                l2_native_read_hit_rate - l2_fabric_model_native_hit_rate
+            )
+        routing_is_coherent = (
+            l2_fabric_read_to_source_miss_ratio is not None
+            and 0.0 <= l2_fabric_read_to_source_miss_ratio <= 1.05
+            and l2_fabric_hit_to_source_miss_ratio is not None
+            and 0.0 <= l2_fabric_hit_to_source_miss_ratio <= 1.05
+            and -0.005
+            <= l2_logical_read_miss_sectors / l2_path_read_sectors
+            <= 1.0
+        )
+        l2_fabric_model_coherent = float(
+            l2_path_counter_coherent == 1.0
+            and l2_fabric_counter_coherent == 1.0
+            and routing_is_coherent
+        )
+    l2_logical_read_miss_bytes = (
+        l2_logical_read_miss_sectors * SECTOR_BYTES
+        if l2_logical_read_miss_sectors is not None
+        else None
+    )
     l2_native_vs_derived_hit_delta_pct = None
     if l2_native_read_hit_rate is not None and l2_path_hit_rate is not None:
         l2_native_vs_derived_hit_delta_pct = abs(
@@ -604,40 +875,114 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         sum_non_none(dram_read_sectors, dram_write_sectors),
         metrics.sum_names(["dram__sectors.sum"]),
     )
+    direct_dram_read_bytes = metrics.sum_names(["dram__bytes_read.sum"])
+    direct_dram_write_bytes = metrics.sum_names(["dram__bytes_write.sum"])
     dram_bytes = first_non_none(
         metrics.sum_names(["dram__bytes.sum"]),
         sum_non_none(
-            metrics.sum_names(["dram__bytes_read.sum"]),
-            metrics.sum_names(["dram__bytes_write.sum"]),
+            direct_dram_read_bytes,
+            direct_dram_write_bytes,
         ),
         dram_sectors * SECTOR_BYTES if dram_sectors is not None else None,
     )
     dram_read_bytes = first_non_none(
-        metrics.sum_names(["dram__bytes_read.sum"]),
+        direct_dram_read_bytes,
         dram_read_sectors * SECTOR_BYTES if dram_read_sectors is not None else None,
     )
+    dram_read_bytes_source = (
+        "dram__bytes_read.sum"
+        if direct_dram_read_bytes is not None
+        else (
+            "dram__sectors_read.sum*32"
+            if dram_read_sectors is not None
+            else ""
+        )
+    )
+    dram_write_bytes = first_non_none(
+        direct_dram_write_bytes,
+        dram_write_sectors * SECTOR_BYTES if dram_write_sectors is not None else None,
+        (
+            max(0.0, dram_bytes - dram_read_bytes)
+            if dram_bytes is not None and dram_read_bytes is not None
+            else None
+        ),
+    )
+    dram_write_bytes_source = (
+        "dram__bytes_write.sum"
+        if direct_dram_write_bytes is not None
+        else (
+            "dram__sectors_write.sum*32"
+            if dram_write_sectors is not None
+            else (
+                "dram__bytes.sum-dram_read_bytes"
+                if dram_bytes is not None and dram_read_bytes is not None
+                else ""
+            )
+        )
+    )
+    dram_write_to_read_ratio = None
+    if dram_read_bytes is not None and dram_read_bytes > 0.0:
+        if dram_write_bytes is not None:
+            dram_write_to_read_ratio = dram_write_bytes / dram_read_bytes
+    gpu_duration_s = metrics.sum_names(["gpu__time_duration.sum"])
+    dram_read_bandwidth_gbps = None
+    if (
+        dram_read_bytes is not None
+        and gpu_duration_s is not None
+        and gpu_duration_s > 0.0
+    ):
+        dram_read_bandwidth_gbps = dram_read_bytes / gpu_duration_s / 1.0e9
     dram_read_to_l2_miss_bytes_ratio = None
     if l2_read_miss_bytes is not None and l2_read_miss_bytes > 0.0:
         if dram_read_bytes is not None:
             dram_read_to_l2_miss_bytes_ratio = dram_read_bytes / l2_read_miss_bytes
+    dram_read_to_l2_read_bytes_ratio = None
+    if l2_read_bytes is not None and l2_read_bytes > 0.0:
+        if dram_read_bytes is not None:
+            dram_read_to_l2_read_bytes_ratio = dram_read_bytes / l2_read_bytes
+    dram_read_to_l2_logical_miss_bytes_ratio = None
+    if (
+        l2_logical_read_miss_bytes is not None
+        and l2_logical_read_miss_bytes > 0.0
+        and dram_read_bytes is not None
+    ):
+        dram_read_to_l2_logical_miss_bytes_ratio = (
+            dram_read_bytes / l2_logical_read_miss_bytes
+        )
 
+    expected_global_read_bytes = None
     expected_l2_read_bytes = None
     l2_read_to_expected_ratio = None
-    if manifest.get("mode", "") == "l2_cg_load_only":
+    dram_read_to_expected_ratio = None
+    if manifest.get("mode", "") in {"l2_cg_load_only", "dram_cg_load_only"}:
         geometry = [
             parse_float(manifest.get(name, ""))
             for name in ("active_SM", "blocks_per_SM", "ITER", "load_repeat")
         ]
         if all(value is not None and value > 0.0 for value in geometry):
-            expected_l2_read_bytes = (
+            expected_global_read_bytes = (
                 math.prod(value for value in geometry if value is not None) * 1024.0
             )
-            if l2_read_bytes is not None and expected_l2_read_bytes > 0.0:
-                l2_read_to_expected_ratio = l2_read_bytes / expected_l2_read_bytes
+            if manifest.get("mode", "") == "l2_cg_load_only":
+                expected_l2_read_bytes = expected_global_read_bytes
+            if l2_read_bytes is not None and expected_global_read_bytes > 0.0:
+                l2_read_to_expected_ratio = l2_read_bytes / expected_global_read_bytes
+            if dram_read_bytes is not None and expected_global_read_bytes > 0.0:
+                dram_read_to_expected_ratio = (
+                    dram_read_bytes / expected_global_read_bytes
+                )
 
     tensor_hmma_inst = metrics.sum_names(["sm__inst_executed_pipe_tensor_op_hmma.sum"])
+    tensor_fp16_f32_ops = metrics.sum_names(
+        ["sm__ops_path_tensor_src_fp16_dst_fp32.sum"]
+    )
+    tensor_pipe_active_pct = metrics.first_names(
+        ["sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active"]
+    )
     expected_logical_mma = None
+    expected_logical_flop = None
     tensor_hmma_per_logical_mma = None
+    tensor_ops_to_expected_flop = None
     if manifest.get("mode", "") == "reg_mma":
         geometry = [
             parse_float(manifest.get(name, ""))
@@ -645,8 +990,13 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         ]
         if all(value is not None and value > 0.0 for value in geometry):
             expected_logical_mma = math.prod(value for value in geometry if value is not None)
+            expected_logical_flop = expected_logical_mma * 8192.0
             if tensor_hmma_inst is not None and expected_logical_mma > 0.0:
                 tensor_hmma_per_logical_mma = tensor_hmma_inst / expected_logical_mma
+            if tensor_fp16_f32_ops is not None and expected_logical_flop > 0.0:
+                tensor_ops_to_expected_flop = (
+                    tensor_fp16_f32_ops / expected_logical_flop
+                )
     local_read_bytes = metrics.sum_names(
         ["l1tex__t_bytes_pipe_lsu_mem_local_op_ld.sum"]
     )
@@ -697,6 +1047,12 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     achieved_occupancy_pct = metrics.first_names(
         ["sm__warps_active.avg.pct_of_peak_sustained_active"]
     )
+    launch_warp_capacity_pct = metrics.first_names(
+        ["sm__maximum_warps_per_active_cycle_pct"]
+    )
+    launch_warps_per_scheduler = metrics.first_names(
+        ["smsp__maximum_warps_avg_per_active_cycle"]
+    )
     registers_per_thread = metrics.first_names(["launch__registers_per_thread"])
     shared_mem_per_block_static = metrics.first_names(
         ["launch__shared_mem_per_block_static"]
@@ -709,10 +1065,16 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     )
 
     missing = []
-    if l1_hit_rate is None:
-        missing.append("l1_hit_rate_pct")
-    if l2_hit_rate is None:
-        missing.append("l2_hit_rate_pct")
+    mode = manifest.get("mode", "")
+    # A zero-traffic address/register/shared control has no meaningful cache
+    # hit-rate denominator. Do not turn that intentional zero into a missing-
+    # metric failure; the acceptance layer validates its zero traffic instead.
+    if mode in {"global_l1_load_only", "l2_cg_load_only", "dram_cg_load_only"}:
+        if l1_hit_rate is None:
+            missing.append("l1_hit_rate_pct")
+    if mode in {"l2_cg_load_only", "dram_cg_load_only"}:
+        if l2_hit_rate is None:
+            missing.append("l2_hit_rate_pct")
     if l1_accesses is None:
         missing.append("l1_accesses")
     if manifest.get("mode", "").startswith("shared_") and shared_accesses is None:
@@ -723,7 +1085,6 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         missing.append("l2_accesses")
     if dram_sectors is None:
         missing.append("dram_accesses")
-    mode = manifest.get("mode", "")
     if mode in {"global_l1_load_only", "l2_cg_load_only", "dram_cg_load_only"}:
         if l1_request_bytes is None:
             missing.append("l1_request_bytes")
@@ -740,6 +1101,8 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     optional_missing = []
     if tensor_hmma_inst is None:
         optional_missing.append("tensor_hmma_inst")
+    if tensor_fp16_f32_ops is None and mode == "reg_mma":
+        optional_missing.append("tensor_fp16_f32_ops")
     if spill_local_read_inst is None:
         optional_missing.append("spill_local_read_inst")
     if spill_local_write_inst is None:
@@ -754,6 +1117,8 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         optional_missing.append("stall_not_selected_pct")
     if achieved_occupancy_pct is None:
         optional_missing.append("achieved_occupancy_pct")
+    if tensor_pipe_active_pct is None and mode == "reg_mma":
+        optional_missing.append("tensor_pipe_active_pct")
     if registers_per_thread is None:
         optional_missing.append("registers_per_thread")
     if l2_native_read_hit_rate is None:
@@ -762,23 +1127,34 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         optional_missing.append("launch_persisting_l2_cache_size_bytes")
 
     validation_notes = []
-    for name, value in [
-        ("l1_hit_rate_pct", l1_hit_rate),
-        ("l2_hit_rate_pct", l2_hit_rate),
-        ("l2_native_read_hit_rate_pct", l2_native_read_hit_rate),
+    for name, value, upper_bound in [
+        ("l1_hit_rate_pct", l1_hit_rate, 100.01),
+        ("l2_hit_rate_pct", l2_hit_rate, 100.01),
+        ("l2_native_read_hit_rate_pct", l2_native_read_hit_rate, 100.01),
+        # Source and fabric events can be aggregated with a small counter skew.
+        # Keep this bound aligned with the downstream GA100 acceptance gate.
+        ("l2_logical_read_hit_rate_pct", l2_logical_read_hit_rate, 100.5),
     ]:
-        if value is not None and (value < -0.01 or value > 100.01):
+        if value is not None and (value < -0.01 or value > upper_bound):
             validation_notes.append(f"{name}_out_of_range")
     if (
         l2_native_vs_derived_hit_delta_pct is not None
         and l2_native_vs_derived_hit_delta_pct > 2.0
     ):
-        validation_notes.append("l2_native_derived_hit_rate_disagree")
+        if (
+            l2_native_vs_fabric_model_hit_delta_pct is not None
+            and l2_native_vs_fabric_model_hit_delta_pct <= 2.0
+        ):
+            validation_notes.append("l2_native_direct_delta_explained_by_fabric")
+        else:
+            validation_notes.append("l2_native_derived_hit_rate_disagree")
     if (
         l2_read_sector_conservation_ratio is not None
         and not 0.98 <= l2_read_sector_conservation_ratio <= 1.02
     ):
         validation_notes.append("l2_read_sector_conservation_failed")
+    if l2_fabric_metrics_present == 1.0 and l2_fabric_model_coherent != 1.0:
+        validation_notes.append("l2_fabric_model_incoherent")
 
     status = "ok" if not missing else "partial"
     if not metrics.values:
@@ -797,12 +1173,15 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "store_repeat": manifest.get("store_repeat", ""),
         "ncu_replay_mode": manifest.get("ncu_replay_mode", ""),
         "ncu_cache_control": manifest.get("ncu_cache_control", ""),
+        "ncu_metric_profile": manifest.get("ncu_metric_profile", "full"),
         "global_warmup_passes": manifest.get("global_warmup_passes", ""),
         "l2_residency_policy": manifest.get("l2_residency_policy", ""),
         "l2_address_layout": manifest.get("l2_address_layout", "contiguous"),
         "status": status,
         "shared_accesses": fmt(shared_accesses),
         "shared_bytes": fmt(shared_bytes),
+        "shared_read_bytes": fmt(shared_read_bytes),
+        "shared_write_bytes": fmt(shared_write_bytes),
         "shared_bytes_source": shared_bytes_source,
         "shared_bank_conflicts": fmt(shared_bank_conflicts),
         "shared_inst": fmt(shared_inst),
@@ -814,9 +1193,19 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "l1_hit_rate_source": l1_hit_rate_source,
         "l2_hit_rate_pct": fmt(l2_hit_rate),
         "l2_path_hit_rate_pct": fmt(l2_path_hit_rate),
+        "l2_tex_path_hit_rate_pct": fmt(l2_tex_path_hit_rate),
+        "l2_device_path_hit_rate_pct": fmt(l2_device_path_hit_rate),
         "l2_native_read_hit_rate_pct": fmt(l2_native_read_hit_rate),
         "l2_native_vs_derived_hit_delta_pct": fmt(
             l2_native_vs_derived_hit_delta_pct
+        ),
+        "l2_logical_read_hit_rate_pct": fmt(l2_logical_read_hit_rate),
+        "l2_fabric_hit_rate_pct": fmt(l2_fabric_hit_rate),
+        "l2_fabric_model_native_hit_rate_pct": fmt(
+            l2_fabric_model_native_hit_rate
+        ),
+        "l2_native_vs_fabric_model_hit_delta_pct": fmt(
+            l2_native_vs_fabric_model_hit_delta_pct
         ),
         "l2_aggregate_hit_rate_pct": fmt(l2_aggregate_hit_rate),
         "l2_hit_rate_source": l2_hit_rate_source,
@@ -840,22 +1229,78 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "l1_miss_bytes": fmt(l1_miss_bytes),
         "l2_bytes": fmt(l2_bytes),
         "l2_read_bytes": fmt(l2_read_bytes),
+        "expected_global_read_bytes": fmt(expected_global_read_bytes),
         "expected_l2_read_bytes": fmt(expected_l2_read_bytes),
         "l2_read_to_expected_ratio": fmt(l2_read_to_expected_ratio),
         "l2_read_hit_sectors": fmt(l2_read_hit_sectors),
         "l2_read_miss_sectors": fmt(l2_read_miss_sectors),
+        "l2_device_read_sectors": fmt(l2_device_read_sectors),
+        "l2_device_read_hit_sectors": fmt(l2_device_read_hit_sectors),
+        "l2_device_read_miss_sectors": fmt(l2_device_read_miss_sectors),
+        "l2_fabric_read_sectors": fmt(l2_fabric_read_sectors),
+        "l2_fabric_read_hit_sectors": fmt(l2_fabric_read_hit_sectors),
+        "l2_fabric_read_miss_sectors": fmt(l2_fabric_read_miss_sectors),
+        "l2_fabric_metric_source": l2_fabric_metric_source,
+        "l2_fabric_metrics_present": fmt(l2_fabric_metrics_present),
+        "l2_fabric_read_sector_conservation_ratio": fmt(
+            l2_fabric_read_sector_conservation_ratio
+        ),
+        "l2_fabric_counter_coherent": fmt(l2_fabric_counter_coherent),
+        "l2_fabric_read_to_source_miss_ratio": fmt(
+            l2_fabric_read_to_source_miss_ratio
+        ),
+        "l2_fabric_hit_to_source_miss_ratio": fmt(
+            l2_fabric_hit_to_source_miss_ratio
+        ),
+        "l2_fabric_read_fraction": fmt(l2_fabric_read_fraction),
+        "l2_logical_read_hit_sectors": fmt(l2_logical_read_hit_sectors),
+        "l2_logical_read_miss_sectors": fmt(l2_logical_read_miss_sectors),
+        "l2_logical_read_miss_bytes": fmt(l2_logical_read_miss_bytes),
+        "l2_fabric_model_coherent": fmt(l2_fabric_model_coherent),
+        "l2_evict_first_read_sectors": fmt(l2_evict_first_read_sectors),
+        "l2_evict_normal_read_sectors": fmt(l2_evict_normal_read_sectors),
+        "l2_evict_last_read_sectors": fmt(l2_evict_last_read_sectors),
+        "l2_evict_first_read_pct": fmt(l2_evict_first_read_pct),
+        "l2_evict_normal_read_pct": fmt(l2_evict_normal_read_pct),
+        "l2_evict_last_read_pct": fmt(l2_evict_last_read_pct),
         "l2_read_miss_bytes": fmt(l2_read_miss_bytes),
         "l2_read_sector_conservation_ratio": fmt(
             l2_read_sector_conservation_ratio
         ),
+        "l2_tex_read_sector_conservation_ratio": fmt(
+            l2_tex_read_sector_conservation_ratio
+        ),
+        "l2_device_read_sector_conservation_ratio": fmt(
+            l2_device_read_sector_conservation_ratio
+        ),
+        "l2_path_counter_coherent": fmt(l2_path_counter_coherent),
         "dram_bytes": fmt(dram_bytes),
+        "dram_read_sectors": fmt(dram_read_sectors),
+        "dram_write_sectors": fmt(dram_write_sectors),
         "dram_read_bytes": fmt(dram_read_bytes),
+        "dram_read_bytes_source": dram_read_bytes_source,
+        "dram_write_bytes": fmt(dram_write_bytes),
+        "dram_write_bytes_source": dram_write_bytes_source,
+        "dram_read_to_expected_ratio": fmt(dram_read_to_expected_ratio),
+        "dram_write_to_read_ratio": fmt(dram_write_to_read_ratio),
+        "gpu_duration_s": fmt(gpu_duration_s),
+        "dram_read_bandwidth_GBps": fmt(dram_read_bandwidth_gbps),
         "dram_read_to_l2_miss_bytes_ratio": fmt(
             dram_read_to_l2_miss_bytes_ratio
         ),
+        "dram_read_to_l2_read_bytes_ratio": fmt(
+            dram_read_to_l2_read_bytes_ratio
+        ),
+        "dram_read_to_l2_logical_miss_bytes_ratio": fmt(
+            dram_read_to_l2_logical_miss_bytes_ratio
+        ),
         "tensor_hmma_inst": fmt(tensor_hmma_inst),
+        "tensor_fp16_f32_ops": fmt(tensor_fp16_f32_ops),
         "expected_logical_mma": fmt(expected_logical_mma),
+        "expected_logical_flop": fmt(expected_logical_flop),
         "tensor_hmma_per_logical_mma": fmt(tensor_hmma_per_logical_mma),
+        "tensor_ops_to_expected_flop": fmt(tensor_ops_to_expected_flop),
+        "tensor_pipe_active_pct": fmt(tensor_pipe_active_pct),
         "local_read_bytes": fmt(local_read_bytes),
         "local_write_bytes": fmt(local_write_bytes),
         "spill_local_read_inst": fmt(spill_local_read_inst),
@@ -867,6 +1312,8 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "stall_wait_pct": fmt(stall_wait_pct),
         "stall_not_selected_pct": fmt(stall_not_selected_pct),
         "achieved_occupancy_pct": fmt(achieved_occupancy_pct),
+        "launch_warp_capacity_pct": fmt(launch_warp_capacity_pct),
+        "launch_warps_per_scheduler": fmt(launch_warps_per_scheduler),
         "registers_per_thread": fmt(registers_per_thread),
         "shared_mem_per_block_static": fmt(shared_mem_per_block_static),
         "shared_mem_per_block_dynamic": fmt(shared_mem_per_block_dynamic),
@@ -940,7 +1387,12 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
             "`L1 request bytes` are bytes presented to L1TEX; they are not L1 "
             "cache-hit bytes. For `.cg`, L1 requests are expected while L1 hit "
             "bytes/hit rate should remain near zero. L2 acceptance uses the "
-            "srcunit-TEX read hit/miss sectors when available.\n\n"
+            "device-aperture srcunit-TEX read hit/miss sectors when available, "
+            "then falls back to all srcunit-TEX reads. The native op-read ratio "
+            "aggregates a broader L2 read population and is a cross-check, not a "
+            "replacement for the path-specific ratio. On GA100, a first-partition "
+            "TEX miss can be recovered by an LTC-fabric hit in the other partition; "
+            "the logical hit and native fabric-model columns preserve that distinction.\n\n"
         )
         f.write(
             "| label | mode | L1 path hit (%) | L1 aggregate hit (%) | L1 hit source | "
@@ -973,6 +1425,84 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
                 f"{row['l2_read_to_expected_ratio']} |\n"
             )
         f.write("\n")
+        f.write("## External-Memory Read Evidence\n\n")
+        f.write(
+            "These counters validate traffic, not physical HBM/GDDR energy. "
+            "Strict coefficients use `dram__bytes_read.sum`; total DRAM bytes "
+            "are never the read-path denominator.\n\n"
+        )
+        f.write(
+            "| label | mode | expected global read bytes | L2/source read bytes | "
+            "source/expected | DRAM read bytes | read source | read/expected | "
+            "DRAM write bytes | write source | write/read | DRAM read GB/s |\n"
+        )
+        f.write(
+            "|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|---:|\n"
+        )
+        for row in rows:
+            f.write(
+                f"| {row['label']} | {row['mode']} | "
+                f"{row['expected_global_read_bytes']} | {row['l2_read_bytes']} | "
+                f"{row['l2_read_to_expected_ratio']} | {row['dram_read_bytes']} | "
+                f"{row['dram_read_bytes_source']} | "
+                f"{row['dram_read_to_expected_ratio']} | {row['dram_write_bytes']} | "
+                f"{row['dram_write_bytes_source']} | "
+                f"{row['dram_write_to_read_ratio']} | "
+                f"{row['dram_read_bandwidth_GBps']} |\n"
+            )
+        f.write("\n")
+        f.write("## L2 Scope And Eviction Diagnostics\n\n")
+        f.write(
+            "For GA100, `device-path hit` is the first partition lookup, while "
+            "`logical hit` adds a matching LTC-fabric hit from the other partition. "
+            "A direct/native disagreement is acceptable only when the explicit "
+            "fabric counters reproduce the native ratio and DRAM read leakage remains "
+            "low. This is a transaction model, not permission to relabel arbitrary "
+            "L2 misses as hits.\n\n"
+        )
+        f.write(
+            "| label | device-path hit (%) | all-TEX hit (%) | native op-read hit (%) | "
+            "logical hit (%) | fabric hit (%) | model-native (%) | native-model delta (pp) | "
+            "device read/hit/miss sectors | fabric read/hit/miss sectors | "
+            "fabric/source-miss | fabric fraction | source/fabric/model coherent | "
+            "DRAM-read/L2-read | eviction F/N/L (%) |\n"
+        )
+        f.write("|---|" + "---:|" * 14 + "\n")
+        for row in rows:
+            f.write(
+                f"| {row['label']} | {row['l2_device_path_hit_rate_pct']} | "
+                f"{row['l2_tex_path_hit_rate_pct']} | "
+                f"{row['l2_native_read_hit_rate_pct']} | "
+                f"{row['l2_logical_read_hit_rate_pct']} | "
+                f"{row['l2_fabric_hit_rate_pct']} | "
+                f"{row['l2_fabric_model_native_hit_rate_pct']} | "
+                f"{row['l2_native_vs_fabric_model_hit_delta_pct']} | "
+                f"{row['l2_device_read_sectors']}/"
+                f"{row['l2_device_read_hit_sectors']}/"
+                f"{row['l2_device_read_miss_sectors']} | "
+                f"{row['l2_fabric_read_sectors']}/"
+                f"{row['l2_fabric_read_hit_sectors']}/"
+                f"{row['l2_fabric_read_miss_sectors']} | "
+                f"{row['l2_fabric_read_to_source_miss_ratio']} | "
+                f"{row['l2_fabric_read_fraction']} | "
+                f"{row['l2_path_counter_coherent']}/"
+                f"{row['l2_fabric_counter_coherent']}/"
+                f"{row['l2_fabric_model_coherent']} | "
+                f"{row['dram_read_to_l2_read_bytes_ratio']} | "
+                f"{row['l2_evict_first_read_pct']}/"
+                f"{row['l2_evict_normal_read_pct']}/"
+                f"{row['l2_evict_last_read_pct']} |\n"
+            )
+        f.write("\n")
+        f.write("## Shared Read/Write Diagnostics\n\n")
+        f.write("| label | mode | shared read bytes | shared write bytes |\n")
+        f.write("|---|---|---:|---:|\n")
+        for row in rows:
+            f.write(
+                f"| {row['label']} | {row['mode']} | "
+                f"{row['shared_read_bytes']} | {row['shared_write_bytes']} |\n"
+            )
+        f.write("\n")
         f.write("## NCU Replay And Residency Policy\n\n")
         f.write(
             "Application replay with cache-control none reruns the program warm-up "
@@ -980,20 +1510,30 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
             "explicit CUDA access-policy window.\n\n"
         )
         f.write(
-            "| label | mode | replay | cache control | warm-up passes | L2 residency | L2 layout | "
-            "persisting L2 size (bytes) | HMMA inst | logical MMA | HMMA/logical MMA |\n"
+            "| label | mode | replay | cache control | metric profile | warm-up passes | L2 residency | L2 layout | "
+            "persisting L2 size (bytes) | HMMA inst | logical MMA | HMMA/logical MMA | "
+            "FP16-to-FP32 Tensor ops | expected FLOP | ops/expected FLOP | "
+            "Tensor pipe active (%) | achieved occupancy (%) | launch warp capacity (%) | registers/thread |\n"
         )
-        f.write("|---|---|---|---|---:|---|---|---:|---:|---:|---:|\n")
+        f.write("|---|---|---|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
         for row in rows:
             f.write(
                 f"| {row['label']} | {row['mode']} | {row['ncu_replay_mode']} | "
-                f"{row['ncu_cache_control']} | {row['global_warmup_passes']} | "
+                f"{row['ncu_cache_control']} | {row['ncu_metric_profile']} | "
+                f"{row['global_warmup_passes']} | "
                 f"{row['l2_residency_policy']} | "
                 f"{row['l2_address_layout']} | "
                 f"{row['launch_persisting_l2_cache_size_bytes']} | "
                 f"{row['tensor_hmma_inst']} | "
                 f"{row['expected_logical_mma']} | "
-                f"{row['tensor_hmma_per_logical_mma']} |\n"
+                f"{row['tensor_hmma_per_logical_mma']} | "
+                f"{row['tensor_fp16_f32_ops']} | "
+                f"{row['expected_logical_flop']} | "
+                f"{row['tensor_ops_to_expected_flop']} | "
+                f"{row['tensor_pipe_active_pct']} | "
+                f"{row['achieved_occupancy_pct']} | "
+                f"{row['launch_warp_capacity_pct']} | "
+                f"{row['registers_per_thread']} |\n"
             )
         f.write("\n")
         f.write("## Spill And Local-Memory Evidence\n\n")
@@ -1029,6 +1569,50 @@ def run_self_test() -> None:
     assert percent_from_hit_miss(95.0, 5.0) == 95.0
     assert percent_from_hit_miss(0.0, 100.0) == 0.0
     assert first_non_none(0.0, 1.0) == 0.0
+    assert convert_value(8.192, "Kbyte/block") == 8192.0
+    assert convert_value(26.0, "register/thread") == 26.0
+    with tempfile.TemporaryDirectory() as temp_dir:
+        raw = Path(temp_dir) / "ga100_raw_metrics.csv"
+        native_model = 100.0 * (550.0 + 445.0) / (1000.0 + 450.0)
+        raw.write_text(
+            "Metric Name,Metric Unit,Metric Value\n"
+            "lts__t_sectors_srcunit_tex_aperture_device_op_read.sum,sector,1000\n"
+            "lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_hit.sum,sector,550\n"
+            "lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_miss.sum,sector,450\n"
+            "lts__t_sectors_srcunit_tex_op_read.sum,sector,1000\n"
+            "lts__t_sectors_srcunit_tex_op_read_lookup_hit.sum,sector,550\n"
+            "lts__t_sectors_srcunit_tex_op_read_lookup_miss.sum,sector,450\n"
+            "lts__t_sectors_srcunit_ltcfabric_aperture_device_op_read.sum,sector,450\n"
+            "lts__t_sectors_srcunit_ltcfabric_aperture_device_op_read_lookup_hit.sum,sector,445\n"
+            "lts__t_sectors_srcunit_ltcfabric_aperture_device_op_read_lookup_miss.sum,sector,5\n"
+            f"lts__t_sector_op_read_hit_rate.pct,%,{native_model}\n"
+            "dram__sectors_read.sum,sector,5\n"
+            "dram__bytes_read.sum,byte,160\n"
+            "dram__bytes_write.sum,byte,0\n",
+            encoding="utf-8",
+        )
+        row = summarize_case(
+            "ga100",
+            [raw],
+            {
+                "mode": "l2_cg_load_only",
+                "active_SM": "1",
+                "blocks_per_SM": "1",
+                "ITER": "1",
+                "load_repeat": "1",
+            },
+        )
+        assert abs(float(row["l2_path_hit_rate_pct"]) - 55.0) < 1.0e-6
+        assert abs(float(row["l2_logical_read_hit_rate_pct"]) - 99.5) < 1.0e-6
+        assert abs(float(row["l2_fabric_read_to_source_miss_ratio"]) - 1.0) < 1.0e-6
+        assert (
+            abs(float(row["l2_fabric_read_fraction"]) - (450.0 / 1450.0))
+            < 1.0e-6
+        )
+        assert float(row["l2_fabric_model_coherent"]) == 1.0
+        assert float(row["l2_native_vs_fabric_model_hit_delta_pct"]) < 1.0e-4
+        assert row["dram_read_bytes_source"] == "dram__bytes_read.sum"
+        assert row["dram_write_bytes_source"] == "dram__bytes_write.sum"
     print("NCU cache path-specific metric self-test passed")
 
 
@@ -1071,12 +1655,15 @@ def main() -> int:
         "store_repeat",
         "ncu_replay_mode",
         "ncu_cache_control",
+        "ncu_metric_profile",
         "global_warmup_passes",
         "l2_residency_policy",
         "l2_address_layout",
         "status",
         "shared_accesses",
         "shared_bytes",
+        "shared_read_bytes",
+        "shared_write_bytes",
         "shared_bytes_source",
         "shared_bank_conflicts",
         "shared_inst",
@@ -1088,8 +1675,14 @@ def main() -> int:
         "l1_hit_rate_source",
         "l2_hit_rate_pct",
         "l2_path_hit_rate_pct",
+        "l2_tex_path_hit_rate_pct",
+        "l2_device_path_hit_rate_pct",
         "l2_native_read_hit_rate_pct",
         "l2_native_vs_derived_hit_delta_pct",
+        "l2_logical_read_hit_rate_pct",
+        "l2_fabric_hit_rate_pct",
+        "l2_fabric_model_native_hit_rate_pct",
+        "l2_native_vs_fabric_model_hit_delta_pct",
         "l2_aggregate_hit_rate_pct",
         "l2_hit_rate_source",
         "l1_accesses",
@@ -1112,18 +1705,60 @@ def main() -> int:
         "l1_miss_bytes",
         "l2_bytes",
         "l2_read_bytes",
+        "expected_global_read_bytes",
         "expected_l2_read_bytes",
         "l2_read_to_expected_ratio",
         "l2_read_hit_sectors",
         "l2_read_miss_sectors",
+        "l2_device_read_sectors",
+        "l2_device_read_hit_sectors",
+        "l2_device_read_miss_sectors",
+        "l2_fabric_read_sectors",
+        "l2_fabric_read_hit_sectors",
+        "l2_fabric_read_miss_sectors",
+        "l2_fabric_metric_source",
+        "l2_fabric_metrics_present",
+        "l2_fabric_read_sector_conservation_ratio",
+        "l2_fabric_counter_coherent",
+        "l2_fabric_read_to_source_miss_ratio",
+        "l2_fabric_hit_to_source_miss_ratio",
+        "l2_fabric_read_fraction",
+        "l2_logical_read_hit_sectors",
+        "l2_logical_read_miss_sectors",
+        "l2_logical_read_miss_bytes",
+        "l2_fabric_model_coherent",
+        "l2_evict_first_read_sectors",
+        "l2_evict_normal_read_sectors",
+        "l2_evict_last_read_sectors",
+        "l2_evict_first_read_pct",
+        "l2_evict_normal_read_pct",
+        "l2_evict_last_read_pct",
         "l2_read_miss_bytes",
         "l2_read_sector_conservation_ratio",
+        "l2_tex_read_sector_conservation_ratio",
+        "l2_device_read_sector_conservation_ratio",
+        "l2_path_counter_coherent",
         "dram_bytes",
+        "dram_read_sectors",
+        "dram_write_sectors",
         "dram_read_bytes",
+        "dram_read_bytes_source",
+        "dram_write_bytes",
+        "dram_write_bytes_source",
+        "dram_read_to_expected_ratio",
+        "dram_write_to_read_ratio",
+        "gpu_duration_s",
+        "dram_read_bandwidth_GBps",
         "dram_read_to_l2_miss_bytes_ratio",
+        "dram_read_to_l2_read_bytes_ratio",
+        "dram_read_to_l2_logical_miss_bytes_ratio",
         "tensor_hmma_inst",
+        "tensor_fp16_f32_ops",
         "expected_logical_mma",
+        "expected_logical_flop",
         "tensor_hmma_per_logical_mma",
+        "tensor_ops_to_expected_flop",
+        "tensor_pipe_active_pct",
         "local_read_bytes",
         "local_write_bytes",
         "spill_local_read_inst",
@@ -1135,6 +1770,8 @@ def main() -> int:
         "stall_wait_pct",
         "stall_not_selected_pct",
         "achieved_occupancy_pct",
+        "launch_warp_capacity_pct",
+        "launch_warps_per_scheduler",
         "registers_per_thread",
         "shared_mem_per_block_static",
         "shared_mem_per_block_dynamic",

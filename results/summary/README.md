@@ -14,14 +14,18 @@
 | A100/V100/H100 `*_commands.sh` | 실행 계획, 측정 결과 아님 | 각 `*_command_plan.md`와 `../../docs/platforms/` 가이드 |
 | Documentation consistency | current static audit | `documentation_consistency_audit_20260714.md` |
 
-RTX 3090 DRAM을 보고할 때의 우선순위는 다음과 같다.
+External-memory read path를 보고할 때의 우선순위는 다음과 같다.
 
-1. `rtx3090_dram_current_reporting_policy_20260712.csv/.md`
-2. 새 matched-ITER `dram_cg_load_only - global_addr_only` strict package가 생성되면 그 결과
-3. 과거 `dram_cg_load_only - clocked_empty` summary는 provenance/reproduction only
+1. 새 matched-ITER `dram_cg_load_only - global_addr_only` strict package의 accepted result
+2. strict result 전에는 `external_memory_scope_comparison_20260714.csv`의 user-reported historical observation
+3. `rtx3090_dram_current_reporting_policy_20260712.csv/.md`와 과거
+   `dram_cg_load_only - clocked_empty` summary는 legacy provenance/reproduction only
 
-현재 DRAM 보고값은 `26.709-28.409 pJ/bit`의
-`provisional_reference_aligned_range`다. 이 값은 accepted 실측 coefficient가 아니다.
+현재 저장소에서 확정할 수 있는 accepted external-memory coefficient는 없다.
+`25.510/11.925/8.131 pJ/bit`는 순서대로 RTX 3090/A100/V100의 사용자
+전달 historical observation이며, 새 read-only strict protocol로 재실험하기 전에는
+final coefficient로 사용하지 않는다. 2026-07-12 `26.709-28.409 pJ/bit`는
+raw matched-pair 측정값이 아닌 reference-aligned legacy band이므로 현행 보고에서 철회한다.
 과거 summary의 약 28.3 pJ/byte 및 약 3.54 pJ/bit는 산술적으로 서로 환산되지만,
 현행 address-control matched-ITER 정책과 다르므로 active 보고에 사용하지 않는다.
 

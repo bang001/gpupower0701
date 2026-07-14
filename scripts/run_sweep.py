@@ -83,6 +83,7 @@ MODES = [
     "addr_only",
     "global_addr_only",
     "global_l1_load_only",
+    "shared_scalar_addr_only",
     "shared_scalar_load_only",
     "shared_load_only",
     "shared_mma",
@@ -99,6 +100,7 @@ MODES = [
 MEMORY_BACKED_MODES = {
     "global_addr_only",
     "global_l1_load_only",
+    "shared_scalar_addr_only",
     "shared_scalar_load_only",
     "shared_load_only",
     "shared_mma",
@@ -170,7 +172,12 @@ def mode_allowed(mode: str, info: dict[str, Any]) -> bool:
         return False
     if info.get("below_logical_tile") and mode in MEMORY_BACKED_MODES:
         return False
-    if mode in {"shared_scalar_load_only", "shared_load_only", "shared_mma"}:
+    if mode in {
+        "shared_scalar_addr_only",
+        "shared_scalar_load_only",
+        "shared_load_only",
+        "shared_mma",
+    }:
         return bool(info["shared_resident"])
     if mode == "global_l1_load_only":
         return bool(info["l2_candidate"])

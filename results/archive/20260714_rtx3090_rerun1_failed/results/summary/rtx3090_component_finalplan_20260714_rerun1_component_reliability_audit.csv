@@ -1,0 +1,6 @@
+component,status,median,unit,rows,valid_detail_rows,invalid_detail_rows,ncu_denominator_rows,ncu_accepted_rows,confidence_class,energy_source,energy_integration_method,measurement_scope,power_semantics,reasons,cautions
+dram_cg_stream_path,accepted_sanity,25.5169429738,pJ/bit,15,15,0,15,18,medium-high,nvml_total_energy,total_energy_mj_delta,gpu_device_total_energy_counter,one_sec_average,,dram_sanity_path_not_physical_dram_energy
+global_l1_hit_path,accepted_low_stability,0.11280472766,pJ/bit,4,4,11,4,19,low,nvml_total_energy,total_energy_mj_delta,gpu_device_total_energy_counter,one_sec_average,,low_stability;invalid_detail_rows:11;shared_l1_global_l1_far_apart
+l2_hit_cg_path,accepted,7.74945787957,pJ/bit,15,15,0,15,19,medium-high,nvml_total_energy,total_energy_mj_delta,gpu_device_total_energy_counter,one_sec_average,,
+shared_l1_scalar_path,accepted_with_caution,1.01047072961,pJ/bit,9,9,6,9,5,medium,nvml_total_energy,total_energy_mj_delta,gpu_device_total_energy_counter,one_sec_average,,invalid_detail_rows:6;shared_l1_global_l1_far_apart
+tensor_mma_increment,accepted,1.64095668284,pJ/FLOP,25,25,0,0,10,medium-high,nvml_total_energy,total_energy_mj_delta,gpu_device_total_energy_counter,one_sec_average,,

@@ -14,7 +14,7 @@
 | Shared memory scalar path | pJ/bit | shared-memory load instruction path의 effective traffic energy |
 | Global L1 hit path | pJ/bit | global load가 L1 hit로 끝나는 path의 effective traffic energy |
 | L2 hit path | pJ/bit | L1을 배제하고 L2 hit로 끝나는 path의 effective traffic energy |
-| DRAM streaming path | pJ/bit | 필수 목표가 아니라 L2 분리 sanity check |
+| External-memory read path | effective pJ/bit | SM-to-HBM/GDDR 전체 read service path; 물리 memory-device energy가 아님 |
 
 중요한 제한은 다음과 같다.
 
@@ -43,10 +43,10 @@
 
 | 기존 항목 | 판정 | 이유 | 새 처리 |
 |---|---|---|---|
-| Tensor `0.077-0.170 pJ/FLOP` 과거 sweep | superseded historical | v1 dynamic loop가 GA102 RF2에서 `HMMA/logical MMA=3`, 나머지 primary RF에서 2로 비례성을 깨뜨렸다. control/kernel/pair protocol도 현행 v2와 다르다. | fixed-RF v2로 RF1/2/4/8/16을 재실행. RTX 3090은 NCU 10/10 accepted, 33 valid pair, median 2.2525 pJ/FLOP을 standalone current Tensor 근거로 기록. A100/V100/H100은 각 노드에서 독립 재측정 |
+| Tensor v1 `0.077-0.170`, v2 `2.2525 pJ/FLOP` | superseded historical | v1은 RF별 HMMA 비례성이 깨졌고, v2는 장시간 양의 FP32 누적이 정체될 수 있다. v3의 A+/A- branch는 RF2 이상에서 predicated HMMA 두 경로를 발행했다. | v4는 한 A fragment의 sign bit를 매 MMA 후 뒤집는다. RTX 3090 NCU에서 RF1/2/4/8/16 모두 `HMMA/logical=2`, control HMMA=0을 확인했지만 새 energy run 전이므로 current pJ/FLOP은 없음 |
 | Global L1 `0.449 pJ/bit` | 후보값 미만 | L1 hit path는 맞지만 energy row 6개 중 2개가 음수였다. | 음수 row가 사라지는지 seconds/repeats를 늘려 재실험한다. |
 | L2 `0.798 pJ/bit` | 후보값 | CG L2 path는 맞지만 long scoreboard가 크고 1개 음수 row가 있었다. | L2는 stall을 보고하고, pJ/bit를 L2 SRAM 단독값으로 부르지 않는다. |
-| DRAM legacy `clocked_empty` 값 | 폐기된 current 후보 | 과거 control과 현행 matched-ITER address control이 다르며 cumulative path/device energy 의미도 섞였다. | 최신 보고는 26.709-28.409 pJ/bit provisional cumulative-path band로 제한하고 새 pair-lock 실험으로 검증한다. |
+| External-memory 기존 전달값: RTX 25.510, A100 11.925, V100 8.131 pJ/bit | strict 재검증 전 historical observation | raw/NCU scope가 완전히 재현되지 않았고 total/expected denominator, 압축 가능 입력, 단일 W 문제가 있었다. | high-entropy input, architecture별 W sweep, NCU read-only denominator로 재실험한다. |
 | Register direct `263 pJ/update` | 폐기 | scalar ALU, dependency, scheduler/control, active power를 작은 update 수로 나눈 값이다. | pure register-file energy로 쓰지 않는다. |
 
 ## 4. 실험 분리 원칙
@@ -61,8 +61,8 @@ energy 계수는 아래 NCU 기준을 통과한 mode만 사용한다.
 | Tensor control | `reg_operand_only` | 새 final run은 HMMA=정확히 0, spill/local=0, treatment와 동일 ITER. legacy fixed epilogue 완화는 과거 결과 설명에만 사용 |
 | Shared scalar | `shared_scalar_load_only` | shared bytes/accesses 존재, expected shared bytes와 같은 order, bank conflict 0 또는 매우 낮음 |
 | Global L1 | `global_l1_load_only` | path-specific L1 hit >=95%, L1 request/hit bytes 존재, L2 read/L1 request <=1%, DRAM/L1 request <=1% |
-| L2 hit | `l2_cg_load_only` | path-specific L2 read hit >=95%, L1 path hit <=1%, L1 hit/request bytes <=1%, DRAM/L2 read <=2% |
-| DRAM sanity | `dram_cg_load_only` | path-specific L1 hit <= 1%, DRAM bytes가 충분, path-specific L2 read hit은 `L2 capacity / working set` 기반 residual bound 내 |
+| L2 hit | `l2_cg_load_only` | architecture-specific final L2 service >=95%, L1 path hit <=1%, L1 hit/request bytes <=1%, DRAM-read/source-L2-read <=2%. GA100은 source+LTC-fabric logical hit와 native-model coherence 사용 |
+| External-memory read | `dram_cg_load_only` | L1 hit <=1%, final L2 hit <=10%, source/expected 0.95-1.05, DRAM read/source >=0.90, write/read <=0.01, spill 0 |
 
 NCU 보고 표에는 반드시 단위를 적는다.
 
@@ -80,13 +80,19 @@ NCU 보고 표에는 반드시 단위를 적는다.
 
 ### 4.2 Energy coefficient
 
-Energy run은 NCU 없이 실행한다. Shared/L1 pair는 nearest control의 power rate를
-treatment elapsed에 맞춘다. Tensor pair는 각 RF에서 `reg_mma`의 treatment 목표시간과
+Energy run은 NCU 없이 실행한다. 모든 final pair는 각 좌표에서 treatment 목표시간과
+control 최소시간을 각각 calibrate하고 두 ITER 중 큰 값을 두 mode에 동일하게
+적용한 뒤 net energy를 직접 차분한다. Tensor pair는 각 RF에서 `reg_mma`의 treatment 목표시간과
 `reg_operand_only`의 control 최소시간을 각각 calibrate하고, 두 ITER 중 큰 값을 treatment와
 control에 동일하게 적용한 뒤 net energy를 직접 차분한다.
-`reg_mma`와 `reg_operand_only`는 RF당 dependent register integer add 1개를 공통으로
-실행하고, control의 기존 FP32 FMA/checksum/memory는 제거한다.
-L2와 DRAM pair도 동일하게 각각 `l2_cg_load_only`/`dram_cg_load_only` treatment와
+`reg_mma`와 `reg_operand_only`는 A/B/C fragment 선언, dependent scalar update,
+in-place A-sign flip, source epilogue를 공통으로 두되 treatment만 MMA를 발행한다.
+A fragment의 FP16 sign bit를 매 logical MMA 후 뒤집어 accumulator를 bounded 상태로
+유지한다. ptxas 최적화 후 control의
+register footprint가 더 작으므로 결과는 pure Tensor 회로 에너지가 아니다.
+Shared는 동일 dynamic shared allocation, 초기화, index/checksum loop를 유지하되
+반복 shared read만 제거한 `shared_scalar_addr_only`를 control로 쓴다. Global L1/L2/DRAM은
+`global_addr_only`를 control로 쓴다. L2와 DRAM pair도 각각 `l2_cg_load_only`/`dram_cg_load_only` treatment와
 `global_addr_only` control을
 dual-calibrate하고 동일 ITER를 적용한 뒤 두 net energy를 직접 차분한다.
 
@@ -99,6 +105,8 @@ Matched-control 분석은 다음 gate를 켠다.
 | `--expected-power-semantics <profile>` | V100/A100 `instant`, RTX 3090/H100 `one_sec_average` metadata 확인 |
 | `--pairing nearest-control` | 반복 run에서 treatment를 실행 순서상 가장 가까운 control과 비교해 thermal/clock drift 완화 |
 | `--tensor-pair-policy matched-iters` | Tensor의 동일 ITER를 확인하고 `E_reg_mma - E_reg_operand_only` 직접 차분 |
+| `--shared-pair-policy matched-iters` | Shared treatment/control의 동일 ITER를 확인하고 `E_shared_load - E_shared_addr` 직접 차분 |
+| `--l1-pair-policy matched-iters` | Global L1 treatment/address control의 동일 ITER를 확인하고 net energy 직접 차분 |
 | `--l2-pair-policy matched-iters` | L2 CG와 address control의 동일 ITER를 확인하고 net energy 직접 차분 |
 | `--dram-pair-policy matched-iters` | DRAM treatment/control의 동일 ITER를 확인하고 `net_E_dram - net_E_addr` 직접 차분 |
 | `--require-control-ncu-acceptance` | treatment뿐 아니라 no-MMA/address control도 동일 좌표 NCU acceptance를 요구 |
@@ -120,19 +128,18 @@ pJ/FLOP 또는 pJ/bit의 분자는 가능한 한 세대 공통으로 total-energ
 fallback/provisional 표로 분리한다.
 
 ```text
-delta_E_default_J = E_mode_J - (E_control_J / t_control_s) * t_mode_s
-delta_E_dram_J = net_E(dram_cg_load_only, ITER=N)
-               - net_E(global_addr_only, ITER=N)
+delta_E_component_J = net_E(treatment, ITER=N)
+                    - net_E(matched_control, ITER=N)
 coefficient = delta_E_J / denominator
 ```
 
 | Component | numerator | control | denominator |
 |---|---|---|---|
 | Tensor MMA incremental | `reg_mma` | `reg_operand_only` | FLOP |
-| Shared scalar path | `shared_scalar_load_only` | `clocked_empty` | NCU shared bytes 우선, expected shared bytes fallback |
+| Shared scalar path | `shared_scalar_load_only` | `shared_scalar_addr_only` | NCU shared read bytes 우선, expected shared bytes fallback |
 | Global L1 path | `global_l1_load_only` | `global_addr_only` | NCU L1 bytes 우선, expected L1 bytes fallback |
 | L2 hit path | `l2_cg_load_only` | `global_addr_only` | NCU L2 bytes 우선, expected L2 bytes fallback |
-| DRAM sanity path | `dram_cg_load_only` | `global_addr_only` | NCU DRAM bytes 우선, expected DRAM bytes fallback |
+| External-memory read path | `dram_cg_load_only` | `global_addr_only` | strict NCU `dram__bytes_read.sum`; fallback 금지 |
 
 음수 coefficient는 component energy로 채택하지 않는다. 단순히 0으로 클리핑하지 않고 `not_identified_or_control_failed`로 기록한다.
 
@@ -150,44 +157,40 @@ energy sweep과 같은 `reuse_factor`/`load_repeat` list를 NCU sidecar에서도
 |---|---|---|
 | `TENSOR_REUSE_FACTORS` | `1,2,4,8,16` | `reg_operand_only`, `reg_mma` Tensor/control sweep |
 | `MEMORY_LOAD_REPEATS` | `1,2,4,8,16` | shared, global L1, L2 path sweep |
-| `DRAM_LOAD_REPEATS` | `1,4,8,16` | DRAM streaming sanity sweep; energy LR 4,8,16과 exact coordinate를 맞춤 |
+| `DRAM_LOAD_REPEATS` | `1,4,8,16` | external-memory read-path sweep; energy LR 4,8,16과 exact coordinate를 맞춤 |
+| `DRAM_W_SM_KIB_VALUES` | profile별 표 참조 | nominal L2 배수 working-set sweep |
 
 빠른 대표 검증을 수행할 때의 최소 좌표는 다음이다.
 
 | Component | blocks/SM | W_SM (KiB) | representative factor | 이유 |
 |---|---:|---:|---:|---|
-| Tensor | 16 | 2048 | reuse 4 | B16 full occupancy에서 HMMA/spill 확인 |
+| Tensor | profile 대표 B | N/A (CLI placeholder 1) | reuse 4 | HMMA/spill과 register footprint 확인 |
 | Shared scalar | 16 | 64 | load_repeat 4 | shared bytes와 bank conflict 확인 |
 | Global L1 | 16 | 16 | load_repeat 4 | L1 hit path 확인 |
 | L2 hit | 16 | 64 | load_repeat 4 | RTX 3090은 CG path로 L1을 배제 |
-| DRAM sanity | 16 | 8192 | load_repeat 4 | L2 miss/DRAM streaming 확인 |
+| External-memory read | 16 | RTX/V100 256-2048; A100/H100 2048-8192 | load_repeat 4 | L2 capacity transition과 external-read dominance 확인 |
 
 ### 5.2 Energy 재실험
 
 | Component | modes | blocks/SM | W_SM (KiB) | factor sweep | seconds (s) | repeats |
 |---|---|---:|---:|---:|---:|---:|
-| Tensor | `reg_operand_only`, `reg_mma` | 16 | 2048 | reuse 1,2,4,8,16 | 5 | 3 |
-| Shared scalar | `clocked_empty`, `shared_scalar_load_only` | 16 | 64 | load_repeat 1,2,4,8,16 | 5 | 3 |
+| Tensor | `reg_operand_only`, `reg_mma` | profile별 B sweep | N/A (CLI placeholder 1) | reuse 1,2,4,8,16 | 5 | 3 |
+| Shared scalar | `shared_scalar_addr_only`, `shared_scalar_load_only` | 16 | 64 | load_repeat 1,2,4,8,16 | 5 | 3 |
 | Global L1 | `global_addr_only`, `global_l1_load_only` | 16 | 16,64 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 | 5 | 3 |
 | L2 hit | `global_addr_only`, `l2_cg_load_only` | 16 | 64 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 | 5 | 3 |
-| DRAM sanity | `global_addr_only`, `dram_cg_load_only` | 16 | 8192 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 | 5 | 3 |
+| External-memory read | `global_addr_only`, `dram_cg_load_only` | 16 | RTX/V100 256,512,1024,2048; A100/H100 2048,4096,8192 | energy load_repeat 4,8,16; NCU 1,4,8,16 | 5 | 3 |
 
-주의: Shared/L1 primary runner는 현재 duration-calibrated 방식이다. 따라서 `load_repeat`를
-2배로 늘리면 `ITER`가 줄어 목표 실행 시간을 맞추기 때문에 총 byte denominator가
-반드시 2배로 늘지는 않는다. `load_repeat` sweep은 path의 instruction mix/rate 안정성을
-보는 축이고, 총 denominator scaling을 확인하려면 같은 `load_repeat`에서 duration sweep
-또는 fixed-ITER 보조 실험을 별도로 수행한다. RTX 3090 L1에서는 `load_repeat=4`,
-10/20/30초 duration-scaling check가 기존 0.15 pJ/bit 결과와 정합했다.
-L2 CG와 DRAM CG는 이 예외에서 제외하며, treatment와 address control에 동일 ITER를 강제한다.
-과거 RTX 3090 Tensor duration-scaling `0.077-0.170 pJ/FLOP`는 새
-pair-lock/fixed-RF v2 이전의 역사적 민감도 분석이다. 현행 finalplan에서는 그대로
-재사용하지 않는다. 2026-07-13 RTX 3090 fixed-RF v2는 RF1/2/4/8/16, B16,
-treatment 20초/control 2초 floor, 7 repeats로 실행했다. Power API 70/70, NCU
-10/10을 통과했고 pair/power-state gate 후 33/35 valid, median 2.2525 pJ/FLOP,
-RF별 median 1.9754-2.3211 pJ/FLOP이다. 이는 더 긴 treatment active time의
-scheduler/clock/register lifetime까지 포함한 board-level effective incremental이며 pure
-Tensor circuit energy가 아니다. 다른 GPU에는 이 숫자를 이식하지 않고 동일 v2
-프로토콜로 재측정한다.
+주의: 과거 Shared/L1 duration-scaled power 차분은 memory stall이 issue activity를
+낮출 때 control power가 treatment power보다 커져 음수 계수를 만들 수 있었다.
+현행 protocol은 동일 ITER 완료 energy를 직접 비교한다. 이 값은 latency로 늘어난
+board baseline/scheduler 시간까지 포함한 effective completion-energy coefficient이며,
+순수 SRAM bitcell energy가 아니다.
+과거 RTX 3090 Tensor v1 `0.077-0.170 pJ/FLOP`와 fixed-RF v2 median
+`2.2525 pJ/FLOP`는 모두 역사적 민감도 자료다. v2는 NCU 10/10과 energy pair
+33/35를 통과했지만 장시간 constant-positive FP32 accumulation 정체 가능성이 뒤늦게
+확인되어 superseded되었다. v3도 predicated dual-HMMA codegen 때문에 reject했다.
+현행 v4는 RTX 3090 RF1/2/4/8/16에서 runtime NCU 선형성을 통과했으며, 각 GPU에서
+v4 binary/NCU gate를 통과한 뒤 새 board-energy run으로만 coefficient를 만든다.
 
 성공 기준:
 
@@ -197,8 +200,8 @@ Tensor circuit energy가 아니다. 다른 GPU에는 이 숫자를 이식하지 
 | Tensor | 동일 ITER, control HMMA=0, treatment `HMMA/logical MMA` RF spread<=10%, spill/local=0, RF별 최소 5 valid pair, pair timestamp gate, `delta_E>=10 J`, coefficient>0 |
 | Shared scalar | 모든 load_repeat에서 양수, NCU shared path accepted |
 | Global L1 | 음수 row가 남으면 final에서 제외 또는 control 재설계 |
-| L2 | L2 hit >= 95%, DRAM/L2 <= 2%, long scoreboard를 결과 표에 포함 |
-| DRAM | sanity check로만 사용, physical DRAM energy라고 쓰지 않음 |
+| L2 | final L2 service >=95%, DRAM-read/source-L2-read <=2%, long scoreboard를 결과 표에 포함. GA100은 direct/native lookup 수치를 final hit로 오인하지 않음 |
+| External-memory read path | NCU actual read-byte와 경로 gate를 통과한 effective GPU-device coefficient로만 사용하고 physical HBM/GDDR energy라고 쓰지 않음 |
 
 Tensor/register NCU acceptance는 absolute memory byte threshold와 함께
 bytes/HMMA 또는 bytes/register-op ratio를 확인한다. reuse factor가 커질수록
@@ -219,13 +222,14 @@ energy 측정과 NCU profiling은 분리한다. 개수는 2026-07-10에
 | 파라미터 | RTX 3090 / GA102 | A100 / GA100 | V100 / GV100 | H100 / GH100 | 단위/조건 |
 |---|---|---|---|---|---|
 | CUDA arch / active SM | `sm_86` / 82 | `sm_80` / 108 | `sm_70` / 80 | `sm_90` / 132 | SM count는 full-GPU profile 기준이며 runtime preflight와 다르면 중단 |
-| energy blocks/SM | 8,16 | 16,32 | 4,16,32 | 16,32 | blocks/SM; V100은 저밀도 B4, 중간 B16, strict B32를 비교 |
-| strict NCU blocks/SM | 8 | Shared/L1 16; L2 selector 16/8/4 | Shared/L1 32; L2 selector 32/16/4 | 16 | blocks/SM; A100/V100 L2는 precheck와 energy/full NCU에 같은 selected B 사용 |
-| Tensor W_SM / RF | 2048 / 1,2,4,8,16 | 동일 | 동일 | 동일 | W_SM: KiB/SM 고정 좌표, RF: reuse factor count; W_SM은 register footprint가 아님 |
+| general energy blocks/SM | 8,16 | 16,32 | 4,16,32 | 16,32 | blocks/SM; Tensor는 아래 별도 sweep |
+| Tensor blocks/SM | 4,8,16 | 4,16,32 | 4,16,32 | 4,16,32 | blocks/SM; energy와 NCU에서 모두 수행 |
+| strict NCU blocks/SM | Tensor 4/8/16; Shared/L1 8 | Tensor 4/16/32; Shared/L1 16; L2 selector | Tensor 4/16/32; Shared/L1 32; L2 selector | Tensor 4/16/32; Shared/L1 16 | blocks/SM |
+| Tensor W_SM / RF | N/A (CLI 1) / 1,2,4,8,16 | 동일 | 동일 | 동일 | W_SM은 parser placeholder, RF는 inner MMA grouping count |
 | Shared scalar W_SM | 32,64 | 64,128 | 32,64 | 64,128 | KiB/SM; shared allocation/residency 조건 통과 필요 |
 | Global L1 W_SM | 8,16 | 16,32 | 8,16,32 | 16,32 | KiB/SM; 아래 최소 tile 조건으로 일부 W/B 제외 |
 | L2 CG W_SM | 64 | 16,32,64,128 | 32,64 | 64,128 | KiB/SM; A100은 40 MiB L2 안에서 hit plateau 후보를 넓게 탐색 |
-| DRAM sanity W_SM | 8192 | 8192 | 8192 | 8192 | KiB/SM = 8 MiB/SM; full-GPU working set이 nominal L2보다 큼 |
+| External-memory W_SM | 256,512,1024,2048 | 2048,4096,8192 | 256,512,1024,2048 | 2048,4096,8192 | KiB/SM; full set/L2 약 3.3x-27.3x 또는 5.3x-21.6x sweep |
 | memory energy LR | 4,8,16 | 4,8,16 | 4,8,16 | 4,8,16 | load repeat, count |
 | Tensor NCU RF | 1,2,4,8,16 | 동일 | 동일 | 동일 | count |
 | Shared/L1/L2 NCU LR | 1,2,4,8,16 | 동일 | 동일 | 동일 | count |
@@ -251,8 +255,8 @@ A100/H100 shared profile을 넘으므로 shared 후보가 아니다.
 
 Global L1 W는 작은 cached-global working set과 block당 최소 1 KiB tile을 동시에
 만족하도록 선택한다. L2 W는 `active_SM * W_SM`이 nominal L2 안에 남도록 하면서 `.cg`로
-L1 hit를 억제한다. DRAM W8192 KiB/SM은 full-GPU working set을 L2보다 충분히 크게 만드는
-sanity 좌표다. 이 세 경로는 W 값만으로 판정하지 않고 NCU path-specific hit/access/bytes로
+L1 hit를 억제한다. External-memory W는 full-GPU working set을 nominal L2의 여러
+배로 바꾸며 capacity transition을 측정한다. 이 세 경로는 W 값만으로 판정하지 않고 NCU path-specific hit/access/bytes로
 최종 분류한다. Shared는 별도 address space이므로 이 Global L1-L2-DRAM 전이와 분리한다.
 
 ![strict anchor capacity 맥락](../presentations/assets/platform_capacity_context.png)
@@ -283,19 +287,19 @@ Tensor calibration, NCU sidecar는 서로 다른 단계이므로 energy raw rows
 | Shared scalar | 24 / 120 | 24 / 120 | 36 / 180 | 24 / 120 | 2 modes x W x B x LR 3개 |
 | Global L1 | 18 / 90 | 18 / 90 | 36 / 180 | 18 / 90 | 2 modes x 유효 W/B x LR 3개 |
 | L2 CG | 12 / 60 | 24 / 120 | 12 / 60 | 24 / 120 | A100/V100은 2 modes x W x selected B 1개 x LR 3개 |
-| DRAM sanity | 12 / 60 | 12 / 60 | 18 / 90 | 12 / 60 | 2 modes x B x LR 3개 |
-| **합계** | **86 / 430** | **98 / 490** | **132 / 660** | **98 / 490** | 유효 commands / expected CSV rows |
+| External-memory read | 48 / 240 | 36 / 180 | 72 / 360 | 36 / 180 | 2 modes x W x B x LR 3개 |
+| **합계** | **122 / 610** | **122 / 610** | **186 / 930** | **122 / 610** | 유효 commands / expected CSV rows |
 
 | 별도 실행 단계 | RTX 3090 | A100 | V100 | H100 | 의미 |
 |---|---:|---:|---:|---:|---|
-| feasibility 전 candidate matrix | 92 rows | 104 rows | 150 rows | 104 rows | A100/V100 L2 matrix는 selector가 고른 B 하나로 생성 |
+| feasibility 전 candidate matrix | 128 rows | 128 rows | 204 rows | 128 rows | A100/V100 L2 matrix는 selector가 고른 B 하나로 생성 |
 | feasibility 제외 | 6 rows | 6 rows | 18 rows | 6 rows | treatment/control과 LR를 포함한 최소 tile 위반 row |
 | schema/revision smoke | 3 rows | 3 rows | 3 rows | 3 rows | full sweep 전 CSV schema와 kernel marker 확인 |
 | Tensor pair calibration | 10 coordinates / 20 commands | 10 coordinates / 20 commands | 15 coordinates / 30 commands | 10 coordinates / 20 commands | B x RF 좌표마다 treatment/control-floor calibration 2회; 큰 ITER를 두 mode에 함께 적용 |
 | L2 pair calibration | 6 coordinates / 12 commands | 12 coordinates / 24 commands | 6 coordinates / 12 commands | 12 coordinates / 24 commands | A100/V100은 selected B의 W/LR 좌표만 dual calibration |
-| DRAM pair calibration | 6 coordinates / 12 commands | 6 coordinates / 12 commands | 9 coordinates / 18 commands | 6 coordinates / 12 commands | B x LR 좌표마다 treatment/control-floor calibration 2회; 큰 ITER를 두 mode에 함께 적용 |
-| primary NCU sidecar | 44 cases | 74 cases | 54 cases | 44 cases | A100 L2 W 4개, V100 L2 W 2개; selector precheck는 A100 최대 32/V100 최대 16 case 별도 |
-| nominal energy kernel time | 4,300 s | 4,900 s | 6,600 s | 4,900 s | raw rows x 10 s의 기준값; calibration/launch/cooling/NCU/precheck 시간 별도 |
+| External-memory pair calibration | 24 coordinates / 48 commands | 18 coordinates / 36 commands | 36 coordinates / 72 commands | 18 coordinates / 36 commands | W x B x LR 좌표마다 treatment/control-floor calibration 2회 |
+| primary NCU sidecar | 73 cases | 95 cases | 83 cases | 65 cases | external-memory NCU가 W별 treatment/control과 LR 4개를 수집; selector precheck 별도 |
+| nominal energy kernel time | 6,100 s | 6,100 s | 9,300 s | 6,100 s | raw rows x 10 s의 기준값; calibration/launch/cooling/NCU/precheck 시간 별도 |
 
 상세 계산식, generated strict anchor와 기존 RTX 3090 accepted B16 결과의 구분은
 [cross-platform component experiment guide](../platforms/cross_platform_component_experiment_guide_ko.md)의
@@ -326,8 +330,8 @@ A100 노드에서는 RTX 3090 결과를 이식하지 않고 같은 acceptance-fi
 |---|---|
 | preflight | profile `a100`, runtime SM 수, NVML energy support, NCU metric support |
 | power API audit | energy sweep CSV가 `nvml_total_energy`, `total_energy_mj_delta`, `measurement_scope=gpu_device_total_energy_counter`, `nvml_power_usage_semantics=instant` 조건을 만족하는지 확인 |
-| shared/L1 | `shared_scalar_load_only` W_SM 64/128 KiB. Global L1은 strict W16/B16, diagnostic W32/B16 및 W32/B32; invalid W16/B32는 treatment/control 모두 자동 제외 |
-| L2 final path | `l2_cg_load_only - global_addr_only`, W_SM 16/32/64/128 KiB에서 path-specific L2 read hit >=95%, L1 hit/request bytes <=1%인 plateau 선택. L1 request bytes 자체는 허용. pre-measurement warm-up도 `ld.global.cg` 사용 |
+| shared/L1 | `shared_scalar_load_only - shared_scalar_addr_only` W_SM 64/128 KiB. Global L1은 strict W16/B16, diagnostic W32/B16 및 W32/B32; invalid W16/B32는 treatment/control 모두 자동 제외. 두 path 모두 동일 ITER 직접 차분 |
+| L2 final path | `l2_cg_load_only - global_addr_only`, W_SM 16/32/64/128 KiB. NCU-first에서 B16/8/4/2/1과 normal/persisting, contiguous/sm_interleaved 후보를 검사한다. `l2_path_minimal`에서 device/TEX source와 `srcunit_ltcfabric` hit/miss를 같은 replay로 수집하고 logical final hit >=95%, source/fabric 보존, native-model 오차 <=2 pp, L1 hit/request bytes <=1%, expected traffic, DRAM-read leakage를 모두 통과한 경우만 선택한다. direct/native hit 자체에는 95%를 강제하지 않는다. L1 request bytes 자체는 허용하고 warm-up도 `ld.global.cg` 사용 |
 | L2 diagnostic | `l2_load_only`는 normal global load라 L1과 섞일 수 있으므로 strict coefficient에서 제외 |
 | Tensor | `reg_mma - reg_operand_only`, blocks/SM 16/32, reuse 1-16. RF별 treatment/control-floor calibration ITER의 최대값을 두 mode에 동일 적용하고 calibration manifest/raw/detail을 audit |
 | DRAM | `dram_cg_load_only - global_addr_only`, W_SM 8192 KiB, LR 4/8/16. 좌표별 treatment/control-floor calibration ITER의 최대값을 두 mode에 동일 적용하고 direct net-energy 차분 |

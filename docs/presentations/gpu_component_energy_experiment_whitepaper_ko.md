@@ -27,24 +27,24 @@
 8. **Core pipeline** — generated command packages.
 9. **Actual pipeline** — `scripts/plan_platform_component_experiment.py:430-1016`.
 10. **Profiles and blocks/SM sweep** — `include/config.hpp:18-135`, planner profiles, and `platform_blocks_per_sm_sweep.png`. V100 uses B4/B16 sensitivity points and the strict B32 anchor; requested blocks/SM still needs NCU occupancy/resource validation.
-11. **Platform W_SM path sweep** — planner profiles, generated `*_command_plan.md`, and `platform_wsm_path_sweep.png`. Shared is a separate address-space path; only global-memory candidates are interpreted across L1/L2/DRAM after exact-coordinate NCU acceptance.
+11. **Platform W_SM path sweep** — planner profiles, generated `*_command_plan.md`, and `platform_wsm_path_sweep.png`. Shared is a separate address-space path; only global-memory candidates are interpreted across L1/L2/external memory after exact-coordinate NCU acceptance.
 12. **Host sequence** — `src/main.cu:628-650,919-1010`.
 13. **Raw energy** — `src/main.cu:417-425,692-720,950-978`.
-14. **Memory differential** — `scripts/analyze_matched_control_energy.py`. Shared/L1 use duration-scaled control power. Current L2 CG/DRAM CG finalplans require matched ITER and direct net-energy subtraction.
+14. **Memory differential** — `scripts/analyze_matched_control_energy.py`. Shared/L1/L2/external-memory final pairs use matched controls, identical ITER, and direct net-energy subtraction.
 15. **Tensor differential** — `scripts/run_component_regression_sweep.py:323-430`; matched-ITER fields in matched detail.
 16. **Energy vs NCU** — planner comments #5 and #8.
 17. **Tensor denominator** — `include/config.hpp:12-16`, `src/main.cu:781-791`. NCU HMMA is validation evidence, not the final FLOP denominator.
 18. **Memory denominator** — `scripts/analyze_matched_control_energy.py:339-399,643-658`. `expected_no_ncu_match` is not eligible for strict memory coefficients.
 19. **NCU acceptance** — `scripts/analyze_ncu_path_acceptance.py`. Acceptance uses path-specific rates plus access/byte/local/stall evidence, not aggregate hit rate alone.
 20. **Audit states** — each audit script owns a distinct state vocabulary; states are not collapsed into one grade.
-21. **RTX 3090 current/historical boundary and DRAM policy** — fixed-RF v2 Tensor is the only current standalone component result at 2.2525 pJ/FLOP. Shared, Global L1, and L2 values are the historical strict snapshot; Global L1/L2 fail the active address-control/schema reaudit. DRAM is the 26.709-28.409 pJ/bit `provisional_reference_aligned_range`; no completed matched-ITER address-control raw pair exists.
+21. **RTX 3090 current/historical boundary and external-memory observations** — fixed-RF v2 Tensor 2.2525 pJ/FLOP is superseded historical evidence. Tensor v4 has runtime NCU/FLOP validation but no new board-energy coefficient. Shared, Global L1, and L2 values are the historical strict snapshot. RTX 3090/A100/V100 external-memory values 25.510/11.925/8.131 pJ/bit are user-reported historical GPU-device effective-path observations; none is strict-eligible or a physical HBM/GDDR value.
 22. **Cross-platform state** — current readiness/package audits. A command package is not evidence that a target-node experiment completed.
 
 ## Corrected statements
 
-- The strict RTX 3090 snapshot has four historical components, not five. DRAM is displayed separately as a provisional cumulative-path reporting band.
+- The strict RTX 3090 snapshot has four historical components, not five. External-memory observations are displayed separately and are not strict coefficients.
 - Global L1 and L2 historical rows used `clocked_empty`; active finalplan uses `global_addr_only`.
-- Current L2 CG and DRAM CG finalplans use pair-locked identical ITER; they are not duration-scaled.
+- Current L2 CG and external-memory finalplans use pair-locked identical ITER; they are not duration-scaled.
 - `l2_load_only` is a normal global-load capacity diagnostic, not automatic strict L2-only evidence.
 - The H100 implementation is FP16 WMMA compatibility code, not Hopper-native WGMMA/TMA.
 - NVML total-energy delta is labeled GPU/device scope. It is not represented as an external whole-board meter.

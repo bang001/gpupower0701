@@ -61,6 +61,14 @@ STRICT_SUMMARY_COLUMNS = [
     "ncu_l2_read_miss_sectors_min_med_max",
     "ncu_dram_bytes_min_med_max",
     "ncu_tensor_hmma_inst_min_med_max",
+    "ncu_expected_logical_mma_min_med_max",
+    "ncu_tensor_hmma_per_logical_mma_min_med_max",
+    "ncu_tensor_pipe_active_pct_min_med_max",
+    "ncu_achieved_occupancy_pct_min_med_max",
+    "ncu_launch_warp_capacity_pct_min_med_max",
+    "ncu_registers_per_thread_min_med_max",
+    "ncu_control_tensor_hmma_inst_min_med_max",
+    "ncu_control_registers_per_thread_min_med_max",
     "ncu_local_read_bytes_min_med_max",
     "ncu_local_write_bytes_min_med_max",
     "ncu_spill_zero_verified_min_med_max",
@@ -209,11 +217,13 @@ RELIABILITY_COLUMNS = [
 NCU_ACCEPTANCE_COLUMNS = [
     "mode",
     "status",
+    "W_SM_KiB",
     "active_SM",
     "blocks_per_SM",
     "ITER",
     "reuse_factor",
     "load_repeat",
+    "ncu_metric_profile",
     "component_candidate",
     "acceptance",
     "acceptance_reason",
@@ -221,8 +231,25 @@ NCU_ACCEPTANCE_COLUMNS = [
     "l1_path_hit_rate_pct",
     "l2_hit_rate_pct",
     "l2_path_hit_rate_pct",
+    "l2_native_read_hit_rate_pct",
+    "l2_native_vs_derived_hit_delta_pct",
+    "l2_logical_read_hit_rate_pct",
+    "l2_fabric_hit_rate_pct",
+    "l2_fabric_read_sectors",
+    "l2_fabric_read_hit_sectors",
+    "l2_fabric_read_miss_sectors",
+    "l2_fabric_metrics_present",
+    "l2_fabric_read_sector_conservation_ratio",
+    "l2_fabric_counter_coherent",
+    "l2_fabric_read_to_source_miss_ratio",
+    "l2_fabric_read_fraction",
+    "l2_fabric_model_native_hit_rate_pct",
+    "l2_native_vs_fabric_model_hit_delta_pct",
+    "l2_fabric_model_coherent",
     "shared_accesses",
     "shared_bytes",
+    "shared_read_bytes",
+    "shared_write_bytes",
     "shared_inst",
     "l1_bytes",
     "l1_request_bytes",
@@ -232,8 +259,27 @@ NCU_ACCEPTANCE_COLUMNS = [
     "l2_read_bytes",
     "l2_read_hit_sectors",
     "l2_read_miss_sectors",
+    "l2_read_sector_conservation_ratio",
+    "l2_path_counter_coherent",
     "dram_bytes",
+    "dram_read_bytes",
+    "dram_read_bytes_source",
+    "dram_write_bytes",
+    "dram_write_bytes_source",
+    "dram_read_to_expected_ratio",
+    "dram_write_to_read_ratio",
+    "dram_read_bandwidth_GBps",
+    "external_memory_coefficient_scope",
     "tensor_hmma_inst",
+    "expected_logical_mma",
+    "tensor_hmma_per_logical_mma",
+    "tensor_pipe_active_pct",
+    "achieved_occupancy_pct",
+    "launch_warp_capacity_pct",
+    "registers_per_thread",
+    "tensor_hmma_ratio_group_median",
+    "tensor_hmma_ratio_group_relative_spread",
+    "tensor_control_pair_status",
     "local_read_bytes",
     "local_write_bytes",
     "spill_zero_verified",
@@ -245,6 +291,7 @@ NCU_ACCEPTANCE_CANDIDATES = [
     ("reg_mma", "tensor_increment_candidate"),
     ("reg_operand_only", "register_control_candidate"),
     ("shared_scalar_load_only", "shared_memory_path"),
+    ("shared_scalar_addr_only", "shared_address_control"),
     ("global_l1_load_only", "global_l1_hit_path"),
     ("l2_cg_load_only", "l2_hit_path"),
     ("global_addr_only", "global_address_control"),
@@ -262,12 +309,12 @@ MATCHED_SUMMARY_COMPONENTS = {
     "shared_l1_scalar_path": ("1.20", "pJ/byte", "6", "0.15"),
     "global_l1_hit_path": ("1.40", "pJ/byte", "6", "0.175"),
     "l2_hit_cg_path": ("9.00", "pJ/byte", "6", "1.125"),
-    "dram_cg_stream_path": ("216.00", "pJ/byte", "6", "27.0"),
+    "external_memory_read_path": ("216.00", "pJ/byte", "6", "27.0"),
 }
 
 RELIABILITY_COMPONENTS = {
     "tensor_mma_increment": ("0.10", "pJ/FLOP", "0", "2"),
-    "shared_l1_scalar_path": ("0.20", "pJ/bit", "6", "1"),
+    "shared_l1_scalar_path": ("0.20", "pJ/bit", "6", "2"),
     "global_l1_hit_path": ("0.30", "pJ/bit", "6", "1"),
     "l2_hit_cg_path": ("1.00", "pJ/bit", "6", "1"),
 }
@@ -437,6 +484,14 @@ def summary_evidence_fields(component: str, unit: str) -> dict[str, str]:
         "ncu_coordinate_rows": "2",
         "ncu_metric_rows": "1",
         "denominator_scale_min_med_max": "1",
+        "ncu_expected_logical_mma_min_med_max": "0",
+        "ncu_tensor_hmma_per_logical_mma_min_med_max": "0",
+        "ncu_tensor_pipe_active_pct_min_med_max": "0",
+        "ncu_achieved_occupancy_pct_min_med_max": "50",
+        "ncu_launch_warp_capacity_pct_min_med_max": "50",
+        "ncu_registers_per_thread_min_med_max": "24",
+        "ncu_control_tensor_hmma_inst_min_med_max": "0",
+        "ncu_control_registers_per_thread_min_med_max": "24",
         "ncu_stall_long_scoreboard_pct_min_med_max": "0.01",
     }
     if component == "Tensor MMA incremental":
@@ -467,15 +522,26 @@ def summary_evidence_fields(component: str, unit: str) -> dict[str, str]:
             "ncu_l2_read_miss_sectors_min_med_max": "0",
             "ncu_dram_bytes_min_med_max": "0",
             "ncu_tensor_hmma_inst_min_med_max": "1000",
+            "ncu_expected_logical_mma_min_med_max": "500",
+            "ncu_tensor_hmma_per_logical_mma_min_med_max": "2",
+            "ncu_tensor_pipe_active_pct_min_med_max": "40",
+            "ncu_registers_per_thread_min_med_max": "30",
+            "ncu_control_tensor_hmma_inst_min_med_max": "0",
+            "ncu_control_registers_per_thread_min_med_max": "16",
             "ncu_local_read_bytes_min_med_max": "0",
             "ncu_local_write_bytes_min_med_max": "0",
             "ncu_spill_zero_verified_min_med_max": "1",
         }
     if component == "Shared scalar path":
         evidence = {
-            "ncu_evidence_modes": "shared_scalar_load_only",
+            "ncu_evidence_modes": (
+                "shared_scalar_addr_only,shared_scalar_load_only"
+            ),
             "ncu_metric_modes": "shared_scalar_load_only",
-            "ncu_evidence_coords": "shared_scalar_load_only:W64:B16:SM82:RF1:LR8:SR1",
+            "ncu_evidence_coords": (
+                "shared_scalar_addr_only:W64:B16:SM82:RF1:LR8:SR1;"
+                "shared_scalar_load_only:W64:B16:SM82:RF1:LR8:SR1"
+            ),
             "ncu_path_evidence": "shared_bytes=1024",
             "ncu_counter_caveat": "shared selftest evidence",
             "ncu_shared_bytes_min_med_max": "1024",
@@ -694,6 +760,7 @@ def write_raw_files(
     iter_count: str = "1000",
     omit_tensor_revision: bool = False,
     omit_cg_warmup_policy: bool = False,
+    omit_external_input_pattern: bool = False,
 ) -> None:
     metadata = module.PROFILE_METADATA[profile]
     if power_semantics is None:
@@ -712,10 +779,12 @@ def write_raw_files(
         note_parts: list[str] = []
         if mode == "reg_mma" and not omit_tensor_revision:
             note_parts.append(
-                "tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2"
+                "tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4"
             )
         if mode in {"l2_cg_load_only", "dram_cg_load_only"} and not omit_cg_warmup_policy:
             note_parts.append("global_warmup_policy=ld_global_cg")
+        if mode == "dram_cg_load_only" and not omit_external_input_pattern:
+            note_parts.append("input_data_pattern=splitmix64_uniform_fp16_v1")
         row = {
             "mode": mode,
             "profile_name": metadata["profile_name"],
@@ -796,11 +865,17 @@ def write_l2_path_selection_fixture(
                 "W_SM_KiB": str(w_sm_kib),
                 "load_repeat": "4",
                 "l1_path_hit_rate_pct": "0",
-                "l2_path_hit_rate_pct": "99.5",
-                "l2_native_read_hit_rate_pct": "99.4",
-                "l2_native_vs_derived_hit_delta_pct": "0.1",
+                "l2_path_hit_rate_pct": "55" if profile == "a100" else "99.5",
+                "l2_native_read_hit_rate_pct": "68.62" if profile == "a100" else "99.4",
+                "l2_native_vs_derived_hit_delta_pct": "13.62" if profile == "a100" else "0.1",
+                "l2_logical_read_hit_rate_pct": "99.5" if profile == "a100" else "",
+                "l2_fabric_hit_rate_pct": "98.89" if profile == "a100" else "",
+                "l2_fabric_read_fraction": "0.310345" if profile == "a100" else "",
+                "l2_fabric_counter_coherent": "1" if profile == "a100" else "",
+                "l2_fabric_model_coherent": "1" if profile == "a100" else "",
+                "l2_native_vs_fabric_model_hit_delta_pct": "0.01" if profile == "a100" else "",
                 "native_l2_gate": (
-                    "required"
+                    "ga100_fabric_model"
                     if profile == "a100"
                     else "optional_present_cross_checked"
                 ),
@@ -936,7 +1011,7 @@ def write_matched_detail(
     for component in MATCHED_SUMMARY_COMPONENTS:
         tensor = component == "tensor_mma_increment"
         l2 = component == "l2_hit_cg_path"
-        dram = component == "dram_cg_stream_path"
+        dram = component == "external_memory_read_path"
         base_row = {
                 "component": component,
                 "valid_component_estimate": "True",
@@ -956,7 +1031,7 @@ def write_matched_detail(
                         "tensor_mma_increment",
                         "global_l1_hit_path",
                         "l2_hit_cg_path",
-                        "dram_cg_stream_path",
+                        "external_memory_read_path",
                     }
                     else "False"
                 ),
@@ -967,7 +1042,7 @@ def write_matched_detail(
                         "tensor_mma_increment",
                         "global_l1_hit_path",
                         "l2_hit_cg_path",
-                        "dram_cg_stream_path",
+                        "external_memory_read_path",
                     }
                     else ""
                 ),
@@ -1262,10 +1337,26 @@ def base_ncu_row(
         "ITER": "1000",
         "reuse_factor": reuse_factor,
         "load_repeat": load_repeat,
+        "ncu_metric_profile": "full",
         "l1_hit_rate_pct": "0",
         "l1_path_hit_rate_pct": "0",
         "l2_hit_rate_pct": "0",
         "l2_path_hit_rate_pct": "0",
+        "l2_native_read_hit_rate_pct": "",
+        "l2_native_vs_derived_hit_delta_pct": "",
+        "l2_logical_read_hit_rate_pct": "",
+        "l2_fabric_hit_rate_pct": "",
+        "l2_fabric_read_sectors": "",
+        "l2_fabric_read_hit_sectors": "",
+        "l2_fabric_read_miss_sectors": "",
+        "l2_fabric_metrics_present": "0",
+        "l2_fabric_read_sector_conservation_ratio": "",
+        "l2_fabric_counter_coherent": "",
+        "l2_fabric_read_to_source_miss_ratio": "",
+        "l2_fabric_read_fraction": "",
+        "l2_fabric_model_native_hit_rate_pct": "",
+        "l2_native_vs_fabric_model_hit_delta_pct": "",
+        "l2_fabric_model_coherent": "",
         "l1_accesses": "0",
         "l1_access_unit": "requests",
         "l2_accesses": "0",
@@ -1280,11 +1371,32 @@ def base_ncu_row(
         "l2_read_bytes": "0",
         "l2_read_hit_sectors": "0",
         "l2_read_miss_sectors": "0",
+        "l2_read_sector_conservation_ratio": "",
+        "l2_path_counter_coherent": "",
         "dram_bytes": "0",
+        "dram_read_bytes": "0",
+        "dram_read_bytes_source": "dram__bytes_read.sum",
+        "dram_write_bytes": "0",
+        "dram_write_bytes_source": "dram__bytes_write.sum",
+        "dram_read_to_expected_ratio": "",
+        "dram_write_to_read_ratio": "",
+        "dram_read_bandwidth_GBps": "",
         "shared_accesses": "0",
         "shared_bytes": "0",
+        "shared_read_bytes": "0",
+        "shared_write_bytes": "0",
         "shared_inst": "0",
+        "shared_mem_per_block_dynamic": "0",
         "tensor_hmma_inst": "0",
+        "expected_logical_mma": "0",
+        "tensor_hmma_per_logical_mma": "",
+        "tensor_pipe_active_pct": "0",
+        "achieved_occupancy_pct": "50",
+        "launch_warp_capacity_pct": "50",
+        "registers_per_thread": "24",
+        "tensor_hmma_ratio_group_median": "",
+        "tensor_hmma_ratio_group_relative_spread": "",
+        "tensor_control_pair_status": "not_applicable",
         "local_read_bytes": "0",
         "local_write_bytes": "0",
         "spill_zero_verified": "1",
@@ -1293,15 +1405,37 @@ def base_ncu_row(
         "missing_metrics": "",
     }
     if mode in {"reg_mma", "reg_operand_only"}:
-        row["W_SM_KiB"] = "2048"
+        row["W_SM_KiB"] = "1"
+        row["registers_per_thread"] = "16" if mode == "reg_operand_only" else "30"
     if mode == "dram_cg_load_only":
         row["W_SM_KiB"] = "8192"
     if mode == "reg_mma":
-        row["tensor_hmma_inst"] = "100"
+        expected_logical_mma = (
+            int(row["active_SM"])
+            * int(row["blocks_per_SM"])
+            * int(row["ITER"])
+            * int(row["reuse_factor"])
+        )
+        row["expected_logical_mma"] = str(expected_logical_mma)
+        row["tensor_hmma_inst"] = str(expected_logical_mma * 2)
+        row["tensor_hmma_per_logical_mma"] = "2"
+        row["tensor_pipe_active_pct"] = "40"
+        row["tensor_hmma_ratio_group_median"] = "2"
+        row["tensor_hmma_ratio_group_relative_spread"] = "0"
+        row["tensor_control_pair_status"] = "accepted"
     elif mode == "shared_scalar_load_only":
         row["shared_accesses"] = "100"
         row["shared_bytes"] = "4096"
+        row["shared_read_bytes"] = "4096"
+        row["shared_write_bytes"] = "64"
         row["shared_inst"] = "100"
+        row["shared_mem_per_block_dynamic"] = "65536"
+    elif mode == "shared_scalar_addr_only":
+        row["shared_accesses"] = "1"
+        row["shared_bytes"] = "64"
+        row["shared_write_bytes"] = "64"
+        row["shared_inst"] = "1"
+        row["shared_mem_per_block_dynamic"] = "65536"
     elif mode == "global_l1_load_only":
         row["l1_hit_rate_pct"] = "99"
         row["l1_path_hit_rate_pct"] = "99"
@@ -1311,18 +1445,52 @@ def base_ncu_row(
         row["l1_hit_bytes"] = "4055.04"
         row["l1_miss_bytes"] = "40.96"
     elif mode in {"l2_load_only", "l2_cg_load_only"}:
+        expected_bytes = (
+            int(row["active_SM"])
+            * int(row["blocks_per_SM"])
+            * int(row["ITER"])
+            * int(row["load_repeat"])
+            * 1024
+        )
+        expected_sectors = expected_bytes / 32
+        row["ncu_metric_profile"] = "l2_path_minimal"
         row["l2_hit_rate_pct"] = "99"
         row["l2_path_hit_rate_pct"] = "99"
-        row["l1_request_bytes"] = "4096"
-        row["l1_miss_bytes"] = "4096"
-        row["l2_accesses"] = "100"
-        row["l2_bytes"] = "4096"
-        row["l2_read_bytes"] = "4096"
-        row["l2_read_hit_sectors"] = "99"
-        row["l2_read_miss_sectors"] = "1"
+        row["l2_native_read_hit_rate_pct"] = "99"
+        row["l2_native_vs_derived_hit_delta_pct"] = "0"
+        row["l1_request_bytes"] = str(expected_bytes)
+        row["l1_miss_bytes"] = str(expected_bytes)
+        row["l2_accesses"] = str(expected_sectors)
+        row["l2_bytes"] = str(expected_bytes)
+        row["l2_read_bytes"] = str(expected_bytes)
+        row["l2_read_hit_sectors"] = str(expected_sectors * 0.99)
+        row["l2_read_miss_sectors"] = str(expected_sectors * 0.01)
+        row["l2_read_sector_conservation_ratio"] = "1"
+        row["l2_path_counter_coherent"] = "1"
     elif mode == "dram_cg_load_only":
-        row["dram_accesses"] = "100"
-        row["dram_bytes"] = "4096"
+        expected_bytes = (
+            int(row["active_SM"])
+            * int(row["blocks_per_SM"])
+            * int(row["ITER"])
+            * int(row["load_repeat"])
+            * 1024
+        )
+        dram_read_bytes = expected_bytes * 0.96
+        row["l1_path_hit_rate_pct"] = "0"
+        row["l1_request_bytes"] = str(expected_bytes)
+        row["l1_miss_bytes"] = str(expected_bytes)
+        # Keep the positive fixture below the capacity-aware RTX 3090 limit
+        # (~3.83% for 656 MiB streamed against 6 MiB L2).
+        row["l2_path_hit_rate_pct"] = "3"
+        row["l2_logical_read_hit_rate_pct"] = "3"
+        row["l2_read_bytes"] = str(expected_bytes)
+        row["dram_accesses"] = str(dram_read_bytes / 32)
+        row["dram_read_bytes"] = str(dram_read_bytes)
+        row["dram_write_bytes"] = str(dram_read_bytes * 0.001)
+        row["dram_bytes"] = str(dram_read_bytes * 1.001)
+        row["dram_read_to_expected_ratio"] = "0.96"
+        row["dram_write_to_read_ratio"] = "0.001"
+        row["dram_read_bandwidth_GBps"] = "500"
     return row
 
 
@@ -1341,6 +1509,7 @@ def good_ncu_rows(module: Any, profile: str) -> list[dict[str, str]]:
             base_ncu_row("reg_mma", active_sm=active_sm, reuse_factor=reuse_factor)
         )
     memory_modes = [
+        "shared_scalar_addr_only",
         "shared_scalar_load_only",
         "global_addr_only",
         "global_l1_load_only",
@@ -1352,6 +1521,39 @@ def good_ncu_rows(module: Any, profile: str) -> list[dict[str, str]]:
     for mode in memory_modes:
         for load_repeat in ("1", "2", "4"):
             rows.append(base_ncu_row(mode, active_sm=active_sm, load_repeat=load_repeat))
+    if profile == "a100":
+        for row in rows:
+            if row["mode"] not in {"l2_load_only", "l2_cg_load_only"}:
+                continue
+            source_sectors = float(row["l2_read_bytes"]) / 32.0
+            source_hits = source_sectors * 0.55
+            source_misses = source_sectors * 0.45
+            fabric_hits = source_sectors * 0.445
+            fabric_misses = source_sectors * 0.005
+            row.update(
+                {
+                    "l2_hit_rate_pct": "68.62069",
+                    "l2_path_hit_rate_pct": "55",
+                    "l2_native_read_hit_rate_pct": "68.62069",
+                    "l2_native_vs_derived_hit_delta_pct": "13.62069",
+                    "l2_logical_read_hit_rate_pct": "99.5",
+                    "l2_read_hit_sectors": str(source_hits),
+                    "l2_read_miss_sectors": str(source_misses),
+                    "l2_fabric_hit_rate_pct": "98.888889",
+                    "l2_fabric_read_sectors": str(source_misses),
+                    "l2_fabric_read_hit_sectors": str(fabric_hits),
+                    "l2_fabric_read_miss_sectors": str(fabric_misses),
+                    "l2_fabric_metrics_present": "1",
+                    "l2_fabric_read_sector_conservation_ratio": "1",
+                    "l2_fabric_counter_coherent": "1",
+                    "l2_fabric_read_to_source_miss_ratio": "1",
+                    "l2_fabric_read_fraction": "0.310344828",
+                    "l2_fabric_model_native_hit_rate_pct": "68.62069",
+                    "l2_native_vs_fabric_model_hit_delta_pct": "0",
+                    "l2_fabric_model_coherent": "1",
+                    "dram_read_bytes": str(float(row["l2_read_bytes"]) * 0.005),
+                }
+            )
     return rows
 
 
@@ -1367,12 +1569,17 @@ def write_ncu_summary(
     l2_high_l1_traffic: bool = False,
     misleading_aggregate_l2: bool = False,
     low_l2_path_hit: bool = False,
+    low_l2_native_hit: bool = False,
     dram_high_l2_hit: bool = False,
+    dram_derived_read_source: bool = False,
     wrong_active_sm: bool = False,
     local_spill: bool = False,
 ) -> None:
     path = repo / module.expected_paths(profile, tag)["ncu_summary"]
-    fieldnames = sorted(module.NCU_REQUIRED_COLUMNS)
+    fieldnames = sorted(
+        set(module.NCU_REQUIRED_COLUMNS)
+        | (set(module.A100_L2_FABRIC_REQUIRED_COLUMNS) if profile == "a100" else set())
+    )
     if missing_column is not None:
         fieldnames = [name for name in fieldnames if name != missing_column]
     rows = good_ncu_rows(module, profile)
@@ -1402,12 +1609,27 @@ def write_ncu_summary(
     if low_l2_path_hit:
         for row in rows:
             if row["mode"] == "l2_cg_load_only":
-                row["l2_path_hit_rate_pct"] = "72"
+                if profile == "a100":
+                    row["l2_logical_read_hit_rate_pct"] = "72"
+                else:
+                    row["l2_path_hit_rate_pct"] = "72"
+    if low_l2_native_hit:
+        for row in rows:
+            if row["mode"] == "l2_cg_load_only":
+                row["l2_native_read_hit_rate_pct"] = "72.5"
+                if profile == "a100":
+                    row["l2_native_vs_fabric_model_hit_delta_pct"] = "3.87931"
+                else:
+                    row["l2_native_vs_derived_hit_delta_pct"] = "26.5"
     if dram_high_l2_hit:
         for row in rows:
             if row["mode"] == "dram_cg_load_only":
                 row["l2_hit_rate_pct"] = "99"
                 row["l2_path_hit_rate_pct"] = "99"
+    if dram_derived_read_source:
+        for row in rows:
+            if row["mode"] == "dram_cg_load_only":
+                row["dram_read_bytes_source"] = "dram__sectors_read.sum*32"
     if wrong_active_sm:
         for row in rows:
             row["active_SM"] = "82" if profile != "rtx3090" else "1"
@@ -1439,11 +1661,13 @@ def write_ncu_acceptance(
         row = {
             "mode": mode,
             "status": "ok",
+            "W_SM_KiB": "64",
             "active_SM": str(PROFILE_ACTIVE_SM[profile]),
             "blocks_per_SM": "16",
             "ITER": "1000",
             "reuse_factor": "1",
             "load_repeat": "1",
+            "ncu_metric_profile": "full",
             "component_candidate": candidate,
             "acceptance": "rejected" if candidate == rejected_candidate else "accepted",
             "acceptance_reason": "selftest" if candidate == rejected_candidate else "pass",
@@ -1451,6 +1675,21 @@ def write_ncu_acceptance(
             "l1_path_hit_rate_pct": "0",
             "l2_hit_rate_pct": "0",
             "l2_path_hit_rate_pct": "0",
+            "l2_native_read_hit_rate_pct": "",
+            "l2_native_vs_derived_hit_delta_pct": "",
+            "l2_logical_read_hit_rate_pct": "",
+            "l2_fabric_hit_rate_pct": "",
+            "l2_fabric_read_sectors": "",
+            "l2_fabric_read_hit_sectors": "",
+            "l2_fabric_read_miss_sectors": "",
+            "l2_fabric_metrics_present": "0",
+            "l2_fabric_read_sector_conservation_ratio": "",
+            "l2_fabric_counter_coherent": "",
+            "l2_fabric_read_to_source_miss_ratio": "",
+            "l2_fabric_read_fraction": "",
+            "l2_fabric_model_native_hit_rate_pct": "",
+            "l2_native_vs_fabric_model_hit_delta_pct": "",
+            "l2_fabric_model_coherent": "",
             "shared_accesses": "0",
             "shared_bytes": "0",
             "shared_inst": "0",
@@ -1462,8 +1701,20 @@ def write_ncu_acceptance(
             "l2_read_bytes": "0",
             "l2_read_hit_sectors": "0",
             "l2_read_miss_sectors": "0",
+            "l2_read_sector_conservation_ratio": "",
+            "l2_path_counter_coherent": "",
             "dram_bytes": "0",
+            "dram_read_bytes": "0",
             "tensor_hmma_inst": "0",
+            "expected_logical_mma": "0",
+            "tensor_hmma_per_logical_mma": "",
+            "tensor_pipe_active_pct": "0",
+            "achieved_occupancy_pct": "50",
+            "launch_warp_capacity_pct": "50",
+            "registers_per_thread": "24",
+            "tensor_hmma_ratio_group_median": "",
+            "tensor_hmma_ratio_group_relative_spread": "",
+            "tensor_control_pair_status": "not_applicable",
             "local_read_bytes": "0",
             "local_write_bytes": "0",
             "spill_zero_verified": "1",
@@ -1471,7 +1722,22 @@ def write_ncu_acceptance(
             "stall_long_scoreboard_pct": "0",
         }
         if mode == "reg_mma":
-            row["tensor_hmma_inst"] = "100"
+            expected_logical_mma = (
+                int(row["active_SM"])
+                * int(row["blocks_per_SM"])
+                * int(row["ITER"])
+                * int(row["reuse_factor"])
+            )
+            row["expected_logical_mma"] = str(expected_logical_mma)
+            row["tensor_hmma_inst"] = str(expected_logical_mma * 2)
+            row["tensor_hmma_per_logical_mma"] = "2"
+            row["tensor_pipe_active_pct"] = "40"
+            row["registers_per_thread"] = "30"
+            row["tensor_hmma_ratio_group_median"] = "2"
+            row["tensor_hmma_ratio_group_relative_spread"] = "0"
+            row["tensor_control_pair_status"] = "accepted"
+        elif mode == "reg_operand_only":
+            row["registers_per_thread"] = "16"
         elif mode == "shared_scalar_load_only":
             row["shared_accesses"] = "100"
             row["shared_bytes"] = "4096"
@@ -1484,14 +1750,54 @@ def write_ncu_acceptance(
             row["l1_hit_bytes"] = "4055.04"
             row["l1_miss_bytes"] = "40.96"
         elif mode == "l2_cg_load_only":
+            expected_bytes = (
+                int(row["active_SM"])
+                * int(row["blocks_per_SM"])
+                * int(row["ITER"])
+                * int(row["load_repeat"])
+                * 1024
+            )
+            expected_sectors = expected_bytes / 32
+            row["ncu_metric_profile"] = "l2_path_minimal"
             row["l2_hit_rate_pct"] = "99"
             row["l2_path_hit_rate_pct"] = "99"
-            row["l1_request_bytes"] = "4096"
-            row["l1_miss_bytes"] = "4096"
-            row["l2_bytes"] = "4096"
-            row["l2_read_bytes"] = "4096"
-            row["l2_read_hit_sectors"] = "99"
-            row["l2_read_miss_sectors"] = "1"
+            row["l2_native_read_hit_rate_pct"] = "99"
+            row["l2_native_vs_derived_hit_delta_pct"] = "0"
+            row["l1_request_bytes"] = str(expected_bytes)
+            row["l1_miss_bytes"] = str(expected_bytes)
+            row["l2_bytes"] = str(expected_bytes)
+            row["l2_read_bytes"] = str(expected_bytes)
+            row["l2_read_hit_sectors"] = str(expected_sectors * 0.99)
+            row["l2_read_miss_sectors"] = str(expected_sectors * 0.01)
+            row["l2_read_sector_conservation_ratio"] = "1"
+            row["l2_path_counter_coherent"] = "1"
+            if profile == "a100":
+                source_hits = expected_sectors * 0.55
+                source_misses = expected_sectors * 0.45
+                row.update(
+                    {
+                        "l2_hit_rate_pct": "68.62069",
+                        "l2_path_hit_rate_pct": "55",
+                        "l2_native_read_hit_rate_pct": "68.62069",
+                        "l2_native_vs_derived_hit_delta_pct": "13.62069",
+                        "l2_logical_read_hit_rate_pct": "99.5",
+                        "l2_read_hit_sectors": str(source_hits),
+                        "l2_read_miss_sectors": str(source_misses),
+                        "l2_fabric_hit_rate_pct": "98.888889",
+                        "l2_fabric_read_sectors": str(source_misses),
+                        "l2_fabric_read_hit_sectors": str(expected_sectors * 0.445),
+                        "l2_fabric_read_miss_sectors": str(expected_sectors * 0.005),
+                        "l2_fabric_metrics_present": "1",
+                        "l2_fabric_read_sector_conservation_ratio": "1",
+                        "l2_fabric_counter_coherent": "1",
+                        "l2_fabric_read_to_source_miss_ratio": "1",
+                        "l2_fabric_read_fraction": "0.310344828",
+                        "l2_fabric_model_native_hit_rate_pct": "68.62069",
+                        "l2_native_vs_fabric_model_hit_delta_pct": "0",
+                        "l2_fabric_model_coherent": "1",
+                        "dram_read_bytes": str(expected_bytes * 0.005),
+                    }
+                )
         rows.append(row)
     fieldnames = list(NCU_ACCEPTANCE_COLUMNS)
     if missing_column is not None:
@@ -1652,7 +1958,9 @@ def run_ncu_summary_case(
     l2_high_l1_traffic: bool = False,
     misleading_aggregate_l2: bool = False,
     low_l2_path_hit: bool = False,
+    low_l2_native_hit: bool = False,
     dram_high_l2_hit: bool = False,
+    dram_derived_read_source: bool = False,
     wrong_active_sm: bool = False,
     local_spill: bool = False,
 ) -> None:
@@ -1671,7 +1979,9 @@ def run_ncu_summary_case(
             l2_high_l1_traffic=l2_high_l1_traffic,
             misleading_aggregate_l2=misleading_aggregate_l2,
             low_l2_path_hit=low_l2_path_hit,
+            low_l2_native_hit=low_l2_native_hit,
             dram_high_l2_hit=dram_high_l2_hit,
+            dram_derived_read_source=dram_derived_read_source,
             wrong_active_sm=wrong_active_sm,
             local_spill=local_spill,
         )
@@ -2114,6 +2424,7 @@ def run_raw_policy_case(
     iter_count: str = "1000",
     omit_tensor_revision: bool = False,
     omit_cg_warmup_policy: bool = False,
+    omit_external_input_pattern: bool = False,
 ) -> None:
     with tempfile.TemporaryDirectory(prefix=f"{name}_") as tmp:
         repo = Path(tmp)
@@ -2138,6 +2449,7 @@ def run_raw_policy_case(
             iter_count=iter_count,
             omit_tensor_revision=omit_tensor_revision,
             omit_cg_warmup_policy=omit_cg_warmup_policy,
+            omit_external_input_pattern=omit_external_input_pattern,
         )
         rows = module.audit_package(
             repo,
@@ -2348,7 +2660,10 @@ def main() -> int:
         name="bad_raw_stale_tensor_kernel_revision",
         profile="a100",
         omit_tensor_revision=True,
-        expected_raw_text="missing_tensor_kernel_revision",
+        expected_raw_text=(
+            "missing_tensor_marker=tensor_pair_kernel_revision="
+            "matched_inplace_signflip_fragment_epilogue_fixed_rf_v4"
+        ),
     )
     run_raw_policy_case(
         module,
@@ -2356,6 +2671,13 @@ def main() -> int:
         profile="a100",
         omit_cg_warmup_policy=True,
         expected_raw_text="missing_cg_warmup_policy",
+    )
+    run_raw_policy_case(
+        module,
+        name="bad_raw_missing_external_memory_input_pattern",
+        profile="a100",
+        omit_external_input_pattern=True,
+        expected_raw_text="missing_external_memory_input_pattern",
     )
     run_power_api_case(
         module,
@@ -2539,7 +2861,7 @@ def main() -> int:
     )
     run_matched_detail_case(
         module,
-        name="bad_dram_duration_scaled_detail",
+        name="bad_external_memory_duration_scaled_detail",
         profile="a100",
         dram_pair_energy_basis="duration_scaled_control_power",
         expected_status="fail",
@@ -2547,11 +2869,11 @@ def main() -> int:
     )
     run_matched_detail_case(
         module,
-        name="bad_dram_iter_mismatch_detail",
+        name="bad_external_memory_iter_mismatch_detail",
         profile="a100",
         dram_control_iters="900",
         expected_status="fail",
-        expected_text="dram_iters=1000/900",
+        expected_text="external_memory_iters=1000/900",
     )
     run_tensor_pair_calibration_case(
         module,
@@ -2688,9 +3010,17 @@ def main() -> int:
     )
     run_ncu_summary_case(
         module,
-        name="bad_a100_true_l2_path_hit_72pct",
+        name="bad_a100_logical_l2_hit_72pct",
         profile="a100",
         low_l2_path_hit=True,
+        expected_status="fail",
+        expected_text="l2_cg_load_only:no_path_sanity_pass",
+    )
+    run_ncu_summary_case(
+        module,
+        name="bad_a100_native_fabric_model_mismatch",
+        profile="a100",
+        low_l2_native_hit=True,
         expected_status="fail",
         expected_text="l2_cg_load_only:no_path_sanity_pass",
     )
@@ -2699,6 +3029,14 @@ def main() -> int:
         name="bad_ncu_dram_high_l2_hit_rate",
         profile="rtx3090",
         dram_high_l2_hit=True,
+        expected_status="fail",
+        expected_text="dram_cg_load_only:no_path_sanity_pass",
+    )
+    run_ncu_summary_case(
+        module,
+        name="bad_ncu_external_read_derived_counter",
+        profile="rtx3090",
+        dram_derived_read_source=True,
         expected_status="fail",
         expected_text="dram_cg_load_only:no_path_sanity_pass",
     )
@@ -2726,6 +3064,12 @@ def main() -> int:
     )
     run_ncu_acceptance_case(
         module,
+        name="good_a100_fabric_aware_ncu_path_acceptance",
+        profile="a100",
+        expected_status="pass",
+    )
+    run_ncu_acceptance_case(
+        module,
         name="bad_ncu_missing_shared_candidate",
         profile="rtx3090",
         missing_candidate="shared_memory_path",
@@ -2747,6 +3091,14 @@ def main() -> int:
         missing_column="tensor_hmma_inst",
         expected_status="fail",
         expected_text="missing_columns=tensor_hmma_inst",
+    )
+    run_ncu_acceptance_case(
+        module,
+        name="bad_a100_ncu_acceptance_missing_fabric_column",
+        profile="a100",
+        missing_column="l2_fabric_read_sectors",
+        expected_status="fail",
+        expected_text="missing_columns=l2_fabric_read_sectors",
     )
     run_ncu_acceptance_case(
         module,

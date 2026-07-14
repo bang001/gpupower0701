@@ -39,6 +39,10 @@ struct HardwareProfile {
   const char* ncu_chip_alias = "ga102";
   const char* recommended_ncu = "current";
   const char* nvml_power_usage_semantics = "one_sec_average";
+  const char* external_memory_technology = "GDDR6X";
+  const char* external_memory_topology = "off_package_board";
+  const char* external_memory_coefficient_scope =
+      "effective_gpu_device_external_read_path";
 };
 
 constexpr HardwareProfile kV100Profile{
@@ -63,7 +67,10 @@ constexpr HardwareProfile kV100Profile{
     "implemented:fp16_wmma",
     "gv100",
     "gv100_required",
-    "instant"};
+    "instant",
+    "HBM2",
+    "on_package_interposer",
+    "effective_gpu_device_external_read_path"};
 constexpr HardwareProfile kRtx3090Profile{
     "rtx3090",
     "ampere_ga10x",
@@ -86,7 +93,10 @@ constexpr HardwareProfile kRtx3090Profile{
     "implemented:fp16_wmma;hardware_optional:tf32,bf16,int8,int4,sparsity",
     "ga102",
     "current",
-    "one_sec_average"};
+    "one_sec_average",
+    "GDDR6X",
+    "off_package_board",
+    "effective_gpu_device_external_read_path"};
 constexpr HardwareProfile kA100Profile{
     "a100",
     "ampere_ga100",
@@ -109,7 +119,10 @@ constexpr HardwareProfile kA100Profile{
     "implemented:fp16_wmma;hardware_optional:tf32,bf16,fp64_tc,int8,int4,binary,sparsity",
     "ga100",
     "current",
-    "instant"};
+    "instant",
+    "HBM2",
+    "on_package_interposer",
+    "effective_gpu_device_external_read_path"};
 constexpr HardwareProfile kH100Profile{
     "h100",
     "hopper_gh100",
@@ -132,7 +145,10 @@ constexpr HardwareProfile kH100Profile{
     "implemented:fp16_wmma;hardware_optional:bf16,tf32,fp8,wgmma,tma,int8,int4",
     "gh100",
     "current",
-    "one_sec_average"};
+    "one_sec_average",
+    "HBM3",
+    "on_package_interposer",
+    "effective_gpu_device_external_read_path"};
 constexpr HardwareProfile kDefaultHardwareProfile = kRtx3090Profile;
 
 inline HardwareProfile profile_from_string(const std::string& value) {
@@ -203,6 +219,7 @@ enum class Mode {
   addr_only,
   global_addr_only,
   global_l1_load_only,
+  shared_scalar_addr_only,
   shared_scalar_load_only,
   shared_load_only,
   shared_mma,
@@ -238,6 +255,8 @@ inline std::string to_string(Mode mode) {
       return "global_addr_only";
     case Mode::global_l1_load_only:
       return "global_l1_load_only";
+    case Mode::shared_scalar_addr_only:
+      return "shared_scalar_addr_only";
     case Mode::shared_scalar_load_only:
       return "shared_scalar_load_only";
     case Mode::shared_load_only:
@@ -275,6 +294,7 @@ inline Mode mode_from_string(const std::string& value) {
   if (value == "addr_only") return Mode::addr_only;
   if (value == "global_addr_only") return Mode::global_addr_only;
   if (value == "global_l1_load_only") return Mode::global_l1_load_only;
+  if (value == "shared_scalar_addr_only") return Mode::shared_scalar_addr_only;
   if (value == "shared_scalar_load_only") return Mode::shared_scalar_load_only;
   if (value == "shared_load_only") return Mode::shared_load_only;
   if (value == "shared_mma") return Mode::shared_mma;
@@ -396,6 +416,7 @@ inline bool mode_allowed_for_feasibility(Mode mode, const Feasibility& f,
   const bool memory_backed =
       mode == Mode::global_addr_only ||
       mode == Mode::global_l1_load_only ||
+      mode == Mode::shared_scalar_addr_only ||
       mode == Mode::shared_scalar_load_only ||
       mode == Mode::shared_load_only || mode == Mode::shared_mma ||
       mode == Mode::l2_load_only || mode == Mode::l2_cg_load_only ||
@@ -405,7 +426,8 @@ inline bool mode_allowed_for_feasibility(Mode mode, const Feasibility& f,
     if (reason) *reason = to_string(mode) + " requires at least 1KiB tile per block";
     return false;
   }
-  if ((mode == Mode::shared_scalar_load_only ||
+  if ((mode == Mode::shared_scalar_addr_only ||
+       mode == Mode::shared_scalar_load_only ||
        mode == Mode::shared_load_only || mode == Mode::shared_mma) &&
       f.regime != "shared_resident") {
     if (reason) *reason = to_string(mode) + " requires shared_resident";

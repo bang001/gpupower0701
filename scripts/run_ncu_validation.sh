@@ -2,7 +2,12 @@
 set -euo pipefail
 
 NCU="${NCU:-ncu}"
-read -r -a NCU_BASE_CMD <<< "${NCU}"
+if [[ -x "${NCU}" ]]; then
+  # Preserve installed paths containing spaces (common for Nsight Compute on WSL).
+  NCU_BASE_CMD=("${NCU}")
+else
+  read -r -a NCU_BASE_CMD <<< "${NCU}"
+fi
 NCU_CMD=("${NCU_BASE_CMD[@]}")
 NCU_USE_SUDO="${NCU_USE_SUDO:-0}"
 NCU_AUTO_SUDO="${NCU_AUTO_SUDO:-1}"
@@ -24,31 +29,36 @@ TARGET_PROFILE="${TARGET_PROFILE:-rtx3090}"
 case "${TARGET_PROFILE}" in
   v100)
     DEFAULT_ACTIVE_SM=80
-    DRAM_W_SM_KIB=128
+    DRAM_W_SM_KIB=2048
+    DEFAULT_DRAM_W_SM_KIB_VALUES=256,512,1024,2048
     DEFAULT_NCU_CHIP=gv100
     DEFAULT_FILTER_UNAVAILABLE_METRICS=1
     ;;
   rtx3090)
     DEFAULT_ACTIVE_SM=82
-    DRAM_W_SM_KIB=128
+    DRAM_W_SM_KIB=2048
+    DEFAULT_DRAM_W_SM_KIB_VALUES=256,512,1024,2048
     DEFAULT_NCU_CHIP=ga102
     DEFAULT_FILTER_UNAVAILABLE_METRICS=1
     ;;
   a100)
     DEFAULT_ACTIVE_SM=108
-    DRAM_W_SM_KIB=512
+    DRAM_W_SM_KIB=8192
+    DEFAULT_DRAM_W_SM_KIB_VALUES=2048,4096,8192
     DEFAULT_NCU_CHIP=ga100
     DEFAULT_FILTER_UNAVAILABLE_METRICS=1
     ;;
   h100)
     DEFAULT_ACTIVE_SM=132
-    DRAM_W_SM_KIB=512
+    DRAM_W_SM_KIB=8192
+    DEFAULT_DRAM_W_SM_KIB_VALUES=2048,4096,8192
     DEFAULT_NCU_CHIP=gh100
     DEFAULT_FILTER_UNAVAILABLE_METRICS=1
     ;;
   *)
     DEFAULT_ACTIVE_SM=82
-    DRAM_W_SM_KIB=128
+    DRAM_W_SM_KIB=2048
+    DEFAULT_DRAM_W_SM_KIB_VALUES=256,512,1024,2048
     DEFAULT_NCU_CHIP=""
     DEFAULT_FILTER_UNAVAILABLE_METRICS=0
     ;;
@@ -62,10 +72,12 @@ L1_W_SM_KIB="${L1_W_SM_KIB:-16}"
 L2_W_SM_KIB="${L2_W_SM_KIB:-64}"
 L2_W_SM_KIB_VALUES="${L2_W_SM_KIB_VALUES:-${L2_W_SM_KIB}}"
 DRAM_W_SM_KIB="${DRAM_W_SM_KIB_OVERRIDE:-${DRAM_W_SM_KIB}}"
+DRAM_W_SM_KIB_VALUES="${DRAM_W_SM_KIB_VALUES:-${DRAM_W_SM_KIB_OVERRIDE:-${DEFAULT_DRAM_W_SM_KIB_VALUES}}}"
 BLOCKS_PER_SM="${BLOCKS_PER_SM:-16}"
 L2_BLOCKS_PER_SM="${L2_BLOCKS_PER_SM:-${BLOCKS_PER_SM}}"
-REG_W_SM_KIB="${REG_W_SM_KIB:-2048}"
+REG_W_SM_KIB="${REG_W_SM_KIB:-1}"
 REG_BLOCKS_PER_SM="${REG_BLOCKS_PER_SM:-4}"
+REG_BLOCKS_PER_SM_VALUES="${REG_BLOCKS_PER_SM_VALUES:-${REG_BLOCKS_PER_SM}}"
 REG_PRESSURE_PAYLOAD_BYTES="${REG_PRESSURE_PAYLOAD_BYTES:-8192}"
 REUSE_FACTOR="${REUSE_FACTOR:-1}"
 LOAD_REPEAT="${LOAD_REPEAT:-1}"
@@ -74,6 +86,7 @@ TENSOR_REUSE_FACTORS="${TENSOR_REUSE_FACTORS:-${REUSE_FACTOR}}"
 MEMORY_LOAD_REPEATS="${MEMORY_LOAD_REPEATS:-${LOAD_REPEAT}}"
 DRAM_LOAD_REPEATS="${DRAM_LOAD_REPEATS:-${MEMORY_LOAD_REPEATS}}"
 NCU_COMPONENTS="${NCU_COMPONENTS:-baseline,tensor,shared,l1,l2,dram}"
+NCU_METRIC_PROFILE="${NCU_METRIC_PROFILE:-full}"
 NCU_REPLAY_MODE="${NCU_REPLAY_MODE:-application}"
 NCU_CACHE_CONTROL="${NCU_CACHE_CONTROL:-none}"
 GLOBAL_WARMUP_PASSES="${GLOBAL_WARMUP_PASSES:-1}"
@@ -109,15 +122,19 @@ case "${L2_ADDRESS_LAYOUT}" in
   contiguous|sm_interleaved) ;;
   *) echo "L2_ADDRESS_LAYOUT must be contiguous or sm_interleaved" >&2; exit 2 ;;
 esac
+case "${NCU_METRIC_PROFILE}" in
+  full|l2_path_minimal) ;;
+  *) echo "NCU_METRIC_PROFILE must be full or l2_path_minimal" >&2; exit 2 ;;
+esac
 if ! [[ "${GLOBAL_WARMUP_PASSES}" =~ ^[1-9][0-9]*$ ]]; then
   echo "GLOBAL_WARMUP_PASSES must be a positive integer" >&2
   exit 2
 fi
-if ! [[ "${L2_BLOCKS_PER_SM}" =~ ^(4|8|16|32)$ ]]; then
-  echo "L2_BLOCKS_PER_SM must be 4, 8, 16, or 32" >&2
+if ! [[ "${L2_BLOCKS_PER_SM}" =~ ^(1|2|4|8|16|32)$ ]]; then
+  echo "L2_BLOCKS_PER_SM must be 1, 2, 4, 8, 16, or 32" >&2
   exit 2
 fi
-printf "label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,ncu_replay_mode,ncu_cache_control,global_warmup_passes,l2_residency_policy,l2_address_layout,report\n" > "${CASE_MANIFEST}"
+printf "label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,ncu_replay_mode,ncu_cache_control,ncu_metric_profile,global_warmup_passes,l2_residency_policy,l2_address_layout,report\n" > "${CASE_MANIFEST}"
 
 print_ncu_permission_hint() {
   cat >&2 <<'EOF'
@@ -234,8 +251,10 @@ csv_to_array() {
 }
 
 csv_to_array TENSOR_REUSE_FACTOR_LIST "${TENSOR_REUSE_FACTORS}"
+csv_to_array REG_BLOCKS_PER_SM_LIST "${REG_BLOCKS_PER_SM_VALUES}"
 csv_to_array MEMORY_LOAD_REPEAT_LIST "${MEMORY_LOAD_REPEATS}"
 csv_to_array DRAM_LOAD_REPEAT_LIST "${DRAM_LOAD_REPEATS}"
+csv_to_array DRAM_W_SM_KIB_LIST "${DRAM_W_SM_KIB_VALUES}"
 csv_to_array L2_W_SM_KIB_LIST "${L2_W_SM_KIB_VALUES}"
 csv_to_array NCU_COMPONENT_LIST "${NCU_COMPONENTS}"
 
@@ -271,6 +290,12 @@ for component in "${NCU_COMPONENT_LIST[@]}"; do
       ;;
   esac
 done
+for tensor_blocks_per_sm in "${REG_BLOCKS_PER_SM_LIST[@]}"; do
+  if ! [[ "${tensor_blocks_per_sm}" =~ ^(1|2|4|8|16|32)$ ]]; then
+    echo "REG_BLOCKS_PER_SM_VALUES entries must be 1, 2, 4, 8, 16, or 32" >&2
+    exit 2
+  fi
+done
 
 COMMON_SECTIONS=(
   --section LaunchStats
@@ -282,8 +307,20 @@ COMMON_SECTIONS=(
   --section WarpStateStats
   --section MemoryWorkloadAnalysis
 )
-DEFAULT_NCU_METRICS="l1tex__t_sector_hit_rate,l1tex__t_sectors_pipe_lsu_mem_global_op_ld,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_global_op_ld,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_local_op_ld,l1tex__t_bytes_pipe_lsu_mem_local_op_st,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st,smsp__sass_data_bytes_mem_shared,smsp__sass_data_bytes_mem_shared_op_ld,smsp__sass_data_bytes_mem_shared_op_ldsm,smsp__sass_data_bytes_mem_shared_op_st,smsp__sass_inst_executed_op_shared,smsp__sass_inst_executed_op_shared_ld,smsp__sass_inst_executed_op_shared_st,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ld,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ldsm,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_st,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_ldsm,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_st,lts__t_sector_hit_rate,lts__t_sector_op_read_hit_rate,lts__t_sectors_srcunit_tex_op_read,lts__t_sectors_srcunit_tex_op_read_lookup_hit,lts__t_sectors_srcunit_tex_op_read_lookup_miss,lts__t_bytes,lts__t_bytes_equiv_l1sectormiss_pipe_lsu_mem_global_op_ld,dram__bytes,dram__bytes_read,dram__sectors,dram__sectors_read,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_wait_per_issue_active,smsp__average_warps_issue_stalled_not_selected_per_issue_active,sm__warps_active.avg.pct_of_peak_sustained_active,launch__registers_per_thread,launch__shared_mem_per_block_static,launch__shared_mem_per_block_dynamic,launch__persisting_l2_cache_size,sm__inst_executed_pipe_tensor_op_hmma,sass__inst_executed_register_spilling_mem_local_op_read,sass__inst_executed_register_spilling_mem_local_op_write"
-NCU_METRICS="${NCU_METRICS:-${DEFAULT_NCU_METRICS}}"
+DEFAULT_NCU_METRICS="l1tex__t_sector_hit_rate,l1tex__t_sectors_pipe_lsu_mem_global_op_ld,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_global_op_ld,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_local_op_ld,l1tex__t_bytes_pipe_lsu_mem_local_op_st,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st,smsp__sass_data_bytes_mem_shared,smsp__sass_data_bytes_mem_shared_op_ld,smsp__sass_data_bytes_mem_shared_op_ldsm,smsp__sass_data_bytes_mem_shared_op_st,smsp__sass_inst_executed_op_shared,smsp__sass_inst_executed_op_shared_ld,smsp__sass_inst_executed_op_shared_st,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ld,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ldsm,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_st,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_ldsm,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_st,lts__t_sector_hit_rate,lts__t_sector_op_read_hit_rate,lts__t_sectors_srcunit_tex_op_read,lts__t_sectors_srcunit_tex_op_read_lookup_hit,lts__t_sectors_srcunit_tex_op_read_lookup_miss,lts__t_sectors_srcunit_tex_aperture_device_op_read,lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_hit,lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_miss,lts__t_sectors_srcunit_tex_op_read_evict_first,lts__t_sectors_srcunit_tex_op_read_evict_first_lookup_hit,lts__t_sectors_srcunit_tex_op_read_evict_first_lookup_miss,lts__t_sectors_srcunit_tex_op_read_evict_normal,lts__t_sectors_srcunit_tex_op_read_evict_normal_lookup_hit,lts__t_sectors_srcunit_tex_op_read_evict_normal_lookup_miss,lts__t_sectors_srcunit_tex_op_read_evict_last,lts__t_sectors_srcunit_tex_op_read_evict_last_lookup_hit,lts__t_sectors_srcunit_tex_op_read_evict_last_lookup_miss,lts__t_bytes,lts__t_bytes_equiv_l1sectormiss_pipe_lsu_mem_global_op_ld,dram__bytes,dram__bytes_read,dram__bytes_write,dram__sectors,dram__sectors_read,dram__sectors_write,gpu__time_duration.sum,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_wait_per_issue_active,smsp__average_warps_issue_stalled_not_selected_per_issue_active,sm__warps_active.avg.pct_of_peak_sustained_active,sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active,launch__registers_per_thread,launch__shared_mem_per_block_static,launch__shared_mem_per_block_dynamic,launch__persisting_l2_cache_size,sm__inst_executed_pipe_tensor_op_hmma,sm__ops_path_tensor_src_fp16_dst_fp32,sass__inst_executed_register_spilling_mem_local_op_read,sass__inst_executed_register_spilling_mem_local_op_write"
+L2_PATH_MINIMAL_NCU_METRICS="l1tex__t_sectors_pipe_lsu_mem_global_op_ld,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_global_op_ld,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_local_op_ld,l1tex__t_bytes_pipe_lsu_mem_local_op_st,lts__t_sector_op_read_hit_rate,lts__t_sectors_srcunit_tex_op_read,lts__t_sectors_srcunit_tex_op_read_lookup_hit,lts__t_sectors_srcunit_tex_op_read_lookup_miss,lts__t_sectors_srcunit_tex_aperture_device_op_read,lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_hit,lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_miss,lts__t_bytes_equiv_l1sectormiss_pipe_lsu_mem_global_op_ld,dram__bytes,dram__bytes_read,dram__bytes_write,dram__sectors,dram__sectors_read,dram__sectors_write,gpu__time_duration.sum,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active,launch__registers_per_thread,launch__shared_mem_per_block_static,launch__shared_mem_per_block_dynamic,launch__persisting_l2_cache_size"
+if [[ "${TARGET_PROFILE}" == "a100" ]]; then
+  # GA100 can turn a miss at the directly connected L2 partition into a hit in
+  # the other partition. Keep those LTC-fabric lookups in the same minimal
+  # replay bundle so the first-lookup and final-service populations conserve.
+  L2_PATH_MINIMAL_NCU_METRICS+=",lts__t_sectors_srcunit_ltcfabric_op_read,lts__t_sectors_srcunit_ltcfabric_op_read_lookup_hit,lts__t_sectors_srcunit_ltcfabric_op_read_lookup_miss,lts__t_sectors_srcunit_ltcfabric_aperture_device_op_read,lts__t_sectors_srcunit_ltcfabric_aperture_device_op_read_lookup_hit,lts__t_sectors_srcunit_ltcfabric_aperture_device_op_read_lookup_miss"
+fi
+if [[ "${NCU_METRIC_PROFILE}" == "l2_path_minimal" ]]; then
+  PROFILE_NCU_METRICS="${L2_PATH_MINIMAL_NCU_METRICS}"
+else
+  PROFILE_NCU_METRICS="${DEFAULT_NCU_METRICS}"
+fi
+NCU_METRICS="${NCU_METRICS:-${PROFILE_NCU_METRICS}}"
 
 filter_unavailable_ncu_metrics() {
   local available_file="${OUTDIR}/ncu_available_metrics_${NCU_CHIP:-native}.txt"
@@ -304,7 +341,9 @@ filter_unavailable_ncu_metrics() {
   csv_to_array requested "${NCU_METRICS}"
   for metric in "${requested[@]}"; do
     local metric_regex="${metric//./\\.}"
-    if grep -Eq "(^|[^[:alnum:]_])${metric_regex}([.]|[^[:alnum:]_]|$)" "${available_file}"; then
+    local metric_base="${metric%%.*}"
+    local metric_base_regex="${metric_base//./\\.}"
+    if grep -Eq "(^|[^[:alnum:]_])(${metric_regex}|${metric_base_regex})([.]|[^[:alnum:]_]|$)" "${available_file}"; then
       selected+=("${metric}")
     else
       dropped+=("${metric}")
@@ -355,11 +394,11 @@ run_case() {
   local report="${OUTDIR}/${label}"
 
   echo "== ${label}: mode=${mode} W=${w_sm_kib}KiB B=${blocks_per_sm} iters=${iters} reuse=${reuse_factor} load_repeat=${load_repeat}"
-  printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" \
+  printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" \
     "${label}" "${kernel_regex}" "${mode}" "${w_sm_kib}" "${blocks_per_sm}" \
     "${ACTIVE_SM}" "${iters}" "${reuse_factor}" "${load_repeat}" \
     "${store_repeat}" "${NCU_REPLAY_MODE}" "${NCU_CACHE_CONTROL}" \
-    "${GLOBAL_WARMUP_PASSES}" "${case_l2_residency_policy}" \
+    "${NCU_METRIC_PROFILE}" "${GLOBAL_WARMUP_PASSES}" "${case_l2_residency_policy}" \
     "${case_l2_address_layout}" \
     "${report}" >> "${CASE_MANIFEST}"
   if [[ "${DRY_RUN_NCU}" == "1" ]]; then
@@ -421,14 +460,17 @@ if [[ "${NCU_PERMISSION_PROBE_ONLY}" == "1" ]]; then
 fi
 
 if component_enabled tensor; then
-  for reuse_factor in "${TENSOR_REUSE_FACTOR_LIST[@]}"; do
-    run_case "reg_operand_only_W${REG_W_SM_KIB}_B${REG_BLOCKS_PER_SM}_RF${reuse_factor}" "reg_operand_only_kernel" "reg_operand_only" "${REG_W_SM_KIB}" "${REG_BLOCKS_PER_SM}" 100000 0 "${reuse_factor}" 1
-    run_case "reg_mma_W${REG_W_SM_KIB}_B${REG_BLOCKS_PER_SM}_RF${reuse_factor}" "reg_mma_kernel" "reg_mma" "${REG_W_SM_KIB}" "${REG_BLOCKS_PER_SM}" 100000 0 "${reuse_factor}" 1
+  for tensor_blocks_per_sm in "${REG_BLOCKS_PER_SM_LIST[@]}"; do
+    for reuse_factor in "${TENSOR_REUSE_FACTOR_LIST[@]}"; do
+      run_case "reg_operand_only_W${REG_W_SM_KIB}_B${tensor_blocks_per_sm}_RF${reuse_factor}" "reg_operand_only_kernel" "reg_operand_only" "${REG_W_SM_KIB}" "${tensor_blocks_per_sm}" 100000 0 "${reuse_factor}" 1
+      run_case "reg_mma_W${REG_W_SM_KIB}_B${tensor_blocks_per_sm}_RF${reuse_factor}" "reg_mma_kernel" "reg_mma" "${REG_W_SM_KIB}" "${tensor_blocks_per_sm}" 100000 0 "${reuse_factor}" 1
+    done
   done
 fi
 
 for load_repeat in "${MEMORY_LOAD_REPEAT_LIST[@]}"; do
   if component_enabled shared; then
+    run_case "shared_scalar_addr_only_W${SHARED_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "shared_scalar_addr_only_kernel" "shared_scalar_addr_only" "${SHARED_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
     run_case "shared_scalar_load_only_W${SHARED_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "shared_scalar_load_only_kernel" "shared_scalar_load_only" "${SHARED_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
   fi
   if component_enabled l1; then
@@ -447,9 +489,11 @@ for load_repeat in "${MEMORY_LOAD_REPEAT_LIST[@]}"; do
 done
 
 if component_enabled dram; then
-  for load_repeat in "${DRAM_LOAD_REPEAT_LIST[@]}"; do
-    run_case "global_addr_only_dram_W${DRAM_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${DRAM_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
-    run_case "dram_cg_load_only_W${DRAM_W_SM_KIB}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_cg_load_only_kernel" "dram_cg_load_only" "${DRAM_W_SM_KIB}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+  for dram_w_sm_kib in "${DRAM_W_SM_KIB_LIST[@]}"; do
+    for load_repeat in "${DRAM_LOAD_REPEAT_LIST[@]}"; do
+      run_case "global_addr_only_dram_W${dram_w_sm_kib}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_scalar_addr_only_kernel" "global_addr_only" "${dram_w_sm_kib}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+      run_case "dram_cg_load_only_W${dram_w_sm_kib}_B${BLOCKS_PER_SM}_LR${load_repeat}" "global_cg_load_only_kernel" "dram_cg_load_only" "${dram_w_sm_kib}" "${BLOCKS_PER_SM}" 100000 0 1 "${load_repeat}"
+    done
   done
 fi
 
