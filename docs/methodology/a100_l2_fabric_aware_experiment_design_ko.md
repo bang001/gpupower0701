@@ -142,17 +142,19 @@ board-level power 신호가 크기 때문이다. 단, fabric 회수와 DRAM gate
 
 | 분류 | 변화시키는 값 | 단위 | 고정 조건 |
 |---|---|---|---|
-| working set | W_SM = 16, 32, 64, 128 | KiB/SM | 선택된 blocks/SM, layout, residency |
+| working set | W_SM = 16, 128 | KiB/SM | 선택된 blocks/SM, layout, residency; 두 endpoint 모두 통과해야 함 |
 | energy load amplification | LR = 4, 8, 16 | load/ITER | 동일 ITER treatment-control, 10 s 기본 측정, 반복 5 회 |
-| final NCU validation | LR = 1, 2, 4, 8, 16 | load/ITER | application replay, cache-control none, CG warm-up 4 회 |
+| final NCU validation | LR = 4, 8, 16 | load/ITER | energy와 exact-coordinate 일치, application replay, cache-control none, CG warm-up 4 회 |
+
+과거 discovery에서 사용한 W_SM=32,64 KiB/SM과 LR=1,2는 endpoint 사이에서
+새로운 strict 판정을 추가하지 않으면서 NCU replay와 energy row만 늘렸다. 현행
+finalplan에서는 제외하며, 경로 실패를 진단할 때만 별도 tag로 실행한다.
 
 A100 full GPU의 active SM을 108개로 둘 때 전체 logical working set은 다음과 같다.
 
 | W_SM | full-GPU working set | 40 MiB L2 대비 |
 |---:|---:|---:|
 | 16 KiB/SM | 1.6875 MiB | 4.22 % |
-| 32 KiB/SM | 3.375 MiB | 8.44 % |
-| 64 KiB/SM | 6.75 MiB | 16.88 % |
 | 128 KiB/SM | 13.5 MiB | 33.75 % |
 
 MIG 또는 다른 A100 SKU에서는 108을 그대로 사용하지 않는다. preflight가 확인한

@@ -65,7 +65,7 @@ RTX 3090이나 A100에서 쓰던 좌표를 그대로 V100에 적용하면 L1/L2 
 | `sm_80`, `ga100`, `L2=40 MiB`, `shared=164 KiB/SM` | A100/GA100 기준이 섞인 상태 | A100 결과와 V100 결과를 다른 CSV/report로 분리 |
 | `NCU_CHIP` 미지정 또는 `gv100` query 실패 | Volta counter 경로 검증이 불가능할 수 있음 | `NCU_CHIP=gv100`으로 재실행하고, 실패하면 “NCU path acceptance 미완료”로 보고 |
 | L2 후보에서 L1 request bytes가 L2 bytes와 비슷함 | `.cg` 요청도 L1TEX를 통과하므로 request byte만으로 L1 cache hit를 판정한 오류 | V100 L2는 `l2_cg_load_only` 우선, path-specific L1 hit bytes/request <=1%와 L2 read hit >=95% 확인. aggregate hit는 진단값 |
-| External-memory W가 L2와 비슷함 | L2 재사용을 external read로 오인할 수 있음 | `DRAM_W_SM_KIB_VALUES=256,512,1024,2048` sweep과 strict NCU gate 적용 |
+| External-memory W가 L2와 비슷함 | L2 재사용을 external read로 오인할 수 있음 | `DRAM_W_SM_KIB_VALUES=256,512,2048` low/mid/high sweep과 strict NCU gate 적용 |
 
 이 실험의 최종값은 순수 회로 에너지가 아니라 NCU로 경로가 검증된 effective microbenchmark coefficient다. 즉 `pJ/FLOP`, `pJ/bit`, `pJ/Byte`는 “이 커널, 이 access pattern, 이 GPU 상태에서 관찰된 board-level incremental coefficient”로 해석해야 한다.
 
@@ -447,13 +447,13 @@ BIN=./build-v100/a100_fp16_energy_v2 \
 TARGET_PROFILE=v100 \
 ACTIVE_SM=80 \
 GPU=0 \
-DRAM_W_SM_KIB_VALUES=256,512,1024,2048 \
+DRAM_W_SM_KIB_VALUES=256,512,2048 \
 OUTDIR=results/ncu/v100_validation_$(date +%Y%m%d) \
 RAW_OUT=results/raw/v100_ncu_validation_sidecar_$(date +%Y%m%d).csv \
 bash scripts/run_ncu_validation.sh
 ```
 
-`DRAM_W_SM_KIB_VALUES=256,512,1024,2048`는 full set 20/40/80/160 MiB,
+`DRAM_W_SM_KIB_VALUES=256,512,2048`는 full set 20/40/160 MiB,
 즉 V100 6 MiB L2의 약 3.3/6.7/13.3/26.7배를 sweep한다. 최종 채택은 크기가
 아니라 final L2 hit, DRAM read/source read, write contamination으로 결정한다.
 
@@ -524,7 +524,7 @@ BIN=./build-v100/a100_fp16_energy_v2 \
 TARGET_PROFILE=v100 \
 ACTIVE_SM=80 \
 GPU=0 \
-DRAM_W_SM_KIB_VALUES=256,512,1024,2048 \
+DRAM_W_SM_KIB_VALUES=256,512,2048 \
 OUTDIR=results/ncu/v100_validation_$(date +%Y%m%d) \
 RAW_OUT=results/raw/v100_ncu_validation_sidecar_$(date +%Y%m%d).csv \
 bash scripts/run_ncu_validation.sh
@@ -669,41 +669,39 @@ V100 추천 finalplan 좌표:
 RTX 3090/A100/V100의 전체 파라미터와 command 개수 비교는
 [cross-platform component experiment guide](cross_platform_component_experiment_guide_ko.md)의
 4.0-4.5절을 기준으로 한다. 현재 V100 표준 package는 L2 precheck가 선택한 blocks/SM
-하나만 L2 energy에 사용한다. 유효 좌표는 186개/1 repeat, `repeats=5`에서 energy raw
-930행이며 Tensor pair calibration 15 coordinates/30 commands, L2 pair calibration
-6 coordinates/12 commands, external-memory pair calibration 36 coordinates/72 commands, schema
-smoke 3행, primary NCU 83 cases다. L2 selector는 첫 후보 통과 시 조기 종료하며
+하나만 L2 energy에 사용한다. 유효 좌표는 72개/1 repeat, `repeats=5`에서 energy raw
+360행이며 Tensor pair calibration 15 coordinates/30 commands, L2 pair calibration
+6 coordinates/12 commands, external-memory pair calibration 9 coordinates/18 commands, schema
+smoke 3행, primary NCU 73 cases다. L2 selector는 첫 후보 통과 시 조기 종료하며
 최악에는 4 candidates x 2 W x 2 modes = 16개 NCU precheck case를 추가한다.
 
-`seconds=10 s` 기준 nominal energy kernel 시간은 `930 x 10 s = 9,300 s`, 즉 약
-2시간 35분이다. calibration, launch, audit와 83-case NCU replay 및 L2 precheck를 포함한 노드 전체
-예상시간은 보통 약 4~7시간이며 NCU metric replay 횟수와 노드 부하에 따라 달라진다.
+`seconds=10 s` 기준 nominal energy kernel 시간은 `360 x 10 s = 3,600 s`, 즉 1시간이다.
+calibration, launch, audit와 73-case NCU replay 및 L2 precheck를 포함한 노드 전체
+예상시간은 보통 약 2~5시간이며 NCU metric replay 횟수와 노드 부하에 따라 달라진다.
 후보가 늦게 선택되면 NCU precheck 시간만큼 더 필요하다.
 
 | Component | modes | energy W_SM (KiB) | energy blocks/SM | strict NCU W_SM/B | factor |
 |---|---|---:|---:|---:|---|
 | Tensor | `reg_operand_only,reg_mma` | N/A (CLI placeholder 1) | 4,16,32 | 1/4,16,32 | reuse 1,2,4,8,16 |
-| Shared scalar | `shared_scalar_addr_only,shared_scalar_load_only` | 32,64 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16; 동일 pair ITER |
-| Global L1 | `global_addr_only,global_l1_load_only` | 8,16,32 | 4,16,32 | 32/32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
-| L2 CG | `global_addr_only,l2_cg_load_only` | 32,64 | NCU가 32/16/4 중 선택 | 32,64/selected B | energy load_repeat 4,8,16; 동일 pair ITER; NCU 1,2,4,8,16 |
-| External-memory read path | `global_addr_only,dram_cg_load_only` | 256,512,1024,2048 | 4,16,32 | W2048/B32 anchor | energy load_repeat 4,8,16; NCU 1,4,8,16 |
+| Shared scalar | `shared_scalar_addr_only,shared_scalar_load_only` | 32 | 32 | 32/32 | energy/NCU load_repeat 4,8,16; 동일 pair ITER |
+| Global L1 | `global_addr_only,global_l1_load_only` | 32 | 32 | 32/32 | energy/NCU load_repeat 4,8,16 |
+| L2 CG | `global_addr_only,l2_cg_load_only` | 32,64 | NCU가 32/16/4 중 선택 | 32,64/selected B | energy/final NCU load_repeat 4,8,16; selector LR4 |
+| External-memory read path | `global_addr_only,dram_cg_load_only` | 256,512,2048 | 32 | 동일 W/B | energy/NCU load_repeat 4,8,16 |
 
 ### V100 sweep를 그래프로 해석하기
 
 ![플랫폼별 blocks/SM sweep](../presentations/assets/platform_blocks_per_sm_sweep.png)
 
-V100 B4는 저밀도, B16은 중간 밀도 utilization 진단이며 Shared/Global-L1 strict anchor는 B32다.
-B1/B2/B8은 실행시간 대비 추가 식별력이 제한적이어서 기본 package에서 제외했다. B4나
-B16이 L2 selector에서 선택되면 해당 좌표의 exact-coordinate
+V100 B4/B16/B32는 Tensor utilization sweep이고 Shared/Global-L1/external-memory는 B32만
+사용한다. B4나 B16이 L2 selector에서 선택되면 해당 좌표의 exact-coordinate
 `l2_path_minimal` NCU가 자동 수집된다.
 
 ![플랫폼별 W_SM path sweep](../presentations/assets/platform_wsm_path_sweep.png)
 
-- Shared strict W32/B32는 `W+B=64 KiB/SM`, stress W64/B32는 96 KiB allocation 경계다.
-- Global L1 strict W32/B32는 block당 1 KiB를 확보한다. W8/B16·B32와 W16/B32는 tile
-  부족으로 제외한다.
+- Shared strict W32/B32는 `W+B=64 KiB/SM`이며 energy와 NCU가 동일 좌표다.
+- Global L1 W32/B32는 block당 1 KiB를 확보하는 단일 strict anchor다.
 - L2 W32는 전체 2.5 MiB로 6 MiB L2의 약 42%, W64는 5 MiB로 약 83%인 stress 점이다.
-- External-memory W256/512/1024/2048은 전체 20/40/80/160 MiB다. Shared는 별도 address space이며 이 L1-L2-external-memory
+- External-memory W256/512/2048은 전체 20/40/160 MiB다. Shared는 별도 address space이며 이 L1-L2-external-memory
   global hierarchy 전이축과 섞어 해석하지 않는다.
 
 현행 분석은 `--require-control-ncu-acceptance`를 사용한다. 따라서 V100에서도

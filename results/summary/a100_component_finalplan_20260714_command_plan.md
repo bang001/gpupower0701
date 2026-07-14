@@ -7,7 +7,8 @@ Generated: 2026-07-14
 | target profile | `a100` |
 | CUDA arch | `sm_80` |
 | active_SM (SMs) | `108` |
-| energy sweep blocks/SM | `16,32` |
+| energy sweep blocks/SM | `16` |
+| Tensor energy/NCU blocks/SM | `4,16,32` |
 | strict NCU blocks/SM | `16` |
 | L2 strict blocks/SM | `selected by NCU precheck` |
 | L2 NCU-first selector | `enabled` |
@@ -25,7 +26,7 @@ Generated: 2026-07-14
 | NCU counter permission probe | baseline hardware-counter profile before energy sweep |
 | NCU automatic sudo retry | enabled by default with `NCU_AUTO_SUDO=1` |
 | NCU sudo fallback | `NCU_USE_SUDO=1 bash results/summary/a100_component_finalplan_20260714_commands.sh` |
-| L2 NCU metric profile | `l2_path_minimal`; full non-L2 rows are collected separately and merged by row |
+| Memory NCU metric profiles | L2/external use `l2_path_minimal`; Tensor/Shared/Global-L1 use `full`; disjoint rows are merged with provenance |
 | generated shell | `results/summary/a100_component_finalplan_20260714_commands.sh` |
 
 ## Platform Note
@@ -54,13 +55,13 @@ binary whose CSV header includes `measurement_scope`.
 
 | component/path | modes | energy W_SM (KiB) | strict NCU W_SM/B | factor |
 |---|---|---:|---:|---|
-| Tensor | `reg_operand_only,reg_mma` | 2048 | 2048/16 | reuse 1,2,4,8,16; treatment/control-floor dual-calibrated pair-locked ITER |
-| Shared scalar | `shared_scalar_addr_only,shared_scalar_load_only` | 64,128 | 128/16 | energy load_repeat 4,8,16; dual-calibrated equal ITER; NCU also checks 1,2 |
-| Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | 16/16 | energy load_repeat 4,8,16; dual-calibrated equal ITER; NCU also checks 1,2 |
-| L2 | `global_addr_only,l2_cg_load_only` | 16,32,64,128 | 16,32,64,128/selected by NCU precheck | energy load_repeat 4,8,16; treatment/control-floor dual-calibrated pair-locked ITER; NCU also checks 1,2 |
+| Tensor | `reg_operand_only,reg_mma` | 1 (CLI placeholder; memory W_SM N/A) | 1/4,16,32 | reuse 1,2,4,8,16; every energy B has exact-coordinate NCU; pair-locked ITER |
+| Shared scalar | `shared_scalar_addr_only,shared_scalar_load_only` | 128 | 128/16 | energy and NCU load_repeat 4,8,16; dual-calibrated equal ITER |
+| Global L1 | `global_addr_only,global_l1_load_only` | 16 | 16/16 | energy and NCU load_repeat 4,8,16; dual-calibrated equal ITER |
+| L2 | `global_addr_only,l2_cg_load_only` | 16,128 | 16,128/selected by NCU precheck | energy and final NCU load_repeat 4,8,16; selector probes LR4; treatment/control-floor dual-calibrated pair-locked ITER |
 | External-memory read path (effective) | `global_addr_only,dram_cg_load_only` | 2048,4096,8192 | 2048,4096,8192/16 | W_SM은 nominal L2 배수 sweep; energy load_repeat 4,8,16; pair-locked ITER; NCU read-byte conservation/write-contamination 검증 |
 
-For A100/V100, the generated shell performs the L2 NCU selector before any long
+For A100/V100/H100, the generated shell performs the L2 NCU selector before any long
 energy sweep. It records every rejected candidate in
 `results/summary/a100_component_finalplan_20260714_l2_path_selection.csv`.
 If no candidate passes, the shell stops without manufacturing an L2 coefficient;
@@ -68,8 +69,8 @@ the 95% threshold is not relaxed.
 
 The energy runner applies the same 1 KiB/block feasibility rule to treatment and
 matched control. Global L1 valid coordinates are
-`W16/B16,W32/B16,W32/B32`. Coordinates omitted before execution because
-`W_SM < blocks/SM` are `W16/B32`. The
+`W16/B16`. Coordinates omitted before execution because
+`W_SM < blocks/SM` are `none`. The
 generated matrix retains rejected rows with `valid=false`, but no rejected row
 is sent to the binary. Before collecting energy, every unique valid coordinate
 is also checked with the binary's `--dry-run` mode.
@@ -89,8 +90,8 @@ an unvalidated or traffic-contaminated control.
 | evidence | required columns | unit / meaning |
 |---|---|---|
 | L1 hit direction | `l1_path_hit_rate_pct`, `l1_hit_bytes` | percent, bytes; global-load lookup hit/miss path |
-| L2 hit direction | `l2_device_path_hit_rate_pct`, `l2_logical_read_hit_rate_pct`, `l2_fabric_hit_rate_pct`, `l2_native_read_hit_rate_pct` | percent; GA100 distinguishes first-partition, final-service, fabric, and transaction-weighted native rates |
-| L2 counter coherence | `l2_read_sector_conservation_ratio`, `l2_fabric_read_sector_conservation_ratio`, `l2_fabric_model_coherent`, `ncu_metric_profile` | ratio/boolean/profile; GA100 strict L2 requires coherent source and fabric populations in `l2_path_minimal` |
+| L2 hit direction | `l2_device_path_hit_rate_pct`, `l2_logical_read_hit_rate_pct`, `l2_fabric_hit_rate_pct`, `l2_native_read_hit_rate_pct` | percent; GA100/GH100 distinguish first-partition, final-service, fabric, and transaction-weighted native rates |
+| L2 counter coherence | `l2_read_sector_conservation_ratio`, `l2_fabric_read_sector_conservation_ratio`, `l2_fabric_model_coherent`, `ncu_metric_profile` | ratio/boolean/profile; GA100/GH100 strict L2 requires coherent source and fabric populations in `l2_path_minimal` |
 | access magnitude | `l1_accesses`, `l2_accesses`, `dram_accesses` | L1 requests when available, otherwise sectors; L2/DRAM sectors |
 | byte magnitude | `shared_read_bytes`, `shared_write_bytes`, `l1_request_bytes`, `l1_hit_bytes`, `l2_read_bytes`, `dram_read_bytes`, `dram_write_bytes` | bytes; Shared pJ/bit uses read bytes, L1 request bytes are not L1 hit bytes, L2 pJ/bit uses L2 read bytes |
 | external-byte provenance | `dram_read_bytes_source`, `dram_write_bytes_source` | strict external path requires direct `dram__bytes_read.sum` and `dram__bytes_write.sum`; derived fallback is diagnostic-only |
@@ -168,10 +169,11 @@ fallback is only for the NCU sidecar/preflight/goal-readiness commands; failed
 NCU evidence must not be replaced with unvalidated denominators in final
 component coefficients.
 
-The generated NCU stage runs a minimal coherent L2 sidecar and a separate full
-non-L2 sidecar, then merges disjoint rows with `ncu_summary_source` provenance.
-It profiles every energy `reuse_factor`/`load_repeat` coordinate and includes
-1,2 as lower-signal diagnostic points. This lets `analyze_matched_control_energy.py` prefer
+The generated NCU stage runs minimal coherent L2 and external-memory sidecars
+plus a separate full Tensor/Shared/Global-L1 sidecar, then merges disjoint rows
+with `ncu_summary_source` provenance. It profiles every energy
+`reuse_factor`/`load_repeat` coordinate; memory LR is exactly 4,8,16. This lets
+`analyze_matched_control_energy.py` prefer
 `ncu_actual_exact` denominators instead of representative same-working-set
 scaling. Shared uses `shared_scalar_addr_only`, which keeps the same dynamic-shared
 allocation, initialization, index loop, and dependent checksum while removing
@@ -299,15 +301,18 @@ baseline for `seconds` before its timed kernel, so a fixed 30-second gate would
 reject valid adjacent pairs in longer stability runs. The 15-second allowance
 covers process startup, allocation, warm-up, and synchronization; the actual
 limit is recorded as `pair_transition_gap_limit_ms` in every matched-detail row.
-Both Tensor kernels execute the same dependent register integer add once per
-RF iteration, so the liveness/control instruction cancels in the direct pair.
-The control no longer performs the former RF-proportional FP32 FMA/checksum or
-memory work. Both modes use the same per-thread eight-scalar-store epilogue
-instead of a WMMA store intrinsic. The treatment stores all accumulator
-fragment values to keep HMMA live; the control stores sink values with the same
-address pattern while keeping its HMMA count at zero.
+Both Tensor kernels execute the same fragment-dependent register integer add and
+the same in-place FP16 sign-bit flip once per RF iteration. `reg_mma` therefore
+uses one A fragment with alternating sign, so its FP32 accumulator remains bounded
+instead of becoming numerically stagnant
+after millions of constant-sign accumulations. Both modes use the same
+`c.num_elements` scalar-store epilogue and issue no operand memory load. The
+no-MMA control can still compile to fewer registers than treatment; therefore the
+coefficient includes WMMA/HMMA operand and accumulator RF activity and is not a
+pure Tensor circuit coefficient. Report both launch register counts.
 The raw Tensor rows must contain
-`tensor_pair_kernel_revision=matched_add_scalar_epilogue_fixed_rf_v2` in `notes`.
+`tensor_pair_kernel_revision=matched_inplace_signflip_fragment_epilogue_fixed_rf_v4`
+and `tensor_operand_source=register_fill_no_memory` in `notes`.
 CG rows must contain `global_warmup_policy=ld_global_cg`. The package audit
 rejects either missing marker so a stale binary with the same CSV schema cannot
 silently pass.

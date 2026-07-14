@@ -14,15 +14,15 @@
 | paired stability | `run_paired_component_stability.py` | drift-sensitive component를 explicit control-treatment-control 순서로 재측정. Global L1/L2/DRAM은 `global_addr_only`, Shared는 `shared_scalar_addr_only`를 강제 |
 | power API audit | `audit_power_api_measurements.py` | raw energy CSV가 power measurement matrix 기준 final/provisional/reject인지 판정하고 새 finalplan에서는 explicit `measurement_scope`와 exact timed-kernel interval을 요구하며 `--self-test`로 A100 semantics, fallback numerator, H100 module scope 혼입 회귀를 검증 |
 | power-state audit | `audit_power_state_stability.py` | raw row의 평균 전력/endpoint power outlier를 찾아 측정 품질 문제와 weak-signal 문제를 분리 |
-| NCU sidecar | `run_ncu_validation.sh` | chip별 metric availability를 확인한 뒤 counter 수집. L2 strict gate는 `NCU_METRIC_PROFILE=l2_path_minimal`, 나머지 component는 `full`을 사용하며 `NCU_COMPONENTS=tensor,l2`처럼 subset 선택 가능 |
+| NCU sidecar | `run_ncu_validation.sh` | chip별 metric availability를 확인한 뒤 counter 수집. L2와 external-memory strict gate는 coherent `NCU_METRIC_PROFILE=l2_path_minimal`, Tensor/Shared/Global-L1은 `full`을 사용하며 `NCU_COMPONENTS=tensor,l2`처럼 subset 선택 가능 |
 | Tensor binary audit | `audit_tensor_mma_binary.py` | target binary의 RF1/2/4/8/16 treatment/control SASS와 resource usage를 검사해 control HMMA, predicated dual-HMMA, operand LDG/LDS, local/stack allocation을 거부. runtime NCU를 대체하지 않음 |
-| NCU summary | `summarize_ncu_cache_metrics.py` | NCU raw export를 cache/path, source/native L2 hit, GA100 LTC-fabric recovery와 logical final hit, sector conservation, observed/expected traffic, DRAM read, occupancy/register/shared-block summary로 정리 |
-| NCU summary merge | `merge_ncu_validation_summaries.py` | disjoint full non-L2와 minimal L2 summary를 row source를 보존해 canonical CSV로 병합하고 duplicate label을 거부 |
-| path acceptance | `analyze_ncu_path_acceptance.py` | accepted/provisional/rejected path 판정. A100 L2는 source+LTC-fabric logical final hit, native-model, selected layout, observed/expected byte gate를 강제 |
+| NCU summary | `summarize_ncu_cache_metrics.py` | NCU raw export를 cache/path, source/native L2 hit, GA100/GH100 LTC-fabric recovery와 logical final hit, sector conservation, observed/expected traffic, DRAM read, occupancy/register/shared-block summary로 정리 |
+| NCU summary merge | `merge_ncu_validation_summaries.py` | disjoint full Tensor/Shared/L1, minimal L2, minimal external-memory summary를 row source를 보존해 canonical CSV로 병합하고 duplicate label을 거부 |
+| path acceptance | `analyze_ncu_path_acceptance.py` | accepted/provisional/rejected path 판정. A100/H100 L2는 source+LTC-fabric logical final hit, native-model, selected layout, observed/expected byte gate를 강제 |
 | matched-control | `analyze_matched_control_energy.py` | NCU byte denominator 기반 pJ/FLOP, pJ/byte, pJ/bit 계산. 실제 benchmark interval의 `pair_transition_gap_ms`로 pair 인접성을 검사하고 legacy CSV는 `run_id-elapsed_s`로 명시적 추정 |
 | component reliability | `audit_component_reliability.py` | power/NCU/matched-control 결과를 결합해 component별 최종 verdict 생성 |
 | instability audit | `audit_matched_control_instability.py` | invalid/weak-signal matched-control row 원인과 follow-up 실험 조건 요약 |
-| platform L2 path selector | `select_l2_path_configuration.py` | A100/V100의 사전 순서 policy/layout/blocks-SM 후보 중 두 working-set anchor의 strict NCU gate를 모두 통과한 첫 후보를 energy sweep에 전달. A100은 native hit 95%가 아니라 source+fabric logical hit와 native-model coherence를 필수로 하며, GV100은 native metric이 없으면 direct/sector/traffic 증거로 대체. V100 persisting policy는 하드 거부 |
+| platform L2 path selector | `select_l2_path_configuration.py` | A100/V100/H100의 사전 순서 policy/layout/blocks-SM 후보 중 두 working-set anchor의 strict NCU gate를 모두 통과한 첫 후보를 energy sweep에 전달. A100/H100은 native hit 95%가 아니라 source+fabric logical hit와 native-model coherence를 필수로 하며, GV100은 native metric이 없으면 direct/sector/traffic 증거로 대체. V100 persisting policy는 하드 거부 |
 | legacy selector entry point | `select_a100_l2_path_configuration.py` | 기존 A100 remediation command와의 호환 wrapper. 새 plan은 generic selector 사용 |
 | A100 Tensor/L2 NCU precheck | `audit_a100_ncu_precheck.py` | energy 전에 Tensor RF 선형성과 selected L2 policy/layout/B의 전체 W/LR path evidence를 hard gate |
 | A100 Tensor/L2 remediation audit | `audit_a100_tensor_l2_remediation.py` | RF별 dual-calibration max ITER, 실제 control duration, 동일 ITER/HMMA/spill/양수 delta와 W별 source/fabric logical L2 hit, native-model, sector/traffic 보존, exact NCU denominator, 인접-W pJ/bit plateau를 검증 |
@@ -528,9 +528,9 @@ python3 scripts/build_platform_intake_dashboard.py --self-test
 | env | 예시 | 의미 |
 |---|---|---|
 | `TENSOR_REUSE_FACTORS` | `1,2,4,8,16` | `reg_operand_only`, `reg_mma` reuse sweep |
-| `MEMORY_LOAD_REPEATS` | `1,2,4,8,16` | shared/L1/L2 load_repeat sweep |
-| `DRAM_LOAD_REPEATS` | `1,4,8,16` | external-memory load_repeat sweep |
-| `DRAM_W_SM_KIB_VALUES` | profile별: RTX/V100 `256,512,1024,2048`; A100/H100 `2048,4096,8192` | nominal L2 배수 W_SM sweep (KiB/SM) |
+| `MEMORY_LOAD_REPEATS` | `4,8,16` | shared/L1/L2 energy와 exact NCU 공통 load_repeat sweep |
+| `DRAM_LOAD_REPEATS` | `4,8,16` | external-memory energy와 exact NCU 공통 load_repeat sweep |
+| `DRAM_W_SM_KIB_VALUES` | profile별: RTX/V100 `256,512,2048`; A100/H100 `2048,4096,8192` | nominal L2보다 큰 low/mid/high W_SM sweep (KiB/SM) |
 | `DRY_RUN_NCU` | `1` | NCU 실행 없이 case manifest만 생성 |
 
 대표 조건만 빠르게 확인하려면 세 list를 모두 `4`로 제한한다. 그 결과는

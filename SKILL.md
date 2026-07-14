@@ -164,17 +164,18 @@ expected-byte conservation, hit+miss/read sector conservation, and low DRAM-read
 leakage. It does not require zero L1 request traffic. Strict L2 rows use
 `NCU_METRIC_PROFILE=l2_path_minimal` and require
 `l2_path_counter_coherent=1`; full-bundle L2 replay is diagnostic and cannot
-override this gate. Platform plans run full non-L2 and minimal L2 sidecars
-separately, then merge disjoint rows with source provenance.
+override this gate. Platform plans run full Tensor/Shared/Global-L1, minimal L2,
+and minimal external-memory sidecars separately, then merge disjoint rows with
+source provenance.
 
-GA100 is fabric-aware: collect device/TEX source lookup and
+GA100 and GH100 are fabric-aware: collect device/TEX source lookup and
 `srcunit_ltcfabric` read/hit/miss sectors in the same minimal replay. Require
 `(source_hit + fabric_hit) / source_read >= 95%`, source and fabric conservation
 in 0.98-1.02, coherent fabric routing, native-vs-fabric-model delta <=2
 percentage points, and DRAM read/source L2 read <=2%. Do not require either the
 direct source hit or native lookup-level hit to be >=95%; a first-partition miss
-can be recovered in another L2 partition. Other profiles retain their reviewed
-architecture-specific direct/native policy. GV100 may omit the native metric;
+can be recovered in another L2 partition. RTX 3090 retains its reviewed
+direct/native policy. GV100 may omit the native metric;
 missing native evidence is never replaced with an invented pass value. All
 profiles require observed/expected L2 read bytes in 0.95-1.05.
 
@@ -221,6 +222,10 @@ acceptance gates explicitly select them.
 - Exclude placement failures and power-state rejects from primary summaries.
 - Memory coefficients require `denominator_source=ncu_actual_exact` for strict
   reporting.
+- Every strict energy coordinate must have exact-coordinate treatment and
+  control NCU rows at the same `W_SM`, blocks/SM, active SM, and RF/LR. Keep
+  broader discovery sweeps under separate diagnostic tags; do not include
+  coordinates the strict analyzer must discard.
 - Tensor, Shared, Global L1, L2, and DRAM pair details require
   `pair_energy_basis=matched_iters_net_energy`, equal positive ITER, and
   `iter_ratio=1`.

@@ -1064,7 +1064,8 @@ int run_idle(const Options& opts, NvmlEnergy& nvml) {
         "idle_" + now_token() + "_r" + std::to_string(repeat);
 
     Feasibility f =
-        classify_feasibility(opts.w_sm_kib, opts.blocks_per_sm, opts.profile);
+        classify_feasibility(opts.w_sm_kib, opts.blocks_per_sm, opts.profile,
+                             opts.active_sm);
     for (int gpu = 0; gpu < nvml.device_count(); ++gpu) {
       const double delta_j = delta.at(gpu);
       SmidCheck smid;
@@ -1222,7 +1223,7 @@ int main(int argc, char** argv) {
     }
     const auto f =
         a100fp16::classify_feasibility(opts.w_sm_kib, opts.blocks_per_sm,
-                                       opts.profile);
+                                       opts.profile, opts.active_sm);
     std::string mode_reason;
     const bool allowed =
         a100fp16::mode_allowed_for_feasibility(opts.mode, f, &mode_reason);

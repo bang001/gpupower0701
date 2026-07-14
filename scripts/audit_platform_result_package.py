@@ -238,6 +238,7 @@ REQUIRED_NCU_CANDIDATES = {
     "shared_memory_path",
     "global_l1_hit_path",
     "l2_hit_path",
+    "external_memory_read_path",
     "global_address_control",
 }
 
@@ -298,7 +299,9 @@ NCU_ACCEPTANCE_REQUIRED_COLUMNS = {
     "stall_long_scoreboard_pct",
 }
 
-A100_L2_FABRIC_REQUIRED_COLUMNS = {
+FABRIC_AWARE_L2_PROFILES = {"a100", "h100"}
+
+FABRIC_L2_REQUIRED_COLUMNS = {
     "l2_logical_read_hit_rate_pct",
     "l2_fabric_hit_rate_pct",
     "l2_fabric_read_sectors",
@@ -618,7 +621,7 @@ def expected_paths(profile: str, tag: str) -> dict[str, Path | list[Path]]:
             f"results/summary/{profile}_strict_scope_fresh_ncu_component_summary_audit_{tag}.csv"
         ),
     }
-    if profile in {"a100", "v100"}:
+    if profile in {"a100", "v100", "h100"}:
         paths["l2_path_selection"] = Path(
             f"results/summary/{base}_l2_path_selection.csv"
         )
@@ -686,7 +689,7 @@ def audit_l2_path_selection(
         "status",
         "reason",
     }
-    if profile == "a100":
+    if profile in FABRIC_AWARE_L2_PROFILES:
         required.update(
             {
                 "l2_logical_read_hit_rate_pct",
@@ -720,7 +723,13 @@ def audit_l2_path_selection(
     for row in selection_rows:
         key = (row.get("policy", ""), row.get("layout", ""), row.get("blocks_per_SM", ""))
         grouped.setdefault(key, []).append(row)
-    expected_w = {16, 128} if profile == "a100" else {32, 64}
+    expected_w = (
+        {16, 128}
+        if profile == "a100"
+        else {64, 128}
+        if profile == "h100"
+        else {32, 64}
+    )
     accepted = []
     selected = []
     for key, candidate_rows in grouped.items():
@@ -742,8 +751,9 @@ def audit_l2_path_selection(
         and any(row.get("policy") == "persisting" for row in selection_rows)
     )
     native_gate_valid = all(
-        row.get("native_l2_gate") == "ga100_fabric_model"
-        if profile == "a100"
+        row.get("native_l2_gate")
+        == ("ga100_fabric_model" if profile == "a100" else "gh100_fabric_model")
+        if profile in FABRIC_AWARE_L2_PROFILES
         else row.get("native_l2_gate")
         in {"optional_unavailable", "optional_present_cross_checked"}
         for row in selection_rows
@@ -764,7 +774,7 @@ def audit_l2_path_selection(
             + (
                 "V100 policy must be normal"
                 if profile == "v100"
-                else "A100 policy may be normal or persisting and must use the GA100 fabric model"
+                else f"{profile.upper()} policy may be normal or persisting and must use its partition-fabric model"
             )
         ),
         actual=(
@@ -1571,8 +1581,8 @@ def audit_ncu_acceptance(
     ]
     problems = []
     required_columns = set(NCU_ACCEPTANCE_REQUIRED_COLUMNS)
-    if profile == "a100":
-        required_columns.update(A100_L2_FABRIC_REQUIRED_COLUMNS)
+    if profile in FABRIC_AWARE_L2_PROFILES:
+        required_columns.update(FABRIC_L2_REQUIRED_COLUMNS)
     missing_columns = sorted(required_columns - fieldnames)
     if missing_columns:
         problems.append("missing_columns=" + ",".join(missing_columns))
@@ -1726,7 +1736,7 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
         native_delta_text = row.get(
             "l2_native_vs_derived_hit_delta_pct", ""
         ).strip()
-        if profile == "a100":
+        if profile in FABRIC_AWARE_L2_PROFILES:
             logical_hit = ncu_value(
                 row, "l2_logical_read_hit_rate_pct", -1.0
             )
@@ -1803,9 +1813,27 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
     if mode == "dram_cg_load_only":
         l2_service_hit = (
             ncu_value(row, "l2_logical_read_hit_rate_pct", -1.0)
-            if profile == "a100"
+            if profile in FABRIC_AWARE_L2_PROFILES
             else l2_hit
         )
+        fabric_ok = True
+        if profile in FABRIC_AWARE_L2_PROFILES:
+            fabric_ok = (
+                ncu_value(row, "l2_fabric_metrics_present", 0.0) == 1.0
+                and ncu_value(row, "l2_fabric_counter_coherent", -1.0) == 1.0
+                and ncu_value(row, "l2_fabric_model_coherent", -1.0) == 1.0
+                and bool(
+                    row.get(
+                        "l2_native_vs_fabric_model_hit_delta_pct", ""
+                    ).strip()
+                )
+                and ncu_value(
+                    row,
+                    "l2_native_vs_fabric_model_hit_delta_pct",
+                    math.inf,
+                )
+                <= 2.0
+            )
         l2_limit = min(
             NCU_DRAM_L2_HIT_MAX_PCT,
             ncu_expected_l2_residency_hit_pct(row, profile)
@@ -1814,7 +1842,9 @@ def ncu_path_sanity_pass(row: dict[str, str], *, profile: str) -> bool:
         )
         expected_source_bytes = ncu_expected_input_bytes(row)
         return (
-            l1_hit <= NCU_DRAM_L1_HIT_MAX_PCT
+            row.get("ncu_metric_profile", "") == "l2_path_minimal"
+            and fabric_ok
+            and l1_hit <= NCU_DRAM_L1_HIT_MAX_PCT
             and l2_service_hit >= 0.0
             and l2_service_hit <= l2_limit
             and l2_read_bytes > 0.0
@@ -1885,8 +1915,8 @@ def audit_ncu_summary_quality(
 
     problems: list[str] = []
     required_columns = set(NCU_REQUIRED_COLUMNS)
-    if profile == "a100":
-        required_columns.update(A100_L2_FABRIC_REQUIRED_COLUMNS)
+    if profile in FABRIC_AWARE_L2_PROFILES:
+        required_columns.update(FABRIC_L2_REQUIRED_COLUMNS)
     missing_columns = sorted(required_columns - fieldnames)
     if missing_columns:
         problems.append("missing_columns=" + ",".join(missing_columns))

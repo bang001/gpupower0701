@@ -52,9 +52,10 @@ def write_markdown(path: Path, inputs: list[Path], rows: list[dict[str, str]]) -
     with path.open("w", encoding="utf-8") as out:
         out.write("# Combined NCU Validation Summary\n\n")
         out.write(
-            "This canonical table combines disjoint NCU runs. L2 gating rows use "
-            "the `l2_path_minimal` profile; the other component rows use the full "
-            "diagnostic profile. NCU runs are validation evidence, not energy rows.\n\n"
+            "This canonical table combines disjoint NCU runs. L2 and external-memory "
+            "gating rows use the coherent `l2_path_minimal` profile; Tensor, Shared, "
+            "and Global-L1 rows use the full diagnostic profile. NCU runs are "
+            "validation evidence, not energy rows.\n\n"
         )
         out.write("## Inputs\n\n")
         for source in inputs:

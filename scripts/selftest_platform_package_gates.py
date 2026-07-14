@@ -294,6 +294,7 @@ NCU_ACCEPTANCE_CANDIDATES = [
     ("shared_scalar_addr_only", "shared_address_control"),
     ("global_l1_load_only", "global_l1_hit_path"),
     ("l2_cg_load_only", "l2_hit_path"),
+    ("dram_cg_load_only", "external_memory_read_path"),
     ("global_addr_only", "global_address_control"),
 ]
 
@@ -854,29 +855,34 @@ def write_l2_path_selection_fixture(
     policy: str = "normal",
 ) -> None:
     path = repo / module.expected_paths(profile, tag)["l2_path_selection"]
-    expected_w = (16, 128) if profile == "a100" else (32, 64)
+    expected_w = {
+        "a100": (16, 128),
+        "h100": (64, 128),
+        "v100": (32, 64),
+    }[profile]
+    fabric_aware = profile in module.FABRIC_AWARE_L2_PROFILES
     rows = []
     for w_sm_kib in expected_w:
         rows.append(
             {
                 "policy": policy,
                 "layout": "sm_interleaved",
-                "blocks_per_SM": "8" if profile == "a100" else "16",
+                "blocks_per_SM": "8" if fabric_aware else "16",
                 "W_SM_KiB": str(w_sm_kib),
                 "load_repeat": "4",
                 "l1_path_hit_rate_pct": "0",
-                "l2_path_hit_rate_pct": "55" if profile == "a100" else "99.5",
-                "l2_native_read_hit_rate_pct": "68.62" if profile == "a100" else "99.4",
-                "l2_native_vs_derived_hit_delta_pct": "13.62" if profile == "a100" else "0.1",
-                "l2_logical_read_hit_rate_pct": "99.5" if profile == "a100" else "",
-                "l2_fabric_hit_rate_pct": "98.89" if profile == "a100" else "",
-                "l2_fabric_read_fraction": "0.310345" if profile == "a100" else "",
-                "l2_fabric_counter_coherent": "1" if profile == "a100" else "",
-                "l2_fabric_model_coherent": "1" if profile == "a100" else "",
-                "l2_native_vs_fabric_model_hit_delta_pct": "0.01" if profile == "a100" else "",
+                "l2_path_hit_rate_pct": "55" if fabric_aware else "99.5",
+                "l2_native_read_hit_rate_pct": "68.62" if fabric_aware else "99.4",
+                "l2_native_vs_derived_hit_delta_pct": "13.62" if fabric_aware else "0.1",
+                "l2_logical_read_hit_rate_pct": "99.5" if fabric_aware else "",
+                "l2_fabric_hit_rate_pct": "98.89" if fabric_aware else "",
+                "l2_fabric_read_fraction": "0.310345" if fabric_aware else "",
+                "l2_fabric_counter_coherent": "1" if fabric_aware else "",
+                "l2_fabric_model_coherent": "1" if fabric_aware else "",
+                "l2_native_vs_fabric_model_hit_delta_pct": "0.01" if fabric_aware else "",
                 "native_l2_gate": (
-                    "ga100_fabric_model"
-                    if profile == "a100"
+                    f"{'ga100' if profile == 'a100' else 'gh100'}_fabric_model"
+                    if fabric_aware
                     else "optional_present_cross_checked"
                 ),
                 "l2_read_sector_conservation_ratio": "1",
@@ -1409,6 +1415,7 @@ def base_ncu_row(
         row["registers_per_thread"] = "16" if mode == "reg_operand_only" else "30"
     if mode == "dram_cg_load_only":
         row["W_SM_KiB"] = "8192"
+        row["ncu_metric_profile"] = "l2_path_minimal"
     if mode == "reg_mma":
         expected_logical_mma = (
             int(row["active_SM"])
@@ -1476,6 +1483,7 @@ def base_ncu_row(
             * 1024
         )
         dram_read_bytes = expected_bytes * 0.96
+        expected_sectors = expected_bytes / 32
         row["l1_path_hit_rate_pct"] = "0"
         row["l1_request_bytes"] = str(expected_bytes)
         row["l1_miss_bytes"] = str(expected_bytes)
@@ -1483,6 +1491,10 @@ def base_ncu_row(
         # (~3.83% for 656 MiB streamed against 6 MiB L2).
         row["l2_path_hit_rate_pct"] = "3"
         row["l2_logical_read_hit_rate_pct"] = "3"
+        row["l2_read_hit_sectors"] = str(expected_sectors * 0.03)
+        row["l2_read_miss_sectors"] = str(expected_sectors * 0.97)
+        row["l2_read_sector_conservation_ratio"] = "1"
+        row["l2_path_counter_coherent"] = "1"
         row["l2_read_bytes"] = str(expected_bytes)
         row["dram_accesses"] = str(dram_read_bytes / 32)
         row["dram_read_bytes"] = str(dram_read_bytes)
@@ -1519,27 +1531,47 @@ def good_ncu_rows(module: Any, profile: str) -> list[dict[str, str]]:
     if profile in module.PROFILE_EXTRA_NCU_REQUIRED_MODES:
         memory_modes.extend(sorted(module.PROFILE_EXTRA_NCU_REQUIRED_MODES[profile]))
     for mode in memory_modes:
-        for load_repeat in ("1", "2", "4"):
+        for load_repeat in ("4", "8", "16"):
             rows.append(base_ncu_row(mode, active_sm=active_sm, load_repeat=load_repeat))
-    if profile == "a100":
+    if profile in module.FABRIC_AWARE_L2_PROFILES:
         for row in rows:
-            if row["mode"] not in {"l2_load_only", "l2_cg_load_only"}:
+            if row["mode"] not in {
+                "l2_load_only",
+                "l2_cg_load_only",
+                "dram_cg_load_only",
+            }:
                 continue
             source_sectors = float(row["l2_read_bytes"]) / 32.0
-            source_hits = source_sectors * 0.55
-            source_misses = source_sectors * 0.45
-            fabric_hits = source_sectors * 0.445
-            fabric_misses = source_sectors * 0.005
+            if row["mode"] == "dram_cg_load_only":
+                source_hits = source_sectors * 0.01
+                source_misses = source_sectors * 0.99
+                fabric_hits = source_sectors * 0.02
+                fabric_misses = source_sectors * 0.97
+                logical_hit = "3"
+                native_hit = "1.5"
+                fabric_hit = "2.020202"
+                fabric_fraction = "0.497487437"
+            else:
+                source_hits = source_sectors * 0.55
+                source_misses = source_sectors * 0.45
+                fabric_hits = source_sectors * 0.445
+                fabric_misses = source_sectors * 0.005
+                logical_hit = "99.5"
+                native_hit = "68.62069"
+                fabric_hit = "98.888889"
+                fabric_fraction = "0.310344828"
             row.update(
                 {
-                    "l2_hit_rate_pct": "68.62069",
-                    "l2_path_hit_rate_pct": "55",
-                    "l2_native_read_hit_rate_pct": "68.62069",
-                    "l2_native_vs_derived_hit_delta_pct": "13.62069",
-                    "l2_logical_read_hit_rate_pct": "99.5",
+                    "l2_hit_rate_pct": native_hit,
+                    "l2_path_hit_rate_pct": (
+                        "1" if row["mode"] == "dram_cg_load_only" else "55"
+                    ),
+                    "l2_native_read_hit_rate_pct": native_hit,
+                    "l2_native_vs_derived_hit_delta_pct": "0",
+                    "l2_logical_read_hit_rate_pct": logical_hit,
                     "l2_read_hit_sectors": str(source_hits),
                     "l2_read_miss_sectors": str(source_misses),
-                    "l2_fabric_hit_rate_pct": "98.888889",
+                    "l2_fabric_hit_rate_pct": fabric_hit,
                     "l2_fabric_read_sectors": str(source_misses),
                     "l2_fabric_read_hit_sectors": str(fabric_hits),
                     "l2_fabric_read_miss_sectors": str(fabric_misses),
@@ -1547,13 +1579,14 @@ def good_ncu_rows(module: Any, profile: str) -> list[dict[str, str]]:
                     "l2_fabric_read_sector_conservation_ratio": "1",
                     "l2_fabric_counter_coherent": "1",
                     "l2_fabric_read_to_source_miss_ratio": "1",
-                    "l2_fabric_read_fraction": "0.310344828",
-                    "l2_fabric_model_native_hit_rate_pct": "68.62069",
+                    "l2_fabric_read_fraction": fabric_fraction,
+                    "l2_fabric_model_native_hit_rate_pct": native_hit,
                     "l2_native_vs_fabric_model_hit_delta_pct": "0",
                     "l2_fabric_model_coherent": "1",
-                    "dram_read_bytes": str(float(row["l2_read_bytes"]) * 0.005),
                 }
             )
+            if row["mode"] != "dram_cg_load_only":
+                row["dram_read_bytes"] = str(float(row["l2_read_bytes"]) * 0.005)
     return rows
 
 
@@ -1578,7 +1611,11 @@ def write_ncu_summary(
     path = repo / module.expected_paths(profile, tag)["ncu_summary"]
     fieldnames = sorted(
         set(module.NCU_REQUIRED_COLUMNS)
-        | (set(module.A100_L2_FABRIC_REQUIRED_COLUMNS) if profile == "a100" else set())
+        | (
+            set(module.FABRIC_L2_REQUIRED_COLUMNS)
+            if profile in module.FABRIC_AWARE_L2_PROFILES
+            else set()
+        )
     )
     if missing_column is not None:
         fieldnames = [name for name in fieldnames if name != missing_column]
@@ -1609,7 +1646,7 @@ def write_ncu_summary(
     if low_l2_path_hit:
         for row in rows:
             if row["mode"] == "l2_cg_load_only":
-                if profile == "a100":
+                if profile in module.FABRIC_AWARE_L2_PROFILES:
                     row["l2_logical_read_hit_rate_pct"] = "72"
                 else:
                     row["l2_path_hit_rate_pct"] = "72"
@@ -1617,7 +1654,7 @@ def write_ncu_summary(
         for row in rows:
             if row["mode"] == "l2_cg_load_only":
                 row["l2_native_read_hit_rate_pct"] = "72.5"
-                if profile == "a100":
+                if profile in module.FABRIC_AWARE_L2_PROFILES:
                     row["l2_native_vs_fabric_model_hit_delta_pct"] = "3.87931"
                 else:
                     row["l2_native_vs_derived_hit_delta_pct"] = "26.5"
@@ -1626,6 +1663,8 @@ def write_ncu_summary(
             if row["mode"] == "dram_cg_load_only":
                 row["l2_hit_rate_pct"] = "99"
                 row["l2_path_hit_rate_pct"] = "99"
+                if profile in module.FABRIC_AWARE_L2_PROFILES:
+                    row["l2_logical_read_hit_rate_pct"] = "99"
     if dram_derived_read_source:
         for row in rows:
             if row["mode"] == "dram_cg_load_only":
@@ -1705,6 +1744,13 @@ def write_ncu_acceptance(
             "l2_path_counter_coherent": "",
             "dram_bytes": "0",
             "dram_read_bytes": "0",
+            "dram_read_bytes_source": "dram__bytes_read.sum",
+            "dram_write_bytes": "0",
+            "dram_write_bytes_source": "dram__bytes_write.sum",
+            "dram_read_to_expected_ratio": "",
+            "dram_write_to_read_ratio": "",
+            "dram_read_bandwidth_GBps": "",
+            "external_memory_coefficient_scope": "",
             "tensor_hmma_inst": "0",
             "expected_logical_mma": "0",
             "tensor_hmma_per_logical_mma": "",
@@ -1771,7 +1817,7 @@ def write_ncu_acceptance(
             row["l2_read_miss_sectors"] = str(expected_sectors * 0.01)
             row["l2_read_sector_conservation_ratio"] = "1"
             row["l2_path_counter_coherent"] = "1"
-            if profile == "a100":
+            if profile in module.FABRIC_AWARE_L2_PROFILES:
                 source_hits = expected_sectors * 0.55
                 source_misses = expected_sectors * 0.45
                 row.update(
@@ -1796,6 +1842,73 @@ def write_ncu_acceptance(
                         "l2_native_vs_fabric_model_hit_delta_pct": "0",
                         "l2_fabric_model_coherent": "1",
                         "dram_read_bytes": str(expected_bytes * 0.005),
+                    }
+                )
+        elif mode == "dram_cg_load_only":
+            row["W_SM_KiB"] = "8192"
+            row["ncu_metric_profile"] = "l2_path_minimal"
+            expected_bytes = (
+                int(row["active_SM"])
+                * int(row["blocks_per_SM"])
+                * int(row["ITER"])
+                * int(row["load_repeat"])
+                * 1024
+            )
+            expected_sectors = expected_bytes / 32
+            dram_read_bytes = expected_bytes * 0.96
+            row.update(
+                {
+                    "l1_path_hit_rate_pct": "0",
+                    "l1_request_bytes": str(expected_bytes),
+                    "l1_miss_bytes": str(expected_bytes),
+                    "l2_hit_rate_pct": "3",
+                    "l2_path_hit_rate_pct": "3",
+                    "l2_logical_read_hit_rate_pct": "3",
+                    "l2_bytes": str(expected_bytes),
+                    "l2_read_bytes": str(expected_bytes),
+                    "l2_read_hit_sectors": str(expected_sectors * 0.03),
+                    "l2_read_miss_sectors": str(expected_sectors * 0.97),
+                    "l2_read_sector_conservation_ratio": "1",
+                    "l2_path_counter_coherent": "1",
+                    "dram_bytes": str(dram_read_bytes * 1.001),
+                    "dram_read_bytes": str(dram_read_bytes),
+                    "dram_write_bytes": str(dram_read_bytes * 0.001),
+                    "dram_read_to_expected_ratio": "0.96",
+                    "dram_write_to_read_ratio": "0.001",
+                    "dram_read_bandwidth_GBps": "500",
+                    "external_memory_coefficient_scope": (
+                        "effective_gpu_device_external_read_path"
+                    ),
+                }
+            )
+            if profile in module.FABRIC_AWARE_L2_PROFILES:
+                source_hits = expected_sectors * 0.01
+                source_misses = expected_sectors * 0.99
+                row.update(
+                    {
+                        "l2_hit_rate_pct": "1.5",
+                        "l2_path_hit_rate_pct": "1",
+                        "l2_native_read_hit_rate_pct": "1.5",
+                        "l2_native_vs_derived_hit_delta_pct": "0",
+                        "l2_logical_read_hit_rate_pct": "3",
+                        "l2_read_hit_sectors": str(source_hits),
+                        "l2_read_miss_sectors": str(source_misses),
+                        "l2_fabric_hit_rate_pct": "2.020202",
+                        "l2_fabric_read_sectors": str(source_misses),
+                        "l2_fabric_read_hit_sectors": str(
+                            expected_sectors * 0.02
+                        ),
+                        "l2_fabric_read_miss_sectors": str(
+                            expected_sectors * 0.97
+                        ),
+                        "l2_fabric_metrics_present": "1",
+                        "l2_fabric_read_sector_conservation_ratio": "1",
+                        "l2_fabric_counter_coherent": "1",
+                        "l2_fabric_read_to_source_miss_ratio": "1",
+                        "l2_fabric_read_fraction": "0.497487437",
+                        "l2_fabric_model_native_hit_rate_pct": "1.5",
+                        "l2_native_vs_fabric_model_hit_delta_pct": "0",
+                        "l2_fabric_model_coherent": "1",
                     }
                 )
         rows.append(row)
@@ -2774,6 +2887,13 @@ def main() -> int:
     )
     run_l2_path_selection_case(
         module,
+        name="good_h100_l2_path_selection",
+        profile="h100",
+        expected_status="pass",
+        expected_text="selected=normal/sm_interleaved/8",
+    )
+    run_l2_path_selection_case(
+        module,
         name="bad_a100_l2_path_not_selected",
         profile="a100",
         selected=False,
@@ -2978,6 +3098,18 @@ def main() -> int:
     )
     run_ncu_summary_case(
         module,
+        name="good_v100_ncu_summary_schema",
+        profile="v100",
+        expected_status="pass",
+    )
+    run_ncu_summary_case(
+        module,
+        name="good_h100_fabric_aware_ncu_summary_schema",
+        profile="h100",
+        expected_status="pass",
+    )
+    run_ncu_summary_case(
+        module,
         name="bad_ncu_missing_l1_hit_rate",
         profile="rtx3090",
         missing_column="l1_hit_rate_pct",
@@ -3066,6 +3198,18 @@ def main() -> int:
         module,
         name="good_a100_fabric_aware_ncu_path_acceptance",
         profile="a100",
+        expected_status="pass",
+    )
+    run_ncu_acceptance_case(
+        module,
+        name="good_v100_ncu_path_acceptance",
+        profile="v100",
+        expected_status="pass",
+    )
+    run_ncu_acceptance_case(
+        module,
+        name="good_h100_fabric_aware_ncu_path_acceptance",
+        profile="h100",
         expected_status="pass",
     )
     run_ncu_acceptance_case(

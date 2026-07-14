@@ -336,10 +336,14 @@ struct Feasibility {
 
 inline Feasibility classify_feasibility(std::uint64_t w_sm_kib,
                                         int blocks_per_sm,
-                                        const HardwareProfile& profile) {
+                                        const HardwareProfile& profile,
+                                        int active_sm = 0) {
   Feasibility f;
+  const int working_set_sm_count =
+      active_sm > 0 ? active_sm : profile.full_sm_count;
   f.full_gpu_working_set_mib =
-      static_cast<double>(profile.full_sm_count * w_sm_kib) / 1024.0;
+      static_cast<double>(working_set_sm_count) *
+      static_cast<double>(w_sm_kib) / 1024.0;
 
   if (!is_allowed_blocks_per_sm(blocks_per_sm, profile)) {
     f.regime = "invalid_blocks_per_sm";

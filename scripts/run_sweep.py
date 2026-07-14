@@ -113,7 +113,12 @@ MEMORY_BACKED_MODES = {
 }
 
 
-def classify(w_sm_kib: int, blocks_per_sm: int, profile: dict[str, Any]) -> dict[str, Any]:
+def classify(
+    w_sm_kib: int,
+    blocks_per_sm: int,
+    profile: dict[str, Any],
+    active_sm: int | None = None,
+) -> dict[str, Any]:
     out: dict[str, Any] = {
         "valid": False,
         "regime": "invalid",
@@ -122,6 +127,7 @@ def classify(w_sm_kib: int, blocks_per_sm: int, profile: dict[str, Any]) -> dict
         "l2_candidate": False,
         "dram_candidate": False,
         "below_logical_tile": False,
+        "full_gpu_working_set_mib": 0.0,
     }
     if blocks_per_sm not in BLOCKS_PER_SM or blocks_per_sm > profile["max_blocks_per_sm"]:
         out["regime"] = "invalid_blocks_per_sm"
@@ -133,7 +139,9 @@ def classify(w_sm_kib: int, blocks_per_sm: int, profile: dict[str, Any]) -> dict
         out["regime"] = "invalid_w_sm"
         out["reason"] = "unsupported W_SM_KiB"
         return out
-    full_gpu_mib = profile["full_sm"] * w_sm_kib / 1024.0
+    working_set_sm_count = active_sm if active_sm is not None else profile["full_sm"]
+    full_gpu_mib = working_set_sm_count * w_sm_kib / 1024.0
+    out["full_gpu_working_set_mib"] = full_gpu_mib
     below_logical_tile = w_sm_kib < blocks_per_sm
     if below_logical_tile:
         out["valid"] = True
@@ -330,9 +338,11 @@ def main() -> int:
         for mode in modes:
             for w_sm_kib in w_values:
                 for blocks_per_sm in b_values:
-                    info = classify(w_sm_kib, blocks_per_sm, profile)
-                    allowed = mode_allowed(mode, info)
                     for active_sm in active_sm_values:
+                        info = classify(
+                            w_sm_kib, blocks_per_sm, profile, active_sm
+                        )
+                        allowed = mode_allowed(mode, info)
                         for n_gpu in n_gpu_values:
                             gpu_list = gpu_list_for_count(gpu_ids, n_gpu)
                             reg_payload_bytes = (

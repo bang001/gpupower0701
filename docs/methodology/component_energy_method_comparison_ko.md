@@ -54,28 +54,28 @@ Tensor와 모든 memory pair는 `matched_iters_net_energy`와 `iter_ratio=1`이 
 
 ## Parameter Sweep과 선택 좌표
 
-### 공통 탐색 축
+### 과거 discovery 축과 현행 strict 축
 
 | 실험자가 조절한 값 | 범위/단위 | 관찰한 값 | 목적 |
 |---|---|---|---|
-| blocks/SM | `1,2,4,8,16,32` blocks/SM 중 profile 허용값 | elapsed, energy, SMID, occupancy/resources | requested grid density와 고정비 amortization 민감도 확인 |
-| W_SM | `1 KiB/SM`에서 `128 MiB/SM`까지 2배 sweep | feasibility, hit rate, L1/L2/DRAM bytes | memory hierarchy 후보 영역 탐색 |
+| blocks/SM | 과거 discovery `1,2,4,8,16,32`; 현행은 아래 표의 profile별 좌표 | elapsed, energy, SMID, occupancy/resources | requested grid density와 고정비 amortization 민감도 확인 |
+| W_SM | 과거 discovery `1 KiB/SM`-`128 MiB/SM`; 현행은 아래 표의 path별 좌표 | feasibility, hit rate, L1/L2/DRAM bytes | discovery로 후보 영역을 찾은 뒤 exact-coordinate NCU가 있는 endpoint만 유지 |
 | reuse factor | RF `1,2,4,8,16` count | HMMA/logical MMA, pJ/FLOP | Tensor steady-loop 대비 setup/final-store 영향 확인 |
-| load repeat | LR `1,2,4,8,16` count | path bytes, stalls, pJ/bit | memory traffic 증가에 따른 유효 계수 안정성 확인 |
+| load repeat | 현행 LR `4,8,16` load/ITER | path bytes, stalls, pJ/bit | memory traffic 증가에 따른 유효 계수 안정성 확인; LR 1/2는 strict에서 제거 |
 | duration/repeats | final target `10 s`, `5 repeats` | net energy, drift, min/median/max | NVML noise floor와 반복 분산 확인 |
 
 한 sweep에서 여러 축을 동시에 바꾸면 어떤 변화가 결과를 만들었는지 구분하기 어렵다.
 따라서 같은 component 안에서는 W_SM, blocks/SM, RF/LR을 좌표로 명시하고, NCU도 최종
 채택할 exact coordinate에서 수집한다.
 
-### 플랫폼별 현행 범위
+### 플랫폼별 현행 strict 범위
 
-| GPU | Energy blocks/SM | Shared W_SM (KiB/SM) | Global L1 W_SM (KiB/SM) | L2 W_SM (KiB/SM) | DRAM W_SM (KiB/SM) |
-|---|---|---|---|---|---|
-| RTX 3090 | 8,16 | 32,64 | 8,16 | 64 | 8192 |
-| V100 | 4,16,32 | 32,64 | 8,16,32 | 32,64 | 8192 |
-| A100 | 16,32 | 64,128 | 16,32 | 16,32,64,128 | 8192 |
-| H100 | 16,32 | 64,128 | 16,32 | 64,128 | 8192 |
+| GPU | Tensor blocks/SM | Memory blocks/SM | Shared W_SM (KiB/SM) | Global L1 W_SM (KiB/SM) | L2 W_SM (KiB/SM) | External W_SM (KiB/SM) | RF/LR |
+|---|---|---|---:|---:|---|---|---|
+| RTX 3090 | 4,8,16 | 8 | 64 | 8 | 32,64 | 256,512,2048 | RF 1,2,4,8,16; LR 4,8,16 |
+| V100 | 4,16,32 | 32 | 32 | 32 | 32,64; selector B32/16/4 | 256,512,2048 | RF 1,2,4,8,16; LR 4,8,16 |
+| A100 | 4,16,32 | 16 | 128 | 16 | 16,128; selector B16/8/4/2/1 | 2048,4096,8192 | RF 1,2,4,8,16; LR 4,8,16 |
+| H100 SXM5 | 4,16,32 | 16 | 128 | 16 | 64,128; selector B16/8 | 2048,4096,8192 | RF 1,2,4,8,16; LR 4,8,16 |
 
 Memory mode의 W_SM은 KiB/SM 단위다. `reg_mma`와 `reg_operand_only`에는 memory
 working set이 없으며 현재 CLI의 W_SM=1 KiB는 parser placeholder다. 실제 register

@@ -43,6 +43,7 @@ DEFAULT_BUILD_DIR_BY_PROFILE = {
     "h100": "build-h100",
 }
 COMMAND_PACKAGE_PROFILES = ("v100", "a100", "h100")
+FABRIC_AWARE_L2_PROFILES = {"a100", "h100"}
 
 POWER_MATRIX = Path("docs/platforms/power_measurement_api_matrix_ko.md")
 PLATFORM_READINESS = Path("results/summary/platform_power_readiness_audit_20260708.csv")
@@ -89,6 +90,14 @@ COMMAND_SHELL_TERMS = [
     "l2_cg_load_only=global_warmup_policy=ld_global_cg",
     "scripts/audit_power_state_stability.py",
     "scripts/run_ncu_validation.sh",
+    "NCU_COMPONENTS=baseline,tensor,shared,l1",
+    "NCU_COMPONENTS=l2",
+    "NCU_COMPONENTS=dram",
+    "NCU_METRIC_PROFILE=l2_path_minimal",
+    "external_memory_minimal",
+    "MEMORY_LOAD_REPEATS=4,8,16",
+    "DRAM_LOAD_REPEATS=4,8,16",
+    "scripts/merge_ncu_validation_summaries.py",
     "scripts/analyze_ncu_path_acceptance.py",
     "scripts/analyze_matched_control_energy.py",
     "--tensor-pair-lock-iters",
@@ -260,7 +269,7 @@ NCU_ACCEPTANCE_REQUIRED_COLUMNS = (
     NCU_ACCEPTANCE_BASE_REQUIRED_COLUMNS | NCU_ACCEPTANCE_PATH_REQUIRED_COLUMNS
 )
 
-A100_L2_FABRIC_REQUIRED_COLUMNS = {
+FABRIC_L2_REQUIRED_COLUMNS = {
     "l2_logical_read_hit_rate_pct",
     "l2_fabric_metrics_present",
     "l2_fabric_counter_coherent",
@@ -725,7 +734,7 @@ def ncu_path_sanity_pass(
     effective_dram_read_bytes = (
         dram_read_bytes
         if math.isfinite(dram_read_bytes)
-        else (math.nan if profile == "a100" else dram_bytes)
+        else (math.nan if profile in FABRIC_AWARE_L2_PROFILES else dram_bytes)
     )
     shared_bytes = ncu_value(row, "shared_bytes")
     shared_accesses = ncu_value(row, "shared_accesses")
@@ -771,11 +780,11 @@ def ncu_path_sanity_pass(
             )
         accepted_l2_hit = (
             ncu_value(row, "l2_logical_read_hit_rate_pct", -1.0)
-            if profile == "a100"
+            if profile in FABRIC_AWARE_L2_PROFILES
             else l2_hit
         )
         fabric_ok = True
-        if profile == "a100":
+        if profile in FABRIC_AWARE_L2_PROFILES:
             fabric_ok = (
                 ncu_value(row, "l2_fabric_metrics_present", 0.0) == 1.0
                 and ncu_value(row, "l2_fabric_counter_coherent", -1.0)
@@ -1066,8 +1075,8 @@ def validate_ncu_acceptance_artifacts(
     required_columns = set(NCU_ACCEPTANCE_BASE_REQUIRED_COLUMNS)
     if require_path_specific_cache_evidence:
         required_columns.update(NCU_ACCEPTANCE_PATH_REQUIRED_COLUMNS)
-    if profile == "a100":
-        required_columns.update(A100_L2_FABRIC_REQUIRED_COLUMNS)
+    if profile in FABRIC_AWARE_L2_PROFILES:
+        required_columns.update(FABRIC_L2_REQUIRED_COLUMNS)
     for artifact in artifacts:
         with artifact.open(newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -1547,6 +1556,52 @@ fi
             require_path_specific_cache_evidence=True,
         )
         assert_selftest(ok, "ncu_acceptance_good", detail)
+
+        fabric_ncu_columns = sorted(
+            set(ncu_columns) | FABRIC_L2_REQUIRED_COLUMNS
+        )
+        fabric_rows = selftest_ncu_rows()
+        for row in fabric_rows:
+            if row["mode"] != "l2_cg_load_only":
+                continue
+            row.update(
+                {
+                    "l2_logical_read_hit_rate_pct": "99.5",
+                    "l2_fabric_metrics_present": "1",
+                    "l2_fabric_counter_coherent": "1",
+                    "l2_fabric_model_coherent": "1",
+                    "l2_native_vs_fabric_model_hit_delta_pct": "0",
+                    "dram_read_bytes": "1000",
+                }
+            )
+        ncu_h100 = Path("results/summary/ncu_acceptance_h100_fabric.csv")
+        write_test_csv(repo / ncu_h100, fabric_ncu_columns, fabric_rows)
+        ok, detail, _ = validate_ncu_acceptance_artifacts(
+            repo,
+            [{"ncu_acceptance_artifact": str(ncu_h100)}],
+            "h100",
+            require_path_specific_cache_evidence=True,
+        )
+        assert_selftest(ok, "ncu_acceptance_h100_fabric_good", detail)
+
+        for row in fabric_rows:
+            if row["mode"] == "l2_cg_load_only":
+                row["l2_fabric_metrics_present"] = "0"
+        ncu_h100_bad = Path(
+            "results/summary/ncu_acceptance_h100_missing_fabric.csv"
+        )
+        write_test_csv(repo / ncu_h100_bad, fabric_ncu_columns, fabric_rows)
+        ok, detail, _ = validate_ncu_acceptance_artifacts(
+            repo,
+            [{"ncu_acceptance_artifact": str(ncu_h100_bad)}],
+            "h100",
+            require_path_specific_cache_evidence=True,
+        )
+        assert_selftest(
+            (not ok) and "path_evidence_failed" in detail,
+            "ncu_acceptance_h100_missing_fabric",
+            detail,
+        )
 
         legacy_ncu_columns = sorted(
             NCU_ACCEPTANCE_BASE_REQUIRED_COLUMNS

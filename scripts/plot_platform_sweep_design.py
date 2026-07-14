@@ -80,32 +80,30 @@ def plot_blocks_per_sm(out_dir: Path) -> Path:
     xpos = {value: index for index, value in enumerate([1, 2, 4, 8, 16, 32])}
     for row, profile_name in enumerate(PLATFORM_ORDER[::-1]):
         profile = PROFILES[profile_name]
-        values = ints(profile["blocks"])
+        values = ints(profile["tensor_blocks"])
         anchor = int(profile["ncu_blocks"])
         y = row
         ax.plot([xpos[v] for v in values], [y] * len(values), color=LINE, linewidth=4, zorder=1)
         for value in values:
-            is_v100_diagnostic = profile_name == "v100" and value < 32
-            color = "#AAB8BF" if is_v100_diagnostic else TEAL
-            ax.scatter(xpos[value], y, s=125, color=color, edgecolor="white", linewidth=1.5, zorder=3)
+            ax.scatter(xpos[value], y, s=125, color=TEAL, edgecolor="white", linewidth=1.5, zorder=3)
             fraction = 100.0 * value / MAX_BLOCKS_PER_SM[profile_name]
-            ax.text(xpos[value], y + 0.18, f"B{value}\n{fraction:.0f}%", ha="center", va="bottom", fontsize=8, color=MUTED)
+            ax.text(xpos[value], y + 0.18, f"Tensor B{value}\n{fraction:.0f}%", ha="center", va="bottom", fontsize=8, color=MUTED)
         ax.scatter(xpos[anchor], y, s=300, marker="D", facecolor=AMBER, edgecolor=INK, linewidth=1.2, zorder=4)
-        ax.text(xpos[anchor], y - 0.23, "strict NCU", ha="center", va="top", fontsize=8.5, color=AMBER, fontweight="bold")
+        ax.text(xpos[anchor], y - 0.23, "memory energy + NCU", ha="center", va="top", fontsize=8.5, color=AMBER, fontweight="bold")
 
     ax.set_yticks(range(4), [LABELS[name] for name in PLATFORM_ORDER[::-1]])
     ax.set_xticks(range(6), ["1", "2", "4", "8", "16", "32"])
-    ax.set_xlabel("요청 blocks/SM [count, log2 sweep point]")
+    ax.set_xlabel("요청 blocks/SM [count]")
     ax.set_xlim(-0.45, 5.45)
     ax.set_ylim(-0.65, 3.75)
     ax.grid(axis="x", color=LINE, linewidth=0.8)
     ax.spines[["top", "right", "left"]].set_visible(False)
-    ax.set_title("플랫폼별 blocks/SM sweep와 strict NCU anchor", loc="left", color=INK, pad=22)
+    ax.set_title("Tensor blocks/SM sweep와 memory strict anchor", loc="left", color=INK, pad=22)
     ax.text(
         0,
         1.02,
-        "V100 B4/B16은 utilization 민감도 진단이며 strict anchor는 B32다. "
-        "요청 B는 실제 residency를 보장하지 않으므로 NCU occupancy/resource로 검증한다.",
+        "원은 Tensor utilization sweep, 마름모는 Shared/Global-L1/external-memory의 energy와 exact NCU 공통 B다. "
+        "L2 selector는 A100/V100/H100에서 fallback B를 고를 수 있으며 실제 residency는 NCU로 검증한다.",
         transform=ax.transAxes,
         fontsize=10,
         color=RED,
@@ -172,7 +170,7 @@ def plot_wsm_paths(out_dir: Path) -> Path:
 
 
 def plot_capacity_context(out_dir: Path) -> Path:
-    metrics = ["Shared 예약량 / allocation", "Global L1 W / combined", "L2 전체 WS / capacity"]
+    metrics = ["Shared 예약량 / allocation", "Global L1 W / combined", "L2 high endpoint / capacity"]
     colors = [TEAL, BLUE, PURPLE]
     values: dict[str, list[float]] = {}
     for profile_name in PLATFORM_ORDER:
@@ -180,7 +178,8 @@ def plot_capacity_context(out_dir: Path) -> Path:
         b = int(p["ncu_blocks"])
         shared_fraction = 100.0 * (int(p["shared_ncu_w"]) + b) / p["shared_capacity_kib"]
         l1_fraction = 100.0 * int(p["l1_ncu_w"]) / COMBINED_L1_SHARED_KIB[profile_name]
-        l2_fraction = 100.0 * (p["active_sm"] * int(p["l2_ncu_w"]) / 1024.0) / p["l2_mib"]
+        l2_w_values = ints(str(p.get("l2_ncu_w_values", p["l2_ncu_w"])))
+        l2_fraction = 100.0 * (p["active_sm"] * max(l2_w_values) / 1024.0) / p["l2_mib"]
         values[profile_name] = [shared_fraction, l1_fraction, l2_fraction]
 
     fig, ax = plt.subplots(figsize=(13.2, 6.8))
@@ -202,7 +201,7 @@ def plot_capacity_context(out_dir: Path) -> Path:
     ax.text(
         0,
         -0.18,
-        "이 값은 nominal 설계 비율이며 측정 hit rate가 아니다. Global L1은 dynamic unified cache를 사용하고 A100/H100 L2는 추가 W 좌표를 포함하므로, "
+        "이 값은 nominal 설계 비율이며 측정 hit rate가 아니다. L2 막대는 두 strict endpoint 중 큰 W를 표시하므로, "
         "최종 선택에는 exact-coordinate NCU evidence가 필요하다.",
         transform=ax.transAxes,
         color=RED,
@@ -217,15 +216,22 @@ def self_test() -> None:
     for name in PLATFORM_ORDER:
         p = PROFILES[name]
         b = int(p["ncu_blocks"])
-        assert b in ints(p["blocks"])
+        assert ints(p["blocks"]) == [b]
+        assert len(ints(p["tensor_blocks"])) == 3
         assert int(p["shared_ncu_w"]) >= b
         assert int(p["l1_ncu_w"]) >= b
         assert int(p["l2_ncu_w"]) >= b
         assert int(p["shared_ncu_w"]) + b <= int(p["shared_capacity_kib"])
         full_l2_mib = p["active_sm"] * int(p["l2_ncu_w"]) / 1024.0
         assert full_l2_mib <= float(p["l2_mib"])
+        assert ints(p["shared_w"]) == [int(p["shared_ncu_w"])]
+        assert ints(p["l1_w"]) == [int(p["l1_ncu_w"])]
+        assert set(ints(p["l2_w"])) == set(
+            ints(str(p.get("l2_ncu_w_values", p["l2_ncu_w"])))
+        )
+        assert ints(p["memory_energy_load_repeats"]) == [4, 8, 16]
         external_w = ints(p["dram_w"])
-        assert len(external_w) >= 3
+        assert len(external_w) == 3
         assert all(
             value > float(p["l2_mib"]) * 1024.0 / p["active_sm"]
             for value in external_w

@@ -7,7 +7,7 @@ External-memory 결과의 최신 명칭, read-only NCU 분모와 W sweep은
 
 ## 목적
 
-이 문서는 H100/GH100 노드에서 FP16 Tensor Core energy microbenchmark와 component-energy finalplan 실험을 실행하기 위한 가이드다. 현재 코드의 primary Tensor path는 CUDA WMMA compatibility path다. 따라서 H100에서 실행하더라도 이 결과는 **Hopper-native WGMMA/TMA/FP8 에너지**가 아니라, H100에서의 WMMA 기반 effective microbenchmark coefficient다.
+이 문서는 H100/GH100 노드에서 FP16 Tensor Core energy microbenchmark와 component-energy finalplan 실험을 실행하기 위한 가이드다. 기본 profile은 **H100 SXM5, 132 SM, 50 MiB L2, HBM3** planning profile이며 H100 PCIe 결과에는 그대로 쓰지 않는다. 현재 코드의 primary Tensor path는 CUDA WMMA compatibility path다. 따라서 H100에서 실행하더라도 이 결과는 **Hopper-native WGMMA/TMA/FP8 에너지**가 아니라, H100에서의 WMMA 기반 effective microbenchmark coefficient다.
 
 ## H100 기준 profile
 
@@ -261,24 +261,24 @@ bash results/summary/h100_component_finalplan_$(date +%Y%m%d)_commands.sh
 | Component | modes | W_SM (KiB) | blocks/SM | factor |
 |---|---|---:|---:|---|
 | Tensor | `reg_operand_only,reg_mma` | N/A (CLI placeholder 1) | 4,16,32 | reuse 1,2,4,8,16 |
-| Shared scalar | `shared_scalar_addr_only,shared_scalar_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16; 동일 pair ITER |
-| Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16 |
-| L2 CG | `global_addr_only,l2_cg_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; 동일 pair ITER; NCU 1,2,4,8,16 |
-| External-memory read path | `global_addr_only,dram_cg_load_only` | 2048,4096,8192 | 16,32 | energy load_repeat 4,8,16; NCU 1,4,8,16 |
+| Shared scalar | `shared_scalar_addr_only,shared_scalar_load_only` | 128 | 16 | energy/NCU load_repeat 4,8,16; 동일 pair ITER |
+| Global L1 | `global_addr_only,global_l1_load_only` | 16 | 16 | energy/NCU load_repeat 4,8,16 |
+| L2 CG | `global_addr_only,l2_cg_load_only` | 64,128 | NCU가 B16/B8 중 선택 | energy/final NCU load_repeat 4,8,16; selector는 LR4 |
+| External-memory read path | `global_addr_only,dram_cg_load_only` | 2048,4096,8192 | 16 | energy/NCU load_repeat 4,8,16 |
 
 ### H100 sweep를 그래프로 해석하기
 
 ![플랫폼별 W_SM path sweep](../presentations/assets/platform_wsm_path_sweep.png)
 
-- Shared W64/W128은 228 KiB shared allocation profile 안의 후보이며 strict W128/B16의
-  보수적 예약량은 144 KiB/SM이다. 다음 power-of-two W256은 profile 한도를 넘는다.
-- Global L1 W16/W32는 작은 cached-global 후보이고 strict W16/B16은 block당 1 KiB를
-  제공한다.
+- Shared W128/B16의 보수적 예약량은 144 KiB/SM이며 energy와 NCU가 동일 좌표다.
+- Global L1 W16/B16은 block당 1 KiB를 제공하는 단일 cached-global anchor다.
 - L2 W64/W128은 전체 8.25/16.5 MiB로 50 MiB L2의 약 16.5/33%다. A100처럼 더 작은
-  W를 포함하지 않은 것은 current heuristic이며 target-node NCU plateau 검증이 필요하다.
+  W를 포함하지 않은 것은 current heuristic이며 두 endpoint의 target-node NCU plateau 검증이 필요하다.
 - External-memory W2048/4096/8192는 전체 약 264/528/1,056 MiB다. HBM3 physical
   energy가 아니라 effective GPU-device read path로 해석한다.
 
+이 132-SM, 50-MiB L2, HBM3 좌표는 H100 SXM5 planning profile이다. H100 PCIe는
+runtime SM 수와 memory subsystem을 기록하고 별도 profile/result label로 재계획해야 한다.
 현재 H100 좌표가 WGMMA/TMA용으로 별도 최적화된 것은 아니다. kernel은 FP16 WMMA
 compatibility path이며, WGMMA/TMA energy를 주장하려면 별도 kernel과 NCU instruction
 evidence가 필요하다.
@@ -288,7 +288,10 @@ evidence가 필요하다.
 accepted여야 한다. 이 gate는 WMMA compatibility path의 control 검증이며 WGMMA/TMA
 지원 여부를 검증하는 것은 아니다.
 
-L2 CG energy sweep는 각 W/B/LR 좌표에서 `l2_cg_load_only` treatment와
+GH100도 partitioned L2 crossbar를 사용하므로 L2 selector와 final minimal replay는
+source/TEX 첫 lookup에 `srcunit_ltcfabric` hit를 더한 logical final service를 검증한다.
+필수 fabric counter가 NCU에서 제공되지 않으면 direct hit rate로 대체하지 않고 L2를
+reject한다. L2 CG energy sweep는 각 W/B/LR 좌표에서 `l2_cg_load_only` treatment와
 `global_addr_only` control을 dual-calibrate하고 동일 resolved ITER를 양쪽에 전달한다.
 분석은 `--l2-pair-policy matched-iters`로 net energy를 직접 차분한다.
 `*_l2_pair_calibration.csv`, raw ITER equality, `pair_energy_basis=matched_iters_net_energy`,
@@ -322,16 +325,15 @@ ACTIVE_SM=132 \
 GPU=0 \
 BLOCKS_PER_SM=16 \
 REG_BLOCKS_PER_SM=16 \
-REG_W_SM_KIB=2048 \
+REG_W_SM_KIB=1 \
 L1_W_SM_KIB=16 \
 SHARED_W_SM_KIB=128 \
-L2_W_SM_KIB=64 \
+L2_W_SM_KIB_VALUES=64,128 \
 DRAM_W_SM_KIB_VALUES=2048,4096,8192 \
 REUSE_FACTOR=1 \
-LOAD_REPEAT=1 \
 TENSOR_REUSE_FACTORS=1,2,4,8,16 \
-MEMORY_LOAD_REPEATS=1,2,4,8,16 \
-DRAM_LOAD_REPEATS=1,4,16 \
+MEMORY_LOAD_REPEATS=4,8,16 \
+DRAM_LOAD_REPEATS=4,8,16 \
 OUTDIR=results/ncu/h100_component_finalplan_ncu_factor_$(date +%Y%m%d) \
 RAW_OUT=results/raw/h100_component_finalplan_ncu_factor_$(date +%Y%m%d).csv \
 bash scripts/run_ncu_validation.sh
@@ -363,16 +365,15 @@ ACTIVE_SM=132 \
 GPU=0 \
 BLOCKS_PER_SM=16 \
 REG_BLOCKS_PER_SM=16 \
-REG_W_SM_KIB=2048 \
+REG_W_SM_KIB=1 \
 L1_W_SM_KIB=16 \
 SHARED_W_SM_KIB=128 \
-L2_W_SM_KIB=64 \
+L2_W_SM_KIB_VALUES=64,128 \
 DRAM_W_SM_KIB_VALUES=2048,4096,8192 \
 REUSE_FACTOR=1 \
-LOAD_REPEAT=1 \
 TENSOR_REUSE_FACTORS=1,2,4,8,16 \
-MEMORY_LOAD_REPEATS=1,2,4,8,16 \
-DRAM_LOAD_REPEATS=1,4,16 \
+MEMORY_LOAD_REPEATS=4,8,16 \
+DRAM_LOAD_REPEATS=4,8,16 \
 OUTDIR=results/ncu/h100_component_finalplan_ncu_factor_$(date +%Y%m%d) \
 RAW_OUT=results/raw/h100_component_finalplan_ncu_factor_$(date +%Y%m%d).csv \
 bash scripts/run_ncu_validation.sh

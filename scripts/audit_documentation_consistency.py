@@ -119,7 +119,7 @@ REQUIRED_POLICY_TERMS = {
         "l2_logical_read_hit_rate_pct",
         "l2_native_vs_fabric_model_hit_delta_pct",
         "Not pure silicon-level energy",
-        "W_SM = 16, 32, 64, 128",
+        "W_SM = 16, 128",
     ),
     "docs/results/gpu_power_modeling_experiment_results_ko.md": (
         "Tensor와 모든 memory pair",
@@ -134,7 +134,7 @@ REQUIRED_POLICY_TERMS = {
         "--shared-pair-policy",
         "--l2-pair-policy",
         "matched-iters",
-        "GA100 applies 95% to final service after LTC-fabric recovery",
+        "Partition-fabric profiles apply 95% to final service after LTC-fabric recovery",
     ),
     "scripts/run_ncu_validation.sh": (
         "lts__t_sectors_srcunit_ltcfabric_op_read",

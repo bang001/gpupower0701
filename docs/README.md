@@ -22,6 +22,7 @@
 | A100/V100 외부 결과가 왜 탈락했고 무엇을 다시 받아야 하는가 | `docs/audits/a100_v100_external_result_remediation_ko.md` |
 | A100 L2 lookup 모집단 오류와 RTX Shared/L1 pair를 어떻게 교정했는가 | `docs/audits/a100_l2_counter_scope_and_rtx_pair_remediation_ko.md` |
 | Tensor MMA 구현·FLOP·cache 오염을 어떻게 감사했는가 | `docs/audits/tensor_mma_cross_architecture_implementation_audit_ko.md` |
+| Memory path와 제거한 sweep을 GPU별로 어떻게 감사했는가 | `docs/audits/memory_path_cross_architecture_sweep_audit_ko.md` |
 | 무엇이 archive로 이동했는가 | `docs/audits/repository_active_archive_audit_ko.md` |
 
 ## 실행 순서
@@ -39,10 +40,10 @@ GPU별 가이드:
 
 | GPU | 가이드 | 표준 실행 package |
 |---|---|---|
-| RTX 3090 | `README.md` | `results/summary/rtx3090_component_finalplan_20260712_commands.sh` |
-| V100 | `docs/platforms/v100_node_experiment_guide_ko.md` | `results/summary/v100_component_finalplan_20260708_commands.sh` |
+| RTX 3090 | `README.md` | `results/summary/rtx3090_component_finalplan_20260714_commands.sh` |
+| V100 | `docs/platforms/v100_node_experiment_guide_ko.md` | `results/summary/v100_component_finalplan_20260714_commands.sh` |
 | A100 | `docs/platforms/a100_node_experiment_guide_ko.md` | `results/summary/a100_component_finalplan_20260714_commands.sh` |
-| H100 | `docs/platforms/h100_node_experiment_guide_ko.md` | `results/summary/h100_component_finalplan_20260708_commands.sh` |
+| H100 | `docs/platforms/h100_node_experiment_guide_ko.md` | `results/summary/h100_component_finalplan_20260714_commands.sh` |
 
 새 실행에서는 날짜 tag로 package를 다시 생성하는 것이 가장 명확하다.
 
@@ -92,6 +93,7 @@ python3 scripts/plan_platform_component_experiment.py \
 | audits | `a100_v100_external_result_remediation_ko.md` | A100/V100 pair timing 및 L2 58-72% 외부 결과 교정 |
 | audits | `a100_l2_counter_scope_and_rtx_pair_remediation_ko.md` | A100 L2 counter scope와 RTX matched-control 교정 |
 | audits | `tensor_mma_cross_architecture_implementation_audit_ko.md` | Tensor v2/v3 오류, v4 구현, FLOP/cache 및 GPU별 검증 상태 |
+| audits | `memory_path_cross_architecture_sweep_audit_ko.md` | Shared/Global-L1/L2/external path 논리, exact-NCU coverage, 제거/유지 sweep |
 | audits | `v100_l2_iter_mismatch_remediation_ko.md` | V100 L2 동일 ITER 교정 |
 | audits | `v100_32gb_platform_review_ko.md` | V100 32GB SKU/toolchain 검토 |
 | audits | `literature_energy_values_audit_ko.md` | 문헌값과 측정 경계 비교 |

@@ -50,7 +50,22 @@ TAG="$(date +%Y%m%d)"
 | RTX 3090 (GA102) | `rtx3090` | `sm_86` | `build` | 실험 중 다른 그래픽/compute 부하를 최소화하고 현재 strict protocol로 재측정 | [cross-platform guide](docs/platforms/cross_platform_component_experiment_guide_ko.md) |
 | V100 (GV100) | `v100` | `sm_70` | `build-v100` | `compute_70`을 지원하는 CUDA 12.x 사용; CUDA 13.x는 `sm_70` 빌드 불가 | [V100 node guide](docs/platforms/v100_node_experiment_guide_ko.md) |
 | A100 (GA100) | `a100` | `sm_80` | `build-a100` | L2 NCU-first selector와 fabric-aware acceptance를 임의로 우회하지 않음 | [A100 node guide](docs/platforms/a100_node_experiment_guide_ko.md) |
-| H100 (GH100) | `h100` | `sm_90` | `build-h100` | 현재 Tensor 계수는 WMMA/HMMA compatibility path이며 WGMMA/TMA 계수가 아님 | [H100 node guide](docs/platforms/h100_node_experiment_guide_ko.md) |
+| H100 SXM5 profile (GH100) | `h100` | `sm_90` | `build-h100` | 132-SM/HBM3 profile; partition-fabric L2와 WMMA compatibility path 검증. PCIe SKU는 별도 label 필요 | [H100 node guide](docs/platforms/h100_node_experiment_guide_ko.md) |
+
+현행 strict 기본 좌표는 다음과 같다. Tensor만 utilization을 보기 위해 B 세 점을
+유지하고, memory path는 energy와 exact-coordinate NCU가 같은 단일 B anchor를 쓴다.
+
+| GPU | Tensor blocks/SM | memory blocks/SM | Shared W_SM (KiB/SM) | Global L1 W_SM (KiB/SM) | L2 W_SM (KiB/SM) | External W_SM (KiB/SM) | RF/LR |
+|---|---|---|---:|---:|---:|---:|---|
+| RTX 3090 | 4,8,16 | 8 | 64 | 8 | 32,64 | 256,512,2048 | RF 1,2,4,8,16; LR 4,8,16 |
+| V100 | 4,16,32 | 32 | 32 | 32 | 32,64; selector B32/16/4 | 256,512,2048 | RF 1,2,4,8,16; LR 4,8,16 |
+| A100 | 4,16,32 | 16 | 128 | 16 | 16,128; selector B16/8/4/2/1 | 2048,4096,8192 | RF 1,2,4,8,16; LR 4,8,16 |
+| H100 SXM5 | 4,16,32 | 16 | 128 | 16 | 64,128; selector B16/8 | 2048,4096,8192 | RF 1,2,4,8,16; LR 4,8,16 |
+
+기본 package는 각 플랫폼에서 72 energy commands, 5 repeats 기준 360 raw rows와
+73 final NCU cases를 만든다. A100/V100/H100 L2 selector precheck는 별도이며 첫 통과
+후 중단한다. 좌표 선정 근거와 제거한 sweep은
+[memory-path audit](docs/audits/memory_path_cross_architecture_sweep_audit_ko.md)에 기록한다.
 
 ### RTX 3090
 
@@ -162,7 +177,7 @@ Global L1/L2 energy pairs use `clocked_empty` and do not carry same-coordinate
 `global_addr_only` NCU acceptance. The current protocol requires address
 controls, exact control NCU acceptance, and pair-locked Tensor/Shared/Global-L1/L2/external-memory work. See
 `docs/audits/current_goal_alignment_audit_ko.md` and rerun
-`results/summary/rtx3090_component_finalplan_20260712_commands.sh` before
+`results/summary/rtx3090_component_finalplan_20260714_commands.sh` before
 publishing updated RTX 3090 coefficients.
 
 Historical RTX 3090 result artifacts:
@@ -171,7 +186,7 @@ Historical RTX 3090 result artifacts:
 |---|---|
 | current-protocol alignment audit | `docs/audits/current_goal_alignment_audit_ko.md` |
 | current-protocol reaudit of old strict result | `results/summary/rtx3090_current_protocol_reaudit_20260714.md` |
-| current-protocol rerun plan | `results/summary/rtx3090_component_finalplan_20260712_command_plan.md` |
+| current-protocol rerun plan | `results/summary/rtx3090_component_finalplan_20260714_command_plan.md` |
 | historical 2026-07-08 component summary | `results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.md` |
 | historical 2026-07-08 reliability audit | `results/summary/rtx3090_strict_scope_fresh_ncu_component_reliability_audit_20260708.md` |
 | historical 2026-07-08 NCU acceptance CSV | `results/summary/rtx3090_strict_scope_fresh_ncu_combined_acceptance_20260708.csv` |
@@ -304,19 +319,20 @@ Generated cross-platform command packages:
 |---|---|---|
 | A100 | `results/summary/a100_component_finalplan_20260714_command_plan.md` | `results/summary/a100_component_finalplan_20260714_commands.sh` |
 | A100 Tensor/L2 remediation | `results/summary/a100_tensor_l2_remediation_20260710_command_plan.md` | `results/summary/a100_tensor_l2_remediation_20260710_commands.sh` |
-| V100 | `results/summary/v100_component_finalplan_20260708_command_plan.md` | `results/summary/v100_component_finalplan_20260708_commands.sh` |
-| H100 | `results/summary/h100_component_finalplan_20260708_command_plan.md` | `results/summary/h100_component_finalplan_20260708_commands.sh` |
+| RTX 3090 | `results/summary/rtx3090_component_finalplan_20260714_command_plan.md` | `results/summary/rtx3090_component_finalplan_20260714_commands.sh` |
+| V100 | `results/summary/v100_component_finalplan_20260714_command_plan.md` | `results/summary/v100_component_finalplan_20260714_commands.sh` |
+| H100 | `results/summary/h100_component_finalplan_20260714_command_plan.md` | `results/summary/h100_component_finalplan_20260714_commands.sh` |
 
 These command packages are generated plans, not measured platform results. Run
 them on the matching target node after building the profile-specific binary, then
 rerun the power API, power-state, NCU, reliability, strict-summary, and goal
 readiness audits.
 
-The standard A100 and V100 finalplans run an NCU-first L2 selector before any
+The standard A100, V100, and H100 finalplans run an NCU-first L2 selector before any
 long energy sweep. The standalone A100 remediation package remains a focused
 diagnostic for the previously observed direct-partition hit range. The selector
 runs application-replay NCU prechecks over an ordered
-policy/address-layout/blocks-per-SM candidate list. On GA100, the 95% gate applies
+policy/address-layout/blocks-per-SM candidate list. On GA100 and GH100, the 95% gate applies
 to logical final service computed from source/TEX plus `srcunit_ltcfabric` hits;
 native lookup hit is checked against the reconstructed fabric model instead of
 being forced above 95%. It also requires observed L2 bytes to match logical
@@ -345,8 +361,8 @@ Prompt templates:
 - 1 logical op input footprint = A+B FP16 = 1KiB = 8192 bits.
 - `threads/block = 32`, so `blocks/SM = resident warps/SM`.
 
-For V100, the general energy diagnostic sweep uses `blocks/SM=4,16,32` and the
-strict NCU sidecar uses B32 for Shared/Global-L1 at `W_SM=32 KiB`. L2 first tests
+For V100, Tensor uses `blocks/SM=4,16,32`; Shared, Global-L1, and external-memory
+energy/NCU use B32. L2 first tests
 normal-residency contiguous B32 and sm-interleaved B32/B16/B4 at W32/W64, then
 uses the first strict-pass B in both L2 energy and minimal coherent L2 NCU. V100 does not use
 persisting-L2 controls. Because the
@@ -507,8 +523,8 @@ Single GPU Tensor Core treatment/control sanity run:
 ./build/a100_fp16_energy_v2 \
   --gpu-list 0 \
   --mode reg_operand_only \
-  --w-sm-kib 2048 \
-  --blocks-per-sm 16 \
+  --w-sm-kib 1 \
+  --blocks-per-sm 8 \
   --target-profile rtx3090 \
   --active-sm 82 \
   --seconds 10 \
@@ -518,8 +534,8 @@ Single GPU Tensor Core treatment/control sanity run:
 ./build/a100_fp16_energy_v2 \
   --gpu-list 0 \
   --mode reg_mma \
-  --w-sm-kib 2048 \
-  --blocks-per-sm 16 \
+  --w-sm-kib 1 \
+  --blocks-per-sm 8 \
   --target-profile rtx3090 \
   --active-sm 82 \
   --seconds 10 \
@@ -531,10 +547,10 @@ L2 and DRAM path examples:
 
 ```bash
 ./build/a100_fp16_energy_v2 --gpu-list 0 --mode l2_cg_load_only \
-  --w-sm-kib 64 --blocks-per-sm 16 --target-profile rtx3090 --active-sm 82 --seconds 10
+  --w-sm-kib 32 --blocks-per-sm 8 --target-profile rtx3090 --active-sm 82 --seconds 10
 
 ./build/a100_fp16_energy_v2 --gpu-list 0 --mode dram_cg_load_only \
-  --w-sm-kib 8192 --blocks-per-sm 16 --target-profile rtx3090 --active-sm 82 --seconds 10
+  --w-sm-kib 2048 --blocks-per-sm 8 --target-profile rtx3090 --active-sm 82 --seconds 10
 ```
 
 Idle baseline with zero active GPUs:
@@ -603,15 +619,16 @@ the design rule:
   memory treatment and its `global_addr_only` matched control.
 - `shared_resident`: `W_SM + B KiB <= profile shared KiB` and
   `W_SM/B <= profile max shared/block KiB`.
-- `l2_candidate`: full-profile working set fits the nominal profile L2
-  (`82 * W_SM <= 6MiB` for RTX 3090).
-- `dram_mixed_streaming`: full-profile working set exceeds nominal profile L2.
+- `l2_candidate`: runtime active-SM working set fits the nominal profile L2
+  (`active_SM * W_SM <= L2`).
+- `dram_mixed_streaming`: runtime active-SM working set exceeds nominal profile L2.
 
 The matrix CSV retains invalid rows with `valid=false`, but the runner does not
 execute them. With `--execute`, it first sends every unique valid coordinate to
 the binary with `--dry-run`; an unexpected Python/C++ feasibility mismatch is
-reported before any energy command starts. For A100 Global L1, W16/B16,
-W32/B16, and W32/B32 are valid, while W16/B32 is excluded.
+reported before any energy command starts. Generated strict profiles only use
+coordinates with at least 1 KiB/block; broader user overrides remain subject to
+this gate.
 
 ## Sweep
 

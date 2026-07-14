@@ -29,6 +29,8 @@ PROFILE_EXTERNAL_MEMORY = {
     "h100": "HBM3",
 }
 
+FABRIC_AWARE_L2_PROFILES = {"a100", "h100"}
+
 
 def f(row: dict[str, str], key: str, default: float = 0.0) -> float:
     value = row.get(key, "")
@@ -100,6 +102,7 @@ def memory_reason_if_high(
 def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
     mode = row.get("mode", "")
     ncu_status = row.get("status", "")
+    ncu_metric_profile = row.get("ncu_metric_profile", "")
     status = "rejected"
     component = "not_selected"
     reasons: list[str] = []
@@ -223,7 +226,7 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
 
     elif mode == "l2_cg_load_only":
         component = "l2_hit_path"
-        if row.get("ncu_metric_profile", "") != "l2_path_minimal":
+        if ncu_metric_profile != "l2_path_minimal":
             reasons.append("l2_metric_profile_not_minimal")
         required_l2_policy = getattr(args, "require_l2_residency_policy", "")
         required_l2_layout = getattr(args, "require_l2_address_layout", "")
@@ -236,13 +239,14 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
             reasons.append("l2_address_layout_mismatch")
         if not has_l2_path_hit:
             reasons.append("missing_l2_path_hit_rate")
-        if args.target_profile == "a100":
-            # GA100 has two L2 partitions. A miss in the directly connected
-            # partition can be recovered by a srcunit_ltcfabric hit in the
-            # other partition. Validate the final service path instead of
-            # requiring the first lookup or the double-lookup native ratio to
-            # be at least 95%.
-            l2_acceptance_model = "ga100_source_plus_ltcfabric"
+        if args.target_profile in FABRIC_AWARE_L2_PROFILES:
+            # GA100 and GH100 use partitioned L2 fabrics. A miss in the first
+            # lookup can be recovered through srcunit_ltcfabric. Validate the
+            # final service population instead of treating every routed lookup
+            # as a device-memory miss.
+            l2_acceptance_model = (
+                f"{args.target_profile}_source_plus_ltcfabric"
+            )
             l2_acceptance_hit_rate = l2_logical_hit
             if l2_fabric_metrics_present != 1.0:
                 reasons.append("missing_required_l2_fabric_metrics")
@@ -445,15 +449,33 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
 
     elif mode == "dram_cg_load_only":
         component = "external_memory_read_path"
+        if ncu_metric_profile != "l2_path_minimal":
+            reasons.append("external_metric_profile_not_minimal")
         if not has_l1_path_hit:
             reasons.append("missing_l1_path_hit_rate_for_external_memory")
         elif l1_path_hit > args.dram_l1_hit_max_pct:
             reasons.append("l1_hit_too_high_for_external_memory")
         external_l2_hit = l2_path_hit
         has_external_l2_hit = has_l2_path_hit
-        if args.target_profile == "a100":
+        if args.target_profile in FABRIC_AWARE_L2_PROFILES:
             external_l2_hit = l2_logical_hit
             has_external_l2_hit = has_l2_logical_hit
+            if l2_fabric_metrics_present != 1.0:
+                reasons.append("required_l2_fabric_metrics_absent")
+            if l2_fabric_counter_coherent != 1.0:
+                reasons.append("external_l2_fabric_counters_incoherent")
+            if l2_fabric_model_coherent != 1.0:
+                reasons.append("external_l2_fabric_model_incoherent")
+            if not has_l2_native_hit:
+                reasons.append("external_native_l2_hit_absent")
+            if not has_native_fabric_model_delta:
+                reasons.append("external_native_fabric_delta_absent")
+            elif (
+                native_fabric_model_delta >= 0.0
+                and native_fabric_model_delta
+                > args.l2_native_derived_delta_max_pct
+            ):
+                reasons.append("external_l2_native_fabric_model_mismatch")
         if not has_external_l2_hit:
             reasons.append("missing_l2_service_hit_rate_for_external_memory")
         dram_expected_l2_hit_pct = expected_l2_residency_hit_pct(
@@ -515,7 +537,7 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
         status = "accepted"
     elif component == "shared_memory_path" and reasons == ["missing_shared_read_bytes"]:
         status = "provisional"
-    elif component != "l2_hit_path" and all(
+    elif component not in {"l2_hit_path", "external_memory_read_path"} and all(
         reason.startswith("missing_") for reason in reasons
     ):
         status = "provisional"
@@ -958,8 +980,50 @@ def run_self_test() -> None:
     ]
     assert (
         observed_a100_failure["l2_acceptance_model"]
-        == "ga100_source_plus_ltcfabric"
+        == "a100_source_plus_ltcfabric"
     )
+
+    h100_args = argparse.Namespace(**vars(args))
+    h100_args.target_profile = "h100"
+    observed_h100_partition_recovery = classify(
+        {
+            **row,
+            "target_profile": "h100",
+            "l2_path_hit_rate_pct": "61",
+            "l2_native_read_hit_rate_pct": "73",
+            "l2_native_vs_derived_hit_delta_pct": "12",
+            "l2_logical_read_hit_rate_pct": "99.5",
+            "l2_fabric_hit_rate_pct": "98.7179",
+            "l2_fabric_model_native_hit_rate_pct": "73",
+            "l2_native_vs_fabric_model_hit_delta_pct": "0",
+        },
+        h100_args,
+    )
+    assert observed_h100_partition_recovery["acceptance"] == "accepted", (
+        observed_h100_partition_recovery["acceptance_reason"]
+    )
+    assert (
+        observed_h100_partition_recovery["l2_acceptance_model"]
+        == "h100_source_plus_ltcfabric"
+    )
+
+    h100_missing_fabric = classify(
+        {
+            **row,
+            "target_profile": "h100",
+            "l2_path_hit_rate_pct": "99.5",
+            "l2_logical_read_hit_rate_pct": "",
+            "l2_fabric_metrics_present": "0",
+            "l2_fabric_counter_coherent": "",
+            "l2_fabric_model_coherent": "",
+            "l2_native_vs_fabric_model_hit_delta_pct": "",
+        },
+        h100_args,
+    )
+    assert h100_missing_fabric["acceptance"] == "rejected"
+    assert "missing_required_l2_fabric_metrics" in h100_missing_fabric[
+        "acceptance_reason"
+    ]
 
     missing_fabric = classify(
         {
@@ -1092,8 +1156,29 @@ def run_self_test() -> None:
     missing_dram_path = classify(
         {**dram_stream, "l2_logical_read_hit_rate_pct": ""}, args
     )
-    assert missing_dram_path["acceptance"] == "provisional"
+    assert missing_dram_path["acceptance"] == "rejected"
     assert "missing_l2_service_hit_rate_for_external_memory" in missing_dram_path[
+        "acceptance_reason"
+    ]
+    full_profile_dram = classify(
+        {**dram_stream, "ncu_metric_profile": "full"}, args
+    )
+    assert full_profile_dram["acceptance"] == "rejected"
+    assert "external_metric_profile_not_minimal" in full_profile_dram[
+        "acceptance_reason"
+    ]
+    missing_dram_fabric = classify(
+        {
+            **dram_stream,
+            "l2_fabric_metrics_present": "0",
+            "l2_fabric_counter_coherent": "",
+            "l2_fabric_model_coherent": "",
+            "l2_native_vs_fabric_model_hit_delta_pct": "",
+        },
+        args,
+    )
+    assert missing_dram_fabric["acceptance"] == "rejected"
+    assert "required_l2_fabric_metrics_absent" in missing_dram_fabric[
         "acceptance_reason"
     ]
     strict_tensor_control = {
@@ -1225,7 +1310,7 @@ def main() -> int:
         type=float,
         default=2.0,
         help=(
-            "Maximum hit-rate delta in percentage points. A100 compares native "
+            "Maximum hit-rate delta in percentage points. A100/H100 compare native "
             "against the source+LTC-fabric model; other profiles compare native "
             "against the direct path rate. The old option is retained as an alias."
         ),

@@ -551,13 +551,14 @@ source/fabric sector conservation이 0.98-1.02, observed/expected traffic이
 0.95-1.05여야 strict precheck를 통과한다. direct source나 native lookup hit 자체에는
 95%를 요구하지 않는다. 또한
 `hit+miss/read`가 0.98-1.02를 벗어나면 replay counter 자체가 불일치한 것이므로 두 hit
-비율 모두 coefficient 근거에서 제외한다. 현행 package는 L2를
-`NCU_METRIC_PROFILE=l2_path_minimal`로 별도 실행하고, Tensor/Shared/L1/DRAM의 `full`
-summary와 source를 보존해 merge한다. 최종 확인 파일은 다음과 같다.
+비율 모두 coefficient 근거에서 제외한다. 현행 package는 L2와 external-memory를
+각각 `NCU_METRIC_PROFILE=l2_path_minimal`로 실행하고 Tensor/Shared/L1은 `full`
+summary를 사용한다. 세 source를 보존해 merge하며 최종 확인 파일은 다음과 같다.
 
 ```text
 results/ncu/a100_component_finalplan_ncu_factor_<tag>/
   l2_selected_minimal/ncu_cache_validation_summary.csv
+  external_memory_minimal/ncu_cache_validation_summary.csv
   full_non_l2/ncu_cache_validation_summary.csv
   ncu_cache_validation_summary.csv
 ```
@@ -565,40 +566,35 @@ results/ncu/a100_component_finalplan_ncu_factor_<tag>/
 RTX 3090/A100/V100의 전체 파라미터와 command 개수 비교는
 [cross-platform component experiment guide](cross_platform_component_experiment_guide_ko.md)의
 4.0-4.5절을 기준으로 한다. 현재 A100 표준 package는 L2 precheck가 선택한 blocks/SM
-하나만 L2 energy에 사용한다. 유효 좌표는 122개/1 repeat, `repeats=5`에서 energy raw
-610행이며 Tensor pair calibration 10 coordinates/20 commands, L2 pair calibration
-12 coordinates/24 commands, external-memory pair calibration 18 coordinates/36 commands, schema
-smoke 3행이다. Shared control case와 L2 후보 수가 변경될 수 있으므로 primary NCU case
-수는 생성된 command plan을 기준으로 기록한다. L2 selector는 첫 후보 통과 시 조기 종료하며
+하나만 L2 energy에 사용한다. 유효 좌표는 72개/1 repeat, `repeats=5`에서 energy raw
+360행이며 Tensor pair calibration 15 coordinates/30 commands, L2 pair calibration
+6 coordinates/12 commands, external-memory pair calibration 9 coordinates/18 commands, schema
+smoke 3행, primary NCU 73 cases다. L2 selector는 첫 후보 통과 시 조기 종료하며
 최악에는 14 candidates x 2 W x 2 modes = 56개 NCU precheck case를 추가한다.
 
 | Component | modes | W_SM (KiB) | blocks/SM | factor |
 |---|---|---:|---:|---|
 | Tensor | `reg_operand_only,reg_mma` | N/A (CLI placeholder 1) | 4,16,32 | reuse 1,2,4,8,16 |
-| Shared scalar | `shared_scalar_addr_only,shared_scalar_load_only` | 64,128 | 16,32 | energy load_repeat 4,8,16; NCU 1,2,4,8,16; 동일 pair ITER |
-| Global L1 | `global_addr_only,global_l1_load_only` | 16,32 | valid W/B: 16/16, 32/16, 32/32 | energy load_repeat 4,8,16; strict NCU W16/B16, NCU factor 1,2,4,8,16 |
-| L2 CG | `global_addr_only,l2_cg_load_only` | 16,32,64,128 | NCU precheck가 B16/B8/B4/B2/B1 중 하나 선택 | energy load_repeat 4,8,16; 동일 pair ITER; NCU는 선택 B와 네 W 모두에서 1,2,4,8,16 |
-| External-memory read path | `global_addr_only,dram_cg_load_only` | 2048,4096,8192 | 16,32 | energy load_repeat 4,8,16; NCU 1,4,8,16; strict read-byte gate |
+| Shared scalar | `shared_scalar_addr_only,shared_scalar_load_only` | 128 | 16 | energy/NCU load_repeat 4,8,16; 동일 pair ITER |
+| Global L1 | `global_addr_only,global_l1_load_only` | 16 | 16 | energy/NCU load_repeat 4,8,16; exact W/B |
+| L2 CG | `global_addr_only,l2_cg_load_only` | 16,128 | NCU precheck가 B16/B8/B4/B2/B1 중 하나 선택 | energy/final NCU load_repeat 4,8,16; selector는 LR4만 probe |
+| External-memory read path | `global_addr_only,dram_cg_load_only` | 2048,4096,8192 | 16 | energy/NCU load_repeat 4,8,16; strict read-byte gate |
 
 ### A100 sweep를 그래프로 해석하기
 
 ![플랫폼별 W_SM path sweep](../presentations/assets/platform_wsm_path_sweep.png)
 
-- Shared W64/W128은 164 KiB shared allocation profile 안에서 낮은 점과 높은 점을 비교한다.
-  strict W128/B16의 보수적 예약량은 `128+16=144 KiB/SM`이다.
-- Global L1 W16/W32는 B16/B32에서 block당 1 KiB 이상을 유지하는 작은 cached-global
-  working set이다. W16/B32는 0.5 KiB/block이므로 실행하지 않는다.
-- L2 W16/W32/W64/W128은 전체 1.688/3.375/6.75/13.5 MiB로 40 MiB L2 안의
-  plateau 후보다. 네 점 모두 L2라는 뜻이 아니라 NCU L1 bypass와 L2 read hit를 통과한
-  점만 채택한다.
+- Shared W128/B16의 보수적 예약량은 `128+16=144 KiB/SM`이며 energy와 NCU가 동일 좌표다.
+- Global L1 W16/B16은 block당 1 KiB를 유지하는 cached-global anchor다.
+- L2 W16/W128은 전체 1.688/13.5 MiB로 40 MiB L2 안의 두 endpoint다. 두 점 모두
+  NCU L1 bypass와 source+fabric final-service gate를 통과해야 한다.
 - External-memory W2048/4096/8192는 전체 216/432/864 MiB, 즉 40 MiB L2의
   5.4/10.8/21.6배다. final L2 hit <=10%, DRAM read/L2 read >=90%, write/read <=1%를 확인한다.
 
 ![strict anchor capacity 맥락](../presentations/assets/platform_capacity_context.png)
 
-A100 L2 strict anchor W16은 nominal L2의 약 4.2%에 불과하므로 대표값 하나만으로 다른
-GPU의 40-85% anchor와 직접 비교하지 않는다. A100은 네 W의 coefficient/hit/stall plateau를
-함께 보고 선택한다.
+A100 L2 W16은 nominal L2의 약 4.2%, W128은 약 33.8%다. 두 endpoint의
+coefficient/hit/stall plateau를 함께 보고 선택한다.
 
 Tensor는 각 `W/B/SM/RF` 좌표에서 `reg_mma`를 treatment 목표시간으로,
 `reg_operand_only`를 control 최소시간으로 각각 calibration하고 두 ITER 중 큰 값을
@@ -654,13 +650,11 @@ ITER 중 큰 값을 두 mode에 동일하게 전달한다. 분석은
 `pair_energy_basis=matched_iters_net_energy`, `iter_ratio=1`이 모두 일치해야
 effective external-memory 후보가 된다. 물리 HBM2 energy로 해석하지 않는다.
 
-`W16/B32`는 block당 0.5 KiB이므로 Global L1과 L2 CG의
-`global_addr_only`/treatment 모두 matrix에서 `valid=false`로 남기고 실행하지 않는다.
-B32 L1 diagnostic은 W32/B32에서만 수행한다. 표준 runner는 energy 수집 전에 unique valid 좌표를
-binary `--dry-run`으로 다시 검사하므로 Python/C++ feasibility가 어긋나면 첫 측정 전에
-명확한 좌표와 return code를 출력하고 중단한다.
+기본 A100 memory 좌표는 모두 block당 최소 1 KiB를 만족한다. 사용자 override도 표준
+runner가 energy 수집 전에 binary `--dry-run`으로 재검사하므로 Python/C++ feasibility가
+어긋나면 첫 측정 전에 명확한 좌표와 return code를 출력하고 중단한다.
 
-A100의 L2는 40 MiB이므로 `W_SM=256 KiB`와 active SM 108개는 전체 27 MiB로 L2 경계에 너무 가깝다. 이 설정은 L2 set/conflict와 background traffic에 따라 hit rate가 흔들릴 수 있다. strict L2 path는 `W_SM=16,32,64,128 KiB`(전체 약 1.688, 3.375, 6.75, 13.5 MiB)를 모두 `ld.global.cg`로 실행한다. path-specific NCU에서 L1 hit가 거의 없고, source/TEX miss 중 LTC-fabric hit를 더한 logical final-service L2 hit가 95% 이상인 plateau만 선택한다. 시간 측정 전 warm-up도 `global_cg_warmup_kernel`의 `ld.global.cg.u32`로 4회 수행한다. NCU는 `application replay + cache-control none`을 사용해 metric pass마다 application과 warm-up을 다시 실행한다. `l2_load_only`는 normal global load라 L1 hit와 섞일 수 있으므로 final L2 coefficient에는 사용하지 않는다.
+A100의 L2는 40 MiB이므로 `W_SM=256 KiB`와 active SM 108개는 전체 27 MiB로 L2 경계에 너무 가깝다. strict L2 path는 `W_SM=16,128 KiB`(전체 약 1.688, 13.5 MiB)를 `ld.global.cg`로 실행한다. path-specific NCU에서 L1 hit가 거의 없고, source/TEX miss 중 LTC-fabric hit를 더한 logical final-service L2 hit가 95% 이상인 plateau만 선택한다. 시간 측정 전 warm-up도 `global_cg_warmup_kernel`의 `ld.global.cg.u32`로 4회 수행한다. NCU는 `application replay + cache-control none`을 사용해 metric pass마다 application과 warm-up을 다시 실행한다. 중간 W32/W64가 필요하면 별도 discovery tag로 실행하며, `l2_load_only`는 normal global load라 final L2 coefficient에는 사용하지 않는다.
 
 CG raw row의 `notes`에는 `global_warmup_policy=ld_global_cg`가 있어야 하며,
 없으면 stale binary로 보고 package audit에서 reject한다.

@@ -133,8 +133,12 @@ def evaluate_candidate(
             reasons.append("l1_bypass_failed")
         if not math.isfinite(derived_hit):
             reasons.append("missing_derived_l2_hit")
-        if target_profile == "a100":
-            native_gate = "ga100_fabric_model"
+        if target_profile in {"a100", "h100"}:
+            native_gate = (
+                "ga100_fabric_model"
+                if target_profile == "a100"
+                else "gh100_fabric_model"
+            )
             if not math.isfinite(logical_hit) or logical_hit < 95.0:
                 reasons.append("logical_l2_hit_below_95pct")
             elif logical_hit > 100.5:
@@ -465,6 +469,43 @@ def self_test() -> None:
         load_repeat=4,
     )
     assert not choose([a100_without_native])
+    h100_rows = [
+        {
+            **row,
+            "W_SM_KiB": "64" if row["W_SM_KiB"] == "16" else "128",
+            "target_profile": "h100",
+        }
+        for row in rows
+    ]
+    h100_evaluated = evaluate_candidate(
+        h100_rows,
+        target_profile="h100",
+        policy="normal",
+        layout="sm_interleaved",
+        blocks_per_sm=8,
+        expected_w=(64, 128),
+        load_repeat=4,
+    )
+    assert choose([h100_evaluated])["native_l2_gate"] == "gh100_fabric_model"
+    h100_missing_fabric = evaluate_candidate(
+        [
+            {
+                **row,
+                "l2_fabric_metrics_present": "0",
+                "l2_fabric_counter_coherent": "",
+                "l2_fabric_model_coherent": "",
+                "l2_native_vs_fabric_model_hit_delta_pct": "",
+            }
+            for row in h100_rows
+        ],
+        target_profile="h100",
+        policy="normal",
+        layout="sm_interleaved",
+        blocks_per_sm=8,
+        expected_w=(64, 128),
+        load_repeat=4,
+    )
+    assert not choose([h100_missing_fabric])
     try:
         parse_candidate(
             "persisting:contiguous:16:unused.csv", target_profile="v100"

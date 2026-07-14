@@ -656,6 +656,15 @@ def run_self_test() -> None:
     valid_tile = classify(32, 32, a100)
     assert mode_allowed("global_addr_only", valid_tile)
     assert mode_allowed("global_l1_load_only", valid_tile)
+
+    # Regime classification must follow the measured active-SM partition, not
+    # the full reference GPU. This matters for reduced-SM, MIG, and vGPU runs.
+    reduced_sm_l2 = classify(512, 16, a100, active_sm=8)
+    full_sm_streaming = classify(512, 16, a100, active_sm=108)
+    assert reduced_sm_l2["regime"] == "l2_candidate"
+    assert full_sm_streaming["regime"] == "dram_mixed_streaming"
+    assert reduced_sm_l2["full_gpu_working_set_mib"] == 4.0
+    assert full_sm_streaming["full_gpu_working_set_mib"] == 54.0
     assert parse_calibrated_iters("ITER=7\nCALIBRATED_ITERS=123\n") == 123
     try:
         parse_calibrated_iters("ITER=123\n")
@@ -1142,8 +1151,10 @@ def main() -> int:
 
         for w_sm_kib in w_values:
             for blocks_per_sm in b_values:
-                info = classify(w_sm_kib, blocks_per_sm, profile)
                 for active_sm in active_sm_values:
+                    info = classify(
+                        w_sm_kib, blocks_per_sm, profile, active_sm
+                    )
                     for n_gpu in n_gpu_values:
                         gpu_list = gpu_list_for_count(gpu_ids, n_gpu)
                         for reuse_factor in reuse_factors:
