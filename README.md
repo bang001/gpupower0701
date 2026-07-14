@@ -30,6 +30,115 @@ known limitations are tracked in `docs/audits/component_energy_self_critique_ko.
 For the detailed NCU validation and pJ/FLOP or pJ/byte calculation method, see
 `docs/methodology/ncu_validation_energy_calculation_ko.md`.
 
+## Platform별 빠른 실행 가이드
+
+항상 대상 GPU 노드에서 최신 `main`을 받은 뒤 **새로운 날짜 태그로 command
+package를 생성**한다. 저장소에 포함된 과거 날짜의 `*_commands.sh`는 당시
+프로토콜을 재현하기 위한 자료이며, 새 실험의 기본 진입점이 아니다.
+
+```bash
+git switch main
+git pull --ff-only origin main
+nvidia-smi
+nvcc --version
+ncu --version
+TAG="$(date +%Y%m%d)"
+```
+
+| GPU | planner profile | CUDA arch | build directory | 실행 전 핵심 확인 | 상세 가이드 |
+|---|---|---:|---|---|---|
+| RTX 3090 (GA102) | `rtx3090` | `sm_86` | `build` | 실험 중 다른 그래픽/compute 부하를 최소화하고 현재 strict protocol로 재측정 | [cross-platform guide](docs/platforms/cross_platform_component_experiment_guide_ko.md) |
+| V100 (GV100) | `v100` | `sm_70` | `build-v100` | `compute_70`을 지원하는 CUDA 12.x 사용; CUDA 13.x는 `sm_70` 빌드 불가 | [V100 node guide](docs/platforms/v100_node_experiment_guide_ko.md) |
+| A100 (GA100) | `a100` | `sm_80` | `build-a100` | L2 NCU-first selector와 fabric-aware acceptance를 임의로 우회하지 않음 | [A100 node guide](docs/platforms/a100_node_experiment_guide_ko.md) |
+| H100 (GH100) | `h100` | `sm_90` | `build-h100` | 현재 Tensor 계수는 WMMA/HMMA compatibility path이며 WGMMA/TMA 계수가 아님 | [H100 node guide](docs/platforms/h100_node_experiment_guide_ko.md) |
+
+### RTX 3090
+
+```bash
+cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES=86
+cmake --build build --clean-first -j
+
+python3 scripts/plan_platform_component_experiment.py \
+  --target-profile rtx3090 \
+  --binary ./build/a100_fp16_energy_v2 \
+  --tag "$TAG"
+
+bash "results/summary/rtx3090_component_finalplan_${TAG}_commands.sh"
+```
+
+### V100
+
+V100은 먼저 선택한 CUDA toolkit이 `compute_70`을 제공하는지 확인한다.
+
+```bash
+nvcc --list-gpu-arch | grep -q compute_70
+cmake -S . -B build-v100 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES=70
+cmake --build build-v100 --clean-first -j
+
+python3 scripts/plan_platform_component_experiment.py \
+  --target-profile v100 \
+  --binary ./build-v100/a100_fp16_energy_v2 \
+  --tag "$TAG"
+
+bash "results/summary/v100_component_finalplan_${TAG}_commands.sh"
+```
+
+### A100
+
+```bash
+cmake -S . -B build-a100 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES=80
+cmake --build build-a100 --clean-first -j
+
+python3 scripts/plan_platform_component_experiment.py \
+  --target-profile a100 \
+  --binary ./build-a100/a100_fp16_energy_v2 \
+  --tag "$TAG"
+
+bash "results/summary/a100_component_finalplan_${TAG}_commands.sh"
+```
+
+### H100
+
+```bash
+cmake -S . -B build-h100 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES=90
+cmake --build build-h100 --clean-first -j
+
+python3 scripts/plan_platform_component_experiment.py \
+  --target-profile h100 \
+  --binary ./build-h100/a100_fp16_energy_v2 \
+  --tag "$TAG"
+
+bash "results/summary/h100_component_finalplan_${TAG}_commands.sh"
+```
+
+생성된 shell은 strict preflight, power/energy 측정, treatment-control NCU
+검증, matched-control 분석, reliability audit, strict summary 및 package
+audit를 순서대로 수행한다. NCU가 `ERR_NVGPUCTRPERM`을 반환하면 기본 자동
+재시도가 `sudo -E`를 사용한다. 처음부터 sudo NCU를 강제하려면 다음처럼
+실행한다. 전체 energy harness가 아니라 NCU invocation만 권한 상승 대상이다.
+
+```bash
+NCU_USE_SUDO=1 bash \
+  "results/summary/<profile>_component_finalplan_${TAG}_commands.sh"
+```
+
+실험 완료는 단순히 shell이 끝났다는 뜻이 아니다. `results/summary/`에서
+power API audit, power-state audit, NCU acceptance, matched-control,
+reliability, strict component summary와 package audit가 모두 생성되고 각 필수
+gate가 통과했는지 확인해야 한다. 특정 경로가 reject되면 계수를 임의로 채우지
+말고 해당 경로를 미측정 상태로 보고한다. 플랫폼별 capacity, sweep 좌표,
+NVML 의미 및 NCU counter 차이는
+[cross-platform guide](docs/platforms/cross_platform_component_experiment_guide_ko.md)와
+[power API matrix](docs/platforms/power_measurement_api_matrix_ko.md)를 함께 확인한다.
+
 For a quick map of active vs archived material, start with `docs/README.md` and
 `scripts/README.md`. Legacy design/code paths are kept under
 `archive/legacy_20260707/`.
