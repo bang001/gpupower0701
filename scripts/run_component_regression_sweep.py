@@ -15,6 +15,7 @@ import csv
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +61,8 @@ MEMORY_PAIR_SPECS = {
     "dram_cg_load_only": ("global_addr_only", "dram"),
 }
 MEMORY_PAIR_TREATMENT_MODES = set(MEMORY_PAIR_SPECS)
+DEFAULT_PAIR_MAX_TREATMENT_STRETCH = 6.0
+DEFAULT_MAX_COMMAND_WALL_SECONDS = 180.0
 ATOMIC_MODE_PAIRS = {
     frozenset({"reg_operand_only", "reg_mma"}): ("reg_operand_only", "reg_mma"),
     frozenset({"shared_scalar_addr_only", "shared_scalar_load_only"}): (
@@ -233,6 +236,13 @@ def tensor_pair_groups(
     )
 
 
+@dataclass(frozen=True)
+class CalibrationResult:
+    target_iters: int
+    trial_iters: int
+    trial_elapsed_s: float
+
+
 def parse_calibrated_iters(output: str) -> int:
     match = re.search(r"(?:^|\n)CALIBRATED_ITERS=(\d+)(?:\n|$)", output)
     if not match:
@@ -241,6 +251,34 @@ def parse_calibrated_iters(output: str) -> int:
     if value <= 0:
         raise ValueError("calibrated ITER must be positive")
     return value
+
+
+def parse_calibration_result(output: str) -> CalibrationResult:
+    target_iters = parse_calibrated_iters(output)
+    trial_iters_match = re.search(
+        r"(?:^|\n)CALIBRATION_TRIAL_ITERS=(\d+)(?:\n|$)", output
+    )
+    trial_elapsed_match = re.search(
+        r"(?:^|\n)CALIBRATION_TRIAL_ELAPSED_S=([0-9.eE+-]+)(?:\n|$)",
+        output,
+    )
+    reached_floor_match = re.search(
+        r"(?:^|\n)CALIBRATION_REACHED_FLOOR=([01])(?:\n|$)", output
+    )
+    if not trial_iters_match or not trial_elapsed_match or not reached_floor_match:
+        raise ValueError(
+            "calibration output lacks runtime-floor evidence; rebuild the benchmark "
+            "with the current calibration protocol"
+        )
+    trial_iters = int(trial_iters_match.group(1))
+    trial_elapsed_s = float(trial_elapsed_match.group(1))
+    if trial_iters <= 0 or trial_elapsed_s < 0.05:
+        raise ValueError(
+            "calibration trial did not demonstrate at least 50 ms of kernel runtime"
+        )
+    if reached_floor_match.group(1) != "1":
+        raise ValueError("calibration explicitly reported an unmet runtime floor")
+    return CalibrationResult(target_iters, trial_iters, trial_elapsed_s)
 
 
 def replace_command_option(command: list[str], option: str, value: str) -> list[str]:
@@ -281,9 +319,16 @@ def write_pair_calibration_manifest(
         "calibration_source_mode",
         "treatment_target_seconds",
         "control_min_seconds",
+        "treatment_trial_iters",
+        "treatment_trial_elapsed_s",
+        "control_trial_iters",
+        "control_trial_elapsed_s",
         "treatment_calibrated_iters",
         "control_min_calibrated_iters",
         "resolved_iters",
+        "control_to_treatment_iter_ratio",
+        "predicted_treatment_seconds",
+        "max_treatment_stretch",
         "resolution_policy",
         "status",
         "calibration_command",
@@ -332,6 +377,7 @@ def resolve_tensor_pair_iters(
     manifest_path: Path,
     *,
     control_min_seconds: float = 0.0,
+    max_treatment_stretch: float = DEFAULT_PAIR_MAX_TREATMENT_STRETCH,
 ) -> tuple[int, dict[tuple[str, ...], int]]:
     groups: dict[tuple[str, ...], dict[str, dict[str, Any]]] = {}
     for item in commands:
@@ -371,7 +417,8 @@ def resolve_tensor_pair_iters(
                 print(proc.stdout.rstrip(), file=sys.stderr)
             return proc.returncode, resolved
         try:
-            treatment_iters = parse_calibrated_iters(proc.stdout)
+            treatment_calibration = parse_calibration_result(proc.stdout)
+            treatment_iters = treatment_calibration.target_iters
         except ValueError as exc:
             print(f"Tensor treatment calibration failed: {exc}; key={key}", file=sys.stderr)
             if proc.stdout:
@@ -379,6 +426,7 @@ def resolve_tensor_pair_iters(
             return 2, resolved
 
         control_iters = 0
+        control_calibration: CalibrationResult | None = None
         control_calibration_command: list[str] = []
         if control_min_seconds > 0.0:
             try:
@@ -406,19 +454,29 @@ def resolve_tensor_pair_iters(
                     print(proc.stdout.rstrip(), file=sys.stderr)
                 return proc.returncode, resolved
             try:
-                control_iters = parse_calibrated_iters(proc.stdout)
+                control_calibration = parse_calibration_result(proc.stdout)
+                control_iters = control_calibration.target_iters
             except ValueError as exc:
                 print(f"Tensor control-min calibration failed: {exc}; key={key}", file=sys.stderr)
                 if proc.stdout:
                     print(proc.stdout.rstrip(), file=sys.stderr)
                 return 2, resolved
 
+        treatment_target_seconds = float(
+            command_option_value(treatment["cmd"], "--seconds")
+        )
+        control_to_treatment_ratio = (
+            control_iters / treatment_iters if control_iters > 0 else 0.0
+        )
+        treatment_stretch = max(1.0, control_to_treatment_ratio)
+        predicted_treatment_seconds = treatment_target_seconds * treatment_stretch
         iters = max(treatment_iters, control_iters)
+        status = (
+            "pair_locked"
+            if treatment_stretch <= max_treatment_stretch
+            else "reject_control_iter_stretch"
+        )
         resolved[key] = iters
-        for item in by_mode.values():
-            item["cmd"].extend(["--iters", str(iters)])
-            item["resolved_iters"] = iters
-            item["measurement_policy"] = "tensor_pair_locked_iters"
         rows.append(
             {
                 "target_profile": key[0],
@@ -430,19 +488,28 @@ def resolve_tensor_pair_iters(
                 "load_repeat": key[6],
                 "store_repeat": key[7],
                 "calibration_source_mode": "reg_mma",
-                "treatment_target_seconds": command_option_value(
-                    treatment["cmd"], "--seconds"
-                ),
+                "treatment_target_seconds": treatment_target_seconds,
                 "control_min_seconds": control_min_seconds,
+                "treatment_trial_iters": treatment_calibration.trial_iters,
+                "treatment_trial_elapsed_s": treatment_calibration.trial_elapsed_s,
+                "control_trial_iters": (
+                    control_calibration.trial_iters if control_calibration else ""
+                ),
+                "control_trial_elapsed_s": (
+                    control_calibration.trial_elapsed_s if control_calibration else ""
+                ),
                 "treatment_calibrated_iters": treatment_iters,
                 "control_min_calibrated_iters": control_iters if control_min_seconds > 0.0 else "",
                 "resolved_iters": iters,
+                "control_to_treatment_iter_ratio": control_to_treatment_ratio,
+                "predicted_treatment_seconds": predicted_treatment_seconds,
+                "max_treatment_stretch": max_treatment_stretch,
                 "resolution_policy": (
                     "max_treatment_and_control_min_iters"
                     if control_min_seconds > 0.0
                     else "treatment_iters_only"
                 ),
-                "status": "pair_locked",
+                "status": status,
                 "calibration_command": " ".join(treatment_calibration_command),
                 "treatment_calibration_command": " ".join(
                     treatment_calibration_command
@@ -452,6 +519,22 @@ def resolve_tensor_pair_iters(
                 ),
             }
         )
+        if status != "pair_locked":
+            write_pair_calibration_manifest(manifest_path, rows)
+            print(
+                "Tensor pair calibration rejected before energy collection: "
+                f"W={key[2]}KiB B={key[3]} SM={key[4]} RF={key[5]} "
+                f"control/treatment ITER ratio={control_to_treatment_ratio:.3f}, "
+                f"predicted treatment={predicted_treatment_seconds:.3f}s, "
+                f"limit={treatment_target_seconds * max_treatment_stretch:.3f}s. "
+                "The control loop may have been optimized away.",
+                file=sys.stderr,
+            )
+            return 2, {}
+        for item in by_mode.values():
+            item["cmd"].extend(["--iters", str(iters)])
+            item["resolved_iters"] = iters
+            item["measurement_policy"] = "tensor_pair_locked_iters"
         print(
             "Tensor pair calibration: "
             f"W={key[2]}KiB B={key[3]} SM={key[4]} RF={key[5]} "
@@ -470,6 +553,7 @@ def resolve_memory_pair_iters(
     *,
     treatment_mode: str,
     control_min_seconds: float = 0.0,
+    max_treatment_stretch: float = DEFAULT_PAIR_MAX_TREATMENT_STRETCH,
 ) -> tuple[int, dict[tuple[str, ...], int]]:
     """Calibrate a memory-path treatment/control pair to identical ITER."""
 
@@ -522,7 +606,8 @@ def resolve_memory_pair_iters(
                 print(proc.stdout.rstrip(), file=sys.stderr)
             return proc.returncode, resolved
         try:
-            treatment_iters = parse_calibrated_iters(proc.stdout)
+            treatment_calibration = parse_calibration_result(proc.stdout)
+            treatment_iters = treatment_calibration.target_iters
         except ValueError as exc:
             print(
                 f"{pair_label} treatment calibration failed: {exc}; key={key}",
@@ -533,6 +618,7 @@ def resolve_memory_pair_iters(
             return 2, resolved
 
         control_iters = 0
+        control_calibration: CalibrationResult | None = None
         control_calibration_command: list[str] = []
         if control_min_seconds > 0.0:
             try:
@@ -563,7 +649,8 @@ def resolve_memory_pair_iters(
                     print(proc.stdout.rstrip(), file=sys.stderr)
                 return proc.returncode, resolved
             try:
-                control_iters = parse_calibrated_iters(proc.stdout)
+                control_calibration = parse_calibration_result(proc.stdout)
+                control_iters = control_calibration.target_iters
             except ValueError as exc:
                 print(
                     f"{pair_label} control-min calibration failed: {exc}; key={key}",
@@ -573,12 +660,21 @@ def resolve_memory_pair_iters(
                     print(proc.stdout.rstrip(), file=sys.stderr)
                 return 2, resolved
 
+        treatment_target_seconds = float(
+            command_option_value(treatment["cmd"], "--seconds")
+        )
+        control_to_treatment_ratio = (
+            control_iters / treatment_iters if control_iters > 0 else 0.0
+        )
+        treatment_stretch = max(1.0, control_to_treatment_ratio)
+        predicted_treatment_seconds = treatment_target_seconds * treatment_stretch
         iters = max(treatment_iters, control_iters)
+        status = (
+            "pair_locked"
+            if treatment_stretch <= max_treatment_stretch
+            else "reject_control_iter_stretch"
+        )
         resolved[key] = iters
-        for item in by_mode.values():
-            item["cmd"].extend(["--iters", str(iters)])
-            item["resolved_iters"] = iters
-            item["measurement_policy"] = f"{policy_prefix}_pair_locked_iters"
         rows.append(
             {
                 "target_profile": key[0],
@@ -590,21 +686,30 @@ def resolve_memory_pair_iters(
                 "load_repeat": key[6],
                 "store_repeat": key[7],
                 "calibration_source_mode": treatment_mode,
-                "treatment_target_seconds": command_option_value(
-                    treatment["cmd"], "--seconds"
-                ),
+                "treatment_target_seconds": treatment_target_seconds,
                 "control_min_seconds": control_min_seconds,
+                "treatment_trial_iters": treatment_calibration.trial_iters,
+                "treatment_trial_elapsed_s": treatment_calibration.trial_elapsed_s,
+                "control_trial_iters": (
+                    control_calibration.trial_iters if control_calibration else ""
+                ),
+                "control_trial_elapsed_s": (
+                    control_calibration.trial_elapsed_s if control_calibration else ""
+                ),
                 "treatment_calibrated_iters": treatment_iters,
                 "control_min_calibrated_iters": (
                     control_iters if control_min_seconds > 0.0 else ""
                 ),
                 "resolved_iters": iters,
+                "control_to_treatment_iter_ratio": control_to_treatment_ratio,
+                "predicted_treatment_seconds": predicted_treatment_seconds,
+                "max_treatment_stretch": max_treatment_stretch,
                 "resolution_policy": (
                     "max_treatment_and_control_min_iters"
                     if control_min_seconds > 0.0
                     else "treatment_iters_only"
                 ),
-                "status": "pair_locked",
+                "status": status,
                 "calibration_command": " ".join(treatment_calibration_command),
                 "treatment_calibration_command": " ".join(
                     treatment_calibration_command
@@ -614,6 +719,22 @@ def resolve_memory_pair_iters(
                 ),
             }
         )
+        if status != "pair_locked":
+            write_pair_calibration_manifest(manifest_path, rows)
+            print(
+                f"{pair_label} pair calibration rejected before energy collection: "
+                f"W={key[2]}KiB B={key[3]} SM={key[4]} LR={key[6]} "
+                f"control/treatment ITER ratio={control_to_treatment_ratio:.3f}, "
+                f"predicted treatment={predicted_treatment_seconds:.3f}s, "
+                f"limit={treatment_target_seconds * max_treatment_stretch:.3f}s. "
+                "The control loop may have been optimized away.",
+                file=sys.stderr,
+            )
+            return 2, {}
+        for item in by_mode.values():
+            item["cmd"].extend(["--iters", str(iters)])
+            item["resolved_iters"] = iters
+            item["measurement_policy"] = f"{policy_prefix}_pair_locked_iters"
         print(
             f"{pair_label} pair calibration: "
             f"W={key[2]}KiB B={key[3]} SM={key[4]} LR={key[6]} "
@@ -646,6 +767,14 @@ def run_self_test() -> None:
     import tempfile
     from unittest import mock
 
+    def calibration_stdout(target_iters: int) -> str:
+        return (
+            "CALIBRATION_TRIAL_ITERS=1000\n"
+            "CALIBRATION_TRIAL_ELAPSED_S=0.05\n"
+            "CALIBRATION_REACHED_FLOOR=1\n"
+            f"CALIBRATED_ITERS={target_iters}\n"
+        )
+
     a100 = PROFILES["a100"]
     below_tile = classify(16, 32, a100)
     assert below_tile["below_logical_tile"]
@@ -666,6 +795,24 @@ def run_self_test() -> None:
     assert reduced_sm_l2["full_gpu_working_set_mib"] == 4.0
     assert full_sm_streaming["full_gpu_working_set_mib"] == 54.0
     assert parse_calibrated_iters("ITER=7\nCALIBRATED_ITERS=123\n") == 123
+    assert parse_calibration_result(calibration_stdout(123)).target_iters == 123
+    try:
+        parse_calibration_result("CALIBRATED_ITERS=123\n")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("runtime-floor calibration evidence was not required")
+    try:
+        parse_calibration_result(
+            calibration_stdout(123).replace(
+                "CALIBRATION_TRIAL_ELAPSED_S=0.05",
+                "CALIBRATION_TRIAL_ELAPSED_S=0.001",
+            )
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("sub-50ms calibration trial was accepted")
     try:
         parse_calibrated_iters("ITER=123\n")
     except ValueError:
@@ -684,11 +831,19 @@ def run_self_test() -> None:
         "store_repeat": 1,
     }
     pair_commands = [
-        {**base, "mode": "reg_operand_only", "cmd": ["fake", "--mode", "reg_operand_only"]},
-        {**base, "mode": "reg_mma", "cmd": ["fake", "--mode", "reg_mma"]},
+        {
+            **base,
+            "mode": "reg_operand_only",
+            "cmd": ["fake", "--mode", "reg_operand_only", "--seconds", "10"],
+        },
+        {
+            **base,
+            "mode": "reg_mma",
+            "cmd": ["fake", "--mode", "reg_mma", "--seconds", "10"],
+        },
     ]
     completed = subprocess.CompletedProcess(
-        args=[], returncode=0, stdout="ITER=456\nCALIBRATED_ITERS=456\n"
+        args=[], returncode=0, stdout="ITER=456\n" + calibration_stdout(456)
     )
     with tempfile.TemporaryDirectory() as tmpdir:
         manifest = Path(tmpdir) / "pair_calibration.csv"
@@ -705,10 +860,10 @@ def run_self_test() -> None:
         {**base, "mode": "reg_mma", "cmd": ["fake", "--seconds", "20"]},
     ]
     treatment_completed = subprocess.CompletedProcess(
-        args=[], returncode=0, stdout="CALIBRATED_ITERS=456\n"
+        args=[], returncode=0, stdout=calibration_stdout(456)
     )
     control_completed = subprocess.CompletedProcess(
-        args=[], returncode=0, stdout="CALIBRATED_ITERS=800\n"
+        args=[], returncode=0, stdout=calibration_stdout(800)
     )
     with tempfile.TemporaryDirectory() as tmpdir:
         manifest = Path(tmpdir) / "pair_control_floor_calibration.csv"
@@ -740,6 +895,33 @@ def run_self_test() -> None:
         for item in control_floor_commands
     )
 
+    runaway_pair_commands = [
+        {**base, "mode": "reg_operand_only", "cmd": ["fake", "--seconds", "20"]},
+        {**base, "mode": "reg_mma", "cmd": ["fake", "--seconds", "20"]},
+    ]
+    runaway_control = subprocess.CompletedProcess(
+        args=[], returncode=0, stdout=calibration_stdout(10000)
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manifest = Path(tmpdir) / "runaway_pair_calibration.csv"
+        with mock.patch.object(
+            subprocess,
+            "run",
+            side_effect=[treatment_completed, runaway_control],
+        ):
+            rc, resolved = resolve_tensor_pair_iters(
+                runaway_pair_commands,
+                manifest,
+                control_min_seconds=2.0,
+            )
+        assert rc == 2
+        assert not resolved
+        with manifest.open(newline="") as f:
+            manifest_rows = list(csv.DictReader(f))
+        assert manifest_rows[0]["status"] == "reject_control_iter_stretch"
+        assert float(manifest_rows[0]["control_to_treatment_iter_ratio"]) > 6.0
+    assert all("--iters" not in item["cmd"] for item in runaway_pair_commands)
+
     dram_base = {
         **base,
         "W_SM_KiB": 8192,
@@ -758,10 +940,10 @@ def run_self_test() -> None:
         },
     ]
     dram_treatment_completed = subprocess.CompletedProcess(
-        args=[], returncode=0, stdout="CALIBRATED_ITERS=400\n"
+        args=[], returncode=0, stdout=calibration_stdout(400)
     )
     dram_control_completed = subprocess.CompletedProcess(
-        args=[], returncode=0, stdout="CALIBRATED_ITERS=120\n"
+        args=[], returncode=0, stdout=calibration_stdout(120)
     )
     with tempfile.TemporaryDirectory() as tmpdir:
         manifest = Path(tmpdir) / "dram_pair_calibration.csv"
@@ -990,6 +1172,24 @@ def main() -> int:
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--verify-smid", type=int, default=1)
     parser.add_argument(
+        "--pair-max-treatment-stretch",
+        type=float,
+        default=DEFAULT_PAIR_MAX_TREATMENT_STRETCH,
+        help=(
+            "Reject pair calibration when the control-derived ITER would stretch "
+            "the treatment beyond this multiple of its target duration."
+        ),
+    )
+    parser.add_argument(
+        "--max-command-wall-seconds",
+        type=float,
+        default=DEFAULT_MAX_COMMAND_WALL_SECONDS,
+        help=(
+            "Terminate one energy command after this wall time; 0 disables the "
+            "guard. The standard finalplan uses 180 seconds."
+        ),
+    )
+    parser.add_argument(
         "--tensor-pair-lock-iters",
         action="store_true",
         help=(
@@ -1055,6 +1255,11 @@ def main() -> int:
             "--execute requires explicit --modes; use the generated finalplan or "
             "select a documented treatment-control pair"
         )
+
+    if args.pair_max_treatment_stretch < 1.0:
+        raise ValueError("--pair-max-treatment-stretch must be >= 1")
+    if args.max_command_wall_seconds < 0.0:
+        raise ValueError("--max-command-wall-seconds must be non-negative")
 
     if args.tensor_pair_control_min_seconds < 0.0:
         raise ValueError("--tensor-pair-control-min-seconds must be non-negative")
@@ -1253,6 +1458,7 @@ def main() -> int:
             commands,
             calibration_path,
             control_min_seconds=args.tensor_pair_control_min_seconds,
+            max_treatment_stretch=args.pair_max_treatment_stretch,
         )
         if calibration_rc != 0:
             return calibration_rc
@@ -1274,6 +1480,7 @@ def main() -> int:
             calibration_path,
             treatment_mode=memory_treatment_mode,
             control_min_seconds=args.memory_pair_control_min_seconds,
+            max_treatment_stretch=args.pair_max_treatment_stretch,
         )
         if calibration_rc != 0:
             return calibration_rc
@@ -1317,7 +1524,26 @@ def main() -> int:
         for item in repeat_commands:
             index += 1
             print(f"[{index}/{total}] {' '.join(item['cmd'])}", flush=True)
-            proc = subprocess.run(item["cmd"], check=False)
+            try:
+                proc = subprocess.run(
+                    item["cmd"],
+                    check=False,
+                    timeout=(
+                        args.max_command_wall_seconds
+                        if args.max_command_wall_seconds > 0.0
+                        else None
+                    ),
+                )
+            except subprocess.TimeoutExpired:
+                print(
+                    "energy command exceeded the wall-time guard: "
+                    f"mode={item['mode']} W_SM_KiB={item['W_SM_KiB']} "
+                    f"blocks_per_SM={item['blocks_per_SM']} "
+                    f"limit_s={args.max_command_wall_seconds}; "
+                    "refusing to continue with a likely calibration/runtime failure",
+                    file=sys.stderr,
+                )
+                return 124
             if proc.returncode != 0:
                 print(
                     "energy command failed after binary dry-run preflight: "

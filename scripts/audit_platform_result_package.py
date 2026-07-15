@@ -22,6 +22,9 @@ PROFILE_POWER_SEMANTICS = {
     "h100": "one_sec_average",
 }
 
+MIN_CALIBRATION_TRIAL_SECONDS = 0.05
+MAX_PAIR_TREATMENT_STRETCH = 6.0
+
 PROFILE_METADATA = {
     "rtx3090": {
         "profile_name": "rtx3090",
@@ -346,9 +349,16 @@ TENSOR_PAIR_CALIBRATION_REQUIRED_COLUMNS = {
     "calibration_source_mode",
     "treatment_target_seconds",
     "control_min_seconds",
+    "treatment_trial_iters",
+    "treatment_trial_elapsed_s",
+    "control_trial_iters",
+    "control_trial_elapsed_s",
     "treatment_calibrated_iters",
     "control_min_calibrated_iters",
     "resolved_iters",
+    "control_to_treatment_iter_ratio",
+    "predicted_treatment_seconds",
+    "max_treatment_stretch",
     "resolution_policy",
     "status",
     "calibration_command",
@@ -952,7 +962,7 @@ def audit_raw_energy(
             if mode in {"reg_mma", "reg_operand_only"}:
                 tensor_markers = (
                     "tensor_pair_kernel_revision="
-                    "matched_inplace_signflip_observable_control_fixed_rf_v5",
+                    "matched_runtime_clock_observed_control_fixed_rf_v6",
                     "tensor_operand_source=register_fill_no_memory",
                     "tensor_data_pattern=inplace_alternating_sign_a_fp16_v2",
                     "tensor_accumulator_pattern=bounded_two_state",
@@ -1063,7 +1073,7 @@ def audit_raw_energy(
             "delta, GPU/device scope, exact timed-kernel epoch interval, explicit "
             "measurement_scope, profile "
             "power semantics, positive counter delta, elapsed time, and iteration "
-            "count; Tensor rows carry the observable-control fixed-RF v5 revision, "
+            "count; Tensor rows carry the runtime-observed fixed-RF v6 revision, "
             "register-only operand source, and non-cache reuse semantics, while "
             "CG rows carry the ld.global.cg warm-up policy"
         ),
@@ -1148,6 +1158,23 @@ def audit_tensor_pair_calibration(
                 row.get("treatment_target_seconds", "")
             )
             control_min_seconds = parse_float(row.get("control_min_seconds", ""))
+            treatment_trial_elapsed_s = parse_float(
+                row.get("treatment_trial_elapsed_s", "")
+            )
+            treatment_trial_iters = parse_int(row.get("treatment_trial_iters", ""))
+            control_trial_elapsed_s = parse_float(
+                row.get("control_trial_elapsed_s", "")
+            )
+            control_trial_iters = parse_int(row.get("control_trial_iters", ""))
+            iter_ratio = parse_float(
+                row.get("control_to_treatment_iter_ratio", "")
+            )
+            predicted_treatment_seconds = parse_float(
+                row.get("predicted_treatment_seconds", "")
+            )
+            max_treatment_stretch = parse_float(
+                row.get("max_treatment_stretch", "")
+            )
             if row.get("target_profile", "") != profile:
                 problems.append(
                     f"calibration:{idx}:profile={row.get('target_profile', '')}"
@@ -1173,6 +1200,85 @@ def audit_tensor_pair_calibration(
                     f"calibration:{idx}:control_min_seconds="
                     f"{row.get('control_min_seconds', '')}"
                 )
+            if treatment_trial_iters is None or treatment_trial_iters <= 0:
+                problems.append(
+                    f"calibration:{idx}:treatment_trial_iters="
+                    f"{row.get('treatment_trial_iters', '')}"
+                )
+            if (
+                treatment_trial_elapsed_s is None
+                or treatment_trial_elapsed_s < MIN_CALIBRATION_TRIAL_SECONDS
+            ):
+                problems.append(
+                    f"calibration:{idx}:treatment_trial_elapsed_s="
+                    f"{row.get('treatment_trial_elapsed_s', '')}"
+                )
+            if control_trial_iters is None or control_trial_iters <= 0:
+                problems.append(
+                    f"calibration:{idx}:control_trial_iters="
+                    f"{row.get('control_trial_iters', '')}"
+                )
+            if (
+                control_trial_elapsed_s is None
+                or control_trial_elapsed_s < MIN_CALIBRATION_TRIAL_SECONDS
+            ):
+                problems.append(
+                    f"calibration:{idx}:control_trial_elapsed_s="
+                    f"{row.get('control_trial_elapsed_s', '')}"
+                )
+            if (
+                iter_ratio is None
+                or max_treatment_stretch is None
+                or max_treatment_stretch < 1.0
+                or max_treatment_stretch > MAX_PAIR_TREATMENT_STRETCH
+                or iter_ratio > max_treatment_stretch
+            ):
+                problems.append(
+                    f"calibration:{idx}:control_to_treatment_iter_ratio="
+                    f"{row.get('control_to_treatment_iter_ratio', '')}"
+                )
+            if (
+                predicted_treatment_seconds is None
+                or treatment_target_seconds is None
+                or max_treatment_stretch is None
+                or predicted_treatment_seconds
+                > treatment_target_seconds * max_treatment_stretch + 1.0e-9
+            ):
+                problems.append(
+                    f"calibration:{idx}:predicted_treatment_seconds="
+                    f"{row.get('predicted_treatment_seconds', '')}"
+                )
+            if (
+                treatment_candidate is not None
+                and treatment_candidate > 0
+                and control_candidate is not None
+                and control_candidate > 0
+            ):
+                expected_ratio = control_candidate / treatment_candidate
+                expected_seconds = (
+                    treatment_target_seconds * max(1.0, expected_ratio)
+                    if treatment_target_seconds is not None
+                    else None
+                )
+                if iter_ratio is None or not math.isclose(
+                    iter_ratio, expected_ratio, rel_tol=1.0e-9, abs_tol=1.0e-12
+                ):
+                    problems.append(
+                        f"calibration:{idx}:iter_ratio_not_candidate_ratio"
+                    )
+                if (
+                    predicted_treatment_seconds is None
+                    or expected_seconds is None
+                    or not math.isclose(
+                        predicted_treatment_seconds,
+                        expected_seconds,
+                        rel_tol=1.0e-9,
+                        abs_tol=1.0e-9,
+                    )
+                ):
+                    problems.append(
+                        f"calibration:{idx}:predicted_seconds_not_candidate_ratio"
+                    )
             treatment_command = row.get("treatment_calibration_command", "")
             control_command = row.get("control_calibration_command", "")
             if not (
@@ -1336,6 +1442,23 @@ def audit_memory_pair_calibration(
                 row.get("treatment_target_seconds", "")
             )
             control_min_seconds = parse_float(row.get("control_min_seconds", ""))
+            treatment_trial_elapsed_s = parse_float(
+                row.get("treatment_trial_elapsed_s", "")
+            )
+            treatment_trial_iters = parse_int(row.get("treatment_trial_iters", ""))
+            control_trial_elapsed_s = parse_float(
+                row.get("control_trial_elapsed_s", "")
+            )
+            control_trial_iters = parse_int(row.get("control_trial_iters", ""))
+            iter_ratio = parse_float(
+                row.get("control_to_treatment_iter_ratio", "")
+            )
+            predicted_treatment_seconds = parse_float(
+                row.get("predicted_treatment_seconds", "")
+            )
+            max_treatment_stretch = parse_float(
+                row.get("max_treatment_stretch", "")
+            )
             if row.get("target_profile", "") != profile:
                 problems.append(f"calibration:{idx}:profile={row.get('target_profile', '')}")
             if row.get("calibration_source_mode", "") != treatment_mode:
@@ -1356,6 +1479,85 @@ def audit_memory_pair_calibration(
                     f"calibration:{idx}:control_min_seconds="
                     f"{row.get('control_min_seconds', '')}"
                 )
+            if treatment_trial_iters is None or treatment_trial_iters <= 0:
+                problems.append(
+                    f"calibration:{idx}:treatment_trial_iters="
+                    f"{row.get('treatment_trial_iters', '')}"
+                )
+            if (
+                treatment_trial_elapsed_s is None
+                or treatment_trial_elapsed_s < MIN_CALIBRATION_TRIAL_SECONDS
+            ):
+                problems.append(
+                    f"calibration:{idx}:treatment_trial_elapsed_s="
+                    f"{row.get('treatment_trial_elapsed_s', '')}"
+                )
+            if control_trial_iters is None or control_trial_iters <= 0:
+                problems.append(
+                    f"calibration:{idx}:control_trial_iters="
+                    f"{row.get('control_trial_iters', '')}"
+                )
+            if (
+                control_trial_elapsed_s is None
+                or control_trial_elapsed_s < MIN_CALIBRATION_TRIAL_SECONDS
+            ):
+                problems.append(
+                    f"calibration:{idx}:control_trial_elapsed_s="
+                    f"{row.get('control_trial_elapsed_s', '')}"
+                )
+            if (
+                iter_ratio is None
+                or max_treatment_stretch is None
+                or max_treatment_stretch < 1.0
+                or max_treatment_stretch > MAX_PAIR_TREATMENT_STRETCH
+                or iter_ratio > max_treatment_stretch
+            ):
+                problems.append(
+                    f"calibration:{idx}:control_to_treatment_iter_ratio="
+                    f"{row.get('control_to_treatment_iter_ratio', '')}"
+                )
+            if (
+                predicted_treatment_seconds is None
+                or treatment_target_seconds is None
+                or max_treatment_stretch is None
+                or predicted_treatment_seconds
+                > treatment_target_seconds * max_treatment_stretch + 1.0e-9
+            ):
+                problems.append(
+                    f"calibration:{idx}:predicted_treatment_seconds="
+                    f"{row.get('predicted_treatment_seconds', '')}"
+                )
+            if (
+                treatment_candidate is not None
+                and treatment_candidate > 0
+                and control_candidate is not None
+                and control_candidate > 0
+            ):
+                expected_ratio = control_candidate / treatment_candidate
+                expected_seconds = (
+                    treatment_target_seconds * max(1.0, expected_ratio)
+                    if treatment_target_seconds is not None
+                    else None
+                )
+                if iter_ratio is None or not math.isclose(
+                    iter_ratio, expected_ratio, rel_tol=1.0e-9, abs_tol=1.0e-12
+                ):
+                    problems.append(
+                        f"calibration:{idx}:iter_ratio_not_candidate_ratio"
+                    )
+                if (
+                    predicted_treatment_seconds is None
+                    or expected_seconds is None
+                    or not math.isclose(
+                        predicted_treatment_seconds,
+                        expected_seconds,
+                        rel_tol=1.0e-9,
+                        abs_tol=1.0e-9,
+                    )
+                ):
+                    problems.append(
+                        f"calibration:{idx}:predicted_seconds_not_candidate_ratio"
+                    )
             treatment_command = row.get("treatment_calibration_command", "")
             control_command = row.get("control_calibration_command", "")
             if not (

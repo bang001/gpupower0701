@@ -1,6 +1,6 @@
 # 현재 실험 목표 정합성 감사
 
-작성일: 2026-07-13, 갱신일: 2026-07-14
+작성일: 2026-07-13, 갱신일: 2026-07-15
 
 ## 감사 기준
 
@@ -38,14 +38,15 @@ workload-dependent effective microbenchmark coefficient다.
 | 13 | intake dashboard가 package audit 없는 과거 RTX strict artifact를 현재 완료 플랫폼으로 집계하고 package tag 날짜의 오래된 readiness만 읽음 | 실제 현행 gate 실패가 `1/4 complete`로 가려질 수 있음 | 과거 증거를 `historical_local_evidence`/`historical_pass`로 강등하고, 완료 집계에서 제외하며 `--goal-readiness-csv`로 최신 감사 파일을 명시 | 수정 완료 |
 | 14 | Shared는 `clocked_empty`, Global L1은 duration-scaled address control을 사용해 LR 증가 시 control/treatment issue·stall 상태가 달라짐 | RTX 3090 Shared LR16과 Global L1 다수 좌표가 음수 또는 noise-floor 수준 | Shared matched address control 추가, Shared/L1도 pair-locked 동일 ITER 직접 차분으로 전환 | RTX 3090 재측정 완료 |
 | 15 | A100 L2 source hit 51-62%, native 67-72.5%에 동일 95% gate를 적용 | 첫 partition miss가 LTC fabric의 다른 partition에서 회수되는 GA100 lookup 구조를 logical miss로 오판 | device-aperture source와 `srcunit_ltcfabric` hit/miss를 같은 replay에서 수집하고 logical final-service hit를 계산; native는 source+fabric model 오차 <=2 pp로 교차검증 | 코드 수정 완료; A100 재측정 필요 |
-| 16 | v4 `reg_operand_only` source loop가 실제 SASS에도 남는다고 가정 | scalar sink가 empty asm에만 연결돼 ptxas가 loop 전체를 삭제했지만 HMMA=0/spill=0 gate는 통과 | v5 sink를 output에 기록; pre-energy static backward-loop audit과 NCU SASS/expected-op gate 추가 | RTX 3090 통과; 외부 플랫폼 v5 재측정 필요 |
+| 16 | v4 `reg_operand_only` source loop가 실제 SASS에도 남는다고 가정 | scalar sink가 empty asm에만 연결돼 ptxas가 loop 전체를 삭제했지만 HMMA=0/spill=0 gate는 통과 | v5 sink를 output에 기록; pre-energy static backward-loop audit과 NCU SASS/expected-op gate 추가 | RTX 3090 v5 통과 |
+| 17 | v5 output sink가 모든 architecture에서 control loop를 보존한다고 가정 | A100에서 10억 control ITER가 약 1 ms에 종료되고 같은 ITER의 treatment가 2,096-4,280 s 실행 | v6 공통 runtime token, static token-loop, 50 ms trial, 6x stretch, 180 s command gate 추가 | 코드/local sm86/sm80/sm90 검증 완료; target-node fresh run 필요 |
 
 기존 RTX 3090 strict summary를 현행 audit로 다시 검사한 결과는
 `results/summary/rtx3090_current_protocol_reaudit_20260714.md`에 기록했다. 결과는
 189 checks 중 8 failures다. 과거 NCU summary의 path-specific schema 누락과
 Global L1/L2 address-control evidence 누락이 명시적으로 검출됐다.
 
-그 과거 artifact와 별개로 새 v5 package는 Tensor 2.140 pJ/FLOP, Shared 0.714,
+그 과거 artifact와 별개로 2026-07-14 GA102 v5 package는 Tensor 2.140 pJ/FLOP, Shared 0.714,
 Global L1 0.852, L2 9.078 pJ/bit을 생성했다. 새 strict summary audit는 193 checks,
 package audit는 31 checks를 모두 통과했다. External-memory 24.949 pJ/bit은
 `accepted_effective_path`이며 physical GDDR6X energy가 아니다.
@@ -55,7 +56,7 @@ package audit는 31 checks를 모두 통과했다. External-memory 24.949 pJ/bit
 | 영역 | 필수 조건 |
 |---|---|
 | Energy numerator | `nvml_total_energy`, `total_energy_mj_delta`, explicit `measurement_scope=gpu_device_total_energy_counter` |
-| Tensor | pair-locked 동일 ITER, `reg_mma` HMMA > 0, `reg_operand_only` HMMA=0, static backward loop>0, runtime SASS/expected register op>=0.1, spill/local 0 |
+| Tensor | pair-locked 동일 ITER, calibration trial>=0.05 s, control/treatment ITER ratio<=6, `reg_mma` HMMA > 0, `reg_operand_only` HMMA=0, treatment/control runtime-token backward loop>0, runtime SASS/expected register op>=0.1, spill/local 0 |
 | Shared | pair-locked 동일 ITER, treatment shared read bytes > 0, `shared_scalar_addr_only` control shared read bytes = 0, expected bytes와 정합, bank conflict와 global leakage 제한 |
 | Global L1 | path-specific L1 hit >=95%, L2/DRAM leakage <=1% |
 | L2 CG | pair-locked 동일 ITER, `matched_iters_net_energy`. GA100은 source+LTC-fabric logical final-service hit >=95%, fabric/native-model coherence, L1 hit ratio <=1%, DRAM-read/L2-source-read <=2%; 다른 profile은 architecture-verified path hit gate 사용 |
@@ -78,11 +79,11 @@ package audit는 31 checks를 모두 통과했다. External-memory 24.949 pJ/bit
 ## 남은 제한
 
 1. RTX 3090의 기존 0.129/0.171/0.173/1.131 계수와 fixed-RF v2 Tensor
-   2.2525 pJ/FLOP은 현행 v5 이전 결과다. v4 Tensor는 treatment path/FLOP gate는
-   통과했지만 control loop가 제거되어 무효다. 현행 인용값은 2026-07-14 v5 package만
-   사용한다.
-2. A100/V100/H100은 실행 코드와 package gate가 준비됐지만 이 저장소에서 실제 GPU
-   결과를 생성한 것은 아니다.
+   2.2525 pJ/FLOP은 v5 이전 결과다. v4 Tensor는 treatment path/FLOP gate는
+   통과했지만 control loop가 제거되어 무효다. 2026-07-14 v5 2.140 pJ/FLOP은
+   GA102 protocol-specific historical accepted 값으로만 사용한다.
+2. A100 v5 Tensor run은 실제 수행됐지만 launch-only control로 무효다. V100/H100과
+   새 v6 A100/RTX 3090은 target-node accepted 결과가 아직 없다.
 3. 로컬 CUDA 13.2에서 sm_86/sm_80/sm_90 build는 성공했다. CUDA 13.2는 sm_70
    offline compilation을 지원하지 않으므로 V100 build는 CUDA 12.x 대상 노드에서
    수행해야 한다.

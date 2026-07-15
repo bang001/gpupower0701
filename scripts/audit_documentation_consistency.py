@@ -93,7 +93,7 @@ FORBIDDEN_ACTIVE_TERMS = {
 REQUIRED_POLICY_TERMS = {
     "README.md": (
         "rtx3090_strict_scope_fresh_ncu_component_coefficients_20260714.md",
-        "component_energy_goal_readiness_audit_20260714.md",
+        "component_energy_goal_readiness_audit_20260715.md",
     ),
     "SKILL.md": (
         "docs/methodology/howitworks.md",
@@ -126,7 +126,7 @@ REQUIRED_POLICY_TERMS = {
         "24.949 pJ/bit",
     ),
     "docs/audits/component_energy_self_critique_ko.md": (
-        "RTX 3090은 2026-07-14 현행 v5 package",
+        "RTX 3090은 2026-07-14 v5 package",
         "모든 final pair의 matched ITER",
     ),
     "scripts/plan_platform_component_experiment.py": (
@@ -151,7 +151,7 @@ REQUIRED_POLICY_TERMS = {
         'row["package_status"] == "pass"',
     ),
     "scripts/run_local_readiness_checks.sh": (
-        'READINESS_TAG="${READINESS_TAG:-20260714}"',
+        'READINESS_TAG="${READINESS_TAG:-20260715}"',
         '--goal-readiness-csv "results/summary/component_energy_goal_readiness_audit_${READINESS_TAG}.csv"',
     ),
 }
@@ -164,7 +164,7 @@ FORBIDDEN_POLICY_PATTERNS = (
 )
 
 CURRENT_TENSOR_REVISION = (
-    "matched_inplace_signflip_observable_control_fixed_rf_v5"
+    "matched_runtime_clock_observed_control_fixed_rf_v6"
 )
 SUPERSEDED_TENSOR_REVISION = (
     "matched_inplace_signflip_fragment_epilogue_fixed_rf_v4"
@@ -429,7 +429,7 @@ def audit_policy_text(repo: Path, rows: list[dict[str, str]]) -> None:
     add(
         rows,
         area="policy",
-        check="current_tensor_revision_v5",
+        check="current_tensor_revision_v6",
         status="pass" if revision_ok else "fail",
         expected=(
             f"{CURRENT_TENSOR_REVISION} present and superseded exact v4 marker absent"
@@ -440,7 +440,7 @@ def audit_policy_text(repo: Path, rows: list[dict[str, str]]) -> None:
             else f"missing={revision_missing};stale={revision_stale}"
         ),
         evidence=";".join(TENSOR_REVISION_FILES),
-        action="synchronize source, planner, README, and node guides to Tensor v5",
+        action="synchronize source, planner, README, and node guides to Tensor v6",
     )
 
     for relative, terms in REQUIRED_POLICY_TERMS.items():

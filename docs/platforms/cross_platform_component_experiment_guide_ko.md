@@ -1,6 +1,6 @@
 # Cross-Platform Component Energy 실험 가이드
 
-작성일: 2026-07-06, updated 2026-07-14
+작성일: 2026-07-06, updated 2026-07-15
 
 ## 1. 현재 코드와 실험 내용 요약
 
@@ -14,6 +14,16 @@ Tensor control은 여기에 더해 runtime 총 SASS instruction이
 `active_SM x blocks/SM x ITER x RF`에 비례해야 한다. Static backward loop가 없거나
 `SASS instructions/expected register op < 0.1`이면 launch-only control로 판정하고
 Tensor pair 전체를 reject한다.
+
+현행 Tensor revision은
+`matched_runtime_clock_observed_control_fixed_rf_v6`이다. Treatment/control 모두의
+inner loop에 `SR_CLOCKLO` token을 넣고 static SASS에서 token read가 backward-loop
+안에 있는지 확인한다. Pair calibration은 treatment/control trial 각각
+`>=0.05 s`, control/treatment ITER ratio `<=6`을 증명해야 하며 개별 energy
+command의 wall time은 표준 180 s로 제한한다. A100에서 v5 control이
+launch-only로 남아 16시간 이상 run을 만든 실패는
+[`a100_tensor_control_calibration_failure_20260715_ko.md`](../audits/a100_tensor_control_calibration_failure_20260715_ko.md)에
+기록했다.
 
 현재 채택 가능한 component 후보는 다음이다.
 
@@ -123,7 +133,7 @@ coefficient는 final이 아니다. 이 경우 설정을 고쳐 energy run을 다
 RTX 3090/V100/A100/H100 profile이 `plan_platform_component_experiment.py`,
 `preflight_gpu_support.py`, 플랫폼 문서, power API matrix에서 같은 의미로 쓰이는지
 확인한다. 현재 통과 결과는
-`results/summary/platform_power_readiness_audit_20260708.md`에 있다. 단, 이것은
+`results/summary/platform_power_readiness_audit_20260715.md`에 있다. 단, 이것은
 실제 GPU 측정이나 NCU 검증을 대체하지 않는다.
 
 Power-state audit은 power API gate와 다르다. Power API gate가 numerator API의
@@ -407,9 +417,9 @@ readiness self-test와 full goal readiness audit까지 포함한다. Package aud
 
 | GPU | command plan | executable shell |
 |---|---|---|
-| A100 | `results/summary/a100_component_finalplan_20260708_command_plan.md` | `results/summary/a100_component_finalplan_20260708_commands.sh` |
-| V100 | `results/summary/v100_component_finalplan_20260708_command_plan.md` | `results/summary/v100_component_finalplan_20260708_commands.sh` |
-| H100 | `results/summary/h100_component_finalplan_20260708_command_plan.md` | `results/summary/h100_component_finalplan_20260708_commands.sh` |
+| A100 | `results/summary/a100_component_finalplan_20260715_command_plan.md` | `results/summary/a100_component_finalplan_20260715_commands.sh` |
+| V100 | `results/summary/v100_component_finalplan_20260715_command_plan.md` | `results/summary/v100_component_finalplan_20260715_commands.sh` |
+| H100 | `results/summary/h100_component_finalplan_20260715_command_plan.md` | `results/summary/h100_component_finalplan_20260715_commands.sh` |
 
 V100 노드 작업을 다른 작업자나 에이전트에게 전달할 때는 실행 프롬프트를 [v100_experiment_prompt_ko.md](prompts/v100_experiment_prompt_ko.md)에 따로 분리해 두었다. 이 프롬프트는 `sm_70`, `NCU_CHIP=gv100`, V100 L2/shared capacity, NCU path acceptance 기준을 명시해서 RTX 3090/A100 좌표가 섞이는 문제를 줄이기 위한 것이다.
 
@@ -580,6 +590,9 @@ RTX 3090 디렉터리에 누적된 여러 targeted/stability rerun의 전체 파
 아니다. energy sweep는 플랫폼과 좌표별로 ITER를 calibration해 약 10 s의 측정창을 만든다.
 따라서 빠른 GPU에서는 보통 ITER가 더 커지고, 결과 비교는 ITER 자체가 아니라 측정된
 `elapsed_s`, NCU bytes/operations와 total-energy delta를 기준으로 한다.
+단, matched control의 최소 측정시간을 만족시키기 위해 더 큰 ITER가 선택될
+수 있어 10 s는 절대 실행시간이 아니다. 현행 gate는 이 예상 신장을 6배
+이하로 제한하고 개별 명령은 180 s에서 fail-fast한다.
 
 메모리 bandwidth 사양만으로 실행시간을 예측해서는 안 된다. V100 32 GB의 HBM2
 bandwidth는 제품 형태에 따라 RTX 3090과 비슷한 수준일 수 있고, A100/H100도 SKU별로
@@ -672,7 +685,7 @@ resident block 수는 ptxas register count와 NCU의 registers/thread, achieved 
 판정하며, 요청 B 값만으로 residency를 확정하지 않는다.
 
 아래 RTX 3090 행은 v2 historical snapshot이다. 양의 상수 operand를 장시간 누적해 FP32
-accumulator update가 정지할 수 있으므로 현재 v5 coefficient로 인용하지 않는다.
+accumulator update가 정지할 수 있으므로 현재 v6 protocol coefficient로 인용하지 않는다.
 
 | RTX 3090 accepted component | 실제 선택 좌표 | factor | 상태 |
 |---|---|---|---|

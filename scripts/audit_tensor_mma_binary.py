@@ -38,6 +38,9 @@ OPCODE_PATTERNS = {
 }
 SASS_ADDRESS_PATTERN = re.compile(r"/\*(?P<address>[0-9a-fA-F]+)\*/")
 BRANCH_TARGET_PATTERN = re.compile(r"\bBRA\s+0x(?P<target>[0-9a-fA-F]+)\b")
+RUNTIME_TOKEN_PATTERN = re.compile(
+    r"\b(?:CS2R|S2R|S2UR)\b[^\n]*\bSR_CLOCKLO\b"
+)
 
 
 def find_cuobjdump(explicit: str = "") -> str:
@@ -98,6 +101,28 @@ def count_backward_branches(sass: str) -> int:
         if target < address:
             count += 1
     return count
+
+
+def count_runtime_observed_backward_loops(sass: str) -> int:
+    token_addresses: list[int] = []
+    branches: list[tuple[int, int]] = []
+    for line in sass.splitlines():
+        address_match = SASS_ADDRESS_PATTERN.search(line)
+        if not address_match:
+            continue
+        address = int(address_match.group("address"), 16)
+        if RUNTIME_TOKEN_PATTERN.search(line):
+            token_addresses.append(address)
+        target_match = BRANCH_TARGET_PATTERN.search(line)
+        if target_match:
+            target = int(target_match.group("target"), 16)
+            if target < address:
+                branches.append((target, address))
+    return sum(
+        1
+        for target, branch_address in branches
+        if any(target <= token < branch_address for token in token_addresses)
+    )
 
 
 def run_cuobjdump(cuobjdump: str, binary: str, option: str) -> str:
@@ -185,6 +210,12 @@ def build_rows(
                 and re.search(r"@[!]?P\d+\s+HMMA(?:\.|\b)", line)
             )
             counts["backward_branch_static"] = count_backward_branches(sass)
+            counts["runtime_token_static"] = len(
+                RUNTIME_TOKEN_PATTERN.findall(sass)
+            )
+            counts["runtime_token_loop_static"] = (
+                count_runtime_observed_backward_loops(sass)
+            )
             reasons: list[str] = []
             if not symbol:
                 reasons.append("kernel_symbol_missing")
@@ -199,6 +230,8 @@ def build_rows(
                     reasons.append("predicated_hmma_path_present")
                 if counts["wgmma_static"] > 0 or counts["tma_static"] > 0:
                     reasons.append("unexpected_wgmma_or_tma_in_wmma_mode")
+                if counts["runtime_token_loop_static"] <= 0:
+                    reasons.append("runtime_token_loop_missing_in_treatment")
             else:
                 if (
                     counts["hmma_static"] > 0
@@ -208,6 +241,8 @@ def build_rows(
                     reasons.append("tensor_opcode_present_in_control")
                 if counts["backward_branch_static"] <= 0:
                     reasons.append("control_loop_missing_after_ptxas")
+                if counts["runtime_token_loop_static"] <= 0:
+                    reasons.append("runtime_token_loop_missing_in_control")
             if resource.get("local", -1) != 0 or resource.get("stack", -1) != 0:
                 reasons.append("local_or_stack_allocation_present")
             if counts["ldl_static"] > 0 or counts["stl_static"] > 0:
@@ -266,10 +301,11 @@ def write_markdown(path: Path, rows: list[dict[str, str]]) -> None:
         )
         out.write(
             "| RF | treatment HMMA | control HMMA | treatment/control registers/thread | "
-            "predicated treatment HMMA | control backward branches | WGMMA/TMA | LDG/LDS treatment | "
+            "predicated treatment HMMA | runtime-token loops treatment/control | "
+            "control backward branches | WGMMA/TMA | LDG/LDS treatment | "
             "local treatment/control | status |\n"
         )
-        out.write("|---:|---:|---:|---|---:|---:|---|---|---|---|\n")
+        out.write("|---:|---:|---:|---|---:|---|---:|---|---|---|---|\n")
         for rf in FIXED_REUSE_FACTORS:
             treatment = by_key.get((str(rf), "reg_mma"), {})
             control = by_key.get((str(rf), "reg_operand_only"), {})
@@ -280,6 +316,8 @@ def write_markdown(path: Path, rows: list[dict[str, str]]) -> None:
                 f"{treatment.get('registers_per_thread', '')}/"
                 f"{control.get('registers_per_thread', '')} | "
                 f"{treatment.get('hmma_predicated_static', '')} | "
+                f"{treatment.get('runtime_token_loop_static', '')}/"
+                f"{control.get('runtime_token_loop_static', '')} | "
                 f"{control.get('backward_branch_static', '')} | "
                 f"{treatment.get('wgmma_static', '')}/"
                 f"{treatment.get('tma_static', '')} | "
@@ -308,10 +346,13 @@ def run_self_test() -> None:
 """
     sass = """
  Function : xxxreg_mma_kernelILi1EEEfoo
- /*0000*/ HMMA.16816.F32 R0, R2, R4, R0;
+ /*0000*/ CS2R R8, SR_CLOCKLO;
+ /*0010*/ HMMA.16816.F32 R0, R2, R4, R0;
+ /*0020*/ BRA 0x0;
  Function : xxxreg_operand_only_kernelILi1EEEfoo
- /*0000*/ IADD3 R0, R0, R1, RZ;
- /*0010*/ BRA 0x0;
+ /*0000*/ CS2R R8, SR_CLOCKLO;
+ /*0010*/ IADD3 R0, R0, R1, RZ;
+ /*0020*/ BRA 0x0;
 """
     resources = parse_resource_usage(resource)
     functions = parse_sass_functions(sass)
@@ -334,12 +375,14 @@ def run_self_test() -> None:
     assert rf1_treatment["hmma_predicated_static"] == "0"
     assert rf1_control["hmma_static"] == "0"
     assert rf1_control["backward_branch_static"] == "1"
+    assert rf1_treatment["runtime_token_loop_static"] == "1"
+    assert rf1_control["runtime_token_loop_static"] == "1"
     assert all(
         row["status"] == "fail" for row in rows if row["reuse_factor"] != "1"
     )
     predicated = sass.replace(
-        "/*0000*/ HMMA.16816.F32",
-        "/*0000*/ @P0 HMMA.16816.F32",
+        "/*0010*/ HMMA.16816.F32",
+        "/*0010*/ @P0 HMMA.16816.F32",
     )
     predicated_rows = build_rows(
         profile="selftest",
@@ -354,6 +397,19 @@ def run_self_test() -> None:
     )
     assert predicated_treatment["status"] == "fail"
     assert "predicated_hmma_path_present" in predicated_treatment["reasons"]
+    missing_token_rows = build_rows(
+        profile="selftest",
+        binary="selftest.bin",
+        resources_text=resource,
+        sass_text=sass.replace("CS2R R8, SR_CLOCKLO;", "MOV R8, RZ;"),
+    )
+    missing_token_control = next(
+        row
+        for row in missing_token_rows
+        if row["mode"] == "reg_operand_only" and row["reuse_factor"] == "1"
+    )
+    assert missing_token_control["status"] == "fail"
+    assert "runtime_token_loop_missing_in_control" in missing_token_control["reasons"]
     print("Tensor MMA binary audit self-test passed")
 
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TAG="${TAG:-20260708}"
-READINESS_TAG="${READINESS_TAG:-20260714}"
+TAG="${TAG:-20260715}"
+READINESS_TAG="${READINESS_TAG:-20260715}"
 NCU_BIN="${NCU:-}"
 
 if [[ -z "${NCU_BIN}" ]]; then
@@ -145,6 +145,22 @@ python3 scripts/audit_component_goal_readiness.py \
   --out-md "results/summary/component_energy_goal_readiness_audit_${READINESS_TAG}.md"
 
 echo "[readiness] platform intake dashboard"
+python3 scripts/build_platform_intake_dashboard.py \
+  --tag "${TAG}" \
+  --goal-readiness-csv "results/summary/component_energy_goal_readiness_audit_${READINESS_TAG}.csv" \
+  --out-csv "results/summary/platform_component_intake_dashboard_${TAG}.csv" \
+  --out-md "results/summary/platform_component_intake_dashboard_${TAG}.md"
+
+# The goal audit checks the dashboard, while the dashboard includes the goal
+# audit. Refresh both once after their first pass so neither report carries a
+# stale "missing" verdict from generation order.
+echo "[readiness] refresh goal readiness after dashboard"
+python3 scripts/audit_component_goal_readiness.py \
+  --ncu "${NCU_BIN}" \
+  --out-csv "results/summary/component_energy_goal_readiness_audit_${READINESS_TAG}.csv" \
+  --out-md "results/summary/component_energy_goal_readiness_audit_${READINESS_TAG}.md"
+
+echo "[readiness] refresh platform intake dashboard after goal readiness"
 python3 scripts/build_platform_intake_dashboard.py \
   --tag "${TAG}" \
   --goal-readiness-csv "results/summary/component_energy_goal_readiness_audit_${READINESS_TAG}.csv" \

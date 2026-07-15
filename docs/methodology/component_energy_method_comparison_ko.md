@@ -133,15 +133,17 @@ pJ/bit  = pJ/byte / 8
 
 ## 현재 결과 상태
 
-2026-07-14 RTX 3090 v5 package는 현행 protocol의 strict 4-component와 별도
-external-memory effective path를 모두 생성했다.
+2026-07-14 RTX 3090 v5 package는 GA102 v5 protocol의 strict 4-component와 별도
+external-memory effective path를 모두 생성했다. A100 v5 portability 실패 후
+신규 플랫폼 실행은 v6를 사용하며 두 revision 계수를 혼합하지 않는다.
 
 | 항목 | 값 | 단위 | 상태 |
 |---|---:|---|---|
-| RTX 3090 Tensor v5 | 2.140 | pJ/FLOP | strict accepted effective coefficient; register/scheduler path 포함 |
+| RTX 3090 Tensor v5 | 2.140 | pJ/FLOP | historical GA102 strict accepted effective coefficient; register/scheduler path 포함 |
 | RTX 3090 Shared / Global L1 / L2 | 0.714 / 0.852 / 9.078 | pJ/bit | strict accepted effective paths |
 | RTX 3090 external-memory read | 24.949 | effective pJ/bit | accepted effective path; physical GDDR6X energy 아님 |
-| RTX 3090 Tensor v2/v4와 2026-07-08 memory | historical | - | superseded/rejected; 현행 값과 평균 금지 |
+| RTX 3090 Tensor v2/v4와 2026-07-08 memory | historical | - | superseded/rejected; v5/v6 값과 평균 금지 |
+| A100 Tensor v5 20260714 | rejected | - | launch-only control과 과대 ITER로 energy pair 무효 |
 | A100 external-memory observation | 11.925 | effective pJ/bit | 사용자 전달 historical candidate; 현 저장소에서 원본 package 독립 재계산 불가 |
 | V100 external-memory observation | 8.131 | effective pJ/bit | 사용자 전달 historical candidate; 현 저장소에서 원본 package 독립 재계산 불가 |
 | V100/A100/H100 전체 계수 | 문서상 명확한 accepted package 없음 | - | 각 target node에서 재실행 필요 |

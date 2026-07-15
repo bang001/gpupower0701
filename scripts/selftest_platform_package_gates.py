@@ -780,7 +780,7 @@ def write_raw_files(
         note_parts: list[str] = []
         if mode == "reg_mma" and not omit_tensor_revision:
             note_parts.append(
-                "tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5"
+                "tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6"
             )
         if mode in {"l2_cg_load_only", "dram_cg_load_only"} and not omit_cg_warmup_policy:
             note_parts.append("global_warmup_policy=ld_global_cg")
@@ -1142,9 +1142,25 @@ def write_tensor_pair_calibration_fixture(
         "calibration_source_mode": "reg_mma",
         "treatment_target_seconds": "10",
         "control_min_seconds": "1",
+        "treatment_trial_iters": "100",
+        "treatment_trial_elapsed_s": "0.05",
+        "control_trial_iters": "100",
+        "control_trial_elapsed_s": "0.05",
         "treatment_calibrated_iters": treatment_calibrated_iters,
         "control_min_calibrated_iters": control_min_calibrated_iters,
         "resolved_iters": manifest_iters,
+        "control_to_treatment_iter_ratio": str(
+            int(control_min_calibrated_iters) / int(treatment_calibrated_iters)
+        ),
+        "predicted_treatment_seconds": str(
+            10
+            * max(
+                1.0,
+                int(control_min_calibrated_iters)
+                / int(treatment_calibrated_iters),
+            )
+        ),
+        "max_treatment_stretch": "6.0",
         "resolution_policy": resolution_policy,
         "status": "pair_locked",
         "calibration_command": "benchmark --mode reg_mma --calibrate-only",
@@ -1203,9 +1219,16 @@ def write_memory_pair_calibration_fixture(
         "calibration_source_mode": treatment_mode,
         "treatment_target_seconds": "10",
         "control_min_seconds": "1",
+        "treatment_trial_iters": "100",
+        "treatment_trial_elapsed_s": "0.05",
+        "control_trial_iters": "100",
+        "control_trial_elapsed_s": "0.05",
         "treatment_calibrated_iters": "1000",
         "control_min_calibrated_iters": "300",
         "resolved_iters": manifest_iters,
+        "control_to_treatment_iter_ratio": "0.3",
+        "predicted_treatment_seconds": "10.0",
+        "max_treatment_stretch": "6.0",
         "resolution_policy": "max_treatment_and_control_min_iters",
         "status": "pair_locked",
         "calibration_command": f"benchmark --mode {treatment_mode} --calibrate-only",
@@ -2775,7 +2798,7 @@ def main() -> int:
         omit_tensor_revision=True,
         expected_raw_text=(
             "missing_tensor_marker=tensor_pair_kernel_revision="
-            "matched_inplace_signflip_observable_control_fixed_rf_v5"
+            "matched_runtime_clock_observed_control_fixed_rf_v6"
         ),
     )
     run_raw_policy_case(

@@ -3,7 +3,7 @@
 External-memory 결과의 최신 명칭, read-only NCU 분모와 W sweep은
 [External-Memory Read-Path 설계](../methodology/external_memory_read_path_experiment_design_ko.md)를 우선 적용한다.
 
-작성일: 2026-07-02, V100 L2 동일-ITER 정책 재검토: 2026-07-13
+작성일: 2026-07-02, updated 2026-07-15
 
 ## 목적
 
@@ -332,7 +332,7 @@ python3 scripts/audit_power_api_measurements.py \
   --require-explicit-measurement-scope \
   --require-exact-measurement-interval \
   --require-mode-notes-marker \
-  reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5
+  reg_mma=tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6
 ```
 
 이 단계에서 모든 row가 `missing_column:measurement_scope`,
@@ -343,13 +343,19 @@ stale binary/schema 문제다. 현재 source를 pull한 뒤 `cmake --build build
 archive로 옮긴 뒤 재실행한다. 구버전 CSV에 새 row를 append하면 power API audit이
 전체 reject될 수 있다.
 
-`observable_control_fixed_rf_v5`는 RF1/2/4/8/16 모두 fixed-trip `unroll 1` kernel을 사용하고 한 A
-fragment의 sign bit를 in-place로 뒤집어 FP32 accumulator를 bounded 상태로 유지한다. V100의 SASS lowering을
+`matched_runtime_clock_observed_control_fixed_rf_v6`는 RF1/2/4/8/16 모두 fixed-trip
+`unroll 1` kernel을 사용하고 한 A fragment의 sign bit를 in-place로 뒤집어
+FP32 accumulator를 bounded 상태로 유지한다. Treatment/control의 inner step에
+공통 `SR_CLOCKLO` token을 소비해 launch-only control을 막는다. V100의 SASS lowering을
 Ampere와 같다고 가정하지 않으며 V100 NCU에서
 predicated HMMA=0, RF별 `HMMA/logical MMA` 상대 spread<=10%, control HMMA=0을 다시 확인해야 한다.
-또한 `reg_operand_only`의 SASS에 backward loop가 있고 runtime
+또한 두 mode SASS의 backward loop 내에 runtime token read가 있고, control runtime
 `SASS instructions/expected register op >= 0.1`이어야 한다. 이 gate가 없던 v4에서는
 ptxas가 control 반복문을 제거할 수 있었으므로 v4 Tensor energy 결과를 재사용하지 않는다.
+그 뒤 pair calibration trial 각각 `>=0.05 s`, control/treatment ITER ratio `<=6`,
+개별 command `<=180 s`를 통과한 실행만 채택한다. Local CUDA 13.x는
+`sm_70` offline compile을 제거했을 수 있으므로 CUDA 12.x V100 node의 clean build와
+binary audit를 생략하지 않는다.
 
 ## 8. Full sweep 실행
 
@@ -508,13 +514,13 @@ https://developer.nvidia.com/nvidia-development-tools-solutions-ERR_NVGPUCTRPERM
 관리자 정책을 즉시 변경할 수 없으면 처음부터 sudo mode로 실행할 수 있다.
 
 ```bash
-NCU_USE_SUDO=1 bash results/summary/v100_component_finalplan_20260708_commands.sh
+NCU_USE_SUDO=1 bash results/summary/v100_component_finalplan_20260715_commands.sh
 ```
 
 기본 자동 fallback을 사용하려면 일반 명령 그대로 실행한다.
 
 ```bash
-NCU_AUTO_SUDO=1 bash results/summary/v100_component_finalplan_20260708_commands.sh
+NCU_AUTO_SUDO=1 bash results/summary/v100_component_finalplan_20260715_commands.sh
 ```
 
 수동 NCU validation만 다시 돌릴 때는 기존 명령에 `NCU_USE_SUDO=1`을 붙인다.

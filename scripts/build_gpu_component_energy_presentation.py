@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Build the current GPU component-energy methodology presentation.
 
-The deck reports the 2026-07-14 RTX 3090 v5 package and keeps earlier evidence
+The deck reports the 2026-07-14 RTX 3090 v5 package as GA102 protocol-specific
+historical evidence and keeps earlier evidence
 explicitly historical. It describes GPU/device-level NVML energy and effective
 microbenchmark coefficients, not physical circuit energy.
 """
@@ -611,7 +612,7 @@ def build_deck() -> Presentation:
     add_box(slide, 1.1, 6.55, 11.1, 0.42, fill=RED_PALE, line=RED, text="서로 다른 단계의 상태를 하나의 ‘confidence’ 등급처럼 합치지 않는다.", size=13, color=RED, bold=True)
 
     # 21. Current/historical boundary and external-memory observations
-    slide = prs.slides.add_slide(blank); add_title(slide, "RTX 3090 v5 현행 결과와 해석 경계", "RESULTS · CURRENT PACKAGE", 21, "source: 20260714 strict summary; NCU acceptance; package audit")
+    slide = prs.slides.add_slide(blank); add_title(slide, "RTX 3090 20260714 v5 결과와 해석 경계", "RESULTS · GA102 V5 PACKAGE", 21, "source: 20260714 strict summary; NCU acceptance; package audit; new runs use v6")
     strict = {row["component"]: row for row in snapshot}
     external_memory = read_external_memory_observations()
     tensor_value = float(current_tensor["median"])
@@ -622,7 +623,7 @@ def build_deck() -> Presentation:
     add_status(slide, "Strict components: 4/4 accepted", 0.68, 1.18, 3.25, status="pass", size=9.6)
     add_status(slide, "Package audit: 31/31 pass", 4.08, 1.18, 3.15, status="pass", size=9.6)
     add_box(slide, 7.42, 1.18, 5.15, 0.32, fill=PALE, line=LINE, text="all rows: nvml_total_energy · total_energy_mj_delta · gpu_device_total_energy_counter", size=7.7, color=MUTED)
-    add_text(slide, "Current Tensor v5 · pJ/FLOP", 0.75, 1.7, 2.8, 0.25, size=10.5, color=BLUE, bold=True)
+    add_text(slide, "GA102 Tensor v5 · pJ/FLOP", 0.75, 1.7, 2.8, 0.25, size=10.5, color=BLUE, bold=True)
     add_box(slide, 0.75, 2.02, 4.55, 0.48, fill=BLUE_PALE, line=BLUE, radius=False)
     add_box(slide, 0.75, 2.02, 2.9, 0.48, fill=BLUE, line=BLUE, radius=False)
     add_text(slide, f"{tensor_value:.3f}", 3.85, 2.02, 1.25, 0.48, size=17, color=BLUE, bold=True, align=PP_ALIGN.RIGHT)
@@ -658,7 +659,7 @@ def build_deck() -> Presentation:
         ["Raw energy artifact", "360 rows", "missing", "missing", "missing"],
         ["Fresh NCU acceptance", "72 accepted", "missing", "missing", "missing"],
         ["Reliability audit", "4 strict accepted", "missing", "missing", "missing"],
-        ["Strict component summary", "current v5", "missing", "missing", "missing"],
+        ["Strict component summary", "GA102 v5 historical", "missing", "missing", "missing"],
         ["Package audit complete", "31/31 pass", "아니오", "아니오", "아니오"],
     ]
     add_table(slide,matrix,0.55,1.23,7.6,4.75,widths=[2.4,1.35,1.2,1.2,1.2],font_size=9.6,row_fills=[WHITE,PALE,WHITE,PALE,WHITE,PALE,WHITE])
@@ -713,7 +714,7 @@ SLIDE_NOTES = """# GPU Component Energy Experiment Presentation Evidence Notes
 18. **Memory denominator** — `scripts/analyze_matched_control_energy.py:339-399,643-658`. `expected_no_ncu_match` is not eligible for strict memory coefficients.
 19. **NCU acceptance** — `scripts/analyze_ncu_path_acceptance.py`. Acceptance uses path-specific rates plus access/byte/local/stall evidence, not aggregate hit rate alone.
 20. **Audit states** — each audit script owns a distinct state vocabulary; states are not collapsed into one grade.
-21. **RTX 3090 current v5 results** — Tensor 2.140 pJ/FLOP and Shared/Global-L1/L2 0.714/0.852/9.078 pJ/bit passed current strict gates. External read 24.949 pJ/bit is an accepted GPU-device effective path, not physical GDDR6X energy.
+21. **RTX 3090 20260714 GA102 v5 results** — Tensor 2.140 pJ/FLOP and Shared/Global-L1/L2 0.714/0.852/9.078 pJ/bit passed that package's strict gates. New cross-platform runs use v6. External read 24.949 pJ/bit is an accepted GPU-device effective path, not physical GDDR6X energy.
 22. **Cross-platform state** — current readiness/package audits. A command package is not evidence that a target-node experiment completed.
 
 ## Corrected statements

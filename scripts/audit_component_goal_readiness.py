@@ -46,7 +46,7 @@ COMMAND_PACKAGE_PROFILES = ("v100", "a100", "h100")
 FABRIC_AWARE_L2_PROFILES = {"a100", "h100"}
 
 POWER_MATRIX = Path("docs/platforms/power_measurement_api_matrix_ko.md")
-PLATFORM_READINESS = Path("results/summary/platform_power_readiness_audit_20260708.csv")
+PLATFORM_READINESS = Path("results/summary/platform_power_readiness_audit_20260715.csv")
 STRICT_RTX3090_SUMMARY = Path(
     "results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.csv"
 )
@@ -86,7 +86,7 @@ COMMAND_SHELL_TERMS = [
     "--fail-on-provisional",
     "--require-explicit-measurement-scope",
     "--require-mode-notes-marker",
-    "reg_operand_only=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5",
+    "reg_operand_only=tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6",
     "l2_cg_load_only=global_warmup_policy=ld_global_cg",
     "scripts/audit_power_state_stability.py",
     "scripts/run_ncu_validation.sh",
@@ -154,7 +154,7 @@ COMMAND_PLAN_TERMS = [
     "complete control-treatment coordinate pairs",
     "path-specific L1 hit",
     "path-specific L2 read hit",
-    "tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5",
+    "tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6",
     "global_warmup_policy=ld_global_cg",
     "spill_evidence_source=local_memory_bytes_zero_inference",
     "ncu_actual_exact",
@@ -179,7 +179,7 @@ COMMAND_PLAN_TERMS = [
 ]
 
 LOCAL_READINESS_RUNNER_TERMS = [
-    'TAG="${TAG:-20260708}"',
+    'TAG="${TAG:-20260715}"',
     "scripts/write_platform_result_manifest.py",
     "--out-csv \"results/summary/${profile}_component_finalplan_${TAG}_result_manifest.csv\"",
     "--out-md \"results/summary/${profile}_component_finalplan_${TAG}_result_manifest.md\"",
@@ -1458,7 +1458,7 @@ def self_test() -> None:
         runner.parent.mkdir(parents=True, exist_ok=True)
         good_runner_text = """#!/usr/bin/env bash
 set -euo pipefail
-TAG="${TAG:-20260708}"
+TAG="${TAG:-20260715}"
 A100_ACTIVE_SM="${A100_ACTIVE_SM:-108}"
 V100_ACTIVE_SM="${V100_ACTIVE_SM:-80}"
 H100_ACTIVE_SM="${H100_ACTIVE_SM:-132}"

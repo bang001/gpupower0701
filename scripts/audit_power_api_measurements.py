@@ -583,7 +583,7 @@ def run_self_test() -> None:
     marker_rules = {
         "reg_operand_only": (
             "tensor_pair_kernel_revision="
-            "matched_inplace_signflip_observable_control_fixed_rf_v5"
+            "matched_runtime_clock_observed_control_fixed_rf_v6"
         ),
         "l2_cg_load_only": "global_warmup_policy=ld_global_cg",
         "dram_cg_load_only": [
@@ -596,7 +596,7 @@ def run_self_test() -> None:
             mode="reg_operand_only",
             notes=(
                 "tensor_pair_kernel_revision="
-                "matched_inplace_signflip_observable_control_fixed_rf_v5;other=value"
+                "matched_runtime_clock_observed_control_fixed_rf_v6;other=value"
             ),
         ),
         input_file="selftest.csv",

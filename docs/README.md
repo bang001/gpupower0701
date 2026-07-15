@@ -1,6 +1,6 @@
 # Documentation Map
 
-갱신일: 2026-07-14
+갱신일: 2026-07-15
 
 `docs/`에는 현행 acceptance-first finalplan을 실행하고 해석하는 데 필요한 문서만
 남긴다. 초기 설계, 구형 coefficient 시각화와 과거 전체 보고서는 `archive/`에 보존한다.
@@ -22,6 +22,7 @@
 | A100/V100 외부 결과가 왜 탈락했고 무엇을 다시 받아야 하는가 | `docs/audits/a100_v100_external_result_remediation_ko.md` |
 | A100 L2 lookup 모집단 오류와 RTX Shared/L1 pair를 어떻게 교정했는가 | `docs/audits/a100_l2_counter_scope_and_rtx_pair_remediation_ko.md` |
 | Tensor MMA 구현·FLOP·cache 오염을 어떻게 감사했는가 | `docs/audits/tensor_mma_cross_architecture_implementation_audit_ko.md` |
+| A100 Tensor run이 16시간 이상 걸린 이유와 재발 방지는 무엇인가 | `docs/audits/a100_tensor_control_calibration_failure_20260715_ko.md` |
 | Memory path와 제거한 sweep을 GPU별로 어떻게 감사했는가 | `docs/audits/memory_path_cross_architecture_sweep_audit_ko.md` |
 | 무엇이 archive로 이동했는가 | `docs/audits/repository_active_archive_audit_ko.md` |
 
@@ -40,10 +41,10 @@ GPU별 가이드:
 
 | GPU | 가이드 | 표준 실행 package |
 |---|---|---|
-| RTX 3090 | `README.md` | `results/summary/rtx3090_component_finalplan_20260714_commands.sh` |
-| V100 | `docs/platforms/v100_node_experiment_guide_ko.md` | `results/summary/v100_component_finalplan_20260714_commands.sh` |
-| A100 | `docs/platforms/a100_node_experiment_guide_ko.md` | `results/summary/a100_component_finalplan_20260714_commands.sh` |
-| H100 | `docs/platforms/h100_node_experiment_guide_ko.md` | `results/summary/h100_component_finalplan_20260714_commands.sh` |
+| RTX 3090 | `README.md` | `results/summary/rtx3090_component_finalplan_20260715_commands.sh` |
+| V100 | `docs/platforms/v100_node_experiment_guide_ko.md` | `results/summary/v100_component_finalplan_20260715_commands.sh` |
+| A100 | `docs/platforms/a100_node_experiment_guide_ko.md` | `results/summary/a100_component_finalplan_20260715_commands.sh` |
+| H100 | `docs/platforms/h100_node_experiment_guide_ko.md` | `results/summary/h100_component_finalplan_20260715_commands.sh` |
 
 새 실행에서는 날짜 tag로 package를 다시 생성하는 것이 가장 명확하다.
 
@@ -92,7 +93,8 @@ python3 scripts/plan_platform_component_experiment.py \
 | audits | `a100_strict_summary_failure_remediation_ko.md` | A100 Tensor/L2 실패 교정 |
 | audits | `a100_v100_external_result_remediation_ko.md` | A100/V100 pair timing 및 L2 58-72% 외부 결과 교정 |
 | audits | `a100_l2_counter_scope_and_rtx_pair_remediation_ko.md` | A100 L2 counter scope와 RTX matched-control 교정 |
-| audits | `tensor_mma_cross_architecture_implementation_audit_ko.md` | Tensor v2/v3/v4 오류, v5 observable control, FLOP/cache 및 GPU별 검증 상태 |
+| audits | `tensor_mma_cross_architecture_implementation_audit_ko.md` | Tensor v2-v5 오류, v6 runtime-observed control, FLOP/cache 및 GPU별 검증 상태 |
+| audits | `a100_tensor_control_calibration_failure_20260715_ko.md` | A100 launch-only control, 10억 ITER, 장시간 run 무효화와 v6 교정 |
 | audits | `memory_path_cross_architecture_sweep_audit_ko.md` | Shared/Global-L1/L2/external path 논리, exact-NCU coverage, 제거/유지 sweep |
 | audits | `v100_l2_iter_mismatch_remediation_ko.md` | V100 L2 동일 ITER 교정 |
 | audits | `v100_32gb_platform_review_ko.md` | V100 32GB SKU/toolchain 검토 |
@@ -105,7 +107,9 @@ python3 scripts/plan_platform_component_experiment.py \
 |---|---|
 | RTX 3090 fixed-RF v2 Tensor | superseded historical energy evidence; 현행 계수로 인용 금지 |
 | RTX 3090 fixed-RF v4 Tensor | rejected; ptxas가 no-MMA control loop를 제거했으므로 이전 NCU acceptance와 energy pair 무효 |
-| RTX 3090 fixed-RF v5 Tensor | 2026-07-14 full package에서 2.140 pJ/FLOP, strict accepted; pure Tensor circuit은 아님 |
+| RTX 3090 fixed-RF v5 Tensor | 2026-07-14 GA102 full package에서 2.140 pJ/FLOP, historical strict accepted; v6 플랫폼 비교에 직접 혼합 금지 |
+| A100 fixed-RF v5 Tensor 20260714 | rejected; control 10억 ITER가 약 1 ms에 종료되어 calibration과 energy pair가 무효 |
+| Tensor v6 source/package | 새 실행의 현행 protocol; target-node binary/NCU/power gate 통과 전에는 신규 계수 없음 |
 | RTX 3090 Shared/Global-L1/L2 | 0.714/0.852/9.078 pJ/bit, strict accepted effective paths |
 | RTX 3090 external-memory read | 24.949 pJ/bit, `accepted_effective_path`; physical GDDR6X energy가 아님 |
 | 2026-07-08 RTX 3090 component coefficients | historical/provisional; current control/schema gate 미충족 |

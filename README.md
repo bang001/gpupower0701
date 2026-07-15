@@ -180,10 +180,20 @@ Do not equate API visibility with coefficient validity: `power.draw.*`,
 or provisional fallbacks, but the current final denominator policy requires a
 GPU/device total-energy mJ delta plus NCU path validation.
 
-**Current protocol status (2026-07-14):** the RTX 3090 v5 finalplan package is
+**Measured result status (2026-07-14):** the RTX 3090 v5 finalplan package is
 complete. All four strict components passed reliability, strict-summary, and
 platform-package audits. The external-memory row passed separately as an
-effective GPU-device read path, not physical GDDR6X energy.
+effective GPU-device read path, not physical GDDR6X energy. This is preserved
+as GA102 v5 evidence; it is not silently relabeled as a v6 result.
+
+**Current source protocol (2026-07-15):** Tensor v6 is required for every new
+run. An A100 v5 run exposed a launch-only `reg_operand_only` control: more than
+one billion requested iterations completed in about 1 ms, and the resulting
+pair-lock made one `reg_mma` command run for 2,096-4,280 s. Those A100 Tensor
+rows are rejected. v6 adds a matched `SR_CLOCKLO` runtime token, a 50 ms
+calibration trial floor, a 6x treatment-stretch gate, and a 180 s per-command
+wall-time guard. See the
+[A100 Tensor calibration failure audit](docs/audits/a100_tensor_control_calibration_failure_20260715_ko.md).
 
 | Path | Current result | Scope/status |
 |---|---:|---|
@@ -209,7 +219,7 @@ Current RTX 3090 artifacts:
 | Tensor v5 binary audit | `results/summary/rtx3090_component_finalplan_20260714_tensor_mma_binary_audit.md` |
 | power API / power-state audits | `results/summary/rtx3090_component_finalplan_20260714_power_api_audit.md`, `results/summary/rtx3090_component_finalplan_20260714_power_state_audit.md` |
 | strict/package audits | `results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_20260714.md`, `results/summary/rtx3090_platform_result_package_audit_20260714.md` |
-| multi-platform readiness audit | `results/summary/component_energy_goal_readiness_audit_20260714.md` |
+| multi-platform readiness audit | `results/summary/component_energy_goal_readiness_audit_20260715.md` |
 
 Experiment setup and method documents:
 
@@ -222,18 +232,22 @@ Experiment setup and method documents:
 | What power APIs and semantics apply by GPU generation? | `docs/platforms/power_measurement_api_matrix_ko.md` |
 | Where is the full documentation map? | `docs/README.md` |
 
-The current Tensor revision is
-`matched_inplace_signflip_observable_control_fixed_rf_v5`. Static binary audit
+The current Tensor source revision is
+`matched_runtime_clock_observed_control_fixed_rf_v6`. Static binary audit
 requires treatment HMMA, control HMMA=0, no local allocation, and a backward
-branch in every no-MMA control. Runtime NCU additionally requires
-HMMA/logical-MMA linearity, operation-proportional control SASS, and zero
-spill/local traffic. `W_SM=1 KiB` is only a Tensor CLI placeholder and RF means
-inner MMA grouping. The coefficient is not pure Tensor circuitry because WMMA
-operand/accumulator registers and scheduler behavior are not fully matched.
+loop containing an `SR_CLOCKLO` runtime-token read in both modes. Calibration
+must prove a trial runtime of at least 50 ms before extrapolating ITER. Runtime
+NCU additionally requires HMMA/logical-MMA linearity, operation-proportional
+control SASS, and zero spill/local traffic. `W_SM=1 KiB` is only a Tensor CLI
+placeholder and RF means inner MMA grouping. The coefficient is not pure Tensor
+circuitry because the runtime token, WMMA operand/accumulator registers,
+scheduler behavior, and unequal treatment/control completion time remain in the
+effective board-level difference.
 
-The v4 control loop was removed by ptxas and is invalid. Earlier RTX 3090
-snapshots and figures remain under `archive/pre_current_protocol_20260712/` and
-`results/archive/`; they must not be averaged with the current v5 result.
+The v4 control loop was removed by ptxas and is invalid. v5 repaired GA102 but
+was not portable to the observed A100 `sm_80` code generation. Earlier snapshots
+remain under `archive/pre_current_protocol_20260712/` and `results/archive/`;
+v4, failed A100 v5, and new v6 results must not be averaged together.
 
 Platform guides:
 
@@ -247,11 +261,11 @@ Generated cross-platform command packages:
 
 | GPU | command plan | executable shell |
 |---|---|---|
-| A100 | `results/summary/a100_component_finalplan_20260714_command_plan.md` | `results/summary/a100_component_finalplan_20260714_commands.sh` |
+| A100 | `results/summary/a100_component_finalplan_20260715_command_plan.md` | `results/summary/a100_component_finalplan_20260715_commands.sh` |
 | A100 Tensor/L2 remediation | `results/summary/a100_tensor_l2_remediation_20260710_command_plan.md` | `results/summary/a100_tensor_l2_remediation_20260710_commands.sh` |
-| RTX 3090 | `results/summary/rtx3090_component_finalplan_20260714_command_plan.md` | `results/summary/rtx3090_component_finalplan_20260714_commands.sh` |
-| V100 | `results/summary/v100_component_finalplan_20260714_command_plan.md` | `results/summary/v100_component_finalplan_20260714_commands.sh` |
-| H100 | `results/summary/h100_component_finalplan_20260714_command_plan.md` | `results/summary/h100_component_finalplan_20260714_commands.sh` |
+| RTX 3090 | `results/summary/rtx3090_component_finalplan_20260715_command_plan.md` | `results/summary/rtx3090_component_finalplan_20260715_commands.sh` |
+| V100 | `results/summary/v100_component_finalplan_20260715_command_plan.md` | `results/summary/v100_component_finalplan_20260715_commands.sh` |
+| H100 | `results/summary/h100_component_finalplan_20260715_command_plan.md` | `results/summary/h100_component_finalplan_20260715_commands.sh` |
 
 These command packages are generated plans, not measured platform results. Run
 them on the matching target node after building the profile-specific binary, then

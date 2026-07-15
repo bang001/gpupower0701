@@ -25,6 +25,10 @@ from pathlib import Path
 from typing import Any
 
 
+PAIR_MAX_TREATMENT_STRETCH = 6.0
+MIN_MAX_COMMAND_WALL_SECONDS = 180.0
+
+
 PROFILES: dict[str, dict[str, Any]] = {
     "rtx3090": {
         "cuda_arch": "86",
@@ -317,6 +321,10 @@ def run_component_command(
     extra_args: list[str] | None = None,
     blocks_shell_expansion: bool = False,
 ) -> str:
+    max_command_wall_seconds = max(
+        MIN_MAX_COMMAND_WALL_SECONDS,
+        seconds * (PAIR_MAX_TREATMENT_STRETCH + 1.0) + 30.0,
+    )
     return line(
         [
             "python3",
@@ -348,6 +356,10 @@ def run_component_command(
             q(str(seconds)),
             "--repeats",
             q(str(repeats)),
+            "--pair-max-treatment-stretch",
+            q(str(PAIR_MAX_TREATMENT_STRETCH)),
+            "--max-command-wall-seconds",
+            q(str(max_command_wall_seconds)),
             "--output",
             q(output),
             "--matrix-csv",
@@ -374,6 +386,10 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
     dram_control_calibration_min_seconds = max(1.0, args.seconds * 0.1)
     pair_transition_gap_limit_ms = max(
         30000, int(round((args.seconds + 15.0) * 1000.0))
+    )
+    max_command_wall_seconds = max(
+        MIN_MAX_COMMAND_WALL_SECONDS,
+        args.seconds * (PAIR_MAX_TREATMENT_STRETCH + 1.0) + 30.0,
     )
     l2_precheck_enabled = bool(profile.get("l2_precheck_candidates"))
     # l2_load_only follows the normal global-load policy and therefore cannot
@@ -1041,9 +1057,9 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--require-explicit-measurement-scope",
                 "--require-exact-measurement-interval",
                 "--require-mode-notes-marker",
-                "reg_operand_only=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5",
+                "reg_operand_only=tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6",
                 "--require-mode-notes-marker",
-                "reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5",
+                "reg_mma=tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6",
                 "--require-mode-notes-marker",
                 "l2_cg_load_only=global_warmup_policy=ld_global_cg",
                 "--require-mode-notes-marker",
@@ -1206,9 +1222,9 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--require-explicit-measurement-scope",
                 "--require-exact-measurement-interval",
                 "--require-mode-notes-marker",
-                "reg_operand_only=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5",
+                "reg_operand_only=tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6",
                 "--require-mode-notes-marker",
-                "reg_mma=tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5",
+                "reg_mma=tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6",
                 "--require-mode-notes-marker",
                 "shared_scalar_addr_only=shared_pair_kernel_revision=matched_shared_addr_v1",
                 "--require-mode-notes-marker",
@@ -1559,6 +1575,10 @@ def write_markdown(args: argparse.Namespace, profile: dict[str, Any], path: Path
     pair_transition_gap_limit_ms = max(
         30000, int(round((args.seconds + 15.0) * 1000.0))
     )
+    max_command_wall_seconds = max(
+        MIN_MAX_COMMAND_WALL_SECONDS,
+        args.seconds * (PAIR_MAX_TREATMENT_STRETCH + 1.0) + 30.0,
+    )
     out_sh = args.out_sh
     build_dir = str(Path(args.binary).parent)
     block_values = [int(value) for value in blocks.split(",") if value]
@@ -1648,6 +1668,8 @@ Generated: {dt.date.today().isoformat()}
 | minimum visible device memory (MiB) | `{args.min_device_memory_mib}` |
 | seconds (s) | `{args.seconds}` |
 | repeats | `{args.repeats}` |
+| pair max treatment stretch | `{PAIR_MAX_TREATMENT_STRETCH}` x target duration |
+| per-command wall-time guard (s) | `{max_command_wall_seconds}` |
 | max pair transition gap (ms) | `{pair_transition_gap_limit_ms}` (`max(30000, (seconds + 15) x 1000)`) |
 | Tensor control calibration floor (s) | `{tensor_control_min_seconds}` |
 | Shared address-control calibration floor (s) | `{shared_control_min_seconds}` |
@@ -1920,8 +1942,9 @@ baseline for `seconds` before its timed kernel, so a fixed 30-second gate would
 reject valid adjacent pairs in longer stability runs. The 15-second allowance
 covers process startup, allocation, warm-up, and synchronization; the actual
 limit is recorded as `pair_transition_gap_limit_ms` in every matched-detail row.
-Both Tensor kernels execute the same fragment-dependent register integer add and
-the same in-place FP16 sign-bit flip once per RF iteration. `reg_mma` therefore
+Both Tensor kernels execute the same fragment-dependent register integer update,
+consume the same `SR_CLOCKLO` runtime token, and perform the same in-place FP16
+sign-bit flip once per RF iteration. `reg_mma` therefore
 uses one A fragment with alternating sign, so its FP32 accumulator remains bounded
 instead of becoming numerically stagnant
 after millions of constant-sign accumulations. Both modes use the same
@@ -1930,10 +1953,13 @@ no-MMA control can still compile to fewer registers than treatment; therefore th
 coefficient includes WMMA/HMMA operand and accumulator RF activity and is not a
 pure Tensor circuit coefficient. Report both launch register counts.
 The raw Tensor rows must contain
-`tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5`
+`tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6`
 and `tensor_operand_source=register_fill_no_memory` in `notes`.
-Before the energy sweep, `audit_tensor_mma_binary.py` must also find a backward
-branch in every RF1/2/4/8/16 control kernel after ptxas. Runtime NCU then requires
+Before the energy sweep, `audit_tensor_mma_binary.py` must find an `SR_CLOCKLO`
+read inside a backward loop in every RF1/2/4/8/16 treatment and control kernel
+after ptxas. Pair calibration must then prove at least 50 ms of treatment and
+control trial runtime, and reject a control-derived ITER that predicts more than
+{PAIR_MAX_TREATMENT_STRETCH}x the treatment target duration. Runtime NCU requires
 `smsp__sass_inst_executed.sum / expected register operations >= 0.1`; HMMA=0 by
 itself is not proof that a no-MMA control loop executed.
 CG rows must contain `global_warmup_policy=ld_global_cg`. The package audit
@@ -1945,7 +1971,8 @@ analyzer uses a separate
 `--tensor-control-min-elapsed-s={tensor_control_analysis_min_seconds}` floor
 instead of the full treatment `--min-elapsed-s`; non-positive control net
 energy remains rejected. The package audit cross-checks both candidate ITERs,
-the max-resolution policy, the raw ITER,
+the trial runtime, control/treatment ITER ratio, predicted treatment duration,
+max-resolution policy, the raw ITER,
 matched-detail basis, ITER ratio, and control elapsed time.
 
 It also runs `scripts/audit_matched_control_instability.py` to explain weak

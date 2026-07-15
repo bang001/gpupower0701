@@ -88,12 +88,18 @@ __device__ __forceinline__ void consume_uint(unsigned value) {
 
 __device__ __forceinline__ unsigned register_control_step(
     unsigned sink, float a_value, float b_value, float c_value) {
-  // Keep the scalar control data-dependent on the selected operand while
-  // issuing no memory or Tensor instruction.
+  // Read a changing register-only token in both treatment and control. A
+  // stored scalar result alone was insufficient on sm_80: ptxas collapsed the
+  // no-MMA loop to launch-only code and calibration extrapolated from launch
+  // overhead. SR_CLOCKLO prevents that collapse without adding memory traffic.
+  unsigned runtime_token;
   const unsigned a_bits = __float_as_uint(a_value);
-  asm volatile("add.u32 %0, %0, %1;"
+  asm volatile("mov.u32 %0, %%clock;" : "=r"(runtime_token));
+  asm volatile("add.u32 %0, %0, %1;\n\t"
+               "xor.b32 %0, %0, %2;"
                : "+r"(sink)
-               : "r"(a_bits), "f"(b_value), "f"(c_value));
+               : "r"(a_bits), "r"(runtime_token), "f"(b_value),
+                 "f"(c_value));
   return sink;
 }
 
@@ -138,9 +144,8 @@ __device__ __forceinline__ void store_register_pair_output(
     return;
   }
 
-  // Make the no-MMA control loop observable to ptxas. Without this store,
-  // ptxas can delete every register_control_step even though the CUDA source
-  // contains volatile inline PTX, leaving a launch-only control kernel.
+  // Keep the final loop state externally observable. This store alone was not
+  // sufficient on sm_80, so register_control_step also consumes SR_CLOCKLO.
   c.x[0] = __uint_as_float(sink);
 #pragma unroll
   for (int k = 0; k < c.num_elements; ++k) {

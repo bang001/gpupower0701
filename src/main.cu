@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <numeric>
 #include <sstream>
@@ -76,6 +77,13 @@ struct DeviceState {
   int* d_counts = nullptr;
   int sm_count_capacity = 512;
   std::string notes;
+};
+
+struct IterCalibration {
+  std::uint64_t target_iters = 0;
+  std::uint64_t trial_iters = 0;
+  double trial_elapsed_s = 0.0;
+  bool fixed_iters = false;
 };
 
 struct SmidCheck {
@@ -769,29 +777,55 @@ double launch_all(const Options& opts, const Feasibility& f,
   return elapsed_seconds(t0, t1);
 }
 
-std::uint64_t calibrate_iters(const Options& opts, const Feasibility& f,
-                              std::vector<DeviceState>& states) {
-  if (opts.iters != 0) return opts.iters;
+IterCalibration calibrate_iters(const Options& opts, const Feasibility& f,
+                                std::vector<DeviceState>& states) {
+  if (opts.iters != 0) {
+    return IterCalibration{opts.iters, opts.iters, 0.0, true};
+  }
 
+  constexpr double kMinimumTrialElapsedS = 0.05;
   std::uint64_t trial_iters = 1024;
   double elapsed = 0.0;
   for (int attempt = 0; attempt < 10; ++attempt) {
     elapsed = launch_all(opts, f, states, trial_iters, true);
-    if (elapsed >= 0.05) break;
-    const double scale = elapsed > 1.0e-6 ? (0.05 / elapsed) : 64.0;
+    if (elapsed >= kMinimumTrialElapsedS) break;
+    const double scale =
+        elapsed > 1.0e-6 ? (kMinimumTrialElapsedS / elapsed) : 64.0;
     const double bounded_scale = std::min(128.0, std::max(2.0, scale * 1.2));
-    trial_iters = static_cast<std::uint64_t>(
-        std::ceil(static_cast<double>(trial_iters) * bounded_scale));
+    const long double next_iters =
+        std::ceil(static_cast<long double>(trial_iters) * bounded_scale);
+    if (next_iters >
+        static_cast<long double>(std::numeric_limits<std::uint64_t>::max())) {
+      throw std::runtime_error(
+          "calibration ITER overflow before reaching the 50 ms runtime floor; "
+          "the selected kernel loop may have been optimized away");
+    }
+    trial_iters = static_cast<std::uint64_t>(next_iters);
     trial_iters = std::max<std::uint64_t>(trial_iters, 1);
   }
 
   if (elapsed <= 0.0) {
     throw std::runtime_error("calibration produced zero elapsed time");
   }
-  std::uint64_t target_iters = static_cast<std::uint64_t>(
-      std::ceil(static_cast<double>(trial_iters) * opts.seconds / elapsed *
-                1.10));
-  return std::max<std::uint64_t>(target_iters, 1);
+  if (elapsed < kMinimumTrialElapsedS) {
+    std::ostringstream oss;
+    oss << "calibration failed to reach the 50 ms runtime floor after 10 "
+           "attempts (trial_iters="
+        << trial_iters << ", elapsed_s=" << elapsed
+        << "); refusing launch-overhead extrapolation because the kernel loop "
+           "may have been optimized away";
+    throw std::runtime_error(oss.str());
+  }
+  const long double target_iters_estimate =
+      std::ceil(static_cast<long double>(trial_iters) * opts.seconds / elapsed *
+                1.10L);
+  if (target_iters_estimate >
+      static_cast<long double>(std::numeric_limits<std::uint64_t>::max())) {
+    throw std::runtime_error("calibrated target ITER exceeds uint64 range");
+  }
+  const std::uint64_t target_iters = std::max<std::uint64_t>(
+      static_cast<std::uint64_t>(target_iters_estimate), 1);
+  return IterCalibration{target_iters, trial_iters, elapsed, false};
 }
 
 SmidCheck check_smid_histogram(const Options& opts, DeviceState& state) {
@@ -1105,9 +1139,16 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
       states.push_back(setup_device(gpu, opts, f));
     }
 
-    const std::uint64_t iters = calibrate_iters(opts, f, states);
+    const IterCalibration calibration = calibrate_iters(opts, f, states);
+    const std::uint64_t iters = calibration.target_iters;
     std::cerr << "ITER=" << iters << "\n";
     if (opts.calibrate_only) {
+      std::cout << "CALIBRATION_TRIAL_ITERS=" << calibration.trial_iters << "\n";
+      std::cout << "CALIBRATION_TRIAL_ELAPSED_S="
+                << calibration.trial_elapsed_s << "\n";
+      std::cout << "CALIBRATION_REACHED_FLOOR="
+                << (calibration.fixed_iters || calibration.trial_elapsed_s >= 0.05)
+                << "\n";
       std::cout << "CALIBRATED_ITERS=" << iters << "\n";
       cleanup_all(states);
       return 0;
@@ -1177,7 +1218,7 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
         }
         if (is_register_operand_mode(opts.mode)) {
           extra +=
-              "tensor_pair_kernel_revision=matched_inplace_signflip_observable_control_fixed_rf_v5;"
+              "tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6;"
               "tensor_instruction_api=wmma_m16n16k16_f16_f32;"
               "tensor_instruction_scope=architecture_lowered_hmma_compatibility;"
               "tensor_operand_source=register_fill_no_memory;"

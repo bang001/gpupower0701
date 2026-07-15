@@ -37,7 +37,7 @@
 18. **Memory denominator** — `scripts/analyze_matched_control_energy.py:339-399,643-658`. `expected_no_ncu_match` is not eligible for strict memory coefficients.
 19. **NCU acceptance** — `scripts/analyze_ncu_path_acceptance.py`. Acceptance uses path-specific rates plus access/byte/local/stall evidence, not aggregate hit rate alone.
 20. **Audit states** — each audit script owns a distinct state vocabulary; states are not collapsed into one grade.
-21. **RTX 3090 current v5 results** — Tensor 2.140 pJ/FLOP and Shared/Global-L1/L2 0.714/0.852/9.078 pJ/bit passed current strict gates. External read 24.949 pJ/bit is an accepted GPU-device effective path, not physical GDDR6X energy.
+21. **RTX 3090 20260714 GA102 v5 results** — Tensor 2.140 pJ/FLOP and Shared/Global-L1/L2 0.714/0.852/9.078 pJ/bit passed that package's strict gates. New cross-platform runs use v6. External read 24.949 pJ/bit is an accepted GPU-device effective path, not physical GDDR6X energy.
 22. **Cross-platform state** — current readiness/package audits. A command package is not evidence that a target-node experiment completed.
 
 ## Corrected statements
