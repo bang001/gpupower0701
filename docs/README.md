@@ -1,6 +1,6 @@
 # Documentation Map
 
-갱신일: 2026-07-15
+갱신일: 2026-07-16
 
 `docs/`에는 현행 acceptance-first finalplan을 실행하고 해석하는 데 필요한 문서만
 남긴다. 초기 설계, 구형 coefficient 시각화와 과거 전체 보고서는 `archive/`에 보존한다.
@@ -23,6 +23,7 @@
 | A100 L2 lookup 모집단 오류와 RTX Shared/L1 pair를 어떻게 교정했는가 | `docs/audits/a100_l2_counter_scope_and_rtx_pair_remediation_ko.md` |
 | Tensor MMA 구현·FLOP·cache 오염을 어떻게 감사했는가 | `docs/audits/tensor_mma_cross_architecture_implementation_audit_ko.md` |
 | A100 Tensor run이 16시간 이상 걸린 이유와 재발 방지는 무엇인가 | `docs/audits/a100_tensor_control_calibration_failure_20260715_ko.md` |
+| A100/V100의 ratio 21.930 메시지가 왜 실제 GPU 실패가 아닌가 | `docs/audits/a100_v100_synthetic_selftest_false_failure_20260716_ko.md` |
 | Memory path와 제거한 sweep을 GPU별로 어떻게 감사했는가 | `docs/audits/memory_path_cross_architecture_sweep_audit_ko.md` |
 | 무엇이 archive로 이동했는가 | `docs/audits/repository_active_archive_audit_ko.md` |
 
@@ -41,10 +42,10 @@ GPU별 가이드:
 
 | GPU | 가이드 | 표준 실행 package |
 |---|---|---|
-| RTX 3090 | `README.md` | `results/summary/rtx3090_component_finalplan_20260715_commands.sh` |
-| V100 | `docs/platforms/v100_node_experiment_guide_ko.md` | `results/summary/v100_component_finalplan_20260715_commands.sh` |
-| A100 | `docs/platforms/a100_node_experiment_guide_ko.md` | `results/summary/a100_component_finalplan_20260715_commands.sh` |
-| H100 | `docs/platforms/h100_node_experiment_guide_ko.md` | `results/summary/h100_component_finalplan_20260715_commands.sh` |
+| RTX 3090 | `README.md` | `results/summary/rtx3090_component_finalplan_20260716_commands.sh` |
+| V100 | `docs/platforms/v100_node_experiment_guide_ko.md` | `results/summary/v100_component_finalplan_20260716_commands.sh` |
+| A100 | `docs/platforms/a100_node_experiment_guide_ko.md` | `results/summary/a100_component_finalplan_20260716_commands.sh` |
+| H100 | `docs/platforms/h100_node_experiment_guide_ko.md` | `results/summary/h100_component_finalplan_20260716_commands.sh` |
 
 새 실행에서는 날짜 tag로 package를 다시 생성하는 것이 가장 명확하다.
 
@@ -95,6 +96,7 @@ python3 scripts/plan_platform_component_experiment.py \
 | audits | `a100_l2_counter_scope_and_rtx_pair_remediation_ko.md` | A100 L2 counter scope와 RTX matched-control 교정 |
 | audits | `tensor_mma_cross_architecture_implementation_audit_ko.md` | Tensor v2-v5 오류, v6 runtime-observed control, FLOP/cache 및 GPU별 검증 상태 |
 | audits | `a100_tensor_control_calibration_failure_20260715_ko.md` | A100 launch-only control, 10억 ITER, 장시간 run 무효화와 v6 교정 |
+| audits | `a100_v100_synthetic_selftest_false_failure_20260716_ko.md` | synthetic ratio 21.930 오인, clean self-test 출력, non-L2/L2 failure isolation |
 | audits | `memory_path_cross_architecture_sweep_audit_ko.md` | Shared/Global-L1/L2/external path 논리, exact-NCU coverage, 제거/유지 sweep |
 | audits | `v100_l2_iter_mismatch_remediation_ko.md` | V100 L2 동일 ITER 교정 |
 | audits | `v100_32gb_platform_review_ko.md` | V100 32GB SKU/toolchain 검토 |

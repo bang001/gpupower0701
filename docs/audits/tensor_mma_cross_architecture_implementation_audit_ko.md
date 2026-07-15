@@ -129,7 +129,7 @@ Register footprint가 RF와 architecture마다 다르고 no-MMA control이 treat
 | RTX 3090 v5 binary audit | `results/summary/rtx3090_component_finalplan_20260714_tensor_mma_binary_audit.md`, historical |
 | RTX 3090 v5 NCU | `results/ncu/rtx3090_component_finalplan_ncu_factor_20260714/full_non_l2/ncu_cache_validation_summary.csv`, historical |
 | A100 v5 failure | `docs/audits/a100_tensor_control_calibration_failure_20260715_ko.md`, rejected |
-| v6 generated package | `results/summary/<profile>_component_finalplan_20260715_commands.sh` |
+| v6 generated package | `results/summary/<profile>_component_finalplan_20260716_commands.sh` |
 
 1. target node에서 current source를 clean rebuild한다.
 2. `scripts/audit_tensor_mma_binary.py`로 RF1/2/4/8/16 treatment/control 10/10을

@@ -133,8 +133,8 @@ transaction-path 값과 HBM device/access 값은 scope가 다르므로 목표값
 
 1. V100은 CUDA 12.x `sm_70` build와 NCU permission preflight 후 current package를
    다시 실행한다.
-2. A100은 NCU-first L2 selector로 source+LTC-fabric logical service plateau를 먼저
-   통과시킨다.
+2. A100은 독립 non-L2 energy를 보존한 뒤 NCU-first L2 selector로
+   source+LTC-fabric logical service plateau를 통과한 좌표에서만 L2 energy를 실행한다.
 3. H100은 현행 WMMA compatibility result와 향후 native WGMMA/TMA/FP8 연구를
    분리한다.
 4. 외부 플랫폼 결과 반입 후 `scripts/run_local_readiness_checks.sh`와 package/goal

@@ -1,0 +1,126 @@
+profile,check,status,expected,actual,evidence
+all,power_matrix_exists,pass,exists,True,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/power_measurement_api_matrix_ko.md
+all,power_matrix_core_terms,pass,all core API/scope/gate terms,ok,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/power_measurement_api_matrix_ko.md
+all,ncu_permission_fallback_policy,pass,"counter probe, exact-error sudo retry, child-process coverage",ok,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/scripts/run_ncu_validation.sh
+rtx3090,plan_profile_present,pass,present,True,scripts/plan_platform_component_experiment.py
+rtx3090,preflight_profile_present,pass,present,True,scripts/preflight_gpu_support.py
+rtx3090,plan_cuda_arch,pass,86,86,scripts/plan_platform_component_experiment.py
+rtx3090,plan_active_sm,pass,82,82,scripts/plan_platform_component_experiment.py
+rtx3090,plan_ncu_chip,pass,ga102,ga102,scripts/plan_platform_component_experiment.py
+rtx3090,plan_power_semantics,pass,one_sec_average,one_sec_average,scripts/plan_platform_component_experiment.py
+rtx3090,plan_blocks,pass,8,8,scripts/plan_platform_component_experiment.py
+rtx3090,plan_tensor_blocks,pass,"4,8,16","4,8,16",scripts/plan_platform_component_experiment.py
+rtx3090,plan_ncu_blocks,pass,8,8,scripts/plan_platform_component_experiment.py
+rtx3090,plan_shared_w,pass,64,64,scripts/plan_platform_component_experiment.py
+rtx3090,plan_shared_ncu_w,pass,64,64,scripts/plan_platform_component_experiment.py
+rtx3090,plan_l1_w,pass,8,8,scripts/plan_platform_component_experiment.py
+rtx3090,plan_l1_ncu_w,pass,8,8,scripts/plan_platform_component_experiment.py
+rtx3090,plan_l2_w,pass,"32,64","32,64",scripts/plan_platform_component_experiment.py
+rtx3090,plan_l2_ncu_w_values,pass,"32,64","32,64",scripts/plan_platform_component_experiment.py
+rtx3090,plan_dram_w,pass,"256,512,2048","256,512,2048",scripts/plan_platform_component_experiment.py
+rtx3090,plan_memory_energy_load_repeats,pass,"4,8,16","4,8,16",scripts/plan_platform_component_experiment.py
+rtx3090,preflight_cuda_arch,pass,86,86,scripts/preflight_gpu_support.py
+rtx3090,preflight_active_sm,pass,82,82,scripts/preflight_gpu_support.py
+rtx3090,preflight_ncu_chip,pass,ga102,ga102,scripts/preflight_gpu_support.py
+rtx3090,preflight_power_semantics,pass,one_sec_average,one_sec_average,scripts/preflight_gpu_support.py
+rtx3090,guide_exists,pass,exists,True,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/README.md
+rtx3090,guide_power_and_platform_terms,pass,all required guide terms,ok,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/README.md
+rtx3090,generated_plan_runs,pass,return code 0,0,wrote shell: /tmp/platform_readiness_zktoz65y/rtx3090_plan.sh | wrote markdown: /tmp/platform_readiness_zktoz65y/rtx3090_plan.md
+rtx3090,generated_shell_final_gates,pass,power/ncu/matched/reliability gates,ok,plan_platform_component_experiment generated shell
+rtx3090,generated_shell_goal_dashboard_order,pass,goal readiness audit before dashboard refresh,ok,plan_platform_component_experiment generated shell
+rtx3090,generated_gap_report_tagged,pass,gap report command carries target profile and tag,ok,plan_platform_component_experiment generated shell
+rtx3090,generated_default_binary_path,pass,profile-built binary path ./build/a100_fp16_energy_v2,ok,plan_platform_component_experiment generated shell/markdown
+rtx3090,generated_markdown_power_api_note,pass,power matrix and effective-energy caveat,ok,plan_platform_component_experiment generated markdown
+rtx3090,generated_l2_capacity_policy,pass,0,0,strict L2 policy: l2_cg_load_only; l2_load_only diagnostic-only
+v100,plan_profile_present,pass,present,True,scripts/plan_platform_component_experiment.py
+v100,preflight_profile_present,pass,present,True,scripts/preflight_gpu_support.py
+v100,plan_cuda_arch,pass,70,70,scripts/plan_platform_component_experiment.py
+v100,plan_active_sm,pass,80,80,scripts/plan_platform_component_experiment.py
+v100,plan_ncu_chip,pass,gv100,gv100,scripts/plan_platform_component_experiment.py
+v100,plan_power_semantics,pass,instant,instant,scripts/plan_platform_component_experiment.py
+v100,plan_blocks,pass,32,32,scripts/plan_platform_component_experiment.py
+v100,plan_tensor_blocks,pass,"4,16,32","4,16,32",scripts/plan_platform_component_experiment.py
+v100,plan_ncu_blocks,pass,32,32,scripts/plan_platform_component_experiment.py
+v100,plan_shared_w,pass,32,32,scripts/plan_platform_component_experiment.py
+v100,plan_shared_ncu_w,pass,32,32,scripts/plan_platform_component_experiment.py
+v100,plan_l1_w,pass,32,32,scripts/plan_platform_component_experiment.py
+v100,plan_l1_ncu_w,pass,32,32,scripts/plan_platform_component_experiment.py
+v100,plan_l2_w,pass,"32,64","32,64",scripts/plan_platform_component_experiment.py
+v100,plan_l2_ncu_w,pass,32,32,scripts/plan_platform_component_experiment.py
+v100,plan_l2_ncu_w_values,pass,"32,64","32,64",scripts/plan_platform_component_experiment.py
+v100,plan_dram_w,pass,"256,512,2048","256,512,2048",scripts/plan_platform_component_experiment.py
+v100,plan_memory_energy_load_repeats,pass,"4,8,16","4,8,16",scripts/plan_platform_component_experiment.py
+v100,preflight_cuda_arch,pass,70,70,scripts/preflight_gpu_support.py
+v100,preflight_cuda_toolchain_policy,pass,contains:compute_70,Use a compiler that lists compute_70. CUDA 12.x is the recommended V100 build line; CUDA 13 removed Volta offline compilation support.,scripts/preflight_gpu_support.py
+v100,preflight_active_sm,pass,80,80,scripts/preflight_gpu_support.py
+v100,preflight_ncu_chip,pass,gv100,gv100,scripts/preflight_gpu_support.py
+v100,preflight_power_semantics,pass,instant,instant,scripts/preflight_gpu_support.py
+v100,guide_exists,pass,exists,True,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/v100_node_experiment_guide_ko.md
+v100,guide_power_and_platform_terms,pass,all required guide terms,ok,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/v100_node_experiment_guide_ko.md
+v100,generated_plan_runs,pass,return code 0,0,wrote shell: /tmp/platform_readiness_zktoz65y/v100_plan.sh | wrote markdown: /tmp/platform_readiness_zktoz65y/v100_plan.md
+v100,generated_shell_final_gates,pass,power/ncu/matched/reliability gates,ok,plan_platform_component_experiment generated shell
+v100,generated_shell_goal_dashboard_order,pass,goal readiness audit before dashboard refresh,ok,plan_platform_component_experiment generated shell
+v100,generated_gap_report_tagged,pass,gap report command carries target profile and tag,ok,plan_platform_component_experiment generated shell
+v100,generated_default_binary_path,pass,profile-built binary path ./build-v100/a100_fp16_energy_v2,ok,plan_platform_component_experiment generated shell/markdown
+v100,generated_markdown_power_api_note,pass,power matrix and effective-energy caveat,ok,plan_platform_component_experiment generated markdown
+v100,generated_l2_capacity_policy,pass,0,0,strict L2 policy: l2_cg_load_only; l2_load_only diagnostic-only
+a100,plan_profile_present,pass,present,True,scripts/plan_platform_component_experiment.py
+a100,preflight_profile_present,pass,present,True,scripts/preflight_gpu_support.py
+a100,plan_cuda_arch,pass,80,80,scripts/plan_platform_component_experiment.py
+a100,plan_active_sm,pass,108,108,scripts/plan_platform_component_experiment.py
+a100,plan_ncu_chip,pass,ga100,ga100,scripts/plan_platform_component_experiment.py
+a100,plan_power_semantics,pass,instant,instant,scripts/plan_platform_component_experiment.py
+a100,plan_blocks,pass,16,16,scripts/plan_platform_component_experiment.py
+a100,plan_tensor_blocks,pass,"4,16,32","4,16,32",scripts/plan_platform_component_experiment.py
+a100,plan_ncu_blocks,pass,16,16,scripts/plan_platform_component_experiment.py
+a100,plan_shared_w,pass,128,128,scripts/plan_platform_component_experiment.py
+a100,plan_shared_ncu_w,pass,128,128,scripts/plan_platform_component_experiment.py
+a100,plan_l1_w,pass,16,16,scripts/plan_platform_component_experiment.py
+a100,plan_l1_ncu_w,pass,16,16,scripts/plan_platform_component_experiment.py
+a100,plan_l2_w,pass,"16,128","16,128",scripts/plan_platform_component_experiment.py
+a100,plan_l2_ncu_w_values,pass,"16,128","16,128",scripts/plan_platform_component_experiment.py
+a100,plan_dram_w,pass,"2048,4096,8192","2048,4096,8192",scripts/plan_platform_component_experiment.py
+a100,plan_memory_energy_load_repeats,pass,"4,8,16","4,8,16",scripts/plan_platform_component_experiment.py
+a100,preflight_cuda_arch,pass,80,80,scripts/preflight_gpu_support.py
+a100,preflight_active_sm,pass,108,108,scripts/preflight_gpu_support.py
+a100,preflight_ncu_chip,pass,ga100,ga100,scripts/preflight_gpu_support.py
+a100,preflight_power_semantics,pass,instant,instant,scripts/preflight_gpu_support.py
+a100,guide_exists,pass,exists,True,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/a100_node_experiment_guide_ko.md
+a100,guide_power_and_platform_terms,pass,all required guide terms,ok,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/a100_node_experiment_guide_ko.md
+a100,generated_plan_runs,pass,return code 0,0,wrote shell: /tmp/platform_readiness_zktoz65y/a100_plan.sh | wrote markdown: /tmp/platform_readiness_zktoz65y/a100_plan.md
+a100,generated_shell_final_gates,pass,power/ncu/matched/reliability gates,ok,plan_platform_component_experiment generated shell
+a100,generated_shell_goal_dashboard_order,pass,goal readiness audit before dashboard refresh,ok,plan_platform_component_experiment generated shell
+a100,generated_gap_report_tagged,pass,gap report command carries target profile and tag,ok,plan_platform_component_experiment generated shell
+a100,generated_default_binary_path,pass,profile-built binary path ./build-a100/a100_fp16_energy_v2,ok,plan_platform_component_experiment generated shell/markdown
+a100,generated_markdown_power_api_note,pass,power matrix and effective-energy caveat,ok,plan_platform_component_experiment generated markdown
+a100,generated_l2_capacity_policy,pass,0,0,strict L2 policy: l2_cg_load_only; l2_load_only diagnostic-only
+h100,plan_profile_present,pass,present,True,scripts/plan_platform_component_experiment.py
+h100,preflight_profile_present,pass,present,True,scripts/preflight_gpu_support.py
+h100,plan_cuda_arch,pass,90,90,scripts/plan_platform_component_experiment.py
+h100,plan_active_sm,pass,132,132,scripts/plan_platform_component_experiment.py
+h100,plan_ncu_chip,pass,gh100,gh100,scripts/plan_platform_component_experiment.py
+h100,plan_power_semantics,pass,one_sec_average,one_sec_average,scripts/plan_platform_component_experiment.py
+h100,plan_blocks,pass,16,16,scripts/plan_platform_component_experiment.py
+h100,plan_tensor_blocks,pass,"4,16,32","4,16,32",scripts/plan_platform_component_experiment.py
+h100,plan_ncu_blocks,pass,16,16,scripts/plan_platform_component_experiment.py
+h100,plan_shared_w,pass,128,128,scripts/plan_platform_component_experiment.py
+h100,plan_shared_ncu_w,pass,128,128,scripts/plan_platform_component_experiment.py
+h100,plan_l1_w,pass,16,16,scripts/plan_platform_component_experiment.py
+h100,plan_l1_ncu_w,pass,16,16,scripts/plan_platform_component_experiment.py
+h100,plan_l2_w,pass,"64,128","64,128",scripts/plan_platform_component_experiment.py
+h100,plan_l2_ncu_w_values,pass,"64,128","64,128",scripts/plan_platform_component_experiment.py
+h100,plan_dram_w,pass,"2048,4096,8192","2048,4096,8192",scripts/plan_platform_component_experiment.py
+h100,plan_memory_energy_load_repeats,pass,"4,8,16","4,8,16",scripts/plan_platform_component_experiment.py
+h100,preflight_cuda_arch,pass,90,90,scripts/preflight_gpu_support.py
+h100,preflight_active_sm,pass,132,132,scripts/preflight_gpu_support.py
+h100,preflight_ncu_chip,pass,gh100,gh100,scripts/preflight_gpu_support.py
+h100,preflight_power_semantics,pass,one_sec_average,one_sec_average,scripts/preflight_gpu_support.py
+h100,guide_exists,pass,exists,True,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/h100_node_experiment_guide_ko.md
+h100,guide_power_and_platform_terms,pass,all required guide terms,ok,/mnt/c/Users/DMQA/OneDrive/문서/GPUPower0701/docs/platforms/h100_node_experiment_guide_ko.md
+h100,generated_plan_runs,pass,return code 0,0,wrote shell: /tmp/platform_readiness_zktoz65y/h100_plan.sh | wrote markdown: /tmp/platform_readiness_zktoz65y/h100_plan.md
+h100,generated_shell_final_gates,pass,power/ncu/matched/reliability gates,ok,plan_platform_component_experiment generated shell
+h100,generated_shell_goal_dashboard_order,pass,goal readiness audit before dashboard refresh,ok,plan_platform_component_experiment generated shell
+h100,generated_gap_report_tagged,pass,gap report command carries target profile and tag,ok,plan_platform_component_experiment generated shell
+h100,generated_default_binary_path,pass,profile-built binary path ./build-h100/a100_fp16_energy_v2,ok,plan_platform_component_experiment generated shell/markdown
+h100,generated_markdown_power_api_note,pass,power matrix and effective-energy caveat,ok,plan_platform_component_experiment generated markdown
+h100,generated_l2_capacity_policy,pass,0,0,strict L2 policy: l2_cg_load_only; l2_load_only diagnostic-only

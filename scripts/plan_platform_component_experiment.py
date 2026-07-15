@@ -552,7 +552,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             policy, layout, blocks_text = value.split(":")
             candidates.append(f'  "{policy} {layout} {int(blocks_text)}"')
         l2_precheck_commands = [
-            "# 5. NCU-first L2 path selection. Partition-fabric profiles apply 95% to final service after LTC-fabric recovery.",
+            "# 6. NCU-first L2 path selection. Independent non-L2 energy is already preserved at this point.",
+            "# Partition-fabric profiles apply 95% to final service after LTC-fabric recovery.",
             "run_l2_path_candidate() {",
             "  local policy=\"$1\"",
             "  local layout=\"$2\"",
@@ -639,7 +640,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             "  fi",
             "done",
             "if [[ \"${L2_PATH_SELECTED}\" != \"1\" || -z \"${L2_BLOCKS_PER_SM:-}\" || -z \"${L2_RESIDENCY_POLICY:-}\" || -z \"${L2_ADDRESS_LAYOUT:-}\" ]]; then",
-            f"  echo \"No {args.target_profile.upper()} L2 candidate passed strict NCU gates; energy sweep was not started.\" >&2",
+            f"  echo \"No {args.target_profile.upper()} L2 candidate passed strict NCU gates; only the L2 energy sweep was not started.\" >&2",
+            "  echo \"Tensor, Shared, Global-L1, and external-memory raw energy collected earlier remains valid for its own downstream gates.\" >&2",
             f"  echo \"Inspect {l2_path_selection_md} and the l2_precheck_* NCU logs.\" >&2",
             "  exit 2",
             "fi",
@@ -648,7 +650,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         ]
     else:
         l2_precheck_commands = [
-            "# 5. This profile retains its reviewed fixed L2 coordinate.",
+            "# 6. This profile retains its reviewed fixed L2 coordinate.",
             "echo \"L2 precheck selector not enabled for this profile; using policy=${L2_RESIDENCY_POLICY} layout=${L2_ADDRESS_LAYOUT} blocks/SM=${L2_BLOCKS_PER_SM}\"",
             "",
         ]
@@ -771,6 +773,124 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ),
         ]
 
+    tensor_energy_command = run_component_command(
+        binary=binary,
+        profile=args.target_profile,
+        gpu_ids=args.gpu_ids,
+        active_sm=active_sm,
+        seconds=args.seconds,
+        repeats=args.repeats,
+        modes="reg_operand_only,reg_mma",
+        w_values=str(profile["tensor_w"]),
+        blocks=tensor_blocks,
+        reuse_factors="1,2,4,8,16",
+        load_repeats="1",
+        output=energy_csvs[0],
+        matrix=matrix_csvs[0],
+        extra_args=[
+            "--tensor-pair-lock-iters",
+            "--tensor-pair-control-min-seconds",
+            q(str(tensor_control_calibration_min_seconds)),
+            "--pair-calibration-csv",
+            q(tensor_pair_calibration_csv),
+        ],
+    )
+    shared_energy_command = run_component_command(
+        binary=binary,
+        profile=args.target_profile,
+        gpu_ids=args.gpu_ids,
+        active_sm=active_sm,
+        seconds=args.seconds,
+        repeats=args.repeats,
+        modes="shared_scalar_addr_only,shared_scalar_load_only",
+        w_values=profile["shared_w"],
+        blocks=blocks,
+        reuse_factors="1",
+        load_repeats=profile["memory_energy_load_repeats"],
+        output=energy_csvs[1],
+        matrix=matrix_csvs[1],
+        extra_args=[
+            "--memory-pair-lock-iters",
+            "--memory-pair-control-min-seconds",
+            q(str(shared_control_calibration_min_seconds)),
+            "--memory-pair-calibration-csv",
+            q(shared_pair_calibration_csv),
+        ],
+    )
+    l1_energy_command = run_component_command(
+        binary=binary,
+        profile=args.target_profile,
+        gpu_ids=args.gpu_ids,
+        active_sm=active_sm,
+        seconds=args.seconds,
+        repeats=args.repeats,
+        modes="global_addr_only,global_l1_load_only",
+        w_values=profile["l1_w"],
+        blocks=blocks,
+        reuse_factors="1",
+        load_repeats=profile["memory_energy_load_repeats"],
+        output=energy_csvs[2],
+        matrix=matrix_csvs[2],
+        extra_args=[
+            "--memory-pair-lock-iters",
+            "--memory-pair-control-min-seconds",
+            q(str(l1_control_calibration_min_seconds)),
+            "--memory-pair-calibration-csv",
+            q(l1_pair_calibration_csv),
+        ],
+    )
+    l2_energy_command = run_component_command(
+        binary=binary,
+        profile=args.target_profile,
+        gpu_ids=args.gpu_ids,
+        active_sm=active_sm,
+        seconds=args.seconds,
+        repeats=args.repeats,
+        modes=profile["l2_modes"],
+        w_values=profile["l2_w"],
+        blocks='"${L2_BLOCKS_PER_SM}"' if l2_precheck_enabled else blocks,
+        reuse_factors="1",
+        load_repeats=profile["memory_energy_load_repeats"],
+        output=energy_csvs[3],
+        matrix=matrix_csvs[3],
+        extra_args=[
+            "--global-warmup-passes",
+            "4",
+            "--l2-residency-policy",
+            '"${L2_RESIDENCY_POLICY}"',
+            "--l2-address-layout",
+            '"${L2_ADDRESS_LAYOUT}"',
+            "--memory-pair-lock-iters",
+            "--memory-pair-control-min-seconds",
+            q(str(l2_control_calibration_min_seconds)),
+            "--memory-pair-calibration-csv",
+            q(l2_pair_calibration_csv),
+        ],
+        blocks_shell_expansion=l2_precheck_enabled,
+    )
+    dram_energy_command = run_component_command(
+        binary=binary,
+        profile=args.target_profile,
+        gpu_ids=args.gpu_ids,
+        active_sm=active_sm,
+        seconds=args.seconds,
+        repeats=args.repeats,
+        modes="global_addr_only,dram_cg_load_only",
+        w_values=profile["dram_w"],
+        blocks=blocks,
+        reuse_factors="1",
+        load_repeats=profile["memory_energy_load_repeats"],
+        output=energy_csvs[4],
+        matrix=matrix_csvs[4],
+        extra_args=[
+            "--memory-pair-lock-iters",
+            "--memory-pair-control-min-seconds",
+            q(str(dram_control_calibration_min_seconds)),
+            "--memory-pair-calibration-csv",
+            q(dram_pair_calibration_csv),
+        ],
+    )
+
     commands = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
@@ -778,6 +898,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         f"# Generated for {args.target_profile} on {dt.date.today().isoformat()}.",
         f"# {profile['note']}",
         "mkdir -p results/raw results/summary results/ncu",
+        "pipeline_stage() { printf '\\n== PIPELINE_STAGE: %s ==\\n' \"$1\"; }",
+        "pipeline_stage initialization",
         "",
         "# NCU wrapper. Counter access is probed before the long energy sweep.",
         "# ERR_NVGPUCTRPERM triggers one sudo retry by default; set NCU_AUTO_SUDO=0 to disable.",
@@ -802,6 +924,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         "export L2_BLOCKS_PER_SM L2_RESIDENCY_POLICY L2_ADDRESS_LAYOUT",
         "",
         "# 1. Preflight",
+        "pipeline_stage preflight",
         line(
             [
                 "python3",
@@ -833,6 +956,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         ),
         "",
         "# 1a. Actual hardware-counter permission probe before expensive energy sweeps.",
+        "pipeline_stage ncu_permission_probe",
         f"NCU_PROBE_DIR=\"${{TMPDIR:-/tmp}}/gpupower_ncu_probe_{args.target_profile}_${{UID}}_${{PPID}}\"",
         "NCU_PROBE_RAW=\"${NCU_PROBE_DIR}/probe_raw.csv\"",
         line(
@@ -866,6 +990,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         "fi",
         "",
         "# 2. Pipeline policy self-tests. Fail early if a gate is broken.",
+        "pipeline_stage synthetic_policy_self_tests",
+        "echo 'NOTE: self-tests use synthetic coordinates and expected rejection fixtures; they do not measure this GPU.'",
         line(["python3", "scripts/run_component_regression_sweep.py", "--self-test"]),
         line(["python3", "scripts/summarize_ncu_cache_metrics.py", "--self-test"]),
         line(["python3", "scripts/merge_ncu_validation_summaries.py", "--self-test"]),
@@ -911,8 +1037,10 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "--fail-on-error",
             ]
         ),
+        "echo 'Synthetic policy self-tests passed. Subsequent calibration messages use real target-GPU coordinates.'",
         "",
         "# 3. Move stale generated outputs aside before writing new CSV schemas.",
+        "pipeline_stage stale_output_archive",
         "RUN_STAMP=$(date +%Y%m%d_%H%M%S)",
         f"STALE_DIR=results/archive/{args.target_profile}_component_finalplan_{tag}_stale_${{RUN_STAMP}}",
         "STALE_PATHS=(",
@@ -942,6 +1070,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         ),
         "",
         "# 4. Three-row schema/revision smoke test. Catch stale binaries before the full sweep.",
+        "pipeline_stage schema_revision_smoke",
         line(
             [
                 q(binary),
@@ -1083,129 +1212,25 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
             ]
         ),
         "",
+        "# 5. Independent non-L2 energy sweeps. Keep NCU detached from these runs.",
+        "pipeline_stage tensor_energy_sweep",
+        f"echo 'REAL GPU CALIBRATION: profile={args.target_profile} W_SM={profile['tensor_w']}KiB active_SM={active_sm} blocks/SM={tensor_blocks} RF=1,2,4,8,16'",
+        tensor_energy_command,
+        "pipeline_stage shared_energy_sweep",
+        shared_energy_command,
+        "pipeline_stage global_l1_energy_sweep",
+        l1_energy_command,
+        "pipeline_stage external_memory_energy_sweep",
+        dram_energy_command,
+        "",
+        "pipeline_stage l2_path_selection",
         *l2_precheck_commands,
-        "# 6. Energy sweeps. Keep NCU detached from these runs.",
-        run_component_command(
-            binary=binary,
-            profile=args.target_profile,
-            gpu_ids=args.gpu_ids,
-            active_sm=active_sm,
-            seconds=args.seconds,
-            repeats=args.repeats,
-            modes="reg_operand_only,reg_mma",
-            w_values=str(profile["tensor_w"]),
-            blocks=tensor_blocks,
-            reuse_factors="1,2,4,8,16",
-            load_repeats="1",
-            output=energy_csvs[0],
-            matrix=matrix_csvs[0],
-            extra_args=[
-                "--tensor-pair-lock-iters",
-                "--tensor-pair-control-min-seconds",
-                q(str(tensor_control_calibration_min_seconds)),
-                "--pair-calibration-csv",
-                q(tensor_pair_calibration_csv),
-            ],
-        ),
-        run_component_command(
-            binary=binary,
-            profile=args.target_profile,
-            gpu_ids=args.gpu_ids,
-            active_sm=active_sm,
-            seconds=args.seconds,
-            repeats=args.repeats,
-            modes="shared_scalar_addr_only,shared_scalar_load_only",
-            w_values=profile["shared_w"],
-            blocks=blocks,
-            reuse_factors="1",
-            load_repeats=profile["memory_energy_load_repeats"],
-            output=energy_csvs[1],
-            matrix=matrix_csvs[1],
-            extra_args=[
-                "--memory-pair-lock-iters",
-                "--memory-pair-control-min-seconds",
-                q(str(shared_control_calibration_min_seconds)),
-                "--memory-pair-calibration-csv",
-                q(shared_pair_calibration_csv),
-            ],
-        ),
-        run_component_command(
-            binary=binary,
-            profile=args.target_profile,
-            gpu_ids=args.gpu_ids,
-            active_sm=active_sm,
-            seconds=args.seconds,
-            repeats=args.repeats,
-            modes="global_addr_only,global_l1_load_only",
-            w_values=profile["l1_w"],
-            blocks=blocks,
-            reuse_factors="1",
-            load_repeats=profile["memory_energy_load_repeats"],
-            output=energy_csvs[2],
-            matrix=matrix_csvs[2],
-            extra_args=[
-                "--memory-pair-lock-iters",
-                "--memory-pair-control-min-seconds",
-                q(str(l1_control_calibration_min_seconds)),
-                "--memory-pair-calibration-csv",
-                q(l1_pair_calibration_csv),
-            ],
-        ),
-        run_component_command(
-            binary=binary,
-            profile=args.target_profile,
-            gpu_ids=args.gpu_ids,
-            active_sm=active_sm,
-            seconds=args.seconds,
-            repeats=args.repeats,
-            modes=profile["l2_modes"],
-            w_values=profile["l2_w"],
-            blocks=(
-                '"${L2_BLOCKS_PER_SM}"' if l2_precheck_enabled else blocks
-            ),
-            reuse_factors="1",
-            load_repeats=profile["memory_energy_load_repeats"],
-            output=energy_csvs[3],
-            matrix=matrix_csvs[3],
-            extra_args=[
-                "--global-warmup-passes",
-                "4",
-                "--l2-residency-policy",
-                '"${L2_RESIDENCY_POLICY}"',
-                "--l2-address-layout",
-                '"${L2_ADDRESS_LAYOUT}"',
-                "--memory-pair-lock-iters",
-                "--memory-pair-control-min-seconds",
-                q(str(l2_control_calibration_min_seconds)),
-                "--memory-pair-calibration-csv",
-                q(l2_pair_calibration_csv),
-            ],
-            blocks_shell_expansion=l2_precheck_enabled,
-        ),
-        run_component_command(
-            binary=binary,
-            profile=args.target_profile,
-            gpu_ids=args.gpu_ids,
-            active_sm=active_sm,
-            seconds=args.seconds,
-            repeats=args.repeats,
-            modes="global_addr_only,dram_cg_load_only",
-            w_values=profile["dram_w"],
-            blocks=blocks,
-            reuse_factors="1",
-            load_repeats=profile["memory_energy_load_repeats"],
-            output=energy_csvs[4],
-            matrix=matrix_csvs[4],
-            extra_args=[
-                "--memory-pair-lock-iters",
-                "--memory-pair-control-min-seconds",
-                q(str(dram_control_calibration_min_seconds)),
-                "--memory-pair-calibration-csv",
-                q(dram_pair_calibration_csv),
-            ],
-        ),
+        "# 6a. L2 energy runs only after a strict NCU path has been selected.",
+        "pipeline_stage l2_energy_sweep",
+        l2_energy_command,
         "",
         "# 7. Power API audit before spending time on NCU.",
+        "pipeline_stage power_and_power_state_audits",
         line(
             [
                 "python3",
@@ -1617,14 +1642,14 @@ W_SM={profile['l2_w']} KiB as the strict L2 path. The generated strict anchor is
 B{ncu_blocks}; the existing accepted RTX 3090 reporting package uses separate
 B16 targeted/stability evidence and must not be confused with this generated plan.""",
         "v100": f"""V100 uses `NCU_CHIP=gv100` and `l2_cg_load_only` as the L2
-final path. Before energy measurement, strict NCU tests normal-residency
+final path. Before L2 energy measurement, strict NCU tests normal-residency
 `contiguous`/`sm_interleaved` candidates at blocks/SM 32,16,4 and W_SM=32,64
 KiB/SM. V100 does not support CUDA persisting-L2 controls, so a persisting
 candidate is invalid. Only a candidate passing the unchanged 95% L2-hit gate is
 propagated to the L2 energy sweep. The NCU binary must explicitly support GV100.""",
         "a100": f"""A100 uses `NCU_CHIP=ga100`; its L2 candidates are below the
 {profile['l2_mib']} MiB L2 capacity and use `ld.global.cg` to avoid global-L1
-cache hits. Before energy measurement, NCU tests normal and supported persisting
+cache hits. Before L2 energy measurement, NCU tests normal and supported persisting
 residency with contiguous/sm_interleaved layouts and blocks/SM 16,8,4,2,1 at
 W_SM=16,128 KiB/SM. The first candidate passing path-specific L1 bypass, at
 least 95% final-service L2 hit, source/LTC-fabric sector conservation,
@@ -1638,7 +1663,7 @@ evidence. The resulting pJ/bit is an effective L2-plus-partition-fabric path
 coefficient, not pure L2 SRAM energy.""",
         "h100": f"""H100 uses `NCU_CHIP=gh100`; GH100 has a partitioned L2
 crossbar, so strict NCU tests the W_SM={profile['l2_w']} KiB candidates before
-energy measurement. The selected coordinate must pass path-specific L1 bypass,
+L2 energy measurement. The selected coordinate must pass path-specific L1 bypass,
 source/LTC-fabric final-service hit, sector conservation, expected traffic, and
 DRAM-leakage gates. A direct-partition hit rate below 95% is not itself a miss
 when coherent fabric hits recover the request. Missing GH100 fabric counters is
@@ -1714,11 +1739,13 @@ binary whose CSV header includes `measurement_scope`.
 | L2 | `{profile['l2_modes']}` | {profile['l2_w']} | {profile.get('l2_ncu_w_values', profile['l2_ncu_w'])}/{l2_ncu_block_label} | energy and final NCU load_repeat {profile['memory_energy_load_repeats']}; selector probes LR4; treatment/control-floor dual-calibrated pair-locked ITER |
 | External-memory read path (effective) | `global_addr_only,dram_cg_load_only` | {profile['dram_w']} | {profile['dram_w']}/{ncu_blocks} | W_SM은 nominal L2 배수 sweep; energy load_repeat {profile['memory_energy_load_repeats']}; pair-locked ITER; NCU read-byte conservation/write-contamination 검증 |
 
-For A100/V100/H100, the generated shell performs the L2 NCU selector before any long
-energy sweep. It records every rejected candidate in
+For A100/V100/H100, the generated shell first preserves independent Tensor,
+Shared, Global-L1, and external-memory energy sweeps. It then performs the L2 NCU
+selector before the L2 energy sweep. It records every rejected candidate in
 `{f'results/summary/{args.target_profile}_component_finalplan_{args.tag}_l2_path_selection.csv'}`.
-If no candidate passes, the shell stops without manufacturing an L2 coefficient;
-the 95% threshold is not relaxed.
+If no candidate passes, the shell stops without manufacturing an L2 coefficient,
+but the earlier non-L2 raw energy and calibration manifests remain available for
+their own audits. The 95% threshold is not relaxed.
 
 The energy runner applies the same 1 KiB/block feasibility rule to treatment and
 matched control. Global L1 valid coordinates are
@@ -1727,6 +1754,13 @@ matched control. Global L1 valid coordinates are
 generated matrix retains rejected rows with `valid=false`, but no rejected row
 is sent to the binary. Before collecting energy, every unique valid coordinate
 is also checked with the binary's `--dry-run` mode.
+
+The early `run_component_regression_sweep.py --self-test` stage uses only
+synthetic fixtures and performs no GPU measurement. Its normal output is one
+success line with no stderr. Real Tensor calibration starts only after the shell
+prints `REAL GPU CALIBRATION: profile={args.target_profile}` and
+`runtime Tensor pair calibration start`. A later rejection prefixed with
+`Runtime` and these real profile coordinates is a target-node failure.
 
 ## Architecture-Specific NCU Evidence
 

@@ -186,7 +186,7 @@ platform-package audits. The external-memory row passed separately as an
 effective GPU-device read path, not physical GDDR6X energy. This is preserved
 as GA102 v5 evidence; it is not silently relabeled as a v6 result.
 
-**Current source protocol (2026-07-15):** Tensor v6 is required for every new
+**Current source protocol (v6, package 2026-07-16):** Tensor v6 is required for every new
 run. An A100 v5 run exposed a launch-only `reg_operand_only` control: more than
 one billion requested iterations completed in about 1 ms, and the resulting
 pair-lock made one `reg_mma` command run for 2,096-4,280 s. Those A100 Tensor
@@ -219,7 +219,7 @@ Current RTX 3090 artifacts:
 | Tensor v5 binary audit | `results/summary/rtx3090_component_finalplan_20260714_tensor_mma_binary_audit.md` |
 | power API / power-state audits | `results/summary/rtx3090_component_finalplan_20260714_power_api_audit.md`, `results/summary/rtx3090_component_finalplan_20260714_power_state_audit.md` |
 | strict/package audits | `results/summary/rtx3090_strict_scope_fresh_ncu_component_summary_audit_20260714.md`, `results/summary/rtx3090_platform_result_package_audit_20260714.md` |
-| multi-platform readiness audit | `results/summary/component_energy_goal_readiness_audit_20260715.md` |
+| multi-platform readiness audit | `results/summary/component_energy_goal_readiness_audit_20260716.md` |
 
 Experiment setup and method documents:
 
@@ -261,29 +261,39 @@ Generated cross-platform command packages:
 
 | GPU | command plan | executable shell |
 |---|---|---|
-| A100 | `results/summary/a100_component_finalplan_20260715_command_plan.md` | `results/summary/a100_component_finalplan_20260715_commands.sh` |
+| A100 | `results/summary/a100_component_finalplan_20260716_command_plan.md` | `results/summary/a100_component_finalplan_20260716_commands.sh` |
 | A100 Tensor/L2 remediation | `results/summary/a100_tensor_l2_remediation_20260710_command_plan.md` | `results/summary/a100_tensor_l2_remediation_20260710_commands.sh` |
-| RTX 3090 | `results/summary/rtx3090_component_finalplan_20260715_command_plan.md` | `results/summary/rtx3090_component_finalplan_20260715_commands.sh` |
-| V100 | `results/summary/v100_component_finalplan_20260715_command_plan.md` | `results/summary/v100_component_finalplan_20260715_commands.sh` |
-| H100 | `results/summary/h100_component_finalplan_20260715_command_plan.md` | `results/summary/h100_component_finalplan_20260715_commands.sh` |
+| RTX 3090 | `results/summary/rtx3090_component_finalplan_20260716_command_plan.md` | `results/summary/rtx3090_component_finalplan_20260716_commands.sh` |
+| V100 | `results/summary/v100_component_finalplan_20260716_command_plan.md` | `results/summary/v100_component_finalplan_20260716_commands.sh` |
+| H100 | `results/summary/h100_component_finalplan_20260716_command_plan.md` | `results/summary/h100_component_finalplan_20260716_commands.sh` |
 
 These command packages are generated plans, not measured platform results. Run
 them on the matching target node after building the profile-specific binary, then
 rerun the power API, power-state, NCU, reliability, strict-summary, and goal
 readiness audits.
 
-The standard A100, V100, and H100 finalplans run an NCU-first L2 selector before any
-long energy sweep. The standalone A100 remediation package remains a focused
-diagnostic for the previously observed direct-partition hit range. The selector
-runs application-replay NCU prechecks over an ordered
+The standard A100, V100, and H100 finalplans first collect and preserve the
+independent Tensor, Shared, Global-L1, and external-memory energy sweeps. They
+then run an NCU-first L2 selector before the L2 energy sweep. Therefore, an L2
+selector rejection does not erase or invalidate the non-L2 raw measurements.
+The standalone A100 remediation package remains a focused diagnostic for the
+previously observed direct-partition hit range. The selector runs
+application-replay NCU prechecks over an ordered
 policy/address-layout/blocks-per-SM candidate list. On GA100 and GH100, the 95% gate applies
 to logical final service computed from source/TEX plus `srcunit_ltcfabric` hits;
 native lookup hit is checked against the reconstructed fabric model instead of
 being forced above 95%. It also requires observed L2 bytes to match logical
 expected traffic and verifies the persisting-cache size counter. It
-stops before the long energy sweep if no candidate passes. A persisting or
+stops before the L2 energy sweep if no candidate passes. A persisting or
 `sm_interleaved` result is configuration-specific effective path evidence, not a
 universal default-L2 value.
+
+The message `W=2048KiB B=16 SM=108 RF=4 ... ratio=21.930` was an intentional
+negative fixture inside the old policy self-test, not an A100 or V100 hardware
+calibration result. Current packages label synthetic tests explicitly, suppress
+their expected rejection diagnostics, and print the real profile and coordinate
+before runtime calibration. See
+`docs/audits/a100_v100_synthetic_selftest_false_failure_20260716_ko.md`.
 
 All platform packages now profile strict L2 rows with the smaller
 `NCU_METRIC_PROFILE=l2_path_minimal` bundle and require hit/miss/read sector

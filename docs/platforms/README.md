@@ -22,7 +22,7 @@
 | RTX/A100/V100 비교 | `docs/platforms/cross_platform_component_experiment_guide_ko.md` 4.0-4.5절 | 실험 파라미터, 유효/제외 좌표, energy raw row 수, NCU case 수, strict 좌표 비교 |
 | Power API | `docs/platforms/power_measurement_api_matrix_ko.md` | GPU 세대별 NVML/nvidia-smi power/energy API 의미와 제약 |
 | Memory-path audit | `docs/audits/memory_path_cross_architecture_sweep_audit_ko.md` | GPU별 path 논리, exact-NCU coverage, 제거/유지 sweep |
-| Readiness audit | `results/summary/platform_power_readiness_audit_20260715.md` | RTX 3090/V100/A100/H100 profile, power API, 문서, 생성 command plan 정합성 점검 결과 |
+| Readiness audit | `results/summary/platform_power_readiness_audit_20260716.md` | RTX 3090/V100/A100/H100 profile, power API, 문서, 생성 command plan 정합성 점검 결과 |
 | A100 | `docs/platforms/a100_node_experiment_guide_ko.md` | A100/GA100 profile, 40 MiB L2, HBM 계열 실험 절차 |
 | V100 | `docs/platforms/v100_node_experiment_guide_ko.md` | V100/GV100 profile, CUDA 12.x `compute_70`/Volta NCU toolchain 주의, 실행 절차 |
 | V100 L2 audit | `docs/audits/v100_l2_iter_mismatch_remediation_ko.md` | NCU path 성공과 energy 작업량 실패를 분리하고 동일-ITER 재실험 정책 기록 |
@@ -41,10 +41,10 @@ readiness audit으로 결과 패키지를 다시 검증한다.
 
 | GPU | command plan | executable shell | result manifest |
 |---|---|---|---|
-| RTX 3090 | `results/summary/rtx3090_component_finalplan_20260715_command_plan.md` | `results/summary/rtx3090_component_finalplan_20260715_commands.sh` | 실행 후 생성 |
-| A100 | `results/summary/a100_component_finalplan_20260715_command_plan.md` | `results/summary/a100_component_finalplan_20260715_commands.sh` | 실행 후 생성 |
-| V100 | `results/summary/v100_component_finalplan_20260715_command_plan.md` | `results/summary/v100_component_finalplan_20260715_commands.sh` | 실행 후 생성 |
-| H100 | `results/summary/h100_component_finalplan_20260715_command_plan.md` | `results/summary/h100_component_finalplan_20260715_commands.sh` | 실행 후 생성 |
+| RTX 3090 | `results/summary/rtx3090_component_finalplan_20260716_command_plan.md` | `results/summary/rtx3090_component_finalplan_20260716_commands.sh` | 실행 후 생성 |
+| A100 | `results/summary/a100_component_finalplan_20260716_command_plan.md` | `results/summary/a100_component_finalplan_20260716_commands.sh` | 실행 후 생성 |
+| V100 | `results/summary/v100_component_finalplan_20260716_command_plan.md` | `results/summary/v100_component_finalplan_20260716_commands.sh` | 실행 후 생성 |
+| H100 | `results/summary/h100_component_finalplan_20260716_command_plan.md` | `results/summary/h100_component_finalplan_20260716_commands.sh` | 실행 후 생성 |
 
 | profile | CUDA arch | required build command | generated binary path |
 |---|---:|---|---|
@@ -239,7 +239,7 @@ audit, goal readiness audit, intake dashboard 갱신, `git diff --check`를 순�
 `A100_ACTIVE_SM=<n>`, `V100_ACTIVE_SM=<n>`, `H100_ACTIVE_SM=<n>` 환경변수로 package
 audit 기준을 맞춘다.
 
-현재 기준 audit 결과는 `results/summary/platform_power_readiness_audit_20260715.md`에
+현재 기준 audit 결과는 `results/summary/platform_power_readiness_audit_20260716.md`에
 있다. 이 결과가 통과해도 A100/V100/H100의 component coefficient가 검증되었다는 뜻은
 아니며, 각 노드에서 power API audit과 NCU/reliability audit을 새로 통과해야 한다.
 

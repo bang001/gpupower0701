@@ -93,7 +93,7 @@ FORBIDDEN_ACTIVE_TERMS = {
 REQUIRED_POLICY_TERMS = {
     "README.md": (
         "rtx3090_strict_scope_fresh_ncu_component_coefficients_20260714.md",
-        "component_energy_goal_readiness_audit_20260715.md",
+        "component_energy_goal_readiness_audit_20260716.md",
     ),
     "SKILL.md": (
         "docs/methodology/howitworks.md",
@@ -151,7 +151,7 @@ REQUIRED_POLICY_TERMS = {
         'row["package_status"] == "pass"',
     ),
     "scripts/run_local_readiness_checks.sh": (
-        'READINESS_TAG="${READINESS_TAG:-20260715}"',
+        'READINESS_TAG="${READINESS_TAG:-20260716}"',
         '--goal-readiness-csv "results/summary/component_energy_goal_readiness_audit_${READINESS_TAG}.csv"',
     ),
 }

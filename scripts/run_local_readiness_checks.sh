@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TAG="${TAG:-20260715}"
-READINESS_TAG="${READINESS_TAG:-20260715}"
+TAG="${TAG:-20260716}"
+READINESS_TAG="${READINESS_TAG:-20260716}"
 NCU_BIN="${NCU:-}"
 
 if [[ -z "${NCU_BIN}" ]]; then

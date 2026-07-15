@@ -526,12 +526,20 @@ python3 scripts/plan_platform_component_experiment.py \
 bash results/summary/a100_component_finalplan_$(date +%Y%m%d)_commands.sh
 ```
 
+2026-07-16 이후 package에서 policy self-test는 synthetic 내부 출력을 캡처하고
+성공 한 줄만 남긴다. `W=2048KiB, SM=108, ITER=456/10000,
+ratio=21.930`은 과거 self-test fixture이며 실제 A100 측정값이 아니다. 실제
+calibration은 `REAL GPU CALIBRATION: profile=a100 W_SM=1KiB`와
+`runtime Tensor pair calibration start` 뒤에 출력된다. 구분 근거는
+[`a100_v100_synthetic_selftest_false_failure_20260716_ko.md`](../audits/a100_v100_synthetic_selftest_false_failure_20260716_ko.md)에 있다.
+
 A100 추천 finalplan 좌표:
 
 기존 실행에서 Tensor RF4 이상 음수/weak 또는 L2 CG path reject를 재현한 경우에는 다음
 targeted remediation package도 사용할 수 있다. 현재 표준 finalplan 자체에도 동일한
-NCU-first L2 selector가 통합되어 있으므로 새 실행은 표준 package만으로도 energy 전에
-L2 실패 원인을 남긴다.
+NCU-first L2 selector가 통합되어 있으므로 새 실행은 표준 package만으로도 L2 energy 전에
+L2 실패 원인을 남긴다. Tensor/Shared/Global-L1/external-memory energy는 selector보다
+먼저 실행하므로, L2가 reject돼도 이 네 raw/calibration artifact는 보존된다.
 
 ```bash
 NCU_USE_SUDO=1 bash results/summary/a100_tensor_l2_remediation_20260710_commands.sh

@@ -95,8 +95,9 @@ DRAM traffic으로 판정한다.
 현재 NCU sidecar는 기본적으로 `application replay + cache-control none`을 사용한다.
 metric pass마다 application setup과 kernel 전 warm-up을 다시 실행하기 위한 선택이다.
 summary에는 `ncu_replay_mode`, `ncu_cache_control`, `global_warmup_passes`,
-`ncu_metric_profile`, `l2_residency_policy`, `l2_address_layout`을 남긴다. A100/V100/H100 새 finalplan은 긴 energy
-sweep 전에 L2 후보를 먼저 profiling한다. A100/H100은 normal/persisting, V100은 CC 7.0에서
+`ncu_metric_profile`, `l2_residency_policy`, `l2_address_layout`을 남긴다. A100/V100/H100 새 finalplan은
+독립적인 Tensor/Shared/Global-L1/external-memory energy를 먼저 보존하고, L2 energy
+sweep 직전에 L2 후보를 profiling한다. A100/H100은 normal/persisting, V100은 CC 7.0에서
 지원되는 normal만 사용하며, 두 working-set anchor에서 strict gate를 통과한
 policy/layout/blocks-SM을 최소 L2 NCU와 energy에 동일하게 전달한다. 이 필드들과
 selected blocks/SM이 energy 구성과 정확히 일치하지 않으면 reject한다. persisting policy가 선택되면 그 값은

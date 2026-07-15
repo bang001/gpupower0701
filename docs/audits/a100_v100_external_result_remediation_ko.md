@@ -230,6 +230,6 @@ L2 row에서는 특히 다음 열이 필요하다.
 
 1. Pair 탈락의 한 원인은 코드상 확인되었고 수정되었다. 기존 Shared raw는 재분석 가치가 있다.
 2. L2 전달값은 A100/V100 모두 현재 무효다. 95% gate를 낮추지 않는다.
-3. standard finalplan에 architecture-aware L2 selector를 연결해 같은 실패를 긴 energy 측정 뒤에 발견하지 않도록 했다.
+3. standard finalplan에 architecture-aware L2 selector를 연결해 같은 실패를 L2 energy 측정 뒤에 발견하지 않도록 했다. 독립 non-L2 energy는 selector 전에 보존한다.
 4. Tensor/L1/DRAM 전달값은 버리지 않되, caution/low-stability 등급 그대로 유지한다.
 5. 새 selector도 실패하면 위 NCU artifact를 받아 metric과 실제 miss를 구분한 뒤 다음 kernel 설계를 결정한다.

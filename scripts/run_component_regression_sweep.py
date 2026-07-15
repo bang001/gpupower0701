@@ -11,7 +11,9 @@ noise floor.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
+import io
 import re
 import subprocess
 import sys
@@ -522,8 +524,8 @@ def resolve_tensor_pair_iters(
         if status != "pair_locked":
             write_pair_calibration_manifest(manifest_path, rows)
             print(
-                "Tensor pair calibration rejected before energy collection: "
-                f"W={key[2]}KiB B={key[3]} SM={key[4]} RF={key[5]} "
+                "Runtime Tensor pair calibration rejected before energy collection: "
+                f"profile={key[0]} W={key[2]}KiB B={key[3]} SM={key[4]} RF={key[5]} "
                 f"control/treatment ITER ratio={control_to_treatment_ratio:.3f}, "
                 f"predicted treatment={predicted_treatment_seconds:.3f}s, "
                 f"limit={treatment_target_seconds * max_treatment_stretch:.3f}s. "
@@ -763,7 +765,7 @@ def resolve_dram_pair_iters(
     )
 
 
-def run_self_test() -> None:
+def _run_self_test_checks() -> None:
     import tempfile
     from unittest import mock
 
@@ -821,11 +823,13 @@ def run_self_test() -> None:
         raise AssertionError("missing CALIBRATED_ITERS marker was accepted")
 
     base = {
-        "target_profile": "a100",
-        "gpu_list": "0",
-        "W_SM_KiB": 2048,
-        "blocks_per_SM": 16,
-        "active_SM": 108,
+        # Keep synthetic fixture coordinates visibly distinct from every real
+        # target profile so a failed wrapper cannot be mistaken for node data.
+        "target_profile": "synthetic_selftest",
+        "gpu_list": "none",
+        "W_SM_KiB": 17,
+        "blocks_per_SM": 4,
+        "active_SM": 3,
         "reuse_factor": 4,
         "load_repeat": 1,
         "store_repeat": 1,
@@ -1071,7 +1075,34 @@ def run_self_test() -> None:
         "global_addr_only",
         "l2_cg_load_only",
     ]
-    print("component regression sweep feasibility self-test passed")
+    print("component regression sweep feasibility self-test checks passed")
+
+
+def run_self_test() -> None:
+    """Run synthetic checks without leaking expected rejection diagnostics.
+
+    One fixture intentionally creates a runaway control/treatment ITER ratio and
+    asserts that the runtime gate rejects it. Emitting that expected diagnostic
+    on stderr made target-node wrappers report a false platform failure even
+    though the self-test returned zero.
+    """
+
+    captured_stdout = io.StringIO()
+    captured_stderr = io.StringIO()
+    with contextlib.redirect_stdout(captured_stdout), contextlib.redirect_stderr(
+        captured_stderr
+    ):
+        _run_self_test_checks()
+
+    stdout_text = captured_stdout.getvalue()
+    stderr_text = captured_stderr.getvalue()
+    assert "feasibility self-test checks passed" in stdout_text
+    assert "reject_control_iter_stretch" not in stdout_text
+    assert "Runtime Tensor pair calibration rejected before energy collection" in stderr_text
+    print(
+        "component regression sweep self-test passed "
+        "(synthetic runaway rejection verified; no GPU measurement performed)"
+    )
 
 
 def binary_dry_run_preflight(commands: list[dict[str, Any]]) -> int:
@@ -1447,6 +1478,13 @@ def main() -> int:
         return preflight_rc
 
     if args.tensor_pair_lock_iters and not args.iters:
+        print(
+            "runtime Tensor pair calibration start: "
+            f"profile={args.target_profile} W_SM_KiB={args.w_sm_kib_values} "
+            f"blocks_per_SM={args.blocks_per_sm_values} "
+            f"active_SM={args.active_sm_values} RF={args.reuse_factors}",
+            flush=True,
+        )
         calibration_path = (
             Path(args.pair_calibration_csv)
             if args.pair_calibration_csv

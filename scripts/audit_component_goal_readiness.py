@@ -46,7 +46,7 @@ COMMAND_PACKAGE_PROFILES = ("v100", "a100", "h100")
 FABRIC_AWARE_L2_PROFILES = {"a100", "h100"}
 
 POWER_MATRIX = Path("docs/platforms/power_measurement_api_matrix_ko.md")
-PLATFORM_READINESS = Path("results/summary/platform_power_readiness_audit_20260715.csv")
+PLATFORM_READINESS = Path("results/summary/platform_power_readiness_audit_20260716.csv")
 STRICT_RTX3090_SUMMARY = Path(
     "results/summary/rtx3090_strict_scope_fresh_ncu_component_coefficients_20260708.csv"
 )
@@ -78,6 +78,14 @@ COMMAND_SHELL_TERMS = [
     "--strict",
     "--active-sm",
     "scripts/audit_power_api_measurements.py --self-test",
+    "NOTE: self-tests use synthetic coordinates",
+    "pipeline_stage tensor_energy_sweep",
+    "pipeline_stage shared_energy_sweep",
+    "pipeline_stage global_l1_energy_sweep",
+    "pipeline_stage external_memory_energy_sweep",
+    "pipeline_stage l2_path_selection",
+    "pipeline_stage l2_energy_sweep",
+    "REAL GPU CALIBRATION:",
     "scripts/audit_a100_tensor_l2_remediation.py --self-test",
     "scripts/write_platform_result_manifest.py --self-test",
     "scripts/selftest_platform_package_gates.py",
@@ -179,7 +187,7 @@ COMMAND_PLAN_TERMS = [
 ]
 
 LOCAL_READINESS_RUNNER_TERMS = [
-    'TAG="${TAG:-20260715}"',
+    'TAG="${TAG:-20260716}"',
     "scripts/write_platform_result_manifest.py",
     "--out-csv \"results/summary/${profile}_component_finalplan_${TAG}_result_manifest.csv\"",
     "--out-md \"results/summary/${profile}_component_finalplan_${TAG}_result_manifest.md\"",
@@ -1458,7 +1466,7 @@ def self_test() -> None:
         runner.parent.mkdir(parents=True, exist_ok=True)
         good_runner_text = """#!/usr/bin/env bash
 set -euo pipefail
-TAG="${TAG:-20260715}"
+TAG="${TAG:-20260716}"
 A100_ACTIVE_SM="${A100_ACTIVE_SM:-108}"
 V100_ACTIVE_SM="${V100_ACTIVE_SM:-80}"
 H100_ACTIVE_SM="${H100_ACTIVE_SM:-132}"
@@ -1724,6 +1732,22 @@ def validate_command_package(
         problems.append("plan_target_profile_mismatch")
     if f"| expected power semantics | `{expected_semantics}` |" not in plan_text:
         problems.append("plan_power_semantics_mismatch")
+    energy_stage_names = [
+        "pipeline_stage tensor_energy_sweep",
+        "pipeline_stage shared_energy_sweep",
+        "pipeline_stage global_l1_energy_sweep",
+        "pipeline_stage external_memory_energy_sweep",
+        "pipeline_stage l2_path_selection",
+        "pipeline_stage l2_energy_sweep",
+    ]
+    energy_stage_positions = [shell_text.find(name) for name in energy_stage_names]
+    if any(position < 0 for position in energy_stage_positions):
+        problems.append("shell_component_stage_missing")
+    elif energy_stage_positions != sorted(energy_stage_positions):
+        problems.append(
+            "shell_component_failure_isolation_order="
+            + ",".join(str(position) for position in energy_stage_positions)
+        )
     goal_pos = shell_text.find("scripts/audit_component_goal_readiness.py --ncu")
     dashboard_pos = shell_text.find("scripts/build_platform_intake_dashboard.py")
     if goal_pos < 0 or dashboard_pos < 0 or dashboard_pos < goal_pos:

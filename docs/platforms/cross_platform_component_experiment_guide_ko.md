@@ -133,7 +133,7 @@ coefficient는 final이 아니다. 이 경우 설정을 고쳐 energy run을 다
 RTX 3090/V100/A100/H100 profile이 `plan_platform_component_experiment.py`,
 `preflight_gpu_support.py`, 플랫폼 문서, power API matrix에서 같은 의미로 쓰이는지
 확인한다. 현재 통과 결과는
-`results/summary/platform_power_readiness_audit_20260715.md`에 있다. 단, 이것은
+`results/summary/platform_power_readiness_audit_20260716.md`에 있다. 단, 이것은
 실제 GPU 측정이나 NCU 검증을 대체하지 않는다.
 
 Power-state audit은 power API gate와 다르다. Power API gate가 numerator API의
@@ -417,9 +417,9 @@ readiness self-test와 full goal readiness audit까지 포함한다. Package aud
 
 | GPU | command plan | executable shell |
 |---|---|---|
-| A100 | `results/summary/a100_component_finalplan_20260715_command_plan.md` | `results/summary/a100_component_finalplan_20260715_commands.sh` |
-| V100 | `results/summary/v100_component_finalplan_20260715_command_plan.md` | `results/summary/v100_component_finalplan_20260715_commands.sh` |
-| H100 | `results/summary/h100_component_finalplan_20260715_command_plan.md` | `results/summary/h100_component_finalplan_20260715_commands.sh` |
+| A100 | `results/summary/a100_component_finalplan_20260716_command_plan.md` | `results/summary/a100_component_finalplan_20260716_commands.sh` |
+| V100 | `results/summary/v100_component_finalplan_20260716_command_plan.md` | `results/summary/v100_component_finalplan_20260716_commands.sh` |
+| H100 | `results/summary/h100_component_finalplan_20260716_command_plan.md` | `results/summary/h100_component_finalplan_20260716_commands.sh` |
 
 V100 노드 작업을 다른 작업자나 에이전트에게 전달할 때는 실행 프롬프트를 [v100_experiment_prompt_ko.md](prompts/v100_experiment_prompt_ko.md)에 따로 분리해 두었다. 이 프롬프트는 `sm_70`, `NCU_CHIP=gv100`, V100 L2/shared capacity, NCU path acceptance 기준을 명시해서 RTX 3090/A100 좌표가 섞이는 문제를 줄이기 위한 것이다.
 
@@ -617,9 +617,14 @@ L2 CG도 같은 최소 tile 조건을 적용한다. 두 W endpoint를 같은 sel
 | GPU | 유효 L2 CG W/B | 제외되는 W/B | 제외 이유 |
 |---|---|---|---|
 | RTX 3090 | W32,64/B8 | 없음 | 두 좌표 모두 exact minimal NCU |
-| A100 | selector candidate W16,128/B16,8,4,2,1 | 없음 | 두 W를 통과한 B 하나만 full energy에 전달 |
+| A100 | selector candidate W16,128/B16,8,4,2,1 | 없음 | 두 W를 통과한 B 하나만 L2 energy에 전달 |
 | V100 | selector candidate W32,64/B32,16,4 | 없음 | normal policy만 허용하고 두 W를 모두 검증 |
 | H100 | selector candidate W64,128/B16,8 | 없음 | 두 W와 fabric-aware gate를 통과한 B 하나만 전달 |
+
+2026-07-16 package부터 synthetic policy self-test의 expected rejection은 내부에서
+캡처한다. 실제 target calibration reject는 반드시 `Runtime Tensor pair calibration
+rejected`와 profile별 실제 W/SM 좌표를 포함한다. 또한 non-L2 energy를 먼저 보존한
+뒤 L2 selector를 실행하므로 L2 실패를 Tensor/Shared/L1/DRAM 실패로 합치지 않는다.
 
 ### 4.3 표준 package의 실험 개수
 

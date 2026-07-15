@@ -514,14 +514,21 @@ https://developer.nvidia.com/nvidia-development-tools-solutions-ERR_NVGPUCTRPERM
 관리자 정책을 즉시 변경할 수 없으면 처음부터 sudo mode로 실행할 수 있다.
 
 ```bash
-NCU_USE_SUDO=1 bash results/summary/v100_component_finalplan_20260715_commands.sh
+NCU_USE_SUDO=1 bash results/summary/v100_component_finalplan_20260716_commands.sh
 ```
 
 기본 자동 fallback을 사용하려면 일반 명령 그대로 실행한다.
 
 ```bash
-NCU_AUTO_SUDO=1 bash results/summary/v100_component_finalplan_20260715_commands.sh
+NCU_AUTO_SUDO=1 bash results/summary/v100_component_finalplan_20260716_commands.sh
 ```
+
+`W=2048KiB, SM=108, ITER=456/10000, ratio=21.930` 문구는 과거
+synthetic rejection self-test 값이며 V100 runtime 결과가 아니다. 실제 V100
+Tensor calibration은 `profile=v100 W=1KiB ... SM=80`이어야 한다. 2026-07-16
+package는 synthetic stdout/stderr를 캡처하고 실제 단계마다 `PIPELINE_STAGE`와
+`REAL GPU CALIBRATION`을 출력한다. 자세한 판정은
+[`a100_v100_synthetic_selftest_false_failure_20260716_ko.md`](../audits/a100_v100_synthetic_selftest_false_failure_20260716_ko.md)를 따른다.
 
 수동 NCU validation만 다시 돌릴 때는 기존 명령에 `NCU_USE_SUDO=1`을 붙인다.
 
