@@ -893,12 +893,37 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
 
     commands = [
         "#!/usr/bin/env bash",
-        "set -euo pipefail",
+        "set -Eeuo pipefail",
         "",
         f"# Generated for {args.target_profile} on {dt.date.today().isoformat()}.",
         f"# {profile['note']}",
         "mkdir -p results/raw results/summary results/ncu",
-        "pipeline_stage() { printf '\\n== PIPELINE_STAGE: %s ==\\n' \"$1\"; }",
+        "CURRENT_PIPELINE_STAGE=initialization",
+        "pipeline_stage() { CURRENT_PIPELINE_STAGE=\"$1\"; printf '\\n== PIPELINE_STAGE: %s ==\\n' \"${CURRENT_PIPELINE_STAGE}\"; }",
+        "pipeline_error() {",
+        "  local rc=$?",
+        "  local line=\"${BASH_LINENO[0]:-unknown}\"",
+        "  local command=\"${BASH_COMMAND:-unknown}\"",
+        "  trap - ERR",
+        "  printf '== PIPELINE_ABORT: stage=%s line=%s rc=%s command=%q ==\\n' \"${CURRENT_PIPELINE_STAGE}\" \"${line}\" \"${rc}\" \"${command}\" >&2",
+        "  exit \"${rc}\"",
+        "}",
+        "trap pipeline_error ERR",
+        "run_checked() {",
+        "  local label=\"$1\"",
+        "  shift",
+        "  printf '== PIPELINE_COMMAND_BEGIN: stage=%s label=%s ==\\n' \"${CURRENT_PIPELINE_STAGE}\" \"${label}\"",
+        "  printf 'command:'",
+        "  printf ' %q' \"$@\"",
+        "  printf '\\n'",
+        "  local rc=0",
+        "  \"$@\" || rc=$?",
+        "  if [[ \"${rc}\" -ne 0 ]]; then",
+        "    printf '== PIPELINE_COMMAND_FAILED: stage=%s label=%s rc=%s ==\\n' \"${CURRENT_PIPELINE_STAGE}\" \"${label}\" \"${rc}\" >&2",
+        "    return \"${rc}\"",
+        "  fi",
+        "  printf '== PIPELINE_COMMAND_PASS: stage=%s label=%s ==\\n' \"${CURRENT_PIPELINE_STAGE}\" \"${label}\"",
+        "}",
         "pipeline_stage initialization",
         "",
         "# NCU wrapper. Counter access is probed before the long energy sweep.",
@@ -910,6 +935,20 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         "NCU_SUDO=\"${NCU_SUDO:-sudo -E}\"",
         "export NCU_USE_SUDO NCU_AUTO_SUDO NCU_SUDO",
         "NVCC_COMMAND=\"${NVCC:-nvcc}\"",
+        "NVCC_EXECUTABLE=\"${NVCC_COMMAND%% *}\"",
+        "NVCC_RESOLVED=\"$(command -v \"${NVCC_EXECUTABLE}\" 2>/dev/null || true)\"",
+        "if [[ -z \"${NVCC_RESOLVED}\" && -x \"${NVCC_EXECUTABLE}\" ]]; then NVCC_RESOLVED=\"${NVCC_EXECUTABLE}\"; fi",
+        "if [[ -z \"${NVCC_RESOLVED}\" ]]; then echo \"nvcc was not found: ${NVCC_COMMAND}\" >&2; exit 127; fi",
+        "NVCC_COMMAND=\"${NVCC_RESOLVED}\"",
+        "CUDA_TOOLKIT_BIN=\"$(dirname \"$(readlink -f \"${NVCC_RESOLVED}\")\")\"",
+        "CUOBJDUMP_COMMAND=\"${CUOBJDUMP:-}\"",
+        "if [[ -z \"${CUOBJDUMP_COMMAND}\" && -x \"${CUDA_TOOLKIT_BIN}/cuobjdump\" ]]; then CUOBJDUMP_COMMAND=\"${CUDA_TOOLKIT_BIN}/cuobjdump\"; fi",
+        "if [[ -z \"${CUOBJDUMP_COMMAND}\" ]]; then CUOBJDUMP_COMMAND=\"$(command -v cuobjdump 2>/dev/null || true)\"; fi",
+        "CUOBJDUMP_RESOLVED=\"$(command -v \"${CUOBJDUMP_COMMAND}\" 2>/dev/null || true)\"",
+        "if [[ -z \"${CUOBJDUMP_RESOLVED}\" && -x \"${CUOBJDUMP_COMMAND}\" ]]; then CUOBJDUMP_RESOLVED=\"${CUOBJDUMP_COMMAND}\"; fi",
+        "if [[ -z \"${CUOBJDUMP_RESOLVED}\" ]]; then echo \"cuobjdump was not found beside nvcc (${CUDA_TOOLKIT_BIN}) or in PATH; set CUOBJDUMP explicitly\" >&2; exit 127; fi",
+        "CUOBJDUMP_COMMAND=\"${CUOBJDUMP_RESOLVED}\"",
+        "export NVCC=\"${NVCC_COMMAND}\" CUOBJDUMP=\"${CUOBJDUMP_COMMAND}\"",
         "if [[ \"${NCU_USE_SUDO}\" == \"1\" ]]; then",
         "  NCU_COMMAND=\"${NCU_SUDO} ${NCU_BIN}\"",
         "else",
@@ -918,6 +957,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         "echo \"Using NCU command: ${NCU_COMMAND}\"",
         "echo \"NCU permission policy: use_sudo=${NCU_USE_SUDO} auto_sudo=${NCU_AUTO_SUDO}\"",
         "echo \"Using CUDA compiler: ${NVCC_COMMAND}\"",
+        "echo \"Using CUDA binary inspector: ${CUOBJDUMP_COMMAND}\"",
         f"L2_BLOCKS_PER_SM={ncu_blocks}",
         "L2_RESIDENCY_POLICY=normal",
         "L2_ADDRESS_LAYOUT=contiguous",
@@ -1071,8 +1111,11 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         "",
         "# 4. Three-row schema/revision smoke test. Catch stale binaries before the full sweep.",
         "pipeline_stage schema_revision_smoke",
+        "pipeline_stage schema_smoke_kernel_execution",
         line(
             [
+                "run_checked",
+                "schema_clocked_empty",
                 q(binary),
                 "--gpu-list",
                 q(args.gpu_ids.split(",")[0]),
@@ -1106,6 +1149,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         ),
         line(
             [
+                "run_checked",
+                "schema_reg_operand_only",
                 q(binary),
                 "--gpu-list",
                 q(args.gpu_ids.split(",")[0]),
@@ -1139,6 +1184,8 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         ),
         line(
             [
+                "run_checked",
+                "schema_l2_cg_load_only",
                 q(binary),
                 "--gpu-list",
                 q(args.gpu_ids.split(",")[0]),
@@ -1170,8 +1217,11 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "0",
             ]
         ),
+        "pipeline_stage schema_smoke_power_api_audit",
         line(
             [
+                "run_checked",
+                "schema_power_api_audit",
                 "python3",
                 "scripts/audit_power_api_measurements.py",
                 q(schema_smoke_csv),
@@ -1197,14 +1247,19 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
                 "dram_cg_load_only=input_data_pattern=splitmix64_uniform_fp16_v1",
             ]
         ),
+        "pipeline_stage tensor_binary_static_audit",
         line(
             [
+                "run_checked",
+                "tensor_mma_binary_audit",
                 "python3",
                 "scripts/audit_tensor_mma_binary.py",
                 "--binary",
                 q(binary),
                 "--profile",
                 q(args.target_profile),
+                "--cuobjdump",
+                "\"${CUOBJDUMP_COMMAND}\"",
                 "--out-csv",
                 q(tensor_binary_audit_csv),
                 "--out-md",
@@ -1702,6 +1757,7 @@ Generated: {dt.date.today().isoformat()}
 | DRAM address-control calibration floor (s) | `{dram_control_min_seconds}` |
 | binary | `{args.binary}` |
 | NCU | `{args.ncu}` |
+| CUDA binary inspector | selected `nvcc` toolkit's sibling `cuobjdump`; override with `CUOBJDUMP=/absolute/path` |
 | NCU counter permission probe | baseline hardware-counter profile before energy sweep |
 | NCU automatic sudo retry | enabled by default with `NCU_AUTO_SUDO=1` |
 | NCU sudo fallback | `NCU_USE_SUDO=1 bash {out_sh}` |
@@ -1816,6 +1872,16 @@ retry can be disabled with `NCU_AUTO_SUDO=0`. To use sudo from the beginning:
 ```bash
 NCU_USE_SUDO=1 bash {out_sh}
 ```
+
+The shell resolves `cuobjdump` beside the selected `NVCC` executable and passes
+that exact path to the Tensor SASS audit. A global `ERR` trap prints the active
+stage, shell line, return code, and failed command for every unhandled failure.
+The schema smoke is split into
+`schema_smoke_kernel_execution`, `schema_smoke_power_api_audit`, and
+`tensor_binary_static_audit`. Every checked command prints begin/pass/fail lines,
+its shell-escaped command, and a nonzero return code. Do not bypass a failure:
+use the reported label plus the generated power or Tensor audit CSV to determine
+whether the cause is a stale binary, an invalid power schema, or a real SASS gate.
 
 If `sudo` does not preserve the CUDA/Nsight Compute environment, make the NCU
 binary explicit and preserve the environment:

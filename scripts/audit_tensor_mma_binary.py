@@ -433,6 +433,7 @@ def main() -> int:
     cuobjdump = find_cuobjdump(args.cuobjdump)
     if not cuobjdump:
         parser.error("cuobjdump was not found; pass --cuobjdump")
+    print(f"cuobjdump: {cuobjdump}")
 
     resources_text = run_cuobjdump(cuobjdump, str(binary), "--dump-resource-usage")
     sass_text = run_cuobjdump(cuobjdump, str(binary), "--dump-sass")
@@ -449,6 +450,13 @@ def main() -> int:
     print(f"failed: {len(failed)}")
     print(f"wrote csv: {args.out_csv}")
     print(f"wrote markdown: {args.out_md}")
+    for row in failed:
+        print(
+            "Tensor binary audit failed row: "
+            f"mode={row['mode']} RF={row['reuse_factor']} "
+            f"symbol={row['symbol'] or 'missing'} reasons={row['reasons']}",
+            file=sys.stderr,
+        )
     return 1 if failed else 0
 
 

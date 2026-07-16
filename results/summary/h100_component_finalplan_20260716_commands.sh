@@ -1,10 +1,35 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 # Generated for h100 on 2026-07-16.
 # H100 SXM5 planning profile (GH100, 132 SM, 50 MiB L2, HBM3). External-memory W_SM spans about 5.3x-21.1x nominal L2. The L2 path requires source plus LTC-fabric final-service evidence. Current kernel uses WMMA compatibility, not WGMMA/TMA; H100 PCIe must be separately labelled and replanned from its runtime SM count and memory subsystem.
 mkdir -p results/raw results/summary results/ncu
-pipeline_stage() { printf '\n== PIPELINE_STAGE: %s ==\n' "$1"; }
+CURRENT_PIPELINE_STAGE=initialization
+pipeline_stage() { CURRENT_PIPELINE_STAGE="$1"; printf '\n== PIPELINE_STAGE: %s ==\n' "${CURRENT_PIPELINE_STAGE}"; }
+pipeline_error() {
+  local rc=$?
+  local line="${BASH_LINENO[0]:-unknown}"
+  local command="${BASH_COMMAND:-unknown}"
+  trap - ERR
+  printf '== PIPELINE_ABORT: stage=%s line=%s rc=%s command=%q ==\n' "${CURRENT_PIPELINE_STAGE}" "${line}" "${rc}" "${command}" >&2
+  exit "${rc}"
+}
+trap pipeline_error ERR
+run_checked() {
+  local label="$1"
+  shift
+  printf '== PIPELINE_COMMAND_BEGIN: stage=%s label=%s ==\n' "${CURRENT_PIPELINE_STAGE}" "${label}"
+  printf 'command:'
+  printf ' %q' "$@"
+  printf '\n'
+  local rc=0
+  "$@" || rc=$?
+  if [[ "${rc}" -ne 0 ]]; then
+    printf '== PIPELINE_COMMAND_FAILED: stage=%s label=%s rc=%s ==\n' "${CURRENT_PIPELINE_STAGE}" "${label}" "${rc}" >&2
+    return "${rc}"
+  fi
+  printf '== PIPELINE_COMMAND_PASS: stage=%s label=%s ==\n' "${CURRENT_PIPELINE_STAGE}" "${label}"
+}
 pipeline_stage initialization
 
 # NCU wrapper. Counter access is probed before the long energy sweep.
@@ -16,6 +41,20 @@ NCU_AUTO_SUDO="${NCU_AUTO_SUDO:-1}"
 NCU_SUDO="${NCU_SUDO:-sudo -E}"
 export NCU_USE_SUDO NCU_AUTO_SUDO NCU_SUDO
 NVCC_COMMAND="${NVCC:-nvcc}"
+NVCC_EXECUTABLE="${NVCC_COMMAND%% *}"
+NVCC_RESOLVED="$(command -v "${NVCC_EXECUTABLE}" 2>/dev/null || true)"
+if [[ -z "${NVCC_RESOLVED}" && -x "${NVCC_EXECUTABLE}" ]]; then NVCC_RESOLVED="${NVCC_EXECUTABLE}"; fi
+if [[ -z "${NVCC_RESOLVED}" ]]; then echo "nvcc was not found: ${NVCC_COMMAND}" >&2; exit 127; fi
+NVCC_COMMAND="${NVCC_RESOLVED}"
+CUDA_TOOLKIT_BIN="$(dirname "$(readlink -f "${NVCC_RESOLVED}")")"
+CUOBJDUMP_COMMAND="${CUOBJDUMP:-}"
+if [[ -z "${CUOBJDUMP_COMMAND}" && -x "${CUDA_TOOLKIT_BIN}/cuobjdump" ]]; then CUOBJDUMP_COMMAND="${CUDA_TOOLKIT_BIN}/cuobjdump"; fi
+if [[ -z "${CUOBJDUMP_COMMAND}" ]]; then CUOBJDUMP_COMMAND="$(command -v cuobjdump 2>/dev/null || true)"; fi
+CUOBJDUMP_RESOLVED="$(command -v "${CUOBJDUMP_COMMAND}" 2>/dev/null || true)"
+if [[ -z "${CUOBJDUMP_RESOLVED}" && -x "${CUOBJDUMP_COMMAND}" ]]; then CUOBJDUMP_RESOLVED="${CUOBJDUMP_COMMAND}"; fi
+if [[ -z "${CUOBJDUMP_RESOLVED}" ]]; then echo "cuobjdump was not found beside nvcc (${CUDA_TOOLKIT_BIN}) or in PATH; set CUOBJDUMP explicitly" >&2; exit 127; fi
+CUOBJDUMP_COMMAND="${CUOBJDUMP_RESOLVED}"
+export NVCC="${NVCC_COMMAND}" CUOBJDUMP="${CUOBJDUMP_COMMAND}"
 if [[ "${NCU_USE_SUDO}" == "1" ]]; then
   NCU_COMMAND="${NCU_SUDO} ${NCU_BIN}"
 else
@@ -24,6 +63,7 @@ fi
 echo "Using NCU command: ${NCU_COMMAND}"
 echo "NCU permission policy: use_sudo=${NCU_USE_SUDO} auto_sudo=${NCU_AUTO_SUDO}"
 echo "Using CUDA compiler: ${NVCC_COMMAND}"
+echo "Using CUDA binary inspector: ${CUOBJDUMP_COMMAND}"
 L2_BLOCKS_PER_SM=16
 L2_RESIDENCY_POLICY=normal
 L2_ADDRESS_LAYOUT=contiguous
@@ -142,11 +182,14 @@ shopt -u nullglob
 
 # 4. Three-row schema/revision smoke test. Catch stale binaries before the full sweep.
 pipeline_stage schema_revision_smoke
-./build-h100/a100_fp16_energy_v2 --gpu-list 0 --mode clocked_empty --w-sm-kib 1 --blocks-per-sm 1 --target-profile h100 --active-sm 1 --seconds 0.2 --iters 1 --repeats 1 --reuse-factor 1 --load-repeat 1 --store-repeat 1 --output results/raw/h100_component_finalplan_20260716_schema_smoke.csv --verify-smid 0
-./build-h100/a100_fp16_energy_v2 --gpu-list 0 --mode reg_operand_only --w-sm-kib 1 --blocks-per-sm 1 --target-profile h100 --active-sm 1 --seconds 0.2 --iters 1 --repeats 1 --reuse-factor 1 --load-repeat 1 --store-repeat 1 --output results/raw/h100_component_finalplan_20260716_schema_smoke.csv --verify-smid 0
-./build-h100/a100_fp16_energy_v2 --gpu-list 0 --mode l2_cg_load_only --w-sm-kib 64 --blocks-per-sm 1 --target-profile h100 --active-sm 1 --seconds 0.2 --iters 1 --repeats 1 --reuse-factor 1 --load-repeat 1 --store-repeat 1 --output results/raw/h100_component_finalplan_20260716_schema_smoke.csv --verify-smid 0
-python3 scripts/audit_power_api_measurements.py results/raw/h100_component_finalplan_20260716_schema_smoke.csv --target-profile h100 --out-csv results/summary/h100_component_finalplan_20260716_schema_smoke_power_api_audit.csv --out-md results/summary/h100_component_finalplan_20260716_schema_smoke_power_api_audit.md --fail-on-reject --fail-on-provisional --require-explicit-measurement-scope --require-exact-measurement-interval --require-mode-notes-marker reg_operand_only=tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6 --require-mode-notes-marker reg_mma=tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6 --require-mode-notes-marker l2_cg_load_only=global_warmup_policy=ld_global_cg --require-mode-notes-marker dram_cg_load_only=global_warmup_policy=ld_global_cg --require-mode-notes-marker dram_cg_load_only=input_data_pattern=splitmix64_uniform_fp16_v1
-python3 scripts/audit_tensor_mma_binary.py --binary ./build-h100/a100_fp16_energy_v2 --profile h100 --out-csv results/summary/h100_component_finalplan_20260716_tensor_mma_binary_audit.csv --out-md results/summary/h100_component_finalplan_20260716_tensor_mma_binary_audit.md
+pipeline_stage schema_smoke_kernel_execution
+run_checked schema_clocked_empty ./build-h100/a100_fp16_energy_v2 --gpu-list 0 --mode clocked_empty --w-sm-kib 1 --blocks-per-sm 1 --target-profile h100 --active-sm 1 --seconds 0.2 --iters 1 --repeats 1 --reuse-factor 1 --load-repeat 1 --store-repeat 1 --output results/raw/h100_component_finalplan_20260716_schema_smoke.csv --verify-smid 0
+run_checked schema_reg_operand_only ./build-h100/a100_fp16_energy_v2 --gpu-list 0 --mode reg_operand_only --w-sm-kib 1 --blocks-per-sm 1 --target-profile h100 --active-sm 1 --seconds 0.2 --iters 1 --repeats 1 --reuse-factor 1 --load-repeat 1 --store-repeat 1 --output results/raw/h100_component_finalplan_20260716_schema_smoke.csv --verify-smid 0
+run_checked schema_l2_cg_load_only ./build-h100/a100_fp16_energy_v2 --gpu-list 0 --mode l2_cg_load_only --w-sm-kib 64 --blocks-per-sm 1 --target-profile h100 --active-sm 1 --seconds 0.2 --iters 1 --repeats 1 --reuse-factor 1 --load-repeat 1 --store-repeat 1 --output results/raw/h100_component_finalplan_20260716_schema_smoke.csv --verify-smid 0
+pipeline_stage schema_smoke_power_api_audit
+run_checked schema_power_api_audit python3 scripts/audit_power_api_measurements.py results/raw/h100_component_finalplan_20260716_schema_smoke.csv --target-profile h100 --out-csv results/summary/h100_component_finalplan_20260716_schema_smoke_power_api_audit.csv --out-md results/summary/h100_component_finalplan_20260716_schema_smoke_power_api_audit.md --fail-on-reject --fail-on-provisional --require-explicit-measurement-scope --require-exact-measurement-interval --require-mode-notes-marker reg_operand_only=tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6 --require-mode-notes-marker reg_mma=tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6 --require-mode-notes-marker l2_cg_load_only=global_warmup_policy=ld_global_cg --require-mode-notes-marker dram_cg_load_only=global_warmup_policy=ld_global_cg --require-mode-notes-marker dram_cg_load_only=input_data_pattern=splitmix64_uniform_fp16_v1
+pipeline_stage tensor_binary_static_audit
+run_checked tensor_mma_binary_audit python3 scripts/audit_tensor_mma_binary.py --binary ./build-h100/a100_fp16_energy_v2 --profile h100 --cuobjdump "${CUOBJDUMP_COMMAND}" --out-csv results/summary/h100_component_finalplan_20260716_tensor_mma_binary_audit.csv --out-md results/summary/h100_component_finalplan_20260716_tensor_mma_binary_audit.md
 
 # 5. Independent non-L2 energy sweeps. Keep NCU detached from these runs.
 pipeline_stage tensor_energy_sweep

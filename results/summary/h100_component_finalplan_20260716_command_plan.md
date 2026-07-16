@@ -25,6 +25,7 @@ Generated: 2026-07-16
 | DRAM address-control calibration floor (s) | `1.0` |
 | binary | `./build-h100/a100_fp16_energy_v2` |
 | NCU | `ncu` |
+| CUDA binary inspector | selected `nvcc` toolkit's sibling `cuobjdump`; override with `CUOBJDUMP=/absolute/path` |
 | NCU counter permission probe | baseline hardware-counter profile before energy sweep |
 | NCU automatic sudo retry | enabled by default with `NCU_AUTO_SUDO=1` |
 | NCU sudo fallback | `NCU_USE_SUDO=1 bash results/summary/h100_component_finalplan_20260716_commands.sh` |
@@ -150,6 +151,16 @@ retry can be disabled with `NCU_AUTO_SUDO=0`. To use sudo from the beginning:
 ```bash
 NCU_USE_SUDO=1 bash results/summary/h100_component_finalplan_20260716_commands.sh
 ```
+
+The shell resolves `cuobjdump` beside the selected `NVCC` executable and passes
+that exact path to the Tensor SASS audit. A global `ERR` trap prints the active
+stage, shell line, return code, and failed command for every unhandled failure.
+The schema smoke is split into
+`schema_smoke_kernel_execution`, `schema_smoke_power_api_audit`, and
+`tensor_binary_static_audit`. Every checked command prints begin/pass/fail lines,
+its shell-escaped command, and a nonzero return code. Do not bypass a failure:
+use the reported label plus the generated power or Tensor audit CSV to determine
+whether the cause is a stale binary, an invalid power schema, or a real SASS gate.
 
 If `sudo` does not preserve the CUDA/Nsight Compute environment, make the NCU
 binary explicit and preserve the environment:

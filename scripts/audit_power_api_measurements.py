@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterable
@@ -43,6 +44,8 @@ REQUIRED_COLUMNS = {
     "power_sample_count",
     "power_sample_period_ms",
 }
+
+MAX_CONSOLE_PROBLEM_ROWS = 20
 
 
 def truthy(value: str) -> bool:
@@ -193,6 +196,7 @@ def audit_row(
     return {
         "input_file": input_file,
         "row_index": str(row_index),
+        "mode": mode,
         "profile_name": row.get("profile_name", ""),
         "chip": row.get("chip", ""),
         "expected_profile": expected_profile,
@@ -255,6 +259,7 @@ def write_csv(path: str, rows: list[dict[str, str]]) -> None:
     fieldnames = [
         "input_file",
         "row_index",
+        "mode",
         "profile_name",
         "chip",
         "expected_profile",
@@ -285,6 +290,31 @@ def write_csv(path: str, rows: list[dict[str, str]]) -> None:
 
 def count_by(rows: list[dict[str, str]], key: str) -> Counter[str]:
     return Counter(row.get(key, "") for row in rows)
+
+
+def print_problem_rows(
+    rows: list[dict[str, str]],
+    *,
+    status: str,
+    detail_key: str,
+    out_csv: str,
+) -> None:
+    problems = [row for row in rows if row["status"] == status]
+    for row in problems[:MAX_CONSOLE_PROBLEM_ROWS]:
+        print(
+            f"power audit {status} row: "
+            f"file={row['input_file']} row={row['row_index']} "
+            f"mode={row['mode'] or 'unknown'} "
+            f"{detail_key}={row[detail_key] or 'unspecified'}",
+            file=sys.stderr,
+        )
+    omitted = len(problems) - MAX_CONSOLE_PROBLEM_ROWS
+    if omitted > 0:
+        print(
+            f"power audit: {omitted} additional {status} rows omitted from "
+            f"console output; inspect {out_csv} for every row",
+            file=sys.stderr,
+        )
 
 
 def write_count_table(f, title: str, counts: Counter[str]) -> None:
@@ -746,8 +776,20 @@ def main() -> int:
     print(f"wrote {args.out_md}")
 
     if args.fail_on_reject and status_counts["reject"]:
+        print_problem_rows(
+            rows,
+            status="reject",
+            detail_key="reasons",
+            out_csv=args.out_csv,
+        )
         return 2
     if args.fail_on_provisional and status_counts["provisional"]:
+        print_problem_rows(
+            rows,
+            status="provisional",
+            detail_key="notes",
+            out_csv=args.out_csv,
+        )
         return 3
     return 0
 

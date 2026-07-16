@@ -116,7 +116,11 @@ CUDA compiler가 필요하고, counter sidecar는 `gv100`을 지원하는 NCU가
 통과했다고 다른 쪽도 통과한 것으로 간주하지 않는다.
 
 ```bash
-export NVCC="${NVCC:-$(command -v nvcc)}"
+export NVCC="${NVCC:-/usr/local/cuda-12.4/bin/nvcc}"
+export CUOBJDUMP="${CUOBJDUMP:-/usr/local/cuda-12.4/bin/cuobjdump}"
+export NCU="${NCU:-/usr/local/cuda-12.4/bin/ncu}"
+export NCU_BIN="${NCU_BIN:-$NCU}"
+test -x "$NVCC" -a -x "$CUOBJDUMP" -a -x "$NCU_BIN"
 "${NVCC}" --version
 "${NVCC}" --list-gpu-arch | grep -Fx compute_70
 ```
@@ -165,6 +169,7 @@ V100에서는 위에서 `compute_70` 지원을 확인한 CUDA 12.x compiler와
 cmake -S . -B build-v100 \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CUDA_COMPILER="${NVCC}" \
+  -DCUDAToolkit_ROOT=/usr/local/cuda-12.4 \
   -DCMAKE_CUDA_ARCHITECTURES=70
 
 cmake --build build-v100 --clean-first -j
@@ -629,7 +634,7 @@ python3 scripts/plot_results.py \
 | 단계 | script | 목적 |
 |---|---|---|
 | command plan | `scripts/plan_platform_component_experiment.py` | V100용 표준 energy/NCU/analyze 명령 생성 |
-| L2 NCU precheck | `scripts/select_l2_path_configuration.py` | energy 전에 normal residency의 layout/blocks-SM 후보를 strict gate로 선택; persisting은 V100에서 금지 |
+| L2 NCU precheck | `scripts/select_l2_path_configuration.py` | 독립 non-L2 energy 보존 후, L2 energy 전에 normal residency의 layout/blocks-SM 후보를 strict gate로 선택; persisting은 V100에서 금지 |
 | energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 energy 수집. 모든 final pair에서 treatment/control-floor dual calibration의 최대 ITER를 두 mode에 동일 적용 |
 | NCU sidecar | `scripts/run_ncu_validation.sh` | path hit/access/stall/spill 검증 |
 | path acceptance | `scripts/analyze_ncu_path_acceptance.py` | accepted component 후보만 선별 |
@@ -665,12 +670,14 @@ python3 scripts/plan_platform_component_experiment.py \
   --out-md results/summary/v100_component_finalplan_20260710_gpu7_command_plan.md
 ```
 
-생성 shell은 `NVCC` 환경변수를 preflight에 전달한다. 기본 `nvcc`가 CUDA 13이면 다음처럼
-CUDA 12.x compiler를 명시한다. NCU 경로는 별도의 `NCU_BIN`으로 지정할 수 있다.
+생성 shell은 `NVCC` 환경변수를 preflight에 전달하고, 같은 toolkit
+디렉터리의 `cuobjdump`를 Tensor SASS audit에 사용한다. 기본 `nvcc`가
+CUDA 13이면 다음처럼 V100용 CUDA 12.4 경로를 모두 명시한다.
 
 ```bash
-NVCC=/path/to/cuda-12/bin/nvcc \
-NCU_BIN=/path/to/nsight-compute-2024.3/ncu \
+NVCC=/usr/local/cuda-12.4/bin/nvcc \
+CUOBJDUMP=/usr/local/cuda-12.4/bin/cuobjdump \
+NCU_BIN=/usr/local/cuda-12.4/bin/ncu \
 bash results/summary/v100_component_finalplan_$(date +%Y%m%d)_commands.sh
 ```
 
@@ -679,6 +686,17 @@ bash results/summary/v100_component_finalplan_$(date +%Y%m%d)_commands.sh
 ```bash
 bash results/summary/v100_component_finalplan_$(date +%Y%m%d)_commands.sh
 ```
+
+`schema_revision_smoke` 이후에는
+`schema_smoke_kernel_execution`, `schema_smoke_power_api_audit`,
+`tensor_binary_static_audit`를 각각 표시한다. 실패한 명령은
+`PIPELINE_COMMAND_FAILED: stage=... label=... rc=...`로 남는다.
+Power audit reject는 `*_schema_smoke_power_api_audit.csv`, Volta SASS 검증
+실패는 `*_tensor_mma_binary_audit.csv`의 mode/RF별 `reasons`를 확인한다.
+V100 v6 static SASS는 target node에서 최종 확인해야 하므로 이 gate를
+임의로 우회하지 않는다.
+Smoke 이후의 예기치 않은 중단은 `PIPELINE_ABORT`에 stage, line, rc,
+command를 남긴다.
 
 V100 추천 finalplan 좌표:
 

@@ -93,7 +93,8 @@ python3 scripts/preflight_gpu_support.py \
   --target-profile a100 \
   --strict \
   --active-sm 108 \
-  --ncu "$(command -v ncu)" \
+  --ncu "${NCU_BIN:-/usr/local/cuda-13.0/bin/ncu}" \
+  --nvcc "${NVCC:-/usr/local/cuda-13.0/bin/nvcc}" \
   --out results/summary/a100_gpu0_preflight.md
 ```
 
@@ -113,10 +114,19 @@ preflight에서 확인할 항목:
 ## 3. 빌드
 
 A100에서는 `CMAKE_CUDA_ARCHITECTURES=80`으로 빌드한다.
+현재 보고된 서버의 CUDA 13.0 toolkit은 다음처럼 compiler,
+binary inspector, NCU 경로를 같은 toolkit으로 고정한다.
 
 ```bash
+export NVCC=/usr/local/cuda-13.0/bin/nvcc
+export CUOBJDUMP=/usr/local/cuda-13.0/bin/cuobjdump
+export NCU_BIN=/usr/local/cuda-13.0/bin/ncu
+test -x "$NVCC" -a -x "$CUOBJDUMP" -a -x "$NCU_BIN"
+
 cmake -S . -B build-a100 \
   -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_COMPILER="$NVCC" \
+  -DCUDAToolkit_ROOT=/usr/local/cuda-13.0 \
   -DCMAKE_CUDA_ARCHITECTURES=80
 
 cmake --build build-a100 --clean-first -j
@@ -502,7 +512,7 @@ python3 scripts/plot_results.py \
 | 단계 | script | 목적 |
 |---|---|---|
 | command plan | `scripts/plan_platform_component_experiment.py` | A100용 표준 energy/NCU/analyze 명령 생성 |
-| L2 NCU precheck | `scripts/select_l2_path_configuration.py` | energy 전에 normal/persisting, layout, blocks/SM 후보를 strict gate로 선택 |
+| L2 NCU precheck | `scripts/select_l2_path_configuration.py` | 독립 non-L2 energy 보존 후, L2 energy 전에 normal/persisting, layout, blocks/SM 후보를 strict gate로 선택 |
 | energy sweep | `scripts/run_component_regression_sweep.py` | NCU 없이 energy 수집. 모든 final pair에서 treatment/control-floor dual calibration의 최대 ITER를 양쪽에 동일 적용 |
 | NCU sidecar | `scripts/run_ncu_validation.sh` | path hit/access/stall/spill 검증 |
 | path acceptance | `scripts/analyze_ncu_path_acceptance.py` | accepted component 후보만 선별 |
@@ -514,7 +524,7 @@ python3 scripts/plot_results.py \
 python3 scripts/plan_platform_component_experiment.py \
   --target-profile a100 \
   --binary ./build-a100/a100_fp16_energy_v2 \
-  --ncu "$(command -v ncu)" \
+  --ncu "${NCU_BIN}" \
   --active-sm 108 \
   --seconds 10 \
   --repeats 5
@@ -525,6 +535,22 @@ python3 scripts/plan_platform_component_experiment.py \
 ```bash
 bash results/summary/a100_component_finalplan_$(date +%Y%m%d)_commands.sh
 ```
+
+`schema_revision_smoke` 뒤에 멈춘 경우 현재 package는 다음 세 단계를
+별도로 표시한다.
+
+| 로그 stage | 의미 | 확인 artifact |
+|---|---|---|
+| `schema_smoke_kernel_execution` | 3개 최소 kernel이 실제로 종료되는지 | `results/raw/a100_component_finalplan_<tag>_schema_smoke.csv` |
+| `schema_smoke_power_api_audit` | CSV schema, `measurement_scope`, v6 revision marker, NVML scope | `results/summary/*_schema_smoke_power_api_audit.csv` |
+| `tensor_binary_static_audit` | 선택한 `nvcc`와 같은 toolkit의 `cuobjdump`로 HMMA/control loop/spill 검사 | `results/summary/*_tensor_mma_binary_audit.csv` |
+
+실패 시 `PIPELINE_COMMAND_FAILED` 행의 `stage`, `label`, `rc`가 직접
+출력된다. Power audit은 reject row와 사유를, Tensor binary audit은
+mode/RF별 사유를 stderr에 함께 출력한다. 이 gate를 우회하지 말고
+실패 artifact를 먼저 확인한다.
+Smoke 이후의 예기치 않은 중단은 `PIPELINE_ABORT`에 stage, line, rc,
+command를 남긴다.
 
 2026-07-16 이후 package에서 policy self-test는 synthetic 내부 출력을 캡처하고
 성공 한 줄만 남긴다. `W=2048KiB, SM=108, ITER=456/10000,

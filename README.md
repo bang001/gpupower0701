@@ -40,10 +40,13 @@ package를 생성**한다. 저장소에 포함된 과거 날짜의 `*_commands.s
 git switch main
 git pull --ff-only origin main
 nvidia-smi
-nvcc --version
-ncu --version
+NVCC="$(command -v nvcc)"
 NCU_BIN="$(command -v ncu)"
-test -n "$NCU_BIN"
+CUOBJDUMP="$(dirname "$NVCC")/cuobjdump"
+"$NVCC" --version
+"$NCU_BIN" --version
+test -x "$NVCC" -a -x "$NCU_BIN" -a -x "$CUOBJDUMP"
+export NVCC NCU_BIN CUOBJDUMP
 TAG="$(date +%Y%m%d)"
 ```
 
@@ -91,9 +94,14 @@ bash "results/summary/rtx3090_component_finalplan_${TAG}_commands.sh"
 V100은 먼저 선택한 CUDA toolkit이 `compute_70`을 제공하는지 확인한다.
 
 ```bash
-nvcc --list-gpu-arch | grep -q compute_70
+export NVCC=/usr/local/cuda-12.4/bin/nvcc
+export CUOBJDUMP=/usr/local/cuda-12.4/bin/cuobjdump
+export NCU_BIN=/usr/local/cuda-12.4/bin/ncu
+"$NVCC" --list-gpu-arch | grep -q compute_70
 cmake -S . -B build-v100 \
   -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_COMPILER="$NVCC" \
+  -DCUDAToolkit_ROOT=/usr/local/cuda-12.4 \
   -DCMAKE_CUDA_ARCHITECTURES=70
 cmake --build build-v100 --clean-first -j
 
@@ -109,8 +117,13 @@ bash "results/summary/v100_component_finalplan_${TAG}_commands.sh"
 ### A100
 
 ```bash
+export NVCC=/usr/local/cuda-13.0/bin/nvcc
+export CUOBJDUMP=/usr/local/cuda-13.0/bin/cuobjdump
+export NCU_BIN=/usr/local/cuda-13.0/bin/ncu
 cmake -S . -B build-a100 \
   -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_COMPILER="$NVCC" \
+  -DCUDAToolkit_ROOT=/usr/local/cuda-13.0 \
   -DCMAKE_CUDA_ARCHITECTURES=80
 cmake --build build-a100 --clean-first -j
 
@@ -148,6 +161,15 @@ audit도 실행해 treatment HMMA, control HMMA=0, local spill=0뿐 아니라
 `ERR_NVGPUCTRPERM`을 반환하면 기본 자동
 재시도가 `sudo -E`를 사용한다. 처음부터 sudo NCU를 강제하려면 다음처럼
 실행한다. 전체 energy harness가 아니라 NCU invocation만 권한 상승 대상이다.
+
+`schema_revision_smoke` 는 kernel execution, power/schema audit, Tensor binary
+audit으로 분리해 표시한다. 실패한 명령은
+`PIPELINE_COMMAND_FAILED` 행에 stage, label, return code를 남긴다. Tensor
+audit은 PATH의 임의 `cuobjdump`가 아니라 `NVCC`와 같은 toolkit의
+binary inspector를 사용한다. 중단 판독은
+[A100/V100 schema smoke 감사](docs/audits/a100_v100_schema_smoke_stop_20260716_ko.md)를 따른다.
+Smoke 밖의 처리되지 않은 오류도 `PIPELINE_ABORT`에 active stage,
+shell line, return code, failed command를 남긴다.
 
 ```bash
 NCU_USE_SUDO=1 bash \

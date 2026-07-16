@@ -1,5 +1,5 @@
 area,check,status,expected,actual,evidence,action
-links,active_markdown_local_links,pass,all local Markdown links resolve,checked=97,README.md;SKILL.md;docs/**/*.md,repair or archive documents with broken local links
+links,active_markdown_local_links,pass,all local Markdown links resolve,checked=98,README.md;SKILL.md;docs/**/*.md,repair or archive documents with broken local links
 links,archive_markdown_local_links,pass,all preserved archive Markdown links resolve,checked=70,archive/**/*.md,repair relative links without changing archived experimental claims
 inventory,canonical_active_documents,pass,16 canonical files,all present,docs/README.md,restore the canonical document or update the documented map
 inventory,superseded_v2_design_archived,pass,design absent from active docs and preserved in archive,"active=False,archive=True",docs/design/a100_fp16_energy_experiment_design_v2.md;archive/superseded_v2_design_20260714/docs/design/a100_fp16_energy_experiment_design_v2.md,move the superseded v2 design and its assets to the dated archive

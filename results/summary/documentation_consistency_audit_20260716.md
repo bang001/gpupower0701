@@ -6,7 +6,7 @@
 
 | Area | Check | Status | Actual | Evidence |
 |---|---|---|---|---|
-| links | `active_markdown_local_links` | **pass** | checked=97 | `README.md;SKILL.md;docs/**/*.md` |
+| links | `active_markdown_local_links` | **pass** | checked=98 | `README.md;SKILL.md;docs/**/*.md` |
 | links | `archive_markdown_local_links` | **pass** | checked=70 | `archive/**/*.md` |
 | inventory | `canonical_active_documents` | **pass** | all present | `docs/README.md` |
 | inventory | `superseded_v2_design_archived` | **pass** | active=False,archive=True | `docs/design/a100_fp16_energy_experiment_design_v2.md;archive/superseded_v2_design_20260714/docs/design/a100_fp16_energy_experiment_design_v2.md` |
