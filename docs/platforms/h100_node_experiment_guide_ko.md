@@ -247,6 +247,9 @@ command `<=180 s`를 통과한 실행만 채택한다.
 
 표준 명령 생성:
 
+`--gpu-ids`를 생략하면 GPU 0을 사용한다. 다른 GPU를 쓰는 경우에만 물리
+CUDA/NVML index를 명시한다.
+
 ```bash
 python3 scripts/plan_platform_component_experiment.py \
   --target-profile h100 \
@@ -262,6 +265,11 @@ python3 scripts/plan_platform_component_experiment.py \
 ```bash
 bash results/summary/h100_component_finalplan_$(date +%Y%m%d)_commands.sh
 ```
+
+멀티 GPU raw에서 같은 `run_id`의 inactive GPU 행은 repeat가 아니다. 현행
+power-state/matched-control 경로는 `(sweep_source_id, run_id, gpu_id)` 복합키와
+sweep별 pairing 격리를 사용한다. 따라서 L1/L2/DRAM의 동일 좌표 control이 서로
+혼합되지 않으며, 이 identity 열이 없는 구형 audit은 재생성해야 한다.
 
 기본 좌표:
 

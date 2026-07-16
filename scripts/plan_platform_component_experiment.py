@@ -174,6 +174,21 @@ def q(value: str | Path) -> str:
     return shlex.quote(str(value))
 
 
+def normalize_gpu_ids(value: str) -> str:
+    items = [item.strip() for item in value.split(",") if item.strip()]
+    if not items:
+        items = ["0"]
+    try:
+        gpu_ids = [int(item) for item in items]
+    except ValueError as exc:
+        raise ValueError("--gpu-ids must be a comma-separated integer list") from exc
+    if any(gpu_id < 0 for gpu_id in gpu_ids):
+        raise ValueError("--gpu-ids values must be non-negative")
+    if len(set(gpu_ids)) != len(gpu_ids):
+        raise ValueError("--gpu-ids values must be unique")
+    return ",".join(str(gpu_id) for gpu_id in gpu_ids)
+
+
 def validate_ncu_coordinates(
     profile_name: str,
     profile: dict[str, Any],
@@ -1040,6 +1055,7 @@ def write_shell(args: argparse.Namespace, profile: dict[str, Any], path: Path) -
         line(["python3", "scripts/select_l2_path_configuration.py", "--self-test"]),
         line(["python3", "scripts/analyze_matched_control_energy.py", "--self-test"]),
         line(["python3", "scripts/audit_power_api_measurements.py", "--self-test"]),
+        line(["python3", "scripts/audit_power_state_stability.py", "--self-test"]),
         line(
             [
                 "python3",
@@ -1737,6 +1753,7 @@ Generated: {dt.date.today().isoformat()}
 | item | value |
 |---|---|
 | target profile | `{args.target_profile}` |
+| active GPU ids | `{args.gpu_ids}` (`--gpu-ids` omitted/empty defaults to physical GPU 0) |
 | CUDA arch | `sm_{profile['cuda_arch']}` |
 | active_SM (SMs) | `{active_sm}` |
 | energy sweep blocks/SM | `{blocks}` |
@@ -1976,6 +1993,12 @@ Matched-control consumes the generated power-state audit CSV with
 `--exclude-power-state-rejects`, so rows flagged as `status=reject` or
 `coefficient_eligible=false` are removed before treatment/control pairing. This
 keeps power-state drops from appearing as negative component coefficients.
+The raw `gpu_id` is a physical CUDA/NVML device index, not a repeat index.
+Power-state rows are joined by `(sweep_source_id, run_id, gpu_id)` and duplicate
+or legacy run-id-only evidence is rejected. Treatment/control grouping also
+includes `sweep_source_id`, so equal-coordinate `global_addr_only` rows from the
+Global-L1, L2, and external-memory CSVs cannot cross-pair. NCU exact-coordinate
+keys carry the corresponding sweep family for the same reason.
 
 Tensor energy rows use `--tensor-pair-lock-iters` together with
 `--tensor-pair-control-min-seconds={tensor_control_min_seconds}`. Each RF coordinate
@@ -2213,6 +2236,8 @@ def main() -> int:
     parser.add_argument("--out-sh", default="")
     parser.add_argument("--out-md", default="")
     args = parser.parse_args()
+
+    args.gpu_ids = normalize_gpu_ids(args.gpu_ids)
 
     profile = PROFILES[args.target_profile]
     blocks = args.blocks_per_sm_values or profile["blocks"]

@@ -219,6 +219,13 @@ acceptance gates explicitly select them.
   `results/plots/`, and generated audit/report files in `results/summary/`.
 - Treat per-GPU rows as separate rows and aggregate only matching `run_id`
   groups when a multi-GPU total is explicitly required.
+- Treat raw `gpu_id` as the physical CUDA/NVML device index, never as a repeat
+  index. Join power-state evidence by `(sweep_source_id, run_id, gpu_id)` and
+  reject missing or duplicate identities instead of overwriting them.
+- Isolate treatment/control pairing by raw sweep source. Equal-coordinate
+  `global_addr_only` rows from Global L1, L2, and DRAM CSVs are not
+  interchangeable; strict detail must satisfy
+  `source_file == control_source_file`.
 - Exclude placement failures and power-state rejects from primary summaries.
 - Memory coefficients require `denominator_source=ncu_actual_exact` for strict
   reporting.

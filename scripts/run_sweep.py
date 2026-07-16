@@ -202,6 +202,19 @@ def parse_int_list(value: str, default: list[int]) -> list[int]:
     return [int(item) for item in value.split(",") if item]
 
 
+def parse_gpu_ids(value: str) -> list[int]:
+    """Parse CUDA/NVML ids, defaulting an omitted or empty value to GPU 0."""
+
+    gpu_ids = parse_int_list(value.strip(), [0])
+    if not gpu_ids:
+        gpu_ids = [0]
+    if any(gpu_id < 0 for gpu_id in gpu_ids):
+        raise ValueError("--gpu-ids values must be non-negative")
+    if len(set(gpu_ids)) != len(gpu_ids):
+        raise ValueError("--gpu-ids values must be unique")
+    return gpu_ids
+
+
 def parse_str_list(value: str, default: list[str]) -> list[str]:
     if not value:
         return default
@@ -241,7 +254,7 @@ def main() -> int:
     args = parser.parse_args()
 
     profile = PROFILES[args.target_profile]
-    gpu_ids = parse_int_list(args.gpu_ids, [0])
+    gpu_ids = parse_gpu_ids(args.gpu_ids)
     modes = parse_str_list(args.modes, MODES)
     w_values = parse_int_list(args.w_sm_kib_values, W_SM_KIB)
     b_default = [b for b in BLOCKS_PER_SM if b <= profile["max_blocks_per_sm"]]

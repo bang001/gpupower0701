@@ -520,6 +520,9 @@ python3 scripts/plot_results.py \
 
 표준 명령 생성:
 
+`--gpu-ids`를 생략하면 GPU 0을 사용한다. 다른 GPU를 쓰는 경우에만 예를 들어
+`--gpu-ids 1`을 명시한다. raw의 `gpu_id`는 repeat가 아니라 물리 CUDA/NVML index다.
+
 ```bash
 python3 scripts/plan_platform_component_experiment.py \
   --target-profile a100 \
@@ -535,6 +538,11 @@ python3 scripts/plan_platform_component_experiment.py \
 ```bash
 bash results/summary/a100_component_finalplan_$(date +%Y%m%d)_commands.sh
 ```
+
+4-GPU 노드에서 GPU 0만 active여도 raw에는 같은 `run_id`의 GPU 0~3 관찰 행이
+기록될 수 있다. 현행 power-state audit과 matched-control은
+`(sweep_source_id, run_id, gpu_id)`로 조인하며 Tensor/Shared/L1/L2/DRAM CSV 사이의
+control pairing도 차단한다. 이 열이 없는 구형 power-state audit은 재생성한다.
 
 `schema_revision_smoke` 뒤에 멈춘 경우 현재 package는 다음 세 단계를
 별도로 표시한다.

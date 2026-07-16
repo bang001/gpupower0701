@@ -122,8 +122,12 @@ POWER_API_COLUMNS = [
 
 POWER_STATE_COLUMNS = [
     "input_file",
+    "sweep_source_id",
     "row_index",
     "run_id",
+    "gpu_id",
+    "n_gpu_active",
+    "gpu_active",
     "mode",
     "W_SM_KiB",
     "blocks_per_SM",
@@ -167,6 +171,10 @@ MATCHED_SUMMARY_COLUMNS = [
 ]
 
 MATCHED_DETAIL_COLUMNS = [
+    "sweep_source_id",
+    "gpu_id",
+    "source_file",
+    "control_source_file",
     "component",
     "valid_component_estimate",
     "pair_energy_basis",
@@ -714,6 +722,30 @@ def write_audit(
             "actual": "ok",
             "interpretation": "selftest",
         },
+        {
+            "component": "matched-control",
+            "check": "detail_same_sweep_source_pairing",
+            "status": "pass",
+            "expected": "same sweep source",
+            "actual": "ok",
+            "interpretation": "selftest",
+        },
+        {
+            "component": "matched-control",
+            "check": "power_state_artifact_covers_detail_run_ids",
+            "status": "pass",
+            "expected": "composite row identity coverage",
+            "actual": "ok",
+            "interpretation": "selftest",
+        },
+        {
+            "component": "matched-control",
+            "check": "detail_source_files_exist",
+            "status": "pass",
+            "expected": "raw source files",
+            "actual": "ok",
+            "interpretation": "selftest",
+        },
     ]
     write_csv(strict_audit_path(repo, profile, tag), STRICT_AUDIT_COLUMNS, rows)
 
@@ -913,8 +945,12 @@ def write_power_state_audit(
     path = repo / module.expected_paths(profile, tag)["power_state"]
     row = {
         "input_file": f"results/raw/{profile}_component_finalplan_selftest_tensor.csv",
+        "sweep_source_id": f"{profile}_component_finalplan_selftest_tensor.csv",
         "row_index": "2",
         "run_id": "selftest",
+        "gpu_id": "0",
+        "n_gpu_active": "1",
+        "gpu_active": "true",
         "mode": "reg_mma",
         "W_SM_KiB": "64",
         "blocks_per_SM": "16",
@@ -1014,11 +1050,24 @@ def write_matched_detail(
 ) -> None:
     semantics = module.PROFILE_POWER_SEMANTICS[profile]
     rows: list[dict[str, str]] = []
+    raw_paths = module.expected_paths(profile, tag)["raw"]
+    component_source_index = {
+        "tensor_mma_increment": 0,
+        "shared_l1_scalar_path": 1,
+        "global_l1_hit_path": 2,
+        "l2_hit_cg_path": 3,
+        "external_memory_read_path": 4,
+    }
     for component in MATCHED_SUMMARY_COMPONENTS:
         tensor = component == "tensor_mma_increment"
         l2 = component == "l2_hit_cg_path"
         dram = component == "external_memory_read_path"
+        source_file = str(raw_paths[component_source_index[component]])
         base_row = {
+                "sweep_source_id": Path(source_file).name,
+                "gpu_id": "0",
+                "source_file": source_file,
+                "control_source_file": source_file,
                 "component": component,
                 "valid_component_estimate": "True",
                 "pair_energy_basis": (

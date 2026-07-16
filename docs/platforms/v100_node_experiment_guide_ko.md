@@ -642,6 +642,9 @@ python3 scripts/plot_results.py \
 
 표준 명령 생성:
 
+`--gpu-ids`를 생략하면 GPU 0을 사용한다. 다른 GPU를 쓰는 경우에만 index를
+명시한다. raw의 `gpu_id`는 repeat가 아니라 물리 CUDA/NVML index다.
+
 ```bash
 python3 scripts/plan_platform_component_experiment.py \
   --target-profile v100 \
@@ -651,6 +654,11 @@ python3 scripts/plan_platform_component_experiment.py \
   --seconds 10 \
   --repeats 5
 ```
+
+멀티 GPU 노드의 inactive GPU 관찰 행은 active GPU 행과 같은 `run_id`를 가질 수
+있다. 현행 audit/analysis는 `(sweep_source_id, run_id, gpu_id)`로 조인하고,
+L1/L2/DRAM의 동일 좌표 `global_addr_only`도 서로 다른 raw sweep 사이에서 짝짓지
+않는다. 구형 power-state audit에 `gpu_id`가 없으면 raw 5개 CSV로 다시 생성한다.
 
 GPU index 7에서 기존 `20260710_gpu7` tag를 다시 생성하려면 다음처럼 index와 출력명을
 명시한다. 새 shell에는 energy sweep 전 counter permission probe와 자동 sudo retry가

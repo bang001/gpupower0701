@@ -21,6 +21,35 @@ import tempfile
 from pathlib import Path
 
 
+def portable_source_id(value: str) -> str:
+    normalized = value.strip().replace("\\", "/").rstrip("/")
+    return normalized.rsplit("/", 1)[-1] if normalized else ""
+
+
+PowerStateKey = tuple[str, str, str]
+
+
+def audit_power_state_key(row: dict[str, str]) -> PowerStateKey:
+    source = row.get("sweep_source_id", "") or portable_source_id(
+        row.get("input_file", "")
+    )
+    return (source, row.get("run_id", ""), row.get("gpu_id", ""))
+
+
+def detail_power_state_key(
+    row: dict[str, str], *, control: bool
+) -> PowerStateKey:
+    source_file_column = "control_source_file" if control else "source_file"
+    source_file = row.get(source_file_column, "")
+    source = portable_source_id(source_file)
+    if not source:
+        source = row.get("sweep_source_id", "") or portable_source_id(
+            row.get("source_file", "")
+        )
+    run_column = "control_run_id" if control else "numerator_run_id"
+    return (source, row.get(run_column, ""), row.get("gpu_id", ""))
+
+
 EXPECTED_COMPONENTS = {
     "Tensor MMA incremental": {
         "component_key": "tensor_mma_increment",
@@ -1110,77 +1139,125 @@ def check_detail_artifact(
         ),
     )
 
+    cross_sweep_pairs = [
+        detail
+        for detail in detail_rows
+        if not detail.get("sweep_source_id", "")
+        or not detail.get("control_source_file", "")
+        or portable_source_id(detail.get("source_file", ""))
+        != portable_source_id(detail.get("control_source_file", ""))
+        or detail.get("sweep_source_id", "")
+        != portable_source_id(detail.get("source_file", ""))
+    ]
+    add_check(
+        checks,
+        component=component,
+        check="detail_same_sweep_source_pairing",
+        status="pass" if not cross_sweep_pairs else "fail",
+        expected=(
+            "every treatment/control pair has one nonempty sweep_source_id and "
+            "matching source_file/control_source_file"
+        ),
+        actual=f"bad_rows={len(cross_sweep_pairs)}",
+        interpretation=(
+            "same-coordinate global_addr_only controls from L1/L2/DRAM sweeps "
+            "must never cross-pair"
+        ),
+    )
+
     power_state_artifacts = split_artifact_paths(row.get("power_state_audit_artifact", ""))
-    power_state_by_run_id: dict[str, dict[str, str]] = {}
-    duplicate_power_state_run_ids: set[str] = set()
+    power_state_by_identity: dict[PowerStateKey, dict[str, str]] = {}
+    duplicate_power_state_identities: set[PowerStateKey] = set()
+    invalid_power_state_identities: list[str] = []
     missing_power_state_files: list[str] = []
     for artifact in power_state_artifacts:
         if not path_exists(artifact):
             missing_power_state_files.append(artifact)
             continue
-        for audit_row in read_csv(artifact):
-            run_id = audit_row.get("run_id", "")
-            if not run_id:
+        for audit_index, audit_row in enumerate(read_csv(artifact), start=2):
+            identity = audit_power_state_key(audit_row)
+            if not all(identity):
+                invalid_power_state_identities.append(f"{artifact}:{audit_index}")
                 continue
-            if run_id in power_state_by_run_id:
-                duplicate_power_state_run_ids.add(run_id)
-            power_state_by_run_id[run_id] = audit_row
+            if identity in power_state_by_identity:
+                duplicate_power_state_identities.add(identity)
+                continue
+            power_state_by_identity[identity] = audit_row
 
-    required_power_state_pairs: list[tuple[str, str]] = []
+    required_power_state_pairs: list[tuple[PowerStateKey, str]] = []
+    invalid_detail_identities: list[str] = []
     for detail in detail_rows:
-        required_power_state_pairs.append(
-            (detail.get("numerator_run_id", ""), detail.get("numerator_power_state_status", ""))
-        )
-        required_power_state_pairs.append(
-            (detail.get("control_run_id", ""), detail.get("control_power_state_status", ""))
-        )
-    missing_power_state_run_ids = sorted(
+        for control, status_column in (
+            (False, "numerator_power_state_status"),
+            (True, "control_power_state_status"),
+        ):
+            identity = detail_power_state_key(detail, control=control)
+            if not all(identity):
+                invalid_detail_identities.append(repr(identity))
+                continue
+            required_power_state_pairs.append((identity, detail.get(status_column, "")))
+    missing_power_state_identities = sorted(
         {
-            run_id
-            for run_id, _ in required_power_state_pairs
-            if run_id and run_id not in power_state_by_run_id
+            identity
+            for identity, _ in required_power_state_pairs
+            if identity not in power_state_by_identity
         }
     )
     mismatched_power_state_status = sorted(
         {
-            f"{run_id}:{expected}!={power_state_by_run_id.get(run_id, {}).get('status', '')}"
-            for run_id, expected in required_power_state_pairs
-            if run_id
-            and expected
-            and run_id in power_state_by_run_id
-            and power_state_by_run_id[run_id].get("status", "") != expected
+            f"{identity!r}:{expected}!={power_state_by_identity.get(identity, {}).get('status', '')}"
+            for identity, expected in required_power_state_pairs
+            if expected
+            and identity in power_state_by_identity
+            and power_state_by_identity[identity].get("status", "") != expected
         }
     )
     power_state_coverage_ok = (
         bool(power_state_artifacts)
         and not missing_power_state_files
-        and not missing_power_state_run_ids
+        and not invalid_power_state_identities
+        and not invalid_detail_identities
+        and not duplicate_power_state_identities
+        and not missing_power_state_identities
         and not mismatched_power_state_status
     )
     power_state_actual_parts = [
         f"artifacts={len(power_state_artifacts)}",
-        f"covered_run_ids={len(power_state_by_run_id)}",
+        f"covered_row_identities={len(power_state_by_identity)}",
     ]
     if missing_power_state_files:
         power_state_actual_parts.append("missing_files=" + ",".join(missing_power_state_files[:4]))
-    if missing_power_state_run_ids:
+    if invalid_power_state_identities:
         power_state_actual_parts.append(
-            "missing_run_ids=" + ",".join(missing_power_state_run_ids[:4])
+            "invalid_audit_identities=" + ",".join(invalid_power_state_identities[:4])
+        )
+    if invalid_detail_identities:
+        power_state_actual_parts.append(
+            "invalid_detail_identities=" + ",".join(invalid_detail_identities[:4])
+        )
+    if missing_power_state_identities:
+        power_state_actual_parts.append(
+            "missing_row_identities="
+            + ",".join(repr(value) for value in missing_power_state_identities[:4])
         )
     if mismatched_power_state_status:
         power_state_actual_parts.append(
             "status_mismatch=" + ",".join(mismatched_power_state_status[:4])
         )
-    if duplicate_power_state_run_ids:
+    if duplicate_power_state_identities:
         power_state_actual_parts.append(
-            "duplicate_run_ids=" + ",".join(sorted(duplicate_power_state_run_ids)[:4])
+            "duplicate_row_identities="
+            + ",".join(repr(value) for value in sorted(duplicate_power_state_identities)[:4])
         )
     add_check(
         checks,
         component=component,
         check="power_state_artifact_covers_detail_run_ids",
         status="pass" if power_state_coverage_ok else "fail",
-        expected="power-state audit artifacts cover every numerator/control run_id in detail",
+        expected=(
+            "power-state audit artifacts uniquely cover every detail "
+            "(sweep_source_id, run_id, gpu_id)"
+        ),
         actual=";".join(power_state_actual_parts),
         interpretation=(
             "strict package must trace each accepted matched-control row back to "
@@ -1192,13 +1269,14 @@ def check_detail_artifact(
         detail
         for detail in detail_rows
         if not path_exists(detail.get("source_file", ""))
+        or not path_exists(detail.get("control_source_file", ""))
     ]
     add_check(
         checks,
         component=component,
         check="detail_source_files_exist",
         status="pass" if not missing_source_files else "fail",
-        expected="all raw source files exist",
+        expected="all treatment/control raw source files exist",
         actual=f"missing_rows={len(missing_source_files)}",
         interpretation="matched-control detail must remain traceable to raw energy CSVs",
     )
@@ -1573,6 +1651,26 @@ def make_ncu_selftest_row(
 
 
 def run_self_test() -> None:
+    shared_run_gpu0 = {
+        "sweep_source_id": "a100_component_selftest_l1.csv",
+        "input_file": "/remote/a100_component_selftest_l1.csv",
+        "run_id": "shared_run_100000_r0",
+        "gpu_id": "0",
+    }
+    shared_run_gpu1 = {**shared_run_gpu0, "gpu_id": "1"}
+    assert audit_power_state_key(shared_run_gpu0) != audit_power_state_key(
+        shared_run_gpu1
+    )
+    assert detail_power_state_key(
+        {
+            "sweep_source_id": "a100_component_selftest_l1.csv",
+            "source_file": "results/raw/a100_component_selftest_l1.csv",
+            "numerator_run_id": "shared_run_100000_r0",
+            "gpu_id": "0",
+        },
+        control=False,
+    ) == audit_power_state_key(shared_run_gpu0)
+
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
         detail = root / "matched_control_detail.csv"

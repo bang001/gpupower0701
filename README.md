@@ -170,6 +170,8 @@ binary inspector를 사용한다. 중단 판독은
 [A100/V100 schema smoke 감사](docs/audits/a100_v100_schema_smoke_stop_20260716_ko.md)를 따른다.
 Smoke 밖의 처리되지 않은 오류도 `PIPELINE_ABORT`에 active stage,
 shell line, return code, failed command를 남긴다.
+멀티 GPU row identity와 동일 좌표 L1/L2/DRAM control 격리의 수정 근거는
+[pairing identity 감사](docs/audits/multigpu_sweep_pairing_identity_fix_20260716_ko.md)에 기록한다.
 
 ```bash
 NCU_USE_SUDO=1 bash \
@@ -461,6 +463,9 @@ evidence, not strict cross-platform final evidence.
 Matched-control analysis can also take a power-state audit CSV; rows marked
 `status=reject` or `coefficient_eligible=false` are excluded from coefficient
 pairing when `--exclude-power-state-rejects` is used.
+The audit and raw rows are joined by `(sweep_source_id, run_id, gpu_id)`, and
+pairing is isolated by input sweep CSV. Equal-coordinate `global_addr_only`
+rows from the L1, L2, and DRAM sweeps are therefore not interchangeable.
 
 Run a support preflight before collecting new data:
 
@@ -785,6 +790,10 @@ input_bits = N_MMA * 8192
 
 Aggregate multi-GPU energy by summing active rows with the same `run_id`. Inactive
 GPU rows are still emitted so idle drift and system-side effects remain visible.
+`gpu_id` is the physical CUDA/NVML device index, not a repeat index. If
+`--gpu-list`/`--gpu-ids` is omitted, the binary and Python runners select GPU 0.
+Power-state evidence uses `(sweep_source_id, run_id, gpu_id)` so an inactive
+device row cannot overwrite the selected device's audit status.
 
 For non-idle modes the binary performs a pre-run idle measurement and stores an
 elapsed-time-scaled `idle_baseline_J`. `net_E_J = delta_E_J - idle_baseline_J`.

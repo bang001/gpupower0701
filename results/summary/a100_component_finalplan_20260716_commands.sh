@@ -97,6 +97,7 @@ python3 scripts/audit_tensor_mma_binary.py --self-test
 python3 scripts/select_l2_path_configuration.py --self-test
 python3 scripts/analyze_matched_control_energy.py --self-test
 python3 scripts/audit_power_api_measurements.py --self-test
+python3 scripts/audit_power_state_stability.py --self-test
 python3 scripts/remediate_wsl_wallclock_intervals.py --self-test
 python3 scripts/audit_a100_tensor_l2_remediation.py --self-test
 python3 scripts/build_strict_component_summary.py --self-test

@@ -127,6 +127,67 @@ COEFFICIENT_METADATA_FIELDS = (
 )
 
 
+def source_id(value: str) -> str:
+    """Return a portable input identity for cross-artifact joins.
+
+    Power-state audit files are commonly copied from a Linux measurement node
+    to a Windows/WSL analysis host. A basename remains stable across that move,
+    while an absolute path does not.
+    """
+
+    normalized = value.strip().replace("\\", "/").rstrip("/")
+    return normalized.rsplit("/", 1)[-1] if normalized else ""
+
+
+def source_sweep_family(path: str) -> str:
+    name = source_id(path).lower()
+    for family in ("tensor", "shared", "l1", "l2", "dram"):
+        if name.endswith(f"_{family}.csv"):
+            return family
+    for family in ("tensor", "shared", "l1", "l2", "dram"):
+        if f"_{family}_" in name:
+            return family
+    return ""
+
+
+MODE_SWEEP_FAMILY = {
+    "reg_operand_only": "tensor",
+    "reg_mma": "tensor",
+    "shared_scalar_addr_only": "shared",
+    "shared_scalar_load_only": "shared",
+    "global_l1_load_only": "l1",
+    "l2_load_only": "l2",
+    "l2_cg_load_only": "l2",
+    "dram_load_only": "dram",
+    "dram_cg_load_only": "dram",
+}
+
+
+def row_sweep_family(row: dict[str, str]) -> str:
+    explicit = row.get("sweep_family", "") or row.get("_sweep_family", "")
+    if explicit:
+        return explicit
+
+    label = row.get("label", "").lower()
+    if label.startswith("global_addr_only_l1_"):
+        return "l1"
+    if label.startswith("global_addr_only_l2_"):
+        return "l2"
+    if label.startswith("global_addr_only_dram_"):
+        return "dram"
+
+    mode = row.get("mode", "")
+    mode_family = MODE_SWEEP_FAMILY.get(mode, "")
+    if mode_family:
+        return mode_family
+
+    return source_sweep_family(
+        row.get("_source_file", "")
+        or row.get("ncu_summary_source", "")
+        or row.get("input_file", "")
+    )
+
+
 def as_float(row: dict[str, str], key: str, default: float = 0.0) -> float:
     value = row.get(key, "")
     if value == "":
@@ -213,9 +274,15 @@ def confidence_class(n: int, rel_iqr: float, rel_ci: float) -> str:
 
 
 def config_key(row: dict[str, str]) -> tuple[str, ...]:
-    """Pairing key; ITER is validated separately for pair-locked components."""
+    """Pairing key; ITER is validated separately for pair-locked components.
+
+    The source id is intentional. The five finalplan CSVs can contain identical
+    global_addr_only coordinates, but those controls belong to different cache
+    path experiments and must never be pooled or selected by nearest timestamp.
+    """
 
     return (
+        row.get("_sweep_source_id", ""),
         row.get("profile_name") or row.get("target_profile") or "",
         row.get("gpu_id", ""),
         row.get("n_gpu_active", ""),
@@ -231,15 +298,56 @@ def config_key(row: dict[str, str]) -> tuple[str, ...]:
 def read_rows(paths: list[str]) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     row_index = 0
+    seen_sources: dict[str, str] = {}
     for path in paths:
+        sweep_source_id = source_id(path)
+        if not sweep_source_id:
+            raise ValueError(f"raw CSV path has no portable source id: {path!r}")
+        previous = seen_sources.get(sweep_source_id)
+        if previous and Path(previous) != Path(path):
+            raise ValueError(
+                "raw CSV basenames must be unique for portable audit joins: "
+                f"{previous!r} and {path!r} both map to {sweep_source_id!r}"
+            )
+        seen_sources[sweep_source_id] = path
         with Path(path).open(newline="") as f:
-            for row in csv.DictReader(f):
-                row = dict(row)
-                row["_source_file"] = path
-                row["_row_index"] = str(row_index)
-                row["_run_order"] = str(run_order(row, row_index))
-                rows.append(row)
-                row_index += 1
+            source_rows = [dict(row) for row in csv.DictReader(f)]
+        file_family = source_sweep_family(path)
+        memory_families = {
+            MODE_SWEEP_FAMILY.get(row.get("mode", ""), "")
+            for row in source_rows
+            if MODE_SWEEP_FAMILY.get(row.get("mode", ""), "")
+            in {"l1", "l2", "dram"}
+        }
+        inferred_control_family = ""
+        if not file_family and any(
+            row.get("mode", "") == "global_addr_only" for row in source_rows
+        ):
+            if len(memory_families) > 1:
+                raise ValueError(
+                    f"{path}: one raw CSV contains global_addr_only with multiple "
+                    f"memory sweep families {sorted(memory_families)}; split L1, "
+                    "L2, and DRAM pairs into separate source files"
+                )
+            if len(memory_families) == 1:
+                inferred_control_family = next(iter(memory_families))
+        for row in source_rows:
+            row = dict(row)
+            row["_source_file"] = path
+            row["_sweep_source_id"] = sweep_source_id
+            row["_sweep_family"] = (
+                row.get("sweep_family", "")
+                or file_family
+                or (
+                    inferred_control_family
+                    if row.get("mode", "") == "global_addr_only"
+                    else ""
+                )
+            )
+            row["_row_index"] = str(row_index)
+            row["_run_order"] = str(run_order(row, row_index))
+            rows.append(row)
+            row_index += 1
     return rows
 
 
@@ -332,6 +440,7 @@ def exact_config_key(row: dict[str, str]) -> tuple[str, ...]:
         store_repeat = "*"
 
     return (
+        row_sweep_family(row),
         mode,
         normalized_key_value(row.get("W_SM_KiB", "")),
         normalized_key_value(row.get("blocks_per_SM", "")),
@@ -344,6 +453,7 @@ def exact_config_key(row: dict[str, str]) -> tuple[str, ...]:
 
 def working_set_config_key(row: dict[str, str]) -> tuple[str, ...]:
     return (
+        row_sweep_family(row),
         row.get("mode", ""),
         normalized_key_value(row.get("W_SM_KiB", "")),
         normalized_key_value(row.get("blocks_per_SM", "")),
@@ -368,36 +478,73 @@ def read_acceptance(
     return accepted, accepted_keys_by_mode
 
 
-def read_power_state_audit(paths: list[str]) -> dict[str, dict[str, str]]:
-    """Read power-state row quality by run_id.
+PowerStateKey = tuple[str, str, str]
 
-    The power-state audit is generated from the same raw rows. `run_id` is more
-    stable than CSV line number when one analyzer reads multiple input files.
-    """
 
-    by_run_id: dict[str, dict[str, str]] = {}
+def power_state_key(row: dict[str, str], *, audit_row: bool) -> PowerStateKey:
+    source = (
+        row.get("sweep_source_id", "")
+        if audit_row
+        else row.get("_sweep_source_id", "")
+    )
+    if not source and audit_row:
+        source = source_id(row.get("input_file", ""))
+    return (source, row.get("run_id", ""), row.get("gpu_id", ""))
+
+
+def read_power_state_audit(
+    paths: list[str],
+) -> dict[PowerStateKey, dict[str, str]]:
+    """Read row quality without collapsing physical GPUs or sweep files."""
+
+    by_identity: dict[PowerStateKey, dict[str, str]] = {}
     for path in paths:
         with Path(path).open(newline="") as f:
-            for row in csv.DictReader(f):
-                run_id = row.get("run_id", "")
-                if not run_id:
-                    continue
-                by_run_id[run_id] = {
+            reader = csv.DictReader(f)
+            fields = set(reader.fieldnames or [])
+            missing = {"input_file", "run_id", "gpu_id"} - fields
+            if missing:
+                raise ValueError(
+                    f"{path}: power-state audit lacks identity columns "
+                    f"{','.join(sorted(missing))}; regenerate it with the current "
+                    "audit_power_state_stability.py"
+                )
+            for row_index, row in enumerate(reader, start=2):
+                key = power_state_key(row, audit_row=True)
+                if not all(key):
+                    raise ValueError(
+                        f"{path}:{row_index}: incomplete power-state identity "
+                        "(sweep_source_id/input_file, run_id, gpu_id)"
+                    )
+                if key in by_identity:
+                    raise ValueError(
+                        f"{path}:{row_index}: duplicate power-state identity {key!r}; "
+                        "refusing a many-to-one overwrite"
+                    )
+                by_identity[key] = {
+                    "sweep_source_id": key[0],
+                    "run_id": key[1],
+                    "gpu_id": key[2],
                     "status": row.get("status", ""),
                     "coefficient_eligible": row.get("coefficient_eligible", ""),
                     "reasons": row.get("reasons", ""),
                     "notes": row.get("notes", ""),
                     "audit_file": path,
                 }
-    return by_run_id
+    return by_identity
 
 
 def attach_power_state_audit(
-    rows: list[dict[str, str]], audit_by_run_id: dict[str, dict[str, str]]
+    rows: list[dict[str, str]], audit_by_identity: dict[PowerStateKey, dict[str, str]]
 ) -> None:
+    if not audit_by_identity:
+        return
+    missing: list[PowerStateKey] = []
     for row in rows:
-        audit = audit_by_run_id.get(row.get("run_id", ""))
+        key = power_state_key(row, audit_row=False)
+        audit = audit_by_identity.get(key)
         if not audit:
+            missing.append(key)
             continue
         row["_power_state_status"] = audit.get("status", "")
         row["_power_state_coefficient_eligible"] = audit.get(
@@ -406,6 +553,13 @@ def attach_power_state_audit(
         row["_power_state_reasons"] = audit.get("reasons", "")
         row["_power_state_notes"] = audit.get("notes", "")
         row["_power_state_audit_file"] = audit.get("audit_file", "")
+    if missing:
+        examples = ", ".join(repr(key) for key in missing[:3])
+        raise ValueError(
+            "power-state audit join is incomplete for "
+            f"{len(missing)}/{len(rows)} raw rows; examples: {examples}. "
+            "Regenerate the audit from the same five raw CSVs."
+        )
 
 
 def ncu_expected_bytes(row: dict[str, str]) -> float:
@@ -850,6 +1004,7 @@ def make_detail_rows(
                     reasons.append("negative_coefficient")
 
                 (
+                    sweep_source_id,
                     profile_name,
                     gpu_id,
                     n_gpu_active,
@@ -875,6 +1030,8 @@ def make_detail_rows(
                     denominator_metric = "NCU dram__bytes_read.sum"
                 detail_rows.append(
                     {
+                        "sweep_source_id": sweep_source_id,
+                        "sweep_family": row_sweep_family(numerator),
                         "profile_name": profile_name,
                         "gpu_id": gpu_id,
                         "n_gpu_active": n_gpu_active,
@@ -990,6 +1147,7 @@ def make_detail_rows(
                         "valid_component_estimate": not reasons,
                         "diagnostic": ";".join(reasons),
                         "source_file": numerator.get("_source_file", ""),
+                        "control_source_file": control.get("_source_file", ""),
                     }
                 )
 
@@ -1190,6 +1348,12 @@ def write_markdown(
             "acceptance filters are summarized. Values are effective "
             "microbenchmark coefficients, not pure physical component energies.\n\n"
         )
+        f.write(
+            "Treatment/control pairing is isolated by `sweep_source_id` before "
+            "nearest-control selection. Power-state audit rows are joined by "
+            "`(sweep_source_id, run_id, gpu_id)`; neither a different physical "
+            "GPU nor an equal-coordinate control from another sweep is eligible.\n\n"
+        )
         f.write("## Inputs\n\n")
         f.write("| item | value |\n")
         f.write("|---|---|\n")
@@ -1287,14 +1451,14 @@ def write_markdown(
             )
         f.write("\n## Detail Rows\n\n")
         f.write(
-            "| component | W_SM (KiB) | blocks/SM | reuse | load_repeat | pair | pairing | execution order | delta_E (J) | signal fraction | denominator | denominator source | energy source | integration | measurement scope | power semantics | coeff | unit | pJ/bit | elapsed ratio | valid | diagnostic |\n"
+            "| sweep | component | W_SM (KiB) | blocks/SM | reuse | load_repeat | pair | pairing | execution order | delta_E (J) | signal fraction | denominator | denominator source | energy source | integration | measurement scope | power semantics | coeff | unit | pJ/bit | elapsed ratio | valid | diagnostic |\n"
         )
         f.write(
-            "|---|---:|---:|---:|---:|---|---|---|---:|---:|---:|---|---|---|---|---|---:|---|---:|---:|---|---|\n"
+            "|---|---|---:|---:|---:|---:|---|---|---|---:|---:|---:|---|---|---|---|---|---:|---|---:|---:|---|---|\n"
         )
         for row in detail_rows:
             f.write(
-                f"| {row['component']} | {row['W_SM_KiB']} | "
+                f"| `{row['sweep_source_id']}` | {row['component']} | {row['W_SM_KiB']} | "
                 f"{row['blocks_per_SM']} | {row['reuse_factor']} | "
                 f"{row['load_repeat']} | "
                 f"{row['pair']} | {row['pairing']} | "
@@ -1435,6 +1599,218 @@ def run_self_test() -> None:
         dram_pair_policy="duration-scaled",
         require_control_ncu_acceptance=False,
     )
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        audit_path = Path(temp_dir) / "power_state_audit.csv"
+        audit_rows = [
+            {
+                "input_file": "/remote/results/a100_component_selftest_l1.csv",
+                "sweep_source_id": "a100_component_selftest_l1.csv",
+                "run_id": "shared_run_100000_r0",
+                "gpu_id": "0",
+                "status": "ok",
+                "coefficient_eligible": "true",
+                "reasons": "",
+                "notes": "",
+            },
+            {
+                "input_file": "/remote/results/a100_component_selftest_l1.csv",
+                "sweep_source_id": "a100_component_selftest_l1.csv",
+                "run_id": "shared_run_100000_r0",
+                "gpu_id": "1",
+                "status": "reject",
+                "coefficient_eligible": "false",
+                "reasons": "avg_power_low_outlier",
+                "notes": "",
+            },
+        ]
+        with audit_path.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(audit_rows[0]))
+            writer.writeheader()
+            writer.writerows(audit_rows)
+        audit_by_identity = read_power_state_audit([str(audit_path)])
+        raw_join_rows = [
+            {
+                "_sweep_source_id": "a100_component_selftest_l1.csv",
+                "run_id": "shared_run_100000_r0",
+                "gpu_id": "0",
+            },
+            {
+                "_sweep_source_id": "a100_component_selftest_l1.csv",
+                "run_id": "shared_run_100000_r0",
+                "gpu_id": "1",
+            },
+        ]
+        attach_power_state_audit(raw_join_rows, audit_by_identity)
+        assert raw_join_rows[0]["_power_state_status"] == "ok"
+        assert raw_join_rows[1]["_power_state_status"] == "reject"
+
+        legacy_path = Path(temp_dir) / "legacy_power_state_audit.csv"
+        legacy_path.write_text(
+            "input_file,run_id,status\nraw.csv,run_1,ok\n",
+            encoding="utf-8",
+        )
+        try:
+            read_power_state_audit([str(legacy_path)])
+        except ValueError as exc:
+            assert "lacks identity columns gpu_id" in str(exc)
+        else:
+            raise AssertionError("legacy run_id-only power-state audit was accepted")
+
+        duplicate_path = Path(temp_dir) / "duplicate_power_state_audit.csv"
+        with duplicate_path.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(audit_rows[0]))
+            writer.writeheader()
+            writer.writerow(audit_rows[0])
+            writer.writerow(audit_rows[0])
+        try:
+            read_power_state_audit([str(duplicate_path)])
+        except ValueError as exc:
+            assert "duplicate power-state identity" in str(exc)
+        else:
+            raise AssertionError("duplicate power-state identity was overwritten")
+
+        first_dir = Path(temp_dir) / "first"
+        second_dir = Path(temp_dir) / "second"
+        first_dir.mkdir()
+        second_dir.mkdir()
+        duplicate_name = "same_l1.csv"
+        (first_dir / duplicate_name).write_text("run_id\nrun_1\n", encoding="utf-8")
+        (second_dir / duplicate_name).write_text("run_id\nrun_2\n", encoding="utf-8")
+        try:
+            read_rows(
+                [str(first_dir / duplicate_name), str(second_dir / duplicate_name)]
+            )
+        except ValueError as exc:
+            assert "raw CSV basenames must be unique" in str(exc)
+        else:
+            raise AssertionError("ambiguous portable sweep source ids were accepted")
+
+        generic_source = Path(temp_dir) / "component_energy.csv"
+        generic_source.write_text(
+            "mode,run_id\n"
+            "global_addr_only,control_100_r0\n"
+            "global_l1_load_only,treatment_200_r0\n",
+            encoding="utf-8",
+        )
+        generic_rows = read_rows([str(generic_source)])
+        assert {
+            row_sweep_family(row) for row in generic_rows
+        } == {"l1"}
+
+        ambiguous_source = Path(temp_dir) / "ambiguous_component_energy.csv"
+        ambiguous_source.write_text(
+            "mode,run_id\n"
+            "global_addr_only,control_100_r0\n"
+            "global_l1_load_only,l1_200_r0\n"
+            "l2_cg_load_only,l2_300_r0\n",
+            encoding="utf-8",
+        )
+        try:
+            read_rows([str(ambiguous_source)])
+        except ValueError as exc:
+            assert "multiple memory sweep families" in str(exc)
+        else:
+            raise AssertionError("ambiguous multi-path control source was accepted")
+
+    memory_common = {
+        **common,
+        "W_SM_KiB": "32",
+        "blocks_per_SM": "16",
+        "reuse_factor": "1",
+        "load_repeat": "4",
+        "ITER": "100",
+    }
+    l1_source = "a100_component_selftest_l1.csv"
+    dram_source = "a100_component_selftest_dram.csv"
+    l1_treatment = {
+        **memory_common,
+        "_sweep_source_id": l1_source,
+        "_sweep_family": "l1",
+        "_source_file": l1_source,
+        "mode": "global_l1_load_only",
+        "run_id": "global_l1_load_only_200000_r0",
+        "measurement_start_epoch_ms": "190000",
+        "measurement_end_epoch_ms": "200000",
+        "elapsed_s": "10",
+        "net_E_J": "30",
+        "expected_l1_bytes": "1000000",
+    }
+    l1_control = {
+        **memory_common,
+        "_sweep_source_id": l1_source,
+        "_sweep_family": "l1",
+        "_source_file": l1_source,
+        "mode": "global_addr_only",
+        "run_id": "global_addr_only_170000_r0",
+        "measurement_start_epoch_ms": "160000",
+        "measurement_end_epoch_ms": "170000",
+        "elapsed_s": "10",
+        "net_E_J": "10",
+    }
+    dram_control = {
+        **memory_common,
+        "_sweep_source_id": dram_source,
+        "_sweep_family": "dram",
+        "_source_file": dram_source,
+        "mode": "global_addr_only",
+        "run_id": "global_addr_only_189000_r0",
+        "measurement_start_epoch_ms": "179000",
+        "measurement_end_epoch_ms": "189000",
+        "elapsed_s": "10",
+        "net_E_J": "25",
+    }
+    dram_treatment = {
+        **memory_common,
+        "_sweep_source_id": dram_source,
+        "_sweep_family": "dram",
+        "_source_file": dram_source,
+        "mode": "dram_cg_load_only",
+        "run_id": "dram_cg_load_only_220000_r0",
+        "measurement_start_epoch_ms": "210000",
+        "measurement_end_epoch_ms": "220000",
+        "elapsed_s": "10",
+        "net_E_J": "80",
+        "expected_dram_bytes": "1000000",
+    }
+    isolated_memory = make_detail_rows(
+        [l1_treatment, l1_control, dram_control, dram_treatment],
+        tensor_pair_policy="duration-scaled",
+        l1_pair_policy="matched-iters",
+        dram_pair_policy="matched-iters",
+        **{
+            key: value
+            for key, value in kwargs.items()
+            if key not in {"l1_pair_policy", "dram_pair_policy"}
+        },
+    )
+    isolated_by_component = {row["component"]: row for row in isolated_memory}
+    assert isolated_by_component["global_l1_hit_path"]["control_run_id"] == (
+        l1_control["run_id"]
+    )
+    assert isolated_by_component["external_memory_read_path"]["control_run_id"] == (
+        dram_control["run_id"]
+    )
+    assert all(
+        row["source_file"] == row["control_source_file"]
+        for row in isolated_memory
+    )
+    assert exact_config_key(l1_control) != exact_config_key(dram_control)
+    assert source_sweep_family("old_tensor_diagnostic_current_l1.csv") == "l1"
+    assert exact_config_key(
+        {
+            **l1_control,
+            "_sweep_family": "",
+            "label": "global_addr_only_l1_W32_B16_LR4",
+        }
+    ) != exact_config_key(
+        {
+            **dram_control,
+            "_sweep_family": "",
+            "label": "global_addr_only_dram_W32_B16_LR4",
+        }
+    )
+
     matched = make_detail_rows(
         [treatment, control], tensor_pair_policy="matched-iters", **kwargs
     )
@@ -1928,6 +2304,8 @@ def main() -> int:
     summary_rows = make_summary_rows(detail_rows)
 
     detail_fields = [
+        "sweep_source_id",
+        "sweep_family",
         "profile_name",
         "gpu_id",
         "n_gpu_active",
@@ -1998,6 +2376,7 @@ def main() -> int:
         "valid_component_estimate",
         "diagnostic",
         "source_file",
+        "control_source_file",
     ]
     summary_fields = [
         "component",

@@ -90,6 +90,9 @@ STRICT_AUDIT_REQUIRED_CHECKS = {
     "ncu_summary_counter_schema",
     "ncu_summary_coordinate_alignment",
     "ncu_evidence_summary_fields",
+    "detail_same_sweep_source_pairing",
+    "power_state_artifact_covers_detail_run_ids",
+    "detail_source_files_exist",
 }
 
 STRICT_SUMMARY_NCU_EVIDENCE_COLUMNS = {
@@ -368,8 +371,12 @@ TENSOR_PAIR_CALIBRATION_REQUIRED_COLUMNS = {
 
 POWER_STATE_REQUIRED_COLUMNS = {
     "input_file",
+    "sweep_source_id",
     "row_index",
     "run_id",
+    "gpu_id",
+    "n_gpu_active",
+    "gpu_active",
     "mode",
     "W_SM_KiB",
     "blocks_per_SM",
@@ -1717,13 +1724,27 @@ def audit_power_state(repo: Path, rows: list[dict[str, str]], path: Path) -> Non
     missing_columns = sorted(POWER_STATE_REQUIRED_COLUMNS - fieldnames)
     if missing_columns:
         problems.append("missing_columns=" + ",".join(missing_columns))
+    seen_identities: set[tuple[str, str, str]] = set()
     for idx, row in enumerate(csv_rows, start=2):
+        identity = (
+            row.get("sweep_source_id", ""),
+            row.get("run_id", ""),
+            row.get("gpu_id", ""),
+        )
+        if not all(identity):
+            problems.append(f"{path}:{idx}:incomplete_row_identity={identity!r}")
+        elif identity in seen_identities:
+            problems.append(f"{path}:{idx}:duplicate_row_identity={identity!r}")
+        else:
+            seen_identities.add(identity)
         status = row.get("status", "")
         eligible = row.get("coefficient_eligible", "").lower()
         if not status:
             problems.append(f"{path}:{idx}:missing_status")
         if eligible not in {"true", "false"}:
             problems.append(f"{path}:{idx}:missing_eligibility")
+        if row.get("gpu_active", "").lower() not in {"true", "false"}:
+            problems.append(f"{path}:{idx}:gpu_active={row.get('gpu_active', '')}")
         if status == "reject":
             problems.append(f"{path}:{idx}:reject")
         if eligible == "false":
@@ -2320,6 +2341,22 @@ def audit_matched_control(
         valid = row.get("valid_component_estimate", row.get("valid_for_summary", "")).lower()
         component = row.get("component", "")
         seen_components.add(component)
+        sweep_source_id = row.get("sweep_source_id", "")
+        source_file = row.get("source_file", "").replace("\\", "/").rsplit("/", 1)[-1]
+        control_source_file = (
+            row.get("control_source_file", "").replace("\\", "/").rsplit("/", 1)[-1]
+        )
+        if (
+            not sweep_source_id
+            or not row.get("gpu_id", "")
+            or sweep_source_id != source_file
+            or source_file != control_source_file
+        ):
+            problems.append(
+                f"{path}:{idx}:sweep_pair_identity="
+                f"{sweep_source_id!r}/{row.get('gpu_id', '')!r}/"
+                f"{source_file!r}/{control_source_file!r}"
+            )
         pair_execution_order = row.get("pair_execution_order", "")
         if valid == "true":
             if pair_execution_order not in {

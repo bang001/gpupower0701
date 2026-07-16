@@ -123,9 +123,9 @@ bool contains_gpu(const std::vector<int>& gpus, int gpu) {
 
 void print_usage(const char* argv0) {
   std::cout
-      << "Usage: " << argv0 << " --gpu-list 0[,1,2] --mode MODE [options]\n\n"
+      << "Usage: " << argv0 << " [--gpu-list 0[,1,2]] --mode MODE [options]\n\n"
       << "Required/primary options:\n"
-      << "  --gpu-list <list|none>       CUDA/NVML ids for active GPUs\n"
+      << "  --gpu-list <list|none>       CUDA/NVML ids for active GPUs; default 0\n"
       << "  --mode idle|empty|clocked_empty|reg_fragment_only|reg_operand_only|reg_mma|reg_pressure|addr_only|global_addr_only|global_l1_load_only|shared_scalar_addr_only|shared_scalar_load_only|shared_load_only|shared_mma|l2_load_only|l2_cg_load_only|l2_mma|dram_load_only|dram_cg_load_only|dram_mma|store_only|store_path\n"
       << "  --w-sm-kib <int>             1..131072 power-of-two KiB sweep point\n"
       << "  --blocks-per-sm <int>        power-of-two up to target resident block limit\n"

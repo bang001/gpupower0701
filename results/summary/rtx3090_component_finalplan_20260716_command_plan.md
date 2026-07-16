@@ -5,6 +5,7 @@ Generated: 2026-07-16
 | item | value |
 |---|---|
 | target profile | `rtx3090` |
+| active GPU ids | `0` (`--gpu-ids` omitted/empty defaults to physical GPU 0) |
 | CUDA arch | `sm_86` |
 | active_SM (SMs) | `82` |
 | energy sweep blocks/SM | `8` |
@@ -248,6 +249,12 @@ Matched-control consumes the generated power-state audit CSV with
 `--exclude-power-state-rejects`, so rows flagged as `status=reject` or
 `coefficient_eligible=false` are removed before treatment/control pairing. This
 keeps power-state drops from appearing as negative component coefficients.
+The raw `gpu_id` is a physical CUDA/NVML device index, not a repeat index.
+Power-state rows are joined by `(sweep_source_id, run_id, gpu_id)` and duplicate
+or legacy run-id-only evidence is rejected. Treatment/control grouping also
+includes `sweep_source_id`, so equal-coordinate `global_addr_only` rows from the
+Global-L1, L2, and external-memory CSVs cannot cross-pair. NCU exact-coordinate
+keys carry the corresponding sweep family for the same reason.
 
 Tensor energy rows use `--tensor-pair-lock-iters` together with
 `--tensor-pair-control-min-seconds=1.0`. Each RF coordinate

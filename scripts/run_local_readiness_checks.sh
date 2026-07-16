@@ -55,6 +55,7 @@ python3 -m py_compile \
 echo "[readiness] package/gap/dashboard/manifest self-tests"
 python3 scripts/preflight_gpu_support.py --self-test
 python3 scripts/audit_power_api_measurements.py --self-test
+python3 scripts/audit_power_state_stability.py --self-test
 python3 scripts/run_component_regression_sweep.py --self-test
 python3 scripts/summarize_ncu_cache_metrics.py --self-test
 python3 scripts/analyze_ncu_path_acceptance.py --self-test

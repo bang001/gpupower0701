@@ -12,8 +12,23 @@ import argparse
 import csv
 import math
 import statistics
+import tempfile
 from collections import Counter, defaultdict
 from pathlib import Path
+
+
+def source_id(value: str) -> str:
+    normalized = value.strip().replace("\\", "/").rstrip("/")
+    return normalized.rsplit("/", 1)[-1] if normalized else ""
+
+
+def is_active_row(row: dict[str, str]) -> bool:
+    notes = row.get("notes", "")
+    if "gpu_active=1" in notes:
+        return True
+    if "gpu_active=0" in notes:
+        return False
+    return as_float(row, "n_gpu_active") > 0.0
 
 
 def as_float(row: dict[str, str], key: str) -> float:
@@ -53,7 +68,7 @@ def normalized(value: str, default: str = "") -> str:
 
 def group_key(row: dict[str, str]) -> tuple[str, ...]:
     return (
-        row.get("_input_file", ""),
+        row.get("_sweep_source_id", ""),
         row.get("profile_name", ""),
         row.get("gpu_id", ""),
         row.get("n_gpu_active", ""),
@@ -69,11 +84,23 @@ def group_key(row: dict[str, str]) -> tuple[str, ...]:
 
 def read_rows(paths: list[str]) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
+    seen_sources: dict[str, str] = {}
     for path in paths:
+        sweep_source_id = source_id(path)
+        if not sweep_source_id:
+            raise ValueError(f"raw CSV path has no portable source id: {path!r}")
+        previous = seen_sources.get(sweep_source_id)
+        if previous and Path(previous) != Path(path):
+            raise ValueError(
+                "raw CSV basenames must be unique for portable audit joins: "
+                f"{previous!r} and {path!r} both map to {sweep_source_id!r}"
+            )
+        seen_sources[sweep_source_id] = path
         with Path(path).open(newline="") as f:
             for idx, row in enumerate(csv.DictReader(f), start=2):
                 row = dict(row)
                 row["_input_file"] = path
+                row["_sweep_source_id"] = sweep_source_id
                 row["_row_index"] = str(idx)
                 elapsed = as_float(row, "elapsed_s")
                 energy = as_float(row, "net_E_J")
@@ -178,8 +205,12 @@ def audit(
         out.append(
             {
                 "input_file": row.get("_input_file", ""),
+                "sweep_source_id": row.get("_sweep_source_id", ""),
                 "row_index": row.get("_row_index", ""),
                 "run_id": row.get("run_id", ""),
+                "gpu_id": row.get("gpu_id", ""),
+                "n_gpu_active": row.get("n_gpu_active", ""),
+                "gpu_active": "true" if is_active_row(row) else "false",
                 "mode": row.get("mode", ""),
                 "W_SM_KiB": row.get("W_SM_KiB", ""),
                 "blocks_per_SM": row.get("blocks_per_SM", ""),
@@ -231,8 +262,12 @@ def write_csv(path: str, rows: list[dict[str, str]]) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
         "input_file",
+        "sweep_source_id",
         "row_index",
         "run_id",
+        "gpu_id",
+        "n_gpu_active",
+        "gpu_active",
         "mode",
         "W_SM_KiB",
         "blocks_per_SM",
@@ -287,6 +322,12 @@ def write_markdown(path: str, rows: list[dict[str, str]], csv_path: str) -> None
             "configuration. It is a measurement-quality audit, not an NCU path "
             "acceptance report and not a component coefficient report.\n\n"
         )
+        f.write(
+            "Rows retain `sweep_source_id`, physical `gpu_id`, and `run_id`. "
+            "Downstream analysis joins on all three fields so inactive GPUs and "
+            "same-coordinate controls from another sweep cannot overwrite or "
+            "cross-pair the selected GPU row.\n\n"
+        )
         f.write(f"- audit CSV: `{csv_path}`\n\n")
 
         f.write("## Status Counts\n\n")
@@ -313,13 +354,14 @@ def write_markdown(path: str, rows: list[dict[str, str]], csv_path: str) -> None
         if rejects:
             f.write("## Rejected Rows\n\n")
             f.write(
-                "| mode | W_SM (KiB) | B/SM | LR | avg power (W) | group median (W) | "
+                "| sweep | GPU | active | mode | W_SM (KiB) | B/SM | LR | avg power (W) | group median (W) | "
                 "endpoint after ratio | temp (C) | reasons | notes |\n"
             )
-            f.write("|---|---:|---:|---:|---:|---:|---:|---:|---|---|\n")
+            f.write("|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|---|\n")
             for row in rejects:
                 f.write(
-                    f"| `{row['mode']}` | {row['W_SM_KiB']} | {row['blocks_per_SM']} | "
+                    f"| `{row['sweep_source_id']}` | {row['gpu_id']} | "
+                    f"{row['gpu_active']} | `{row['mode']}` | {row['W_SM_KiB']} | {row['blocks_per_SM']} | "
                     f"{row['load_repeat']} | {row['average_power_W']} | "
                     f"{row['group_power_median_W']} | {row['endpoint_after_ratio']} | "
                     f"{row['temp_C']} | {row['reasons'] or '-'} | {row['notes'] or '-'} |\n"
@@ -342,9 +384,54 @@ def write_markdown(path: str, rows: list[dict[str, str]], csv_path: str) -> None
         )
 
 
+def run_self_test() -> None:
+    common = {
+        "profile_name": "a100",
+        "n_gpu_active": "1",
+        "mode": "global_addr_only",
+        "W_SM_KiB": "16",
+        "blocks_per_SM": "16",
+        "active_SM": "108",
+        "reuse_factor": "1",
+        "load_repeat": "4",
+        "store_repeat": "1",
+        "elapsed_s": "10",
+        "net_E_J": "100",
+        "power_after_mw": "100000",
+        "temp_C": "45",
+        "clock_sm_mhz": "1200",
+        "run_id": "global_addr_only_100000_r0",
+    }
+    with tempfile.TemporaryDirectory() as temp:
+        raw = Path(temp) / "a100_component_finalplan_selftest_l1.csv"
+        rows = [
+            {**common, "gpu_id": "0", "notes": "gpu_active=1"},
+            {**common, "gpu_id": "1", "notes": "gpu_active=0"},
+        ]
+        with raw.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+        audited = audit(
+            read_rows([str(raw)]),
+            min_group_size=1,
+            relative_power_tolerance=0.05,
+            min_power_delta_w=10.0,
+            mad_threshold=6.0,
+            endpoint_after_min_ratio=0.75,
+            temp_delta_c=8.0,
+            clock_delta_pct=0.05,
+        )
+    assert len(audited) == 2
+    assert {row["gpu_id"] for row in audited} == {"0", "1"}
+    assert {row["gpu_active"] for row in audited} == {"true", "false"}
+    assert {row["sweep_source_id"] for row in audited} == {raw.name}
+    print("power-state audit multi-GPU identity self-test passed")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("raw_csv", nargs="+")
+    parser.add_argument("raw_csv", nargs="*")
     parser.add_argument("--out-csv", default="results/summary/power_state_audit.csv")
     parser.add_argument("--out-md", default="results/summary/power_state_audit.md")
     parser.add_argument("--min-group-size", type=int, default=4)
@@ -355,7 +442,14 @@ def main() -> int:
     parser.add_argument("--temp-delta-c", type=float, default=8.0)
     parser.add_argument("--clock-delta-pct", type=float, default=0.05)
     parser.add_argument("--fail-on-reject", action="store_true")
+    parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
+
+    if args.self_test:
+        run_self_test()
+        return 0
+    if not args.raw_csv:
+        parser.error("at least one raw CSV path is required")
 
     rows = audit(
         read_rows(args.raw_csv),

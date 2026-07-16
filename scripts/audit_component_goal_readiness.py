@@ -239,6 +239,9 @@ STRICT_AUDIT_REQUIRED_CHECKS = {
     "ncu_summary_counter_schema",
     "ncu_summary_coordinate_alignment",
     "ncu_evidence_summary_fields",
+    "detail_same_sweep_source_pairing",
+    "power_state_artifact_covers_detail_run_ids",
+    "detail_source_files_exist",
 }
 
 REQUIRED_NCU_COMPONENT_CANDIDATES = {
@@ -420,8 +423,12 @@ STRICT_SUMMARY_PATH_REQUIRED_METRICS = {
 
 POWER_STATE_REQUIRED_COLUMNS = {
     "input_file",
+    "sweep_source_id",
     "row_index",
     "run_id",
+    "gpu_id",
+    "n_gpu_active",
+    "gpu_active",
     "mode",
     "W_SM_KiB",
     "blocks_per_SM",
@@ -1258,6 +1265,7 @@ def validate_power_state_artifacts(
     row_count = 0
     reject_count = 0
     ineligible_count = 0
+    seen_identities: set[tuple[str, str, str]] = set()
     for artifact in artifacts:
         with artifact.open(newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -1270,13 +1278,26 @@ def validate_power_state_artifacts(
             artifact_rows = list(reader)
         for idx, row in enumerate(artifact_rows, start=2):
             row_count += 1
+            identity = (
+                row.get("sweep_source_id", ""),
+                row.get("run_id", ""),
+                row.get("gpu_id", ""),
+            )
             status = row.get("status", "")
             eligible = row.get("coefficient_eligible", "")
             location = f"{artifact}:{idx}:{row.get('run_id', '')}"
+            if not all(identity):
+                problems.append(f"{location}:incomplete_row_identity={identity!r}")
+            elif identity in seen_identities:
+                problems.append(f"{location}:duplicate_row_identity={identity!r}")
+            else:
+                seen_identities.add(identity)
             if not status:
                 problems.append(f"{location}:missing_status")
             if eligible.lower() not in {"true", "false"}:
                 problems.append(f"{location}:missing_eligibility")
+            if row.get("gpu_active", "").lower() not in {"true", "false"}:
+                problems.append(f"{location}:gpu_active={row.get('gpu_active', '')}")
             if status == "reject":
                 reject_count += 1
                 problems.append(f"{location}:reject")
@@ -1324,8 +1345,12 @@ def write_test_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]
 def selftest_power_state_row(**overrides: str) -> dict[str, str]:
     row = {
         "input_file": "results/raw/selftest.csv",
+        "sweep_source_id": "selftest.csv",
         "row_index": "2",
         "run_id": "selftest",
+        "gpu_id": "0",
+        "n_gpu_active": "1",
+        "gpu_active": "true",
         "mode": "global_l1_load_only",
         "W_SM_KiB": "16",
         "blocks_per_SM": "16",

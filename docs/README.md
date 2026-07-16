@@ -25,6 +25,7 @@
 | A100 Tensor run이 16시간 이상 걸린 이유와 재발 방지는 무엇인가 | `docs/audits/a100_tensor_control_calibration_failure_20260715_ko.md` |
 | A100/V100의 ratio 21.930 메시지가 왜 실제 GPU 실패가 아닌가 | `docs/audits/a100_v100_synthetic_selftest_false_failure_20260716_ko.md` |
 | A100/V100이 schema smoke 다음에 중단된 원인을 어떻게 구분하는가 | `docs/audits/a100_v100_schema_smoke_stop_20260716_ko.md` |
+| 멀티 GPU `run_id` overwrite와 L1/L2/DRAM control 혼합을 어떻게 막았는가 | `docs/audits/multigpu_sweep_pairing_identity_fix_20260716_ko.md` |
 | Memory path와 제거한 sweep을 GPU별로 어떻게 감사했는가 | `docs/audits/memory_path_cross_architecture_sweep_audit_ko.md` |
 | 무엇이 archive로 이동했는가 | `docs/audits/repository_active_archive_audit_ko.md` |
 
@@ -99,6 +100,7 @@ python3 scripts/plan_platform_component_experiment.py \
 | audits | `a100_tensor_control_calibration_failure_20260715_ko.md` | A100 launch-only control, 10억 ITER, 장시간 run 무효화와 v6 교정 |
 | audits | `a100_v100_synthetic_selftest_false_failure_20260716_ko.md` | synthetic ratio 21.930 오인, clean self-test 출력, non-L2/L2 failure isolation |
 | audits | `a100_v100_schema_smoke_stop_20260716_ko.md` | schema kernel/power audit/Tensor SASS 중단 구분, toolkit binding, 재실행 증거 |
+| audits | `multigpu_sweep_pairing_identity_fix_20260716_ko.md` | `(sweep_source_id, run_id, gpu_id)` 조인, sweep별 control pairing 격리, GPU 0 기본값 |
 | audits | `memory_path_cross_architecture_sweep_audit_ko.md` | Shared/Global-L1/L2/external path 논리, exact-NCU coverage, 제거/유지 sweep |
 | audits | `v100_l2_iter_mismatch_remediation_ko.md` | V100 L2 동일 ITER 교정 |
 | audits | `v100_32gb_platform_review_ko.md` | V100 32GB SKU/toolchain 검토 |

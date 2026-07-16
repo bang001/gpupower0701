@@ -78,6 +78,7 @@ CANONICAL_FILES = (
     "docs/platforms/power_measurement_api_matrix_ko.md",
     "docs/audits/component_energy_self_critique_ko.md",
     "docs/audits/current_goal_alignment_audit_ko.md",
+    "docs/audits/multigpu_sweep_pairing_identity_fix_20260716_ko.md",
 )
 
 FORBIDDEN_ACTIVE_TERMS = {
@@ -114,6 +115,8 @@ REQUIRED_POLICY_TERMS = {
         "GA --> DR[dram_cg_load_only",
         "srcunit_ltcfabric",
         "logical final L2 hit",
+        "(sweep_source_id, run_id, gpu_id)",
+        "sweep_source_id",
     ),
     "docs/methodology/a100_l2_fabric_aware_experiment_design_ko.md": (
         "l2_logical_read_hit_rate_pct",
@@ -129,12 +132,18 @@ REQUIRED_POLICY_TERMS = {
         "RTX 3090은 2026-07-14 v5 package",
         "모든 final pair의 matched ITER",
     ),
+    "docs/audits/multigpu_sweep_pairing_identity_fix_20260716_ko.md": (
+        "(sweep_source_id, run_id, gpu_id)",
+        "gpu_id`는 repeat/pass index가 아니라",
+        "source_file == control_source_file",
+    ),
     "scripts/plan_platform_component_experiment.py": (
         "Shared scalar energy rows use",
         "--shared-pair-policy",
         "--l2-pair-policy",
         "matched-iters",
         "Partition-fabric profiles apply 95% to final service after LTC-fabric recovery",
+        "(sweep_source_id, run_id, gpu_id)",
     ),
     "scripts/run_ncu_validation.sh": (
         "lts__t_sectors_srcunit_ltcfabric_op_read",

@@ -29,6 +29,7 @@ from run_sweep import (
     classify,
     gpu_list_for_count,
     mode_allowed,
+    parse_gpu_ids,
     parse_int_list,
     parse_str_list,
 )
@@ -769,6 +770,16 @@ def _run_self_test_checks() -> None:
     import tempfile
     from unittest import mock
 
+    assert parse_gpu_ids("") == [0]
+    assert parse_gpu_ids("   ") == [0]
+    assert parse_gpu_ids("1,3") == [1, 3]
+    try:
+        parse_gpu_ids("0,0")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("duplicate GPU ids were accepted")
+
     def calibration_stdout(target_iters: int) -> str:
         return (
             "CALIBRATION_TRIAL_ITERS=1000\n"
@@ -1321,7 +1332,7 @@ def main() -> int:
             "--modes global_addr_only,l2_cg_load_only"
         )
     profile = PROFILES[args.target_profile]
-    gpu_ids = parse_int_list(args.gpu_ids, [0])
+    gpu_ids = parse_gpu_ids(args.gpu_ids)
     modes = parse_str_list(args.modes, DEFAULT_MODES)
     unknown_modes = sorted(set(modes) - set(MODES))
     if unknown_modes:

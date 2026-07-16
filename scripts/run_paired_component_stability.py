@@ -15,6 +15,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from run_sweep import parse_gpu_ids
+
 
 FINAL_CONTROL_BY_TREATMENT = {
     "shared_scalar_load_only": "shared_scalar_addr_only",
@@ -167,6 +169,8 @@ def main() -> int:
     parser.add_argument("--verify-smid", type=int, default=1)
     parser.add_argument("--execute", action="store_true")
     args = parser.parse_args()
+
+    args.gpu_ids = ",".join(str(value) for value in parse_gpu_ids(args.gpu_ids))
 
     if args.repeats <= 0:
         raise ValueError("--repeats must be positive")
