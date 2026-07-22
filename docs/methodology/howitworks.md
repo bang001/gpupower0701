@@ -1,9 +1,9 @@
 # How It Works: Component Energy Microbenchmark
 
 작성일: 2026-07-02
-최종 업데이트: 2026-07-14
+최종 업데이트: 2026-07-22
 
-이 문서는 현재 코드 기준으로 GPU component energy 실험이 어떻게 동작하는지 설명한다. 예전 문서에는 `shared_mma`, `l2_mma`, `dram_mma` 중심의 초기 탐색 설명이 많이 섞여 있었지만, 현재 최종 해석은 **acceptance-first finalplan**을 기준으로 한다.
+이 문서는 현재 코드 기준으로 GPU component energy 실험이 어떻게 동작하는지 설명한다. 예전 문서에는 `shared_mma`, `l2_mma`, `dram_mma` 중심의 초기 탐색 설명이 많이 섞여 있었지만, 현재 해석은 **acceptance-first full-component finalplan**과 **FP16 Tensor-only `component_dynamic_attribution_v3`**를 목적에 따라 분리한다.
 
 핵심은 다음 한 문장이다.
 
@@ -14,6 +14,40 @@ effective microbenchmark coefficient다.
 ```
 
 순수 Tensor Core 회로 에너지, 순수 register-file 에너지, 순수 SRAM/HBM bitcell 에너지를 직접 측정하는 실험이 아니다.
+
+## 0. 새 Tensor-only v3를 어떻게 이해할 것인가
+
+새 FP16 Tensor 실험은 `clocked_empty`, `reg_operand_only`, `reg_mma`만
+수집하는 별도 package다. 하나의 pair는 다음 순서로 실행된다.
+
+```text
+pair cooldown -> clocked_empty before
+              -> control/reg_operand_only <-> treatment/reg_mma
+              -> clocked_empty after
+```
+
+Control/treatment 순서는 coordinate와 repeat에 따라 반전한다. 두 모드는
+동일 ITER, RF, blocks/SM, active SM을 사용한다. 각 mode의 `net_E_J`는
+해당 mode 실행 중 측정한 idle energy가 이미 제거된 값이다.
+
+| 방법 | 구현 계산 | 알 수 있는 것 | 단독 채택 주의 |
+|---|---|---|---|
+| matched-ITER completion | `(net_E_mma - net_E_operand) / FLOP_mma` | 같은 ITER를 완료할 때 MMA가 추가한 GPU-device energy | MMA로 길어진 active time도 포함 |
+| clocked MI-ATC | `(delta_E_completion - P_clocked_empty * delta_t) / FLOP_mma` | blocks/SM별 저활동 active-time를 제거한 동적 Tensor 대리값 | `clocked_empty`가 scheduler-matched 반사실이라는 모델 가정 |
+| control-rate ATC | `(E_mma - E_operand/t_operand * t_mma) / FLOP_mma` | no-MMA operand/control이 treatment 시간 동안 유지됐을 때의 operand-rate arm | control과 treatment의 power state가 비교 가능해야 함 |
+| joint regression | `delta_E = beta_FLOP*FLOP + beta_time*delta_t + fixed effects` | RF/B/duration sweep에서 FLOP과 시간 기여를 동시 추정 | predictor 공선성, repeat 3, 충분한 좌표가 필요 |
+
+즉 **v3는 MI-ATC 또는 operand-rate arm 하나의 별칭이 아니다.** 한 measurement
+bundle에서 네 방법을 같이 보고, NCU HMMA/FLOP 비례성, control HMMA=0,
+zero spill, binary hash 일치가 통과한 좌표만 해석한다. 방법 간 결과가 크게
+다르면 하나를 골라 `순수 Tensor energy`라고 부르지 않고 반사실 모델
+민감도로 보고한다.
+
+Pilot은 B `4,8,16`, RF `1,4,16`, duration `5,15 s`, repeat `1`이므로
+실행/NCU/캘리브레이션 진단용이다. Final은 RF `1,2,4,8,16`, duration
+`5,15,30 s`, repeat `3`이며 이 조건에서만 회귀와 bootstrap CI를 final
+후보로 판정한다. 전체 수식과 acceptance는
+[component dynamic attribution protocol](component_dynamic_attribution_protocol_ko.md)을 따른다.
 
 ## 1. 실험 목적
 

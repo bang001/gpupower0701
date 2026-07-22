@@ -1,6 +1,6 @@
 # Documentation Map
 
-갱신일: 2026-07-16
+갱신일: 2026-07-22
 
 `docs/`에는 현행 acceptance-first finalplan을 실행하고 해석하는 데 필요한 문서만
 남긴다. 초기 설계, 구형 coefficient 시각화와 과거 전체 보고서는 `archive/`에 보존한다.
@@ -10,6 +10,7 @@
 | 질문 | 먼저 볼 문서 |
 |---|---|
 | 현재 실험은 어떻게 동작하는가 | `docs/methodology/howitworks.md` |
+| FP16 Tensor-only v3의 네 계산 방법과 sweep은 무엇인가 | `docs/methodology/component_dynamic_attribution_protocol_ko.md` |
 | 어떤 sweep과 좌표를 실행하는가 | `docs/methodology/component_energy_final_experiment_plan_ko.md` |
 | 초기 방식과 현재 방식은 무엇이 다른가 | `docs/methodology/component_energy_method_comparison_ko.md` |
 | NCU로 무엇을 검증하고 pJ를 어떻게 계산하는가 | `docs/methodology/ncu_validation_energy_calculation_ko.md` |
@@ -30,6 +31,11 @@
 | 무엇이 archive로 이동했는가 | `docs/audits/repository_active_archive_audit_ko.md` |
 
 ## 실행 순서
+
+새 **Tensor-only** 실험은
+`scripts/plan_tensor_fp16_cross_platform_experiment.py`로 package를 생성한다. 기존
+`plan_platform_component_experiment.py`는 Shared/Global-L1/L2/External을 포함한
+full-component finalplan용으로 남겨 둔다.
 
 | 단계 | 문서/도구 | 확인할 내용 |
 |---:|---|---|
@@ -78,6 +84,7 @@ python3 scripts/plan_platform_component_experiment.py \
 | 분류 | 파일 | 역할 |
 |---|---|---|
 | methodology | `howitworks.md` | 현재 코드와 component pair의 상세 동작 |
+| methodology | `component_dynamic_attribution_protocol_ko.md` | Tensor-only v3 진입점, 네 estimator, factorial sweep, NCU/energy acceptance |
 | methodology | `component_energy_final_experiment_plan_ko.md` | profile별 sweep, 선택 좌표, acceptance 기준 |
 | methodology | `component_energy_method_comparison_ko.md` | raw sweep과 current finalplan 비교 |
 | methodology | `ncu_validation_energy_calculation_ko.md` | counter, denominator, pJ/FLOP/pJ/bit 계산 |
@@ -113,9 +120,11 @@ python3 scripts/plan_platform_component_experiment.py \
 |---|---|
 | RTX 3090 fixed-RF v2 Tensor | superseded historical energy evidence; 현행 계수로 인용 금지 |
 | RTX 3090 fixed-RF v4 Tensor | rejected; ptxas가 no-MMA control loop를 제거했으므로 이전 NCU acceptance와 energy pair 무효 |
-| RTX 3090 fixed-RF v5 Tensor | 2026-07-14 GA102 full package에서 2.140 pJ/FLOP, historical strict accepted; v6 플랫폼 비교에 직접 혼합 금지 |
+| RTX 3090 fixed-RF v5 Tensor | 2026-07-14 GA102 full package에서 2.140 pJ/FLOP, historical strict accepted; v3 measurement package 결과와 직접 혼합 금지 |
 | A100 fixed-RF v5 Tensor 20260714 | rejected; control 10억 ITER가 약 1 ms에 종료되어 calibration과 energy pair가 무효 |
-| Tensor v6 source/package | 새 실행의 현행 protocol; target-node binary/NCU/power gate 통과 전에는 신규 계수 없음 |
+| Tensor-only v3 source/package | 새 FP16 Tensor 실행의 현행 protocol; matched-ITER, clocked MI-ATC, control-rate ATC, joint regression을 함께 산출 |
+| RTX 3090 Tensor-only v3 20260722 | energy 18 pair와 NCU path 18/18 확인; repeat=1 및 quiescence 생략으로 diagnostic only, final coefficient 없음 |
+| Tensor kernel v6 source revision | 현행 CUDA no-MMA control 구현 revision; Tensor-only v3 measurement package와 같은 층위의 버전명이 아님 |
 | RTX 3090 Shared/Global-L1/L2 | 0.714/0.852/9.078 pJ/bit, strict accepted effective paths |
 | RTX 3090 external-memory read | 24.949 pJ/bit, `accepted_effective_path`; physical GDDR6X energy가 아님 |
 | 2026-07-08 RTX 3090 component coefficients | historical/provisional; current control/schema gate 미충족 |

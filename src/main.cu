@@ -46,8 +46,20 @@ struct Options {
   bool active_sm_explicit = false;
   int active_sm = kDefaultHardwareProfile.full_sm_count;
   double seconds = 10.0;
+  double idle_settle_seconds = 0.0;
+  double idle_measure_seconds = 0.0;
+  double idle_ready_max_power_w = 0.0;
+  int idle_ready_consecutive_samples = 3;
+  double idle_ready_poll_seconds = 0.5;
+  double idle_ready_timeout_seconds = 120.0;
+  bool skip_idle_baseline = false;
   std::uint64_t iters = 0;
   std::uint64_t reuse_factor = 1;
+  std::uint64_t issue_match_steps = 1;
+  unsigned issue_match_extra_period = 0;
+  unsigned latency_match_ns = 0;
+  unsigned latency_match_period = 1;
+  std::uint64_t scheduler_match_steps = 1;
   std::uint64_t load_repeat = 1;
   std::uint64_t store_repeat = 1;
   std::uint64_t reg_payload_bytes_per_block = 0;
@@ -94,6 +106,12 @@ struct SmidCheck {
   std::string notes;
 };
 
+struct IdleReadyCheck {
+  double waited_s = 0.0;
+  unsigned int last_max_power_mw = 0;
+  int samples = 0;
+};
+
 std::vector<int> parse_gpu_list(const std::string& value) {
   std::vector<int> out;
   if (value.empty() || value == "none" || value == "None" || value == "-") {
@@ -126,14 +144,26 @@ void print_usage(const char* argv0) {
       << "Usage: " << argv0 << " [--gpu-list 0[,1,2]] --mode MODE [options]\n\n"
       << "Required/primary options:\n"
       << "  --gpu-list <list|none>       CUDA/NVML ids for active GPUs; default 0\n"
-      << "  --mode idle|empty|clocked_empty|reg_fragment_only|reg_operand_only|reg_mma|reg_pressure|addr_only|global_addr_only|global_l1_load_only|shared_scalar_addr_only|shared_scalar_load_only|shared_load_only|shared_mma|l2_load_only|l2_cg_load_only|l2_mma|dram_load_only|dram_cg_load_only|dram_mma|store_only|store_path\n"
-      << "  --w-sm-kib <int>             1..131072 power-of-two KiB sweep point\n"
+      << "  --mode idle|empty|clocked_empty|reg_fragment_only|reg_operand_only|reg_resident_stall_no_mma|reg_issue_dependency_no_mma|reg_scheduler_matched_no_mma|reg_mma|reg_pressure|addr_only|global_addr_only|global_l1_load_only|shared_scalar_addr_only|shared_scalar_load_only|shared_load_only|shared_mma|l2_load_only|l2_cg_load_only|l2_mma|dram_load_only|dram_cg_load_only|dram_mma|store_only|store_path\n"
+      << "  --w-sm-kib <int>             1..131072 KiB; defaults use powers of two, explicit capacity-edge values are allowed\n"
       << "  --blocks-per-sm <int>        power-of-two up to target resident block limit\n"
       << "  --active-sm <int>            default target full SM count\n"
       << "  --target-profile <name>      auto, rtx3090, v100, a100, h100\n"
       << "  --seconds <float>            target measurement time, default 10\n"
+      << "  --idle-settle-seconds <f>    fixed wait before idle sampling; default 0\n"
+      << "  --idle-measure-seconds <f>   fixed idle window; default 0 means --seconds\n"
+      << "  --idle-ready-max-power-w <f> wait after setup until active GPUs are below this power; 0 disables\n"
+      << "  --idle-ready-consecutive-samples <n> consecutive ready samples; default 3\n"
+      << "  --idle-ready-poll-seconds <f> readiness poll interval; default 0.5\n"
+      << "  --idle-ready-timeout-seconds <f> readiness timeout; default 120\n"
+      << "  --skip-idle-baseline         NCU/timing-only path; records zero idle subtraction\n"
       << "  --iters <int>                bypass calibration if nonzero\n"
       << "  --reuse-factor <int>         MMA repeats per iteration, default 1\n"
+      << "  --issue-match-steps <n>      integer/bitwise dependency steps per logical MMA diagnostic\n"
+      << "  --issue-match-extra-period <n> add one dependency step every n logical ops; 0 disables\n"
+      << "  --latency-match-ns <n>       nanosleep delay for the resident-stall control; default 0\n"
+      << "  --latency-match-period <n>   issue one nanosleep every n logical ops; default 1\n"
+      << "  --scheduler-match-steps <n>  legacy dependent FP32 proxy steps; excluded from final coefficient\n"
       << "  --load-repeat <int>          operand loads per iteration, default 1\n"
       << "  --store-repeat <int>         store writes per iteration for store modes, default 1\n"
       << "  --reg-payload-bytes <int>    register payload target per block for reg_pressure; default 256 for reg_pressure, 0 otherwise\n"
@@ -181,10 +211,39 @@ Options parse_args(int argc, char** argv) {
       opts.active_sm_explicit = true;
     } else if (arg == "--seconds") {
       opts.seconds = std::stod(need_value(arg));
+    } else if (arg == "--idle-settle-seconds") {
+      opts.idle_settle_seconds = std::stod(need_value(arg));
+    } else if (arg == "--idle-measure-seconds") {
+      opts.idle_measure_seconds = std::stod(need_value(arg));
+    } else if (arg == "--idle-ready-max-power-w") {
+      opts.idle_ready_max_power_w = std::stod(need_value(arg));
+    } else if (arg == "--idle-ready-consecutive-samples") {
+      opts.idle_ready_consecutive_samples = std::stoi(need_value(arg));
+    } else if (arg == "--idle-ready-poll-seconds") {
+      opts.idle_ready_poll_seconds = std::stod(need_value(arg));
+    } else if (arg == "--idle-ready-timeout-seconds") {
+      opts.idle_ready_timeout_seconds = std::stod(need_value(arg));
+    } else if (arg == "--skip-idle-baseline") {
+      opts.skip_idle_baseline = true;
     } else if (arg == "--iters") {
       opts.iters = static_cast<std::uint64_t>(std::stoull(need_value(arg)));
     } else if (arg == "--reuse-factor") {
       opts.reuse_factor =
+          static_cast<std::uint64_t>(std::stoull(need_value(arg)));
+    } else if (arg == "--issue-match-steps") {
+      opts.issue_match_steps =
+          static_cast<std::uint64_t>(std::stoull(need_value(arg)));
+    } else if (arg == "--issue-match-extra-period") {
+      opts.issue_match_extra_period =
+          static_cast<unsigned>(std::stoul(need_value(arg)));
+    } else if (arg == "--latency-match-ns") {
+      opts.latency_match_ns =
+          static_cast<unsigned>(std::stoul(need_value(arg)));
+    } else if (arg == "--latency-match-period") {
+      opts.latency_match_period =
+          static_cast<unsigned>(std::stoul(need_value(arg)));
+    } else if (arg == "--scheduler-match-steps") {
+      opts.scheduler_match_steps =
           static_cast<std::uint64_t>(std::stoull(need_value(arg)));
     } else if (arg == "--load-repeat") {
       opts.load_repeat =
@@ -217,6 +276,38 @@ Options parse_args(int argc, char** argv) {
   }
 
   if (opts.seconds <= 0.0) throw std::invalid_argument("--seconds must be > 0");
+  if (opts.idle_settle_seconds < 0.0) {
+    throw std::invalid_argument("--idle-settle-seconds must be >= 0");
+  }
+  if (opts.idle_measure_seconds < 0.0) {
+    throw std::invalid_argument("--idle-measure-seconds must be >= 0");
+  }
+  if (opts.idle_ready_max_power_w < 0.0) {
+    throw std::invalid_argument("--idle-ready-max-power-w must be >= 0");
+  }
+  if (opts.idle_ready_consecutive_samples <= 0 ||
+      opts.idle_ready_poll_seconds <= 0.0 ||
+      opts.idle_ready_timeout_seconds <= 0.0) {
+    throw std::invalid_argument(
+        "idle readiness samples, poll interval, and timeout must be > 0");
+  }
+  if (opts.scheduler_match_steps == 0 || opts.scheduler_match_steps > 64) {
+    throw std::invalid_argument("--scheduler-match-steps must be in [1,64]");
+  }
+  if (opts.issue_match_steps == 0 || opts.issue_match_steps > 64) {
+    throw std::invalid_argument("--issue-match-steps must be in [1,64]");
+  }
+  if (opts.issue_match_extra_period > 1024) {
+    throw std::invalid_argument(
+        "--issue-match-extra-period must be in [0,1024]");
+  }
+  if (opts.latency_match_ns > 10000) {
+    throw std::invalid_argument("--latency-match-ns must be in [0,10000]");
+  }
+  if (opts.latency_match_period == 0 || opts.latency_match_period > 1024) {
+    throw std::invalid_argument(
+        "--latency-match-period must be in [1,1024]");
+  }
   if (opts.repeats <= 0) throw std::invalid_argument("--repeats must be > 0");
   if (opts.active_sm <= 0) throw std::invalid_argument("--active-sm must be > 0");
   if (opts.reuse_factor == 0) {
@@ -332,7 +423,11 @@ bool is_mma_mode(Mode mode) {
 }
 
 bool is_register_operand_mode(Mode mode) {
-  return mode == Mode::reg_operand_only || mode == Mode::reg_mma;
+  return mode == Mode::reg_operand_only ||
+         mode == Mode::reg_resident_stall_no_mma ||
+         mode == Mode::reg_issue_dependency_no_mma ||
+         mode == Mode::reg_scheduler_matched_no_mma ||
+         mode == Mode::reg_mma;
 }
 
 bool is_shared_operand_mode(Mode mode) {
@@ -376,7 +471,9 @@ bool has_operand_loads(Mode mode) {
 
 bool has_final_matrix_store(Mode mode) {
   return mode == Mode::reg_fragment_only || mode == Mode::reg_operand_only ||
-         mode == Mode::reg_mma ||
+         mode == Mode::reg_resident_stall_no_mma ||
+         mode == Mode::reg_issue_dependency_no_mma ||
+         mode == Mode::reg_scheduler_matched_no_mma || mode == Mode::reg_mma ||
          mode == Mode::shared_load_only ||
          mode == Mode::shared_mma || mode == Mode::l2_load_only ||
          mode == Mode::l2_mma || mode == Mode::dram_load_only ||
@@ -404,7 +501,10 @@ std::string mode_family(Mode mode) {
   if (mode == Mode::global_addr_only) return "global_address_control";
   if (is_shared_address_control_mode(mode)) return "shared_address_control";
   if (mode == Mode::reg_fragment_only || mode == Mode::reg_operand_only ||
-      mode == Mode::reg_mma || mode == Mode::reg_pressure) {
+      mode == Mode::reg_resident_stall_no_mma ||
+      mode == Mode::reg_issue_dependency_no_mma ||
+      mode == Mode::reg_scheduler_matched_no_mma || mode == Mode::reg_mma ||
+      mode == Mode::reg_pressure) {
     return "register_tensor";
   }
   if (is_shared_operand_mode(mode)) return "shared";
@@ -457,6 +557,21 @@ void print_dry_run(const Options& opts, const Feasibility& f, bool allowed,
   std::cout << "threads_per_block=" << kThreadsPerBlock << "\n";
   std::cout << "active_SM=" << opts.active_sm << "\n";
   std::cout << "reuse_factor=" << opts.reuse_factor << "\n";
+  std::cout << "issue_match_steps=" << opts.issue_match_steps << "\n";
+  std::cout << "issue_match_extra_period="
+            << opts.issue_match_extra_period << "\n";
+  std::cout << "latency_match_ns=" << opts.latency_match_ns << "\n";
+  std::cout << "latency_match_period=" << opts.latency_match_period << "\n";
+  std::cout << "scheduler_match_steps=" << opts.scheduler_match_steps << "\n";
+  std::cout << "idle_settle_seconds=" << opts.idle_settle_seconds << "\n";
+  std::cout << "idle_measure_seconds=" << opts.idle_measure_seconds << "\n";
+  std::cout << "idle_ready_max_power_w=" << opts.idle_ready_max_power_w << "\n";
+  std::cout << "idle_ready_consecutive_samples="
+            << opts.idle_ready_consecutive_samples << "\n";
+  std::cout << "idle_ready_poll_seconds=" << opts.idle_ready_poll_seconds << "\n";
+  std::cout << "idle_ready_timeout_seconds=" << opts.idle_ready_timeout_seconds
+            << "\n";
+  std::cout << "skip_idle_baseline=" << (opts.skip_idle_baseline ? 1 : 0) << "\n";
   std::cout << "load_repeat=" << opts.load_repeat << "\n";
   std::cout << "store_repeat=" << opts.store_repeat << "\n";
   std::cout << "global_warmup_passes=" << opts.global_warmup_passes << "\n";
@@ -488,6 +603,14 @@ void print_dry_run(const Options& opts, const Feasibility& f, bool allowed,
   std::cout << "W_block_KiB=" << f.w_block_kib << "\n";
   std::cout << "tiles_per_block=" << f.tiles_per_block << "\n";
   std::cout << "full_gpu_working_set_MiB=" << f.full_gpu_working_set_mib
+            << "\n";
+  std::cout << "full_gpu_accessed_working_set_MiB="
+            << f.full_gpu_accessed_working_set_mib << "\n";
+  std::cout << "accessed_L2_capacity_fraction_pct="
+            << (opts.profile.l2_mib > 0
+                    ? 100.0 * f.full_gpu_accessed_working_set_mib /
+                          static_cast<double>(opts.profile.l2_mib)
+                    : 0.0)
             << "\n";
 }
 
@@ -525,6 +648,44 @@ std::vector<double> measure_idle_baseline(NvmlEnergy& nvml, double seconds,
   const auto after = nvml.sample_all();
   if (elapsed_s) *elapsed_s = elapsed_seconds(t0, t1);
   return energy_delta_j(before, after);
+}
+
+IdleReadyCheck wait_for_idle_power_ready(NvmlEnergy& nvml,
+                                         const Options& opts) {
+  IdleReadyCheck check;
+  if (opts.idle_ready_max_power_w <= 0.0 || opts.gpu_list.empty()) return check;
+
+  const auto started = Clock::now();
+  int consecutive = 0;
+  while (true) {
+    const auto samples = nvml.sample_all();
+    ++check.samples;
+    unsigned int max_power_mw = 0;
+    bool ready = true;
+    for (int gpu : opts.gpu_list) {
+      const auto& sample = samples.at(static_cast<std::size_t>(gpu));
+      if (!sample.power_usage_supported) {
+        throw std::runtime_error(
+            "idle power readiness requires NVML power usage support");
+      }
+      max_power_mw = std::max(max_power_mw, sample.power_mw);
+      if (sample.power_mw > opts.idle_ready_max_power_w * 1000.0) ready = false;
+    }
+    check.last_max_power_mw = max_power_mw;
+    consecutive = ready ? consecutive + 1 : 0;
+    check.waited_s = elapsed_seconds(started, Clock::now());
+    if (consecutive >= opts.idle_ready_consecutive_samples) return check;
+    if (check.waited_s >= opts.idle_ready_timeout_seconds) {
+      std::ostringstream oss;
+      oss << "idle power did not settle below " << opts.idle_ready_max_power_w
+          << " W for " << opts.idle_ready_consecutive_samples
+          << " consecutive samples within " << opts.idle_ready_timeout_seconds
+          << " s; last_max_power_W="
+          << static_cast<double>(check.last_max_power_mw) / 1000.0;
+      throw std::runtime_error(oss.str());
+    }
+    sleep_seconds(opts.idle_ready_poll_seconds);
+  }
 }
 
 void cleanup_device(DeviceState& state) {
@@ -684,6 +845,9 @@ DeviceState setup_device(int gpu_id, const Options& opts,
     oss << "l2_address_layout=" << opts.l2_address_layout
         << ";logical_input_bytes=" << state.logical_input_bytes
         << ";physical_input_bytes=" << state.input_bytes
+        << ";effective_accessed_input_bytes="
+        << grid_blocks * static_cast<std::size_t>(f.tiles_per_block) *
+               static_cast<std::size_t>(kLogicalMmaInputBytes)
         << ";global_block_stride_bytes=" << state.global_block_stride_bytes
         << ";global_block_stride_guard_bytes="
         << (state.global_block_stride_bytes >= f.w_block_bytes
@@ -751,6 +915,11 @@ double launch_all(const Options& opts, const Feasibility& f,
     cfg.tiles_per_block = f.tiles_per_block;
     cfg.iters = iters;
     cfg.reuse_factor = opts.reuse_factor;
+    cfg.issue_match_steps = opts.issue_match_steps;
+    cfg.issue_match_extra_period = opts.issue_match_extra_period;
+    cfg.latency_match_ns = opts.latency_match_ns;
+    cfg.latency_match_period = opts.latency_match_period;
+    cfg.scheduler_match_steps = opts.scheduler_match_steps;
     cfg.load_repeat = opts.load_repeat;
     cfg.store_repeat = opts.store_repeat;
     cfg.reg_payload_bytes_per_block = opts.reg_payload_bytes_per_block;
@@ -1042,6 +1211,11 @@ ResultRow make_row(const Options& opts, const Feasibility& f,
         << "logical_op=warp_m16n16k16;"
         << "wmma_fallback=1;"
         << "reuse_factor=" << opts.reuse_factor
+        << ";issue_match_steps=" << opts.issue_match_steps
+        << ";issue_match_extra_period=" << opts.issue_match_extra_period
+        << ";latency_match_ns=" << opts.latency_match_ns
+        << ";latency_match_period=" << opts.latency_match_period
+        << ";scheduler_match_steps=" << opts.scheduler_match_steps
         << ";load_repeat=" << opts.load_repeat
         << ";store_repeat=" << opts.store_repeat
         << ";global_warmup_passes=" << opts.global_warmup_passes
@@ -1154,9 +1328,19 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
       return 0;
     }
 
-    double idle_elapsed = 0.0;
-    const auto idle_baseline = measure_idle_baseline(nvml, opts.seconds,
-                                                     &idle_elapsed);
+    double idle_elapsed = 1.0;
+    IdleReadyCheck idle_ready;
+    std::vector<double> idle_baseline(nvml.device_count(), 0.0);
+    const double idle_measure_seconds =
+        opts.idle_measure_seconds > 0.0 ? opts.idle_measure_seconds : opts.seconds;
+    if (!opts.skip_idle_baseline) {
+      if (opts.idle_settle_seconds > 0.0) {
+        sleep_seconds(opts.idle_settle_seconds);
+      }
+      idle_ready = wait_for_idle_power_ready(nvml, opts);
+      idle_baseline =
+          measure_idle_baseline(nvml, idle_measure_seconds, &idle_elapsed);
+    }
     CsvWriter writer(opts.output);
 
     for (int repeat = 0; repeat < opts.repeats; ++repeat) {
@@ -1217,8 +1401,20 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
           }
         }
         if (is_register_operand_mode(opts.mode)) {
+          if (opts.mode == Mode::reg_scheduler_matched_no_mma) {
+            extra +=
+                "tensor_control_kernel_revision=dependent_fp32_runtime_proxy_v1;";
+          } else if (opts.mode == Mode::reg_resident_stall_no_mma) {
+            extra +=
+                "tensor_control_kernel_revision=resident_stall_no_mma_v1;";
+          } else if (opts.mode == Mode::reg_issue_dependency_no_mma) {
+            extra +=
+                "tensor_control_kernel_revision=integer_issue_dependency_no_mma_v1;";
+          } else {
+            extra +=
+                "tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6;";
+          }
           extra +=
-              "tensor_pair_kernel_revision=matched_runtime_clock_observed_control_fixed_rf_v6;"
               "tensor_instruction_api=wmma_m16n16k16_f16_f32;"
               "tensor_instruction_scope=architecture_lowered_hmma_compatibility;"
               "tensor_operand_source=register_fill_no_memory;"
@@ -1227,11 +1423,66 @@ int run_benchmark(const Options& opts, const Feasibility& f, NvmlEnergy& nvml) {
               "tensor_codegen_control=no_dual_predicated_mma_path;"
               "tensor_working_set_applicable=0;"
               "tensor_reuse_semantics=inner_mma_grouping_not_cache_reuse;";
+          if (opts.mode == Mode::reg_scheduler_matched_no_mma) {
+            extra +=
+                "tensor_control_kind=dependent_fp32_scheduler_proxy;"
+                "tensor_control_contains_nonzero_fp32_alu_energy=1;";
+          } else if (opts.mode == Mode::reg_resident_stall_no_mma) {
+            extra +=
+                "tensor_control_kind=low_issue_resident_nanosleep_baseline;"
+                "tensor_control_contains_nonzero_fp32_alu_energy=0;"
+                "tensor_control_contains_nonzero_fp16_alu_energy=0;"
+                "tensor_control_coefficient_eligible=0_until_zero_hmma_and_strict_ncu_match;";
+          } else if (opts.mode == Mode::reg_issue_dependency_no_mma) {
+            extra +=
+                "tensor_control_kind=integer_bitwise_issue_dependency_diagnostic;"
+                "tensor_control_contains_nonzero_fp32_alu_energy=0;"
+                "tensor_control_contains_nonzero_fp16_alu_energy=0;"
+                "tensor_control_coefficient_eligible=0_until_strict_ncu_match;";
+          }
+          extra += "tensor_measurement_harness_revision=power_ready_fixed_idle_v1;";
         }
         if (opts.mode == Mode::shared_scalar_addr_only ||
             opts.mode == Mode::shared_scalar_load_only) {
           extra += "shared_pair_kernel_revision=matched_shared_addr_v1;";
         }
+        extra += "idle_baseline_policy=";
+        extra +=
+            opts.skip_idle_baseline
+                ? "skipped_for_profiler;"
+                : (opts.idle_ready_max_power_w > 0.0
+                       ? "power_ready_then_fixed_window_per_run;"
+                       : "fixed_window_per_run;");
+        extra += "idle_settle_seconds=" +
+                 std::to_string(opts.idle_settle_seconds) + ";";
+        extra += "idle_measure_requested_seconds=" +
+                 std::to_string(idle_measure_seconds) + ";";
+        extra += "idle_measure_elapsed_seconds=" +
+                 std::to_string(idle_elapsed) + ";";
+        extra += "idle_ready_max_power_W=" +
+                 std::to_string(opts.idle_ready_max_power_w) + ";";
+        extra += "idle_ready_wait_seconds=" +
+                 std::to_string(idle_ready.waited_s) + ";";
+        extra += "idle_ready_samples=" +
+                 std::to_string(idle_ready.samples) + ";";
+        extra += "idle_ready_last_max_power_W=" +
+                 std::to_string(static_cast<double>(
+                                    idle_ready.last_max_power_mw) /
+                                1000.0) +
+                 ";";
+        extra += "idle_baseline_power_W=" +
+                 std::to_string(idle_elapsed > 0.0
+                                    ? idle_baseline.at(gpu) / idle_elapsed
+                                    : 0.0) +
+                 ";";
+        extra += "active_start_clock_sm_mhz=" +
+                 std::to_string(before[gpu].sm_clock_mhz) + ";";
+        extra += "active_start_clock_mem_mhz=" +
+                 std::to_string(before[gpu].mem_clock_mhz) + ";";
+        extra += "active_start_temp_C=" +
+                 std::to_string(before[gpu].temp_c) + ";";
+        extra += "active_start_power_mw=" +
+                 std::to_string(before[gpu].power_mw) + ";";
         extra += "measurement_interval_clock=steady_clock_anchored_epoch;";
         ResultRow row =
             make_row(opts, f, run_id, gpu, static_cast<int>(opts.gpu_list.size()),

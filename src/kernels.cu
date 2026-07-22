@@ -87,20 +87,134 @@ __device__ __forceinline__ void consume_uint(unsigned value) {
 }
 
 __device__ __forceinline__ unsigned register_control_step(
-    unsigned sink, float a_value, float b_value, float c_value) {
+    unsigned sink, unsigned a_bits, unsigned b_bits, unsigned c_bits) {
   // Read a changing register-only token in both treatment and control. A
   // stored scalar result alone was insufficient on sm_80: ptxas collapsed the
   // no-MMA loop to launch-only code and calibration extrapolated from launch
   // overhead. SR_CLOCKLO prevents that collapse without adding memory traffic.
   unsigned runtime_token;
-  const unsigned a_bits = __float_as_uint(a_value);
   asm volatile("mov.u32 %0, %%clock;" : "=r"(runtime_token));
   asm volatile("add.u32 %0, %0, %1;\n\t"
-               "xor.b32 %0, %0, %2;"
+               "xor.b32 %0, %0, %2;\n\t"
+               "lop3.b32 %0, %0, %3, %4, 0x96;"
                : "+r"(sink)
-               : "r"(a_bits), "r"(runtime_token), "f"(b_value),
-                 "f"(c_value));
+               : "r"(a_bits), "r"(runtime_token), "r"(b_bits),
+                 "r"(c_bits));
   return sink;
+}
+
+__device__ __forceinline__ float scheduler_proxy_step(float value,
+                                                       float addend) {
+  // A dependent FFMA keeps one warp instruction in flight without issuing
+  // HMMA. The experiment calibrates the number of steps against reg_mma
+  // runtime and reports this FP32-ALU work as control overhead, not free work.
+  const float multiplier = 0.99951171875f;
+  asm volatile("fma.rn.f32 %0, %0, %1, %2;"
+               : "+f"(value)
+               : "f"(multiplier), "f"(addend));
+  return value;
+}
+
+__device__ __forceinline__ float scheduler_proxy_chain(
+    float value, float addend, std::uint64_t steps) {
+#pragma unroll 1
+  for (std::uint64_t step = 0; step < steps; ++step) {
+    value = scheduler_proxy_step(value, addend);
+  }
+  return value;
+}
+
+__device__ __forceinline__ unsigned issue_dependency_step(unsigned value,
+                                                           unsigned salt) {
+  // This diagnostic control deliberately uses only integer/bitwise PTX. It
+  // must not activate FP16, FP32, or Tensor arithmetic pipelines while it
+  // adds a tunable dependent instruction chain around the common operand
+  // control work.
+  const unsigned mix = 0x9e3779b9u;
+  asm volatile("lop3.b32 %0, %0, %1, %2, 0x96;\n\t"
+               "add.u32 %0, %0, %2;"
+               : "+r"(value)
+               : "r"(salt), "r"(mix));
+  return value;
+}
+
+__device__ __forceinline__ unsigned issue_dependency_chain(
+    unsigned value, unsigned salt, std::uint64_t steps) {
+#pragma unroll 1
+  for (std::uint64_t step = 0; step < steps; ++step) {
+    value = issue_dependency_step(value, salt ^ static_cast<unsigned>(step));
+  }
+  return value;
+}
+
+__device__ __forceinline__ unsigned issue_fractional_dependency_step(
+    unsigned value, unsigned salt, unsigned period, unsigned& phase) {
+  if (period == 0) {
+    return value;
+  }
+  ++phase;
+  if (phase >= period) {
+    phase = 0;
+    return issue_dependency_step(value, salt);
+  }
+  return value;
+}
+
+__device__ __forceinline__ void keep_integer_register_pad_live(
+    unsigned& p0, unsigned& p1, unsigned& p2, unsigned& p3, unsigned& p4,
+    unsigned& p5, unsigned& p6, unsigned& p7, unsigned& p8, unsigned& p9,
+    unsigned& p10, unsigned& p11, unsigned& p12, unsigned salt) {
+  // Read-write constraints keep independent 32-bit registers live
+  // across the control loop without issuing FP16, FP32, Tensor, or memory
+  // instructions. Static resource and runtime NCU audits still decide whether
+  // the resulting footprint matches the treatment on each architecture.
+  asm volatile("xor.b32 %0, %0, %13;\n\t"
+               "xor.b32 %1, %1, %13;\n\t"
+               "xor.b32 %2, %2, %13;\n\t"
+               "xor.b32 %3, %3, %13;\n\t"
+               "xor.b32 %4, %4, %13;\n\t"
+               "xor.b32 %5, %5, %13;\n\t"
+               "xor.b32 %6, %6, %13;\n\t"
+               "xor.b32 %7, %7, %13;\n\t"
+               "xor.b32 %8, %8, %13;\n\t"
+               "xor.b32 %9, %9, %13;\n\t"
+               "xor.b32 %10, %10, %13;\n\t"
+               "xor.b32 %11, %11, %13;\n\t"
+               "xor.b32 %12, %12, %13;"
+               : "+r"(p0), "+r"(p1), "+r"(p2), "+r"(p3), "+r"(p4),
+                 "+r"(p5), "+r"(p6), "+r"(p7), "+r"(p8), "+r"(p9),
+                 "+r"(p10), "+r"(p11), "+r"(p12)
+               : "r"(salt));
+}
+
+__device__ __forceinline__ void keep_resident_register_pad_live(
+    unsigned& p0, unsigned& p1, unsigned& p2, unsigned& p3, unsigned& p4,
+    unsigned& p5, unsigned& p6, unsigned& p7, unsigned& p8, unsigned& p9,
+    unsigned& p10, unsigned& p11, unsigned& p12, unsigned& p13,
+    unsigned& p14, unsigned& p15, unsigned& p16, unsigned p17,
+    unsigned salt) {
+  asm volatile("lop3.b32 %0, %0, %17, %18, 0x96;\n\t"
+               "xor.b32 %1, %1, %18;\n\t"
+               "xor.b32 %2, %2, %18;\n\t"
+               "xor.b32 %3, %3, %18;\n\t"
+               "xor.b32 %4, %4, %18;\n\t"
+               "xor.b32 %5, %5, %18;\n\t"
+               "xor.b32 %6, %6, %18;\n\t"
+               "xor.b32 %7, %7, %18;\n\t"
+               "xor.b32 %8, %8, %18;\n\t"
+               "xor.b32 %9, %9, %18;\n\t"
+               "xor.b32 %10, %10, %18;\n\t"
+               "xor.b32 %11, %11, %18;\n\t"
+               "xor.b32 %12, %12, %18;\n\t"
+               "xor.b32 %13, %13, %18;\n\t"
+               "xor.b32 %14, %14, %18;\n\t"
+               "xor.b32 %15, %15, %18;\n\t"
+               "xor.b32 %16, %16, %18;"
+               : "+r"(p0), "+r"(p1), "+r"(p2), "+r"(p3), "+r"(p4),
+                 "+r"(p5), "+r"(p6), "+r"(p7), "+r"(p8), "+r"(p9),
+                 "+r"(p10), "+r"(p11), "+r"(p12), "+r"(p13), "+r"(p14),
+                 "+r"(p15), "+r"(p16)
+               : "r"(p17), "r"(salt));
 }
 
 __device__ __forceinline__ void keep_register_fragments_live(
@@ -271,11 +385,11 @@ __global__ void reg_mma_kernel(std::uint64_t iters, float* output,
   nvcuda::wmma::fill_fragment(b, __float2half_rn(0.0625f * block_scale));
   nvcuda::wmma::fill_fragment(c, 0.0f);
 
-  float a_value = __half2float(a.x[0]);
-  const float b_value = __half2float(b.x[0]);
-  const float c_value = c.x[0];
-  unsigned sink = __float_as_uint(a_value) ^ __float_as_uint(b_value) ^
-                  __float_as_uint(c_value) ^
+  unsigned a_value_bits = static_cast<unsigned>(__half_as_ushort(a.x[0]));
+  const unsigned b_value_bits =
+      static_cast<unsigned>(__half_as_ushort(b.x[0]));
+  const unsigned c_value_bits = __float_as_uint(c.x[0]);
+  unsigned sink = a_value_bits ^ b_value_bits ^ c_value_bits ^
                   static_cast<unsigned>(blockIdx.x * blockDim.x + threadIdx.x);
 
   for (std::uint64_t i = 0; i < iters; ++i) {
@@ -283,18 +397,20 @@ __global__ void reg_mma_kernel(std::uint64_t iters, float* output,
 #pragma unroll 1
       for (int r = 0; r < FixedReuseFactor; ++r) {
         do_mma(a, b, c);
-        sink = register_control_step(sink, a_value, b_value, c_value);
+        sink = register_control_step(
+            sink, a_value_bits, b_value_bits, c_value_bits);
         keep_register_fragments_live(a, b, c);
         toggle_fragment_sign(a);
-        a_value = -a_value;
+        a_value_bits ^= 0x8000u;
       }
     } else {
       for (std::uint64_t r = 0; r < reuse_factor; ++r) {
         do_mma(a, b, c);
-        sink = register_control_step(sink, a_value, b_value, c_value);
+        sink = register_control_step(
+            sink, a_value_bits, b_value_bits, c_value_bits);
         keep_register_fragments_live(a, b, c);
         toggle_fragment_sign(a);
-        a_value = -a_value;
+        a_value_bits ^= 0x8000u;
       }
     }
   }
@@ -345,9 +461,232 @@ __global__ void reg_operand_only_kernel(std::uint64_t iters, float* output,
   nvcuda::wmma::fill_fragment(b, __float2half_rn(0.0625f * block_scale));
   nvcuda::wmma::fill_fragment(c, 0.0f);
 
+  unsigned a_value_bits = static_cast<unsigned>(__half_as_ushort(a.x[0]));
+  const unsigned b_value_bits =
+      static_cast<unsigned>(__half_as_ushort(b.x[0]));
+  const unsigned c_value_bits = __float_as_uint(c.x[0]);
+  unsigned sink = a_value_bits ^ b_value_bits ^ c_value_bits ^
+                  static_cast<unsigned>(blockIdx.x * blockDim.x + threadIdx.x);
+
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    if constexpr (FixedReuseFactor > 0) {
+#pragma unroll 1
+      for (int r = 0; r < FixedReuseFactor; ++r) {
+        sink = register_control_step(
+            sink, a_value_bits, b_value_bits, c_value_bits);
+        keep_register_fragments_live(a, b, c);
+        toggle_fragment_sign(a);
+        a_value_bits ^= 0x8000u;
+      }
+    } else {
+      for (std::uint64_t r = 0; r < reuse_factor; ++r) {
+        sink = register_control_step(
+            sink, a_value_bits, b_value_bits, c_value_bits);
+        keep_register_fragments_live(a, b, c);
+        toggle_fragment_sign(a);
+        a_value_bits ^= 0x8000u;
+      }
+    }
+  }
+
+  store_register_pair_output(c, sink, output);
+}
+
+template <int FixedReuseFactor>
+__global__ void reg_resident_stall_no_mma_kernel(
+    std::uint64_t iters, float* output, std::uint64_t reuse_factor,
+    unsigned latency_match_ns, unsigned latency_match_period,
+    int* smid_by_block, int* rank_by_block, int* sm_counts,
+    int sm_count_capacity) {
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+
+  fragment<matrix_a, 16, 16, 16, half, row_major> a;
+  fragment<matrix_b, 16, 16, 16, half, col_major> b;
+  fragment<accumulator, 16, 16, 16, float> c;
+
+  const float block_scale = 1.0f + static_cast<float>(blockIdx.x & 7) * 0.03125f;
+  nvcuda::wmma::fill_fragment(a, __float2half_rn(0.125f * block_scale));
+  nvcuda::wmma::fill_fragment(b, __float2half_rn(0.0625f * block_scale));
+  nvcuda::wmma::fill_fragment(c, 0.0f);
+
+  unsigned a_value_bits = static_cast<unsigned>(__half_as_ushort(a.x[0]));
+  const unsigned b_value_bits =
+      static_cast<unsigned>(__half_as_ushort(b.x[0]));
+  const unsigned c_value_bits = __float_as_uint(c.x[0]);
+  unsigned sink = a_value_bits ^ b_value_bits ^ c_value_bits ^
+                  static_cast<unsigned>(blockIdx.x * blockDim.x + threadIdx.x);
+
+  // Keep the register footprint closer to the MMA treatment without issuing
+  // padding arithmetic. NCU/ptxas still decide whether it actually matches.
+  unsigned p0 = sink ^ 0x243f6a88u;
+  unsigned p1 = sink ^ 0x85a308d3u;
+  unsigned p2 = sink ^ 0x13198a2eu;
+  unsigned p3 = sink ^ 0x03707344u;
+  unsigned p4 = sink ^ 0xa4093822u;
+  unsigned p5 = sink ^ 0x299f31d0u;
+  unsigned p6 = sink ^ 0x082efa98u;
+  unsigned p7 = sink ^ 0xec4e6c89u;
+  unsigned p8 = sink ^ 0x452821e6u;
+  unsigned p9 = sink ^ 0x38d01377u;
+  unsigned p10 = sink ^ 0xbe5466cfu;
+  unsigned p11 = sink ^ 0x34e90c6cu;
+  unsigned p12 = sink ^ 0xc0ac29b7u;
+  unsigned p13 = sink ^ 0xc97c50ddu;
+  unsigned p14 = sink ^ 0x3f84d5b5u;
+  unsigned p15 = sink ^ 0xb5470917u;
+  unsigned p16 = sink ^ 0x9216d5d9u;
+  const unsigned p17 = sink ^ 0x8979fb1bu;
+  unsigned latency_phase = 0;
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    if constexpr (FixedReuseFactor > 0) {
+#pragma unroll 1
+      for (int r = 0; r < FixedReuseFactor; ++r) {
+        ++latency_phase;
+        if (latency_match_ns != 0 &&
+            latency_phase >= latency_match_period) {
+          latency_phase = 0;
+          __nanosleep(latency_match_ns);
+        }
+        sink = register_control_step(
+            sink, a_value_bits, b_value_bits, c_value_bits);
+        keep_register_fragments_live(a, b, c);
+        toggle_fragment_sign(a);
+        a_value_bits ^= 0x8000u;
+      }
+    } else {
+      for (std::uint64_t r = 0; r < reuse_factor; ++r) {
+        ++latency_phase;
+        if (latency_match_ns != 0 &&
+            latency_phase >= latency_match_period) {
+          latency_phase = 0;
+          __nanosleep(latency_match_ns);
+        }
+        sink = register_control_step(
+            sink, a_value_bits, b_value_bits, c_value_bits);
+        keep_register_fragments_live(a, b, c);
+        toggle_fragment_sign(a);
+        a_value_bits ^= 0x8000u;
+      }
+    }
+    // Refresh all pad registers rarely enough that the control remains
+    // low-issue. The amortized overhead is 17/(256*RF) integer instructions
+    // per logical MMA-equivalent operation.
+    if ((i & 255ull) == 0) {
+      keep_resident_register_pad_live(
+          p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14,
+          p15, p16, p17, sink ^ static_cast<unsigned>(i));
+    }
+  }
+
+  sink ^= p0 ^ p1 ^ p2 ^ p3 ^ p4 ^ p5 ^ p6 ^ p7 ^ p8 ^ p9 ^ p10 ^ p11 ^
+          p12 ^ p13 ^ p14 ^ p15 ^ p16 ^ p17;
+  store_register_pair_output(c, sink, output);
+}
+
+template <int FixedReuseFactor>
+__global__ void reg_issue_dependency_no_mma_kernel(
+    std::uint64_t iters, float* output, std::uint64_t reuse_factor,
+    std::uint64_t issue_match_steps, unsigned issue_match_extra_period,
+    int* smid_by_block, int* rank_by_block, int* sm_counts,
+    int sm_count_capacity) {
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+
+  fragment<matrix_a, 16, 16, 16, half, row_major> a;
+  fragment<matrix_b, 16, 16, 16, half, col_major> b;
+  fragment<accumulator, 16, 16, 16, float> c;
+
+  const float block_scale = 1.0f + static_cast<float>(blockIdx.x & 7) * 0.03125f;
+  nvcuda::wmma::fill_fragment(a, __float2half_rn(0.125f * block_scale));
+  nvcuda::wmma::fill_fragment(b, __float2half_rn(0.0625f * block_scale));
+  nvcuda::wmma::fill_fragment(c, 0.0f);
+
+  unsigned a_value_bits = static_cast<unsigned>(__half_as_ushort(a.x[0]));
+  const unsigned b_value_bits =
+      static_cast<unsigned>(__half_as_ushort(b.x[0]));
+  const unsigned c_value_bits = __float_as_uint(c.x[0]);
+  unsigned sink = a_value_bits ^ b_value_bits ^ c_value_bits ^
+                  static_cast<unsigned>(blockIdx.x * blockDim.x + threadIdx.x);
+  unsigned issue_value = sink ^ 0x85ebca6bu;
+  unsigned issue_extra_phase = 0;
+  unsigned p0 = sink ^ 0x243f6a88u;
+  unsigned p1 = sink ^ 0x85a308d3u;
+  unsigned p2 = sink ^ 0x13198a2eu;
+  unsigned p3 = sink ^ 0x03707344u;
+  unsigned p4 = sink ^ 0xa4093822u;
+  unsigned p5 = sink ^ 0x299f31d0u;
+  unsigned p6 = sink ^ 0x082efa98u;
+  unsigned p7 = sink ^ 0xec4e6c89u;
+  unsigned p8 = sink ^ 0x452821e6u;
+  unsigned p9 = sink ^ 0x38d01377u;
+  unsigned p10 = sink ^ 0xbe5466cfu;
+  unsigned p11 = sink ^ 0x34e90c6cu;
+  unsigned p12 = sink ^ 0xc0ac29b7u;
+  unsigned p14 = sink ^ 0x3f84d5b5u;
+
+  for (std::uint64_t i = 0; i < iters; ++i) {
+    if constexpr (FixedReuseFactor > 0) {
+#pragma unroll 1
+      for (int r = 0; r < FixedReuseFactor; ++r) {
+        issue_value =
+            issue_dependency_chain(issue_value, sink, issue_match_steps);
+        issue_value = issue_fractional_dependency_step(
+            issue_value, sink, issue_match_extra_period, issue_extra_phase);
+        keep_integer_register_pad_live(p0, p1, p2, p3, p4, p5, p6, p7,
+                                       p8, p9, p10, p11, p12, sink);
+        sink = register_control_step(
+            sink, a_value_bits, b_value_bits, c_value_bits);
+        keep_register_fragments_live(a, b, c);
+        toggle_fragment_sign(a);
+        a_value_bits ^= 0x8000u;
+      }
+      asm volatile("xor.b32 %0, %0, %1;" : "+r"(p14) : "r"(sink));
+    } else {
+      for (std::uint64_t r = 0; r < reuse_factor; ++r) {
+        issue_value =
+            issue_dependency_chain(issue_value, sink, issue_match_steps);
+        issue_value = issue_fractional_dependency_step(
+            issue_value, sink, issue_match_extra_period, issue_extra_phase);
+        keep_integer_register_pad_live(p0, p1, p2, p3, p4, p5, p6, p7,
+                                       p8, p9, p10, p11, p12, sink);
+        sink = register_control_step(
+            sink, a_value_bits, b_value_bits, c_value_bits);
+        keep_register_fragments_live(a, b, c);
+        toggle_fragment_sign(a);
+        a_value_bits ^= 0x8000u;
+      }
+      asm volatile("xor.b32 %0, %0, %1;" : "+r"(p14) : "r"(sink));
+    }
+  }
+
+  sink ^= issue_value ^ p0 ^ p1 ^ p2 ^ p3 ^ p4 ^ p5 ^ p6 ^ p7 ^ p8 ^ p9 ^
+          p10 ^ p11 ^ p12 ^ p14;
+  store_register_pair_output(c, sink, output);
+}
+
+template <int FixedReuseFactor>
+__global__ void reg_scheduler_matched_no_mma_kernel(
+    std::uint64_t iters, float* output, std::uint64_t reuse_factor,
+    std::uint64_t scheduler_match_steps, int* smid_by_block,
+    int* rank_by_block, int* sm_counts, int sm_count_capacity) {
+  record_smid(smid_by_block, rank_by_block, sm_counts, sm_count_capacity);
+
+  fragment<matrix_a, 16, 16, 16, half, row_major> a;
+  fragment<matrix_b, 16, 16, 16, half, col_major> b;
+  fragment<accumulator, 16, 16, 16, float> c;
+
+  const float block_scale = 1.0f + static_cast<float>(blockIdx.x & 7) * 0.03125f;
+  nvcuda::wmma::fill_fragment(a, __float2half_rn(0.125f * block_scale));
+  nvcuda::wmma::fill_fragment(b, __float2half_rn(0.0625f * block_scale));
+  nvcuda::wmma::fill_fragment(c, 0.0f);
+
   float a_value = __half2float(a.x[0]);
   const float b_value = __half2float(b.x[0]);
   const float c_value = c.x[0];
+  unsigned a_value_bits = __float_as_uint(a_value);
+  const unsigned b_value_bits = __float_as_uint(b_value);
+  const unsigned c_value_bits = __float_as_uint(c_value);
+  float proxy_value =
+      0.5f + static_cast<float>((threadIdx.x + blockIdx.x) & 31) * 0.0009765625f;
   unsigned sink = __float_as_uint(a_value) ^ __float_as_uint(b_value) ^
                   __float_as_uint(c_value) ^
                   static_cast<unsigned>(blockIdx.x * blockDim.x + threadIdx.x);
@@ -356,21 +695,32 @@ __global__ void reg_operand_only_kernel(std::uint64_t iters, float* output,
     if constexpr (FixedReuseFactor > 0) {
 #pragma unroll 1
       for (int r = 0; r < FixedReuseFactor; ++r) {
-        sink = register_control_step(sink, a_value, b_value, c_value);
+        proxy_value = scheduler_proxy_chain(
+            proxy_value, 0.000244140625f + a_value * 0.0000152587890625f,
+            scheduler_match_steps);
+        sink = register_control_step(
+            sink, a_value_bits, b_value_bits, c_value_bits);
         keep_register_fragments_live(a, b, c);
         toggle_fragment_sign(a);
         a_value = -a_value;
+        a_value_bits ^= 0x80000000u;
       }
     } else {
       for (std::uint64_t r = 0; r < reuse_factor; ++r) {
-        sink = register_control_step(sink, a_value, b_value, c_value);
+        proxy_value = scheduler_proxy_chain(
+            proxy_value, 0.000244140625f + a_value * 0.0000152587890625f,
+            scheduler_match_steps);
+        sink = register_control_step(
+            sink, a_value_bits, b_value_bits, c_value_bits);
         keep_register_fragments_live(a, b, c);
         toggle_fragment_sign(a);
         a_value = -a_value;
+        a_value_bits ^= 0x80000000u;
       }
     }
   }
 
+  sink ^= __float_as_uint(proxy_value);
   store_register_pair_output(c, sink, output);
 }
 
@@ -1040,6 +1390,138 @@ cudaError_t launch_benchmark_kernel(const KernelLaunchConfig& cfg) {
           reg_operand_only_kernel<0><<<grid_dim, block, 0, cfg.stream>>>(
               cfg.iters, cfg.output, cfg.reuse_factor, cfg.smid_by_block,
               cfg.rank_by_block, cfg.sm_counts, cfg.sm_count_capacity);
+          break;
+      }
+      break;
+    case Mode::reg_resident_stall_no_mma:
+      switch (cfg.reuse_factor) {
+        case 1:
+          reg_resident_stall_no_mma_kernel<1><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.latency_match_ns,
+              cfg.latency_match_period,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        case 2:
+          reg_resident_stall_no_mma_kernel<2><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.latency_match_ns,
+              cfg.latency_match_period,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        case 4:
+          reg_resident_stall_no_mma_kernel<4><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.latency_match_ns,
+              cfg.latency_match_period,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        case 8:
+          reg_resident_stall_no_mma_kernel<8><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.latency_match_ns,
+              cfg.latency_match_period,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        case 16:
+          reg_resident_stall_no_mma_kernel<16><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.latency_match_ns,
+              cfg.latency_match_period,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        default:
+          reg_resident_stall_no_mma_kernel<0><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.latency_match_ns,
+              cfg.latency_match_period,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+      }
+      break;
+    case Mode::reg_issue_dependency_no_mma:
+      switch (cfg.reuse_factor) {
+        case 1:
+          reg_issue_dependency_no_mma_kernel<1><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.issue_match_steps,
+              cfg.issue_match_extra_period,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        case 2:
+          reg_issue_dependency_no_mma_kernel<2><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.issue_match_steps,
+              cfg.issue_match_extra_period,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        case 4:
+          reg_issue_dependency_no_mma_kernel<4><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.issue_match_steps,
+              cfg.issue_match_extra_period,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        case 8:
+          reg_issue_dependency_no_mma_kernel<8><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.issue_match_steps,
+              cfg.issue_match_extra_period,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        case 16:
+          reg_issue_dependency_no_mma_kernel<16><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.issue_match_steps,
+              cfg.issue_match_extra_period,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        default:
+          reg_issue_dependency_no_mma_kernel<0><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.issue_match_steps,
+              cfg.issue_match_extra_period,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+      }
+      break;
+    case Mode::reg_scheduler_matched_no_mma:
+      switch (cfg.reuse_factor) {
+        case 1:
+          reg_scheduler_matched_no_mma_kernel<1><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.scheduler_match_steps,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        case 2:
+          reg_scheduler_matched_no_mma_kernel<2><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.scheduler_match_steps,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        case 4:
+          reg_scheduler_matched_no_mma_kernel<4><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.scheduler_match_steps,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        case 8:
+          reg_scheduler_matched_no_mma_kernel<8><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.scheduler_match_steps,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        case 16:
+          reg_scheduler_matched_no_mma_kernel<16><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.scheduler_match_steps,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
+          break;
+        default:
+          reg_scheduler_matched_no_mma_kernel<0><<<grid_dim, block, 0, cfg.stream>>>(
+              cfg.iters, cfg.output, cfg.reuse_factor, cfg.scheduler_match_steps,
+              cfg.smid_by_block, cfg.rank_by_block, cfg.sm_counts,
+              cfg.sm_count_capacity);
           break;
       }
       break;

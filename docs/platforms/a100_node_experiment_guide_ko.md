@@ -3,11 +3,25 @@
 External-memory 결과의 최신 명칭, read-only NCU 분모와 W sweep은
 [External-Memory Read-Path 설계](../methodology/external_memory_read_path_experiment_design_ko.md)를 우선 적용한다.
 
-작성일: 2026-07-08, updated 2026-07-15
+작성일: 2026-07-08, updated 2026-07-22
 
 ## 목적
 
 이 문서는 A100 기준 노드에서 FP16 Tensor Core energy microbenchmark를 재현하기 위한 실행 가이드다. 기본 목표는 A100 profile에서 `blocks/SM`, `W_SM` sweep을 수행하고, NVML energy 결과와 NCU sidecar 검증 결과를 분리해서 수집하는 것이다.
+
+Tensor만 새 v3 방법으로 재측정할 때는 build 후 다음 package를
+생성한다. `pilot`이 정상 완료된 뒤에만 `--preset final`로 바꾼다.
+
+```bash
+TAG="$(date +%Y%m%d)"
+python3 scripts/plan_tensor_fp16_cross_platform_experiment.py \
+  --target-profile a100 --gpu-id 0 --preset pilot --tag "$TAG"
+bash "results/summary/a100_tensor_fp16_cross_platform_pilot_${TAG}_command.sh"
+```
+
+A100 Tensor v3 좌표는 B `4,16,32`, pilot RF `1,4,16`, duration `5,15 s`다.
+`W_SM=1 KiB/SM`은 CLI placeholder이며 register footprint가 아니다. 실제 RF
+footprint와 spill은 NCU register/local counter로 판정한다.
 
 GA100 L2의 source partition, LTC fabric, logical final-service counter 모델과 수식은
 [A100 L2 fabric-aware 실험 설계](../methodology/a100_l2_fabric_aware_experiment_design_ko.md)를

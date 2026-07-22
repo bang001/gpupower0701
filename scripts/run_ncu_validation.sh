@@ -80,9 +80,20 @@ REG_BLOCKS_PER_SM="${REG_BLOCKS_PER_SM:-4}"
 REG_BLOCKS_PER_SM_VALUES="${REG_BLOCKS_PER_SM_VALUES:-${REG_BLOCKS_PER_SM}}"
 REG_PRESSURE_PAYLOAD_BYTES="${REG_PRESSURE_PAYLOAD_BYTES:-8192}"
 REUSE_FACTOR="${REUSE_FACTOR:-1}"
+SCHEDULER_MATCH_STEPS="${SCHEDULER_MATCH_STEPS:-1}"
+INCLUDE_SCHEDULER_MATCHED_NCU="${INCLUDE_SCHEDULER_MATCHED_NCU:-0}"
+ISSUE_MATCH_STEPS="${ISSUE_MATCH_STEPS:-1}"
+ISSUE_MATCH_EXTRA_PERIOD="${ISSUE_MATCH_EXTRA_PERIOD:-0}"
+INCLUDE_ISSUE_DEPENDENCY_NCU="${INCLUDE_ISSUE_DEPENDENCY_NCU:-0}"
+LATENCY_MATCH_NS="${LATENCY_MATCH_NS:-0}"
+LATENCY_MATCH_PERIOD="${LATENCY_MATCH_PERIOD:-1}"
+RESIDENT_STALL_NS="${RESIDENT_STALL_NS:-128}"
+RESIDENT_STALL_PERIOD="${RESIDENT_STALL_PERIOD:-1}"
+INCLUDE_RESIDENT_STALL_NCU="${INCLUDE_RESIDENT_STALL_NCU:-0}"
 LOAD_REPEAT="${LOAD_REPEAT:-1}"
 STORE_REPEAT="${STORE_REPEAT:-1}"
 TENSOR_REUSE_FACTORS="${TENSOR_REUSE_FACTORS:-${REUSE_FACTOR}}"
+TENSOR_NCU_ITERS="${TENSOR_NCU_ITERS:-100000}"
 MEMORY_LOAD_REPEATS="${MEMORY_LOAD_REPEATS:-${LOAD_REPEAT}}"
 DRAM_LOAD_REPEATS="${DRAM_LOAD_REPEATS:-${MEMORY_LOAD_REPEATS}}"
 NCU_COMPONENTS="${NCU_COMPONENTS:-baseline,tensor,shared,l1,l2,dram}"
@@ -130,11 +141,35 @@ if ! [[ "${GLOBAL_WARMUP_PASSES}" =~ ^[1-9][0-9]*$ ]]; then
   echo "GLOBAL_WARMUP_PASSES must be a positive integer" >&2
   exit 2
 fi
+if ! [[ "${TENSOR_NCU_ITERS}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "TENSOR_NCU_ITERS must be a positive integer" >&2
+  exit 2
+fi
 if ! [[ "${L2_BLOCKS_PER_SM}" =~ ^(1|2|4|8|16|32)$ ]]; then
   echo "L2_BLOCKS_PER_SM must be 1, 2, 4, 8, 16, or 32" >&2
   exit 2
 fi
-printf "label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,load_repeat,store_repeat,ncu_replay_mode,ncu_cache_control,ncu_metric_profile,global_warmup_passes,l2_residency_policy,l2_address_layout,report\n" > "${CASE_MANIFEST}"
+if ! [[ "${SCHEDULER_MATCH_STEPS}" =~ ^([1-9]|[1-5][0-9]|6[0-4])$ ]]; then
+  echo "SCHEDULER_MATCH_STEPS must be an integer from 1 to 64" >&2
+  exit 2
+fi
+if ! [[ "${ISSUE_MATCH_STEPS}" =~ ^([1-9]|[1-5][0-9]|6[0-4])$ ]]; then
+  echo "ISSUE_MATCH_STEPS must be an integer from 1 to 64" >&2
+  exit 2
+fi
+if ! [[ "${ISSUE_MATCH_EXTRA_PERIOD}" =~ ^([0-9]|[1-9][0-9]{1,2}|10[01][0-9]|102[0-4])$ ]]; then
+  echo "ISSUE_MATCH_EXTRA_PERIOD must be an integer from 0 to 1024" >&2
+  exit 2
+fi
+if ! [[ "${LATENCY_MATCH_NS}" =~ ^([0-9]|[1-9][0-9]{1,3}|10000)$ ]]; then
+  echo "LATENCY_MATCH_NS must be an integer from 0 to 10000" >&2
+  exit 2
+fi
+if ! [[ "${LATENCY_MATCH_PERIOD}" =~ ^([1-9]|[1-9][0-9]{1,2}|10[01][0-9]|102[0-4])$ ]]; then
+  echo "LATENCY_MATCH_PERIOD must be an integer from 1 to 1024" >&2
+  exit 2
+fi
+printf "label,kernel_regex,mode,W_SM_KiB,blocks_per_SM,active_SM,ITER,reuse_factor,issue_match_steps,issue_match_extra_period,latency_match_ns,latency_match_period,scheduler_match_steps,load_repeat,store_repeat,ncu_replay_mode,ncu_cache_control,ncu_metric_profile,global_warmup_passes,l2_residency_policy,l2_address_layout,report\n" > "${CASE_MANIFEST}"
 
 print_ncu_permission_hint() {
   cat >&2 <<'EOF'
@@ -307,7 +342,7 @@ COMMON_SECTIONS=(
   --section WarpStateStats
   --section MemoryWorkloadAnalysis
 )
-DEFAULT_NCU_METRICS="l1tex__t_sector_hit_rate,l1tex__t_sectors_pipe_lsu_mem_global_op_ld,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_global_op_ld,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_local_op_ld,l1tex__t_bytes_pipe_lsu_mem_local_op_st,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st,smsp__sass_data_bytes_mem_shared,smsp__sass_data_bytes_mem_shared_op_ld,smsp__sass_data_bytes_mem_shared_op_ldsm,smsp__sass_data_bytes_mem_shared_op_st,smsp__sass_inst_executed,smsp__sass_inst_executed_op_shared,smsp__sass_inst_executed_op_shared_ld,smsp__sass_inst_executed_op_shared_st,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ld,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ldsm,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_st,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_ldsm,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_st,lts__t_sector_hit_rate,lts__t_sector_op_read_hit_rate,lts__t_sectors_srcunit_tex_op_read,lts__t_sectors_srcunit_tex_op_read_lookup_hit,lts__t_sectors_srcunit_tex_op_read_lookup_miss,lts__t_sectors_srcunit_tex_aperture_device_op_read,lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_hit,lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_miss,lts__t_sectors_srcunit_tex_op_read_evict_first,lts__t_sectors_srcunit_tex_op_read_evict_first_lookup_hit,lts__t_sectors_srcunit_tex_op_read_evict_first_lookup_miss,lts__t_sectors_srcunit_tex_op_read_evict_normal,lts__t_sectors_srcunit_tex_op_read_evict_normal_lookup_hit,lts__t_sectors_srcunit_tex_op_read_evict_normal_lookup_miss,lts__t_sectors_srcunit_tex_op_read_evict_last,lts__t_sectors_srcunit_tex_op_read_evict_last_lookup_hit,lts__t_sectors_srcunit_tex_op_read_evict_last_lookup_miss,lts__t_bytes,lts__t_bytes_equiv_l1sectormiss_pipe_lsu_mem_global_op_ld,dram__bytes,dram__bytes_read,dram__bytes_write,dram__sectors,dram__sectors_read,dram__sectors_write,gpu__time_duration.sum,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_wait_per_issue_active,smsp__average_warps_issue_stalled_not_selected_per_issue_active,sm__warps_active.avg.pct_of_peak_sustained_active,sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active,launch__registers_per_thread,launch__shared_mem_per_block_static,launch__shared_mem_per_block_dynamic,launch__persisting_l2_cache_size,sm__inst_executed_pipe_tensor_op_hmma,sm__ops_path_tensor_src_fp16_dst_fp32,sass__inst_executed_register_spilling_mem_local_op_read,sass__inst_executed_register_spilling_mem_local_op_write"
+DEFAULT_NCU_METRICS="l1tex__t_sector_hit_rate,l1tex__t_sectors_pipe_lsu_mem_global_op_ld,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_global_op_ld,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_local_op_ld,l1tex__t_bytes_pipe_lsu_mem_local_op_st,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st,smsp__sass_data_bytes_mem_shared,smsp__sass_data_bytes_mem_shared_op_ld,smsp__sass_data_bytes_mem_shared_op_ldsm,smsp__sass_data_bytes_mem_shared_op_st,smsp__sass_inst_executed,smsp__sass_inst_executed_op_shared,smsp__sass_inst_executed_op_shared_ld,smsp__sass_inst_executed_op_shared_st,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ld,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_ldsm,smsp__sass_l1tex_data_pipe_lsu_wavefronts_mem_shared_op_st,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_ldsm,smsp__sass_l1tex_data_bank_conflicts_pipe_lsu_mem_shared_op_st,lts__t_sector_hit_rate,lts__t_sector_op_read_hit_rate,lts__t_sectors_srcunit_tex_op_read,lts__t_sectors_srcunit_tex_op_read_lookup_hit,lts__t_sectors_srcunit_tex_op_read_lookup_miss,lts__t_sectors_srcunit_tex_aperture_device_op_read,lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_hit,lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_miss,lts__t_sectors_srcunit_tex_op_read_evict_first,lts__t_sectors_srcunit_tex_op_read_evict_first_lookup_hit,lts__t_sectors_srcunit_tex_op_read_evict_first_lookup_miss,lts__t_sectors_srcunit_tex_op_read_evict_normal,lts__t_sectors_srcunit_tex_op_read_evict_normal_lookup_hit,lts__t_sectors_srcunit_tex_op_read_evict_normal_lookup_miss,lts__t_sectors_srcunit_tex_op_read_evict_last,lts__t_sectors_srcunit_tex_op_read_evict_last_lookup_hit,lts__t_sectors_srcunit_tex_op_read_evict_last_lookup_miss,lts__t_bytes,lts__t_bytes_equiv_l1sectormiss_pipe_lsu_mem_global_op_ld,dram__bytes,dram__bytes_read,dram__bytes_write,dram__sectors,dram__sectors_read,dram__sectors_write,gpu__time_duration.sum,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active,smsp__average_warps_issue_stalled_wait_per_issue_active,smsp__average_warps_issue_stalled_not_selected_per_issue_active,smsp__warp_issue_stalled_sleeping_per_warp_active,smsp__average_warp_latency_issue_stalled_sleeping,sm__issue_active.avg.pct_of_peak_sustained_active,sm__warps_active.avg.pct_of_peak_sustained_active,sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active,sm__pipe_alu_cycles_active.avg.pct_of_peak_sustained_active,sm__pipe_fma_cycles_active.avg.pct_of_peak_sustained_active,launch__registers_per_thread,launch__shared_mem_per_block_static,launch__shared_mem_per_block_dynamic,launch__persisting_l2_cache_size,sm__inst_executed_pipe_tensor_op_hmma,sm__inst_executed_pipe_fma_type_fp16,sm__ops_path_tensor_src_fp16_dst_fp32,smsp__sass_thread_inst_executed_op_ffma_pred_on,smsp__sass_thread_inst_executed_op_fp16_pred_on,smsp__sass_thread_inst_executed_op_fp32_pred_on,smsp__sass_thread_inst_executed_op_integer_pred_on,sass__inst_executed_register_spilling_mem_local_op_read,sass__inst_executed_register_spilling_mem_local_op_write"
 L2_PATH_MINIMAL_NCU_METRICS="l1tex__t_sectors_pipe_lsu_mem_global_op_ld,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_global_op_ld,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_hit,l1tex__t_bytes_pipe_lsu_mem_global_op_ld_lookup_miss,l1tex__t_bytes_pipe_lsu_mem_local_op_ld,l1tex__t_bytes_pipe_lsu_mem_local_op_st,lts__t_sector_op_read_hit_rate,lts__t_sectors_srcunit_tex_op_read,lts__t_sectors_srcunit_tex_op_read_lookup_hit,lts__t_sectors_srcunit_tex_op_read_lookup_miss,lts__t_sectors_srcunit_tex_aperture_device_op_read,lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_hit,lts__t_sectors_srcunit_tex_aperture_device_op_read_lookup_miss,lts__t_bytes_equiv_l1sectormiss_pipe_lsu_mem_global_op_ld,dram__bytes,dram__bytes_read,dram__bytes_write,dram__sectors,dram__sectors_read,dram__sectors_write,gpu__time_duration.sum,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active,launch__registers_per_thread,launch__shared_mem_per_block_static,launch__shared_mem_per_block_dynamic,launch__persisting_l2_cache_size"
 if [[ "${TARGET_PROFILE}" == "a100" || "${TARGET_PROFILE}" == "h100" ]]; then
   # GA100 and GH100 use partitioned L2 fabrics. Keep cross-partition lookups in
@@ -384,6 +419,11 @@ run_case() {
   local reuse_factor="${8:-${REUSE_FACTOR}}"
   local load_repeat="${9:-${LOAD_REPEAT}}"
   local store_repeat="${10:-${STORE_REPEAT}}"
+  local scheduler_match_steps="${11:-${SCHEDULER_MATCH_STEPS}}"
+  local issue_match_steps="${12:-${ISSUE_MATCH_STEPS}}"
+  local issue_match_extra_period="${13:-${ISSUE_MATCH_EXTRA_PERIOD}}"
+  local latency_match_ns="${14:-${LATENCY_MATCH_NS}}"
+  local latency_match_period="${15:-${LATENCY_MATCH_PERIOD}}"
   local case_l2_residency_policy="normal"
   local case_l2_address_layout="contiguous"
   if [[ "${label}" == l2_cg_load_only_* ||
@@ -393,10 +433,10 @@ run_case() {
   fi
   local report="${OUTDIR}/${label}"
 
-  echo "== ${label}: mode=${mode} W=${w_sm_kib}KiB B=${blocks_per_sm} iters=${iters} reuse=${reuse_factor} load_repeat=${load_repeat}"
-  printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" \
+  echo "== ${label}: mode=${mode} W=${w_sm_kib}KiB B=${blocks_per_sm} iters=${iters} reuse=${reuse_factor} issue_steps=${issue_match_steps} issue_extra_period=${issue_match_extra_period} latency_ns=${latency_match_ns} latency_period=${latency_match_period} scheduler_steps=${scheduler_match_steps} load_repeat=${load_repeat}"
+  printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" \
     "${label}" "${kernel_regex}" "${mode}" "${w_sm_kib}" "${blocks_per_sm}" \
-    "${ACTIVE_SM}" "${iters}" "${reuse_factor}" "${load_repeat}" \
+    "${ACTIVE_SM}" "${iters}" "${reuse_factor}" "${issue_match_steps}" "${issue_match_extra_period}" "${latency_match_ns}" "${latency_match_period}" "${scheduler_match_steps}" "${load_repeat}" \
     "${store_repeat}" "${NCU_REPLAY_MODE}" "${NCU_CACHE_CONTROL}" \
     "${NCU_METRIC_PROFILE}" "${GLOBAL_WARMUP_PASSES}" "${case_l2_residency_policy}" \
     "${case_l2_address_layout}" \
@@ -426,6 +466,11 @@ run_case() {
       --active-sm "${ACTIVE_SM}" \
       --iters "${iters}" \
       --reuse-factor "${reuse_factor}" \
+      --issue-match-steps "${issue_match_steps}" \
+      --issue-match-extra-period "${issue_match_extra_period}" \
+      --latency-match-ns "${latency_match_ns}" \
+      --latency-match-period "${latency_match_period}" \
+      --scheduler-match-steps "${scheduler_match_steps}" \
       --load-repeat "${load_repeat}" \
       --store-repeat "${store_repeat}" \
       --global-warmup-passes "${GLOBAL_WARMUP_PASSES}" \
@@ -434,6 +479,7 @@ run_case() {
       --reg-payload-bytes "${reg_payload_bytes}" \
       --repeats 1 \
       --seconds 1 \
+      --skip-idle-baseline \
       --output "${RAW_OUT}" \
       --verify-smid 1
 
@@ -462,8 +508,47 @@ fi
 if component_enabled tensor; then
   for tensor_blocks_per_sm in "${REG_BLOCKS_PER_SM_LIST[@]}"; do
     for reuse_factor in "${TENSOR_REUSE_FACTOR_LIST[@]}"; do
-      run_case "reg_operand_only_W${REG_W_SM_KIB}_B${tensor_blocks_per_sm}_RF${reuse_factor}" "reg_operand_only_kernel" "reg_operand_only" "${REG_W_SM_KIB}" "${tensor_blocks_per_sm}" 100000 0 "${reuse_factor}" 1
-      run_case "reg_mma_W${REG_W_SM_KIB}_B${tensor_blocks_per_sm}_RF${reuse_factor}" "reg_mma_kernel" "reg_mma" "${REG_W_SM_KIB}" "${tensor_blocks_per_sm}" 100000 0 "${reuse_factor}" 1
+      tensor_ncu_iters_var="TENSOR_NCU_ITERS_RF${reuse_factor}"
+      tensor_ncu_iters="${!tensor_ncu_iters_var:-${TENSOR_NCU_ITERS}}"
+      if ! [[ "${tensor_ncu_iters}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "${tensor_ncu_iters_var} must be a positive integer" >&2
+        exit 2
+      fi
+      run_case "reg_operand_only_W${REG_W_SM_KIB}_B${tensor_blocks_per_sm}_RF${reuse_factor}" "reg_operand_only_kernel" "reg_operand_only" "${REG_W_SM_KIB}" "${tensor_blocks_per_sm}" "${tensor_ncu_iters}" 0 "${reuse_factor}" 1
+      if [[ "${INCLUDE_SCHEDULER_MATCHED_NCU}" == "1" ]]; then
+        run_case "reg_scheduler_matched_no_mma_W${REG_W_SM_KIB}_B${tensor_blocks_per_sm}_RF${reuse_factor}_S${SCHEDULER_MATCH_STEPS}" "reg_scheduler_matched_no_mma_kernel" "reg_scheduler_matched_no_mma" "${REG_W_SM_KIB}" "${tensor_blocks_per_sm}" "${tensor_ncu_iters}" 0 "${reuse_factor}" 1 1 "${SCHEDULER_MATCH_STEPS}"
+      fi
+      if [[ "${INCLUDE_ISSUE_DEPENDENCY_NCU}" == "1" ]]; then
+        issue_steps_var="ISSUE_MATCH_STEPS_RF${reuse_factor}"
+        issue_steps="${!issue_steps_var:-${ISSUE_MATCH_STEPS}}"
+        issue_extra_period_var="ISSUE_MATCH_EXTRA_PERIOD_RF${reuse_factor}"
+        issue_extra_period="${!issue_extra_period_var:-${ISSUE_MATCH_EXTRA_PERIOD}}"
+        if ! [[ "${issue_steps}" =~ ^([1-9]|[1-5][0-9]|6[0-4])$ ]]; then
+          echo "${issue_steps_var} must be an integer from 1 to 64" >&2
+          exit 2
+        fi
+        if ! [[ "${issue_extra_period}" =~ ^([0-9]|[1-9][0-9]{1,2}|10[01][0-9]|102[0-4])$ ]]; then
+          echo "${issue_extra_period_var} must be an integer from 0 to 1024" >&2
+          exit 2
+        fi
+        run_case "reg_issue_dependency_no_mma_W${REG_W_SM_KIB}_B${tensor_blocks_per_sm}_RF${reuse_factor}_I${issue_steps}_P${issue_extra_period}" "reg_issue_dependency_no_mma_kernel" "reg_issue_dependency_no_mma" "${REG_W_SM_KIB}" "${tensor_blocks_per_sm}" "${tensor_ncu_iters}" 0 "${reuse_factor}" 1 1 1 "${issue_steps}" "${issue_extra_period}"
+      fi
+      if [[ "${INCLUDE_RESIDENT_STALL_NCU}" == "1" ]]; then
+        resident_ns_var="RESIDENT_STALL_NS_RF${reuse_factor}"
+        resident_ns="${!resident_ns_var:-${RESIDENT_STALL_NS}}"
+        resident_period_var="RESIDENT_STALL_PERIOD_RF${reuse_factor}"
+        resident_period="${!resident_period_var:-${RESIDENT_STALL_PERIOD}}"
+        if ! [[ "${resident_ns}" =~ ^([0-9]|[1-9][0-9]{1,3}|10000)$ ]]; then
+          echo "${resident_ns_var} must be an integer from 0 to 10000" >&2
+          exit 2
+        fi
+        if ! [[ "${resident_period}" =~ ^([1-9]|[1-9][0-9]{1,2}|10[01][0-9]|102[0-4])$ ]]; then
+          echo "${resident_period_var} must be an integer from 1 to 1024" >&2
+          exit 2
+        fi
+        run_case "reg_resident_stall_no_mma_W${REG_W_SM_KIB}_B${tensor_blocks_per_sm}_RF${reuse_factor}_N${resident_ns}_P${resident_period}" "reg_resident_stall_no_mma_kernel" "reg_resident_stall_no_mma" "${REG_W_SM_KIB}" "${tensor_blocks_per_sm}" "${tensor_ncu_iters}" 0 "${reuse_factor}" 1 1 1 1 0 "${resident_ns}" "${resident_period}"
+      fi
+      run_case "reg_mma_W${REG_W_SM_KIB}_B${tensor_blocks_per_sm}_RF${reuse_factor}" "reg_mma_kernel" "reg_mma" "${REG_W_SM_KIB}" "${tensor_blocks_per_sm}" "${tensor_ncu_iters}" 0 "${reuse_factor}" 1
     done
   done
 fi

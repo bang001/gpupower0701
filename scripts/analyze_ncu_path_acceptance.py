@@ -408,7 +408,12 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
             if maybe_reason:
                 reasons.append(maybe_reason)
 
-    elif mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}:
+    elif mode in {
+        "reg_operand_only",
+        "reg_scheduler_matched_no_mma",
+        "reg_fragment_only",
+        "reg_pressure",
+    }:
         component = "register_control_candidate"
         if has_tensor_fp16_f32_ops and tensor_fp16_f32_ops > 0.0:
             reasons.append("tensor_ops_present_in_control")
@@ -416,7 +421,7 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
         sass_inst_per_reg_op = ratio(sass_inst_executed, expected_ops)
         control_hmma_per_block = ratio(tensor_hmma, launched_blocks(row))
         control_hmma_per_reg_op = ratio(tensor_hmma, expected_ops)
-        if mode == "reg_operand_only" and tensor_hmma > 0.0:
+        if mode in {"reg_operand_only", "reg_scheduler_matched_no_mma"} and tensor_hmma > 0.0:
             reasons.append("tensor_hmma_present_in_control")
             control_hmma_class = "strict_no_hmma_reject"
         elif tensor_hmma > 0.0:
@@ -431,11 +436,11 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
                 control_hmma_class = "workload_proportional_reject"
             else:
                 control_hmma_class = "fixed_epilogue_allowed"
-        elif mode == "reg_operand_only":
+        elif mode in {"reg_operand_only", "reg_scheduler_matched_no_mma"}:
             control_hmma_class = "strict_no_hmma_pass"
-        if mode == "reg_operand_only" and registers_per_thread <= 0.0:
+        if mode in {"reg_operand_only", "reg_scheduler_matched_no_mma"} and registers_per_thread <= 0.0:
             reasons.append("missing_control_register_footprint")
-        if mode == "reg_operand_only":
+        if mode in {"reg_operand_only", "reg_scheduler_matched_no_mma"}:
             if not has_sass_inst_executed:
                 reasons.append("missing_control_sass_instruction_count")
             elif expected_ops <= 0.0:
@@ -628,36 +633,36 @@ def classify(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
             ),
             "register_l2_bytes_per_op": (
                 f"{ratio(l2_bytes, expected_register_ops(row)):.6g}"
-                if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
+                if mode in {"reg_operand_only", "reg_scheduler_matched_no_mma", "reg_fragment_only", "reg_pressure"}
                 and expected_register_ops(row) > 0.0
                 else ""
             ),
             "register_dram_bytes_per_op": (
                 f"{ratio(dram_bytes, expected_register_ops(row)):.6g}"
-                if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
+                if mode in {"reg_operand_only", "reg_scheduler_matched_no_mma", "reg_fragment_only", "reg_pressure"}
                 and expected_register_ops(row) > 0.0
                 else ""
             ),
             "tensor_control_hmma_class": control_hmma_class,
             "tensor_control_hmma_per_block": (
                 f"{control_hmma_per_block:.6g}"
-                if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
+                if mode in {"reg_operand_only", "reg_scheduler_matched_no_mma", "reg_fragment_only", "reg_pressure"}
                 else ""
             ),
             "tensor_control_hmma_per_reg_op": (
                 f"{control_hmma_per_reg_op:.6g}"
-                if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
+                if mode in {"reg_operand_only", "reg_scheduler_matched_no_mma", "reg_fragment_only", "reg_pressure"}
                 else ""
             ),
             "register_sass_inst_executed": (
                 f"{sass_inst_executed:.6g}"
-                if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
+                if mode in {"reg_operand_only", "reg_scheduler_matched_no_mma", "reg_fragment_only", "reg_pressure"}
                 and has_sass_inst_executed
                 else ""
             ),
             "register_sass_inst_per_expected_op": (
                 f"{sass_inst_per_reg_op:.6g}"
-                if mode in {"reg_operand_only", "reg_fragment_only", "reg_pressure"}
+                if mode in {"reg_operand_only", "reg_scheduler_matched_no_mma", "reg_fragment_only", "reg_pressure"}
                 and has_sass_inst_executed
                 and expected_ops > 0.0
                 else ""
@@ -794,7 +799,11 @@ def write_markdown(rows: list[dict[str, str]], path: Path) -> None:
         )
         out.write("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---|\n")
         for row in rows:
-            if row.get("mode") not in {"reg_mma", "reg_operand_only"}:
+            if row.get("mode") not in {
+                "reg_mma",
+                "reg_operand_only",
+                "reg_scheduler_matched_no_mma",
+            }:
                 continue
             out.write(
                 f"| {row.get('mode','')} | {row.get('blocks_per_SM','')} | "

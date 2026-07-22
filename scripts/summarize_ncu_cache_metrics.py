@@ -980,9 +980,33 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     tensor_fp16_f32_ops = metrics.sum_names(
         ["sm__ops_path_tensor_src_fp16_dst_fp32.sum"]
     )
+    fp16_pipe_inst = metrics.sum_names(
+        ["sm__inst_executed_pipe_fma_type_fp16.sum"]
+    )
+    sass_ffma_thread_inst = metrics.sum_names(
+        ["smsp__sass_thread_inst_executed_op_ffma_pred_on.sum"]
+    )
+    sass_fp16_thread_inst = metrics.sum_names(
+        ["smsp__sass_thread_inst_executed_op_fp16_pred_on.sum"]
+    )
+    sass_fp32_thread_inst = metrics.sum_names(
+        ["smsp__sass_thread_inst_executed_op_fp32_pred_on.sum"]
+    )
+    sass_integer_thread_inst = metrics.sum_names(
+        ["smsp__sass_thread_inst_executed_op_integer_pred_on.sum"]
+    )
     sass_inst_executed = metrics.sum_names(["smsp__sass_inst_executed.sum"])
     tensor_pipe_active_pct = metrics.first_names(
         ["sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active"]
+    )
+    alu_pipe_active_pct = metrics.first_names(
+        ["sm__pipe_alu_cycles_active.avg.pct_of_peak_sustained_active"]
+    )
+    fma_pipe_active_pct = metrics.first_names(
+        ["sm__pipe_fma_cycles_active.avg.pct_of_peak_sustained_active"]
+    )
+    issue_active_pct = metrics.first_names(
+        ["sm__issue_active.avg.pct_of_peak_sustained_active"]
     )
     expected_logical_mma = None
     expected_logical_flop = None
@@ -993,6 +1017,9 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     if manifest.get("mode", "") in {
         "reg_mma",
         "reg_operand_only",
+        "reg_resident_stall_no_mma",
+        "reg_issue_dependency_no_mma",
+        "reg_scheduler_matched_no_mma",
         "reg_fragment_only",
         "reg_pressure",
     }:
@@ -1069,6 +1096,12 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     stall_not_selected_pct = metrics.first_names(
         ["smsp__average_warps_issue_stalled_not_selected_per_issue_active.pct"]
     )
+    stall_sleeping_pct = metrics.first_names(
+        ["smsp__warp_issue_stalled_sleeping_per_warp_active.pct"]
+    )
+    sleeping_latency_cycles_per_warp = metrics.first_names(
+        ["smsp__average_warp_latency_issue_stalled_sleeping.ratio"]
+    )
     achieved_occupancy_pct = metrics.first_names(
         ["sm__warps_active.avg.pct_of_peak_sustained_active"]
     )
@@ -1078,7 +1111,12 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
     launch_warps_per_scheduler = metrics.first_names(
         ["smsp__maximum_warps_avg_per_active_cycle"]
     )
-    registers_per_thread = metrics.first_names(["launch__registers_per_thread"])
+    registers_per_thread = metrics.first_names(
+        [
+            "launch__registers_per_thread",
+            "tpc__average_registers_per_thread",
+        ]
+    )
     shared_mem_per_block_static = metrics.first_names(
         ["launch__shared_mem_per_block_static"]
     )
@@ -1140,6 +1178,10 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         optional_missing.append("stall_wait_pct")
     if stall_not_selected_pct is None:
         optional_missing.append("stall_not_selected_pct")
+    if stall_sleeping_pct is None:
+        optional_missing.append("stall_sleeping_pct")
+    if issue_active_pct is None:
+        optional_missing.append("issue_active_pct")
     if achieved_occupancy_pct is None:
         optional_missing.append("achieved_occupancy_pct")
     if tensor_pipe_active_pct is None and mode == "reg_mma":
@@ -1194,6 +1236,13 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "active_SM": manifest.get("active_SM", ""),
         "ITER": manifest.get("ITER", ""),
         "reuse_factor": manifest.get("reuse_factor", ""),
+        "issue_match_steps": manifest.get("issue_match_steps", ""),
+        "issue_match_extra_period": manifest.get(
+            "issue_match_extra_period", ""
+        ),
+        "latency_match_ns": manifest.get("latency_match_ns", ""),
+        "latency_match_period": manifest.get("latency_match_period", ""),
+        "scheduler_match_steps": manifest.get("scheduler_match_steps", ""),
         "load_repeat": manifest.get("load_repeat", ""),
         "store_repeat": manifest.get("store_repeat", ""),
         "ncu_replay_mode": manifest.get("ncu_replay_mode", ""),
@@ -1321,6 +1370,11 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         ),
         "tensor_hmma_inst": fmt(tensor_hmma_inst),
         "tensor_fp16_f32_ops": fmt(tensor_fp16_f32_ops),
+        "fp16_pipe_inst": fmt(fp16_pipe_inst),
+        "sass_ffma_thread_inst": fmt(sass_ffma_thread_inst),
+        "sass_fp16_thread_inst": fmt(sass_fp16_thread_inst),
+        "sass_fp32_thread_inst": fmt(sass_fp32_thread_inst),
+        "sass_integer_thread_inst": fmt(sass_integer_thread_inst),
         "sass_inst_executed": fmt(sass_inst_executed),
         "expected_register_ops": fmt(expected_register_ops),
         "sass_inst_per_expected_reg_op": fmt(sass_inst_per_expected_reg_op),
@@ -1329,6 +1383,9 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "tensor_hmma_per_logical_mma": fmt(tensor_hmma_per_logical_mma),
         "tensor_ops_to_expected_flop": fmt(tensor_ops_to_expected_flop),
         "tensor_pipe_active_pct": fmt(tensor_pipe_active_pct),
+        "alu_pipe_active_pct": fmt(alu_pipe_active_pct),
+        "fma_pipe_active_pct": fmt(fma_pipe_active_pct),
+        "issue_active_pct": fmt(issue_active_pct),
         "local_read_bytes": fmt(local_read_bytes),
         "local_write_bytes": fmt(local_write_bytes),
         "spill_local_read_inst": fmt(spill_local_read_inst),
@@ -1339,6 +1396,10 @@ def summarize_case(label: str, files: list[Path], manifest: dict[str, str]) -> d
         "stall_short_scoreboard_pct": fmt(stall_short_scoreboard_pct),
         "stall_wait_pct": fmt(stall_wait_pct),
         "stall_not_selected_pct": fmt(stall_not_selected_pct),
+        "stall_sleeping_pct": fmt(stall_sleeping_pct),
+        "sleeping_latency_cycles_per_warp": fmt(
+            sleeping_latency_cycles_per_warp
+        ),
         "achieved_occupancy_pct": fmt(achieved_occupancy_pct),
         "launch_warp_capacity_pct": fmt(launch_warp_capacity_pct),
         "launch_warps_per_scheduler": fmt(launch_warps_per_scheduler),
@@ -1684,6 +1745,11 @@ def main() -> int:
         "active_SM",
         "ITER",
         "reuse_factor",
+        "issue_match_steps",
+        "issue_match_extra_period",
+        "latency_match_ns",
+        "latency_match_period",
+        "scheduler_match_steps",
         "load_repeat",
         "store_repeat",
         "ncu_replay_mode",
@@ -1787,6 +1853,11 @@ def main() -> int:
         "dram_read_to_l2_logical_miss_bytes_ratio",
         "tensor_hmma_inst",
         "tensor_fp16_f32_ops",
+        "fp16_pipe_inst",
+        "sass_ffma_thread_inst",
+        "sass_fp16_thread_inst",
+        "sass_fp32_thread_inst",
+        "sass_integer_thread_inst",
         "sass_inst_executed",
         "expected_register_ops",
         "sass_inst_per_expected_reg_op",
@@ -1795,6 +1866,9 @@ def main() -> int:
         "tensor_hmma_per_logical_mma",
         "tensor_ops_to_expected_flop",
         "tensor_pipe_active_pct",
+        "alu_pipe_active_pct",
+        "fma_pipe_active_pct",
+        "issue_active_pct",
         "local_read_bytes",
         "local_write_bytes",
         "spill_local_read_inst",
@@ -1805,6 +1879,8 @@ def main() -> int:
         "stall_short_scoreboard_pct",
         "stall_wait_pct",
         "stall_not_selected_pct",
+        "stall_sleeping_pct",
+        "sleeping_latency_cycles_per_warp",
         "achieved_occupancy_pct",
         "launch_warp_capacity_pct",
         "launch_warps_per_scheduler",

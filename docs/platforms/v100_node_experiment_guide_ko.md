@@ -3,11 +3,25 @@
 External-memory 결과의 최신 명칭, read-only NCU 분모와 W sweep은
 [External-Memory Read-Path 설계](../methodology/external_memory_read_path_experiment_design_ko.md)를 우선 적용한다.
 
-작성일: 2026-07-02, updated 2026-07-15
+작성일: 2026-07-02, updated 2026-07-22
 
 ## 목적
 
 이 문서는 V100 기준 노드에서 FP16 Tensor Core energy microbenchmark를 재현하기 위한 실행 가이드다. 기본 목표는 V100 profile에서 `blocks/SM`, `W_SM` sweep을 수행하고, NVML energy 결과와 NCU sidecar 검증 결과를 분리해서 수집하는 것이다.
+
+Tensor만 새 v3 방법으로 재측정할 때는 CUDA 12.x `sm_70` build 후
+다음 package를 생성한다. `pilot`이 정상 완료된 뒤에만
+`--preset final`로 바꾼다.
+
+```bash
+TAG="$(date +%Y%m%d)"
+python3 scripts/plan_tensor_fp16_cross_platform_experiment.py \
+  --target-profile v100 --gpu-id 0 --preset pilot --tag "$TAG"
+bash "results/summary/v100_tensor_fp16_cross_platform_pilot_${TAG}_command.sh"
+```
+
+V100 Tensor v3 좌표는 B `4,16,32`, pilot RF `1,4,16`, duration `5,15 s`다.
+V100만 초기 탐색 B `1,2,4,8,16,32`를 다시 실행하지 않는다.
 
 V100은 Volta GV100 / compute capability 7.0 GPU이므로 A100/RTX 3090/H100과 비교할 때 다음 차이를 반드시 분리해서 기록한다.
 
