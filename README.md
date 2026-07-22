@@ -19,9 +19,44 @@ The default runtime profile in this checkout targets GeForce RTX 3090
 V100, A100, and H100. Use `--target-profile auto` to select a profile from the
 runtime CUDA device when running on the target machine.
 
-The current implementation inherits the logical FP16 WMMA operation definition
-from the original v2 design, but the active experiment is the acceptance-first
-finalplan flow documented in:
+## Current FP16 Tensor-only v3
+
+새 FP16 Tensor 계수 실험의 표준 진입점은
+`scripts/plan_tensor_fp16_cross_platform_experiment.py`다. 이 package는 memory
+component를 함께 실행하지 않고 `clocked_empty`, `reg_operand_only`,
+`reg_mma`만 수집한다. 하나의 measurement bundle에서 다음 네 방법을
+동시에 계산하며, v3를 특정 한 방법의 이름으로 해석하지 않는다.
+
+| v3 출력 | 계산 경계 | 주요 해석 |
+|---|---|---|
+| matched-ITER completion | 동일 ITER의 `net_E_treatment - net_E_control` | 같은 work 완료의 실측 증분 |
+| clocked MI-ATC | completion에서 pair 인접 `clocked_empty` 순전력 x 실행시간 차를 제거 | 저활동 active-time 보정 대리값 |
+| control-rate ATC | `reg_operand_only`의 순전력률을 treatment 시간으로 확장해 제거 | Tensor operand-rate arm 진단 |
+| joint regression | FLOP과 추가 실행시간을 별도 설명변수로 추정 | sweep 전체의 식별 가능성 진단 |
+
+빠른 경로/캘리브레이션 점검은 `pilot`, 계수 후보 수집은 `final`로
+분리한다. Pilot은 repeat 1이므로 final coefficient로 승격하지 않는다.
+
+```bash
+TAG="$(date +%Y%m%d)"
+python3 scripts/plan_tensor_fp16_cross_platform_experiment.py \
+  --target-profile rtx3090 --gpu-id 0 --preset pilot --tag "$TAG"
+bash "results/summary/rtx3090_tensor_fp16_cross_platform_pilot_${TAG}_command.sh"
+```
+
+수식, RF/duration/blocks/SM sweep, NCU denominator, acceptance 규칙은
+[GPU Component 동적 에너지 귀속 프로토콜](docs/methodology/component_dynamic_attribution_protocol_ko.md)이
+기준이다. 기존 full-component finalplan은 memory path 실험을 위해 보존하며,
+새 Tensor-only 계수와 구형 finalplan 결과를 직접 혼합하지 않는다.
+
+2026-07-22 RTX 3090에서 이 경로를 실제로 다시 실행한 결과와 NCU 검증은
+[Tensor-only v3 진단 보고서](docs/results/rtx3090_tensor_fp16_v3_diagnostic_20260722_ko.md)에
+있다. 이 실행은 energy/NCU 코드 경로는 확인했지만 quiescence를 생략하고 좌표당
+1회만 측정했으므로 final coefficient가 아니라 diagnostic evidence다.
+
+The implementation inherits the logical FP16 WMMA operation definition from the
+original v2 design. New Tensor-only runs use the v3 package above; the
+acceptance-first full-component flow remains documented in
 `docs/methodology/component_energy_final_experiment_plan_ko.md` and
 `docs/platforms/cross_platform_component_experiment_guide_ko.md`. Memory pJ/bit results
 must use NCU actual traffic counters and should be reported as transaction-path
@@ -210,8 +245,10 @@ platform-package audits. The external-memory row passed separately as an
 effective GPU-device read path, not physical GDDR6X energy. This is preserved
 as GA102 v5 evidence; it is not silently relabeled as a v6 result.
 
-**Current source protocol (v6, package 2026-07-16):** Tensor v6 is required for every new
-run. An A100 v5 run exposed a launch-only `reg_operand_only` control: more than
+**Current Tensor kernel source revision (v6, 2026-07-16):** this kernel revision is
+required underneath every new Tensor-only v3 run. Here, v6 names the C++/CUDA
+control-kernel revision; v3 names the measurement and analysis package. An A100
+v5 run exposed a launch-only `reg_operand_only` control: more than
 one billion requested iterations completed in about 1 ms, and the resulting
 pair-lock made one `reg_mma` command run for 2,096-4,280 s. Those A100 Tensor
 rows are rejected. v6 adds a matched `SR_CLOCKLO` runtime token, a 50 ms
@@ -575,6 +612,9 @@ Control and diagnostic modes:
 | `global_addr_only` | primary global-memory control | same global address/tile/repeat/checksum loop without an input load |
 | `reg_fragment_only` | diagnostic | WMMA fragment/register setup without MMA |
 | `reg_operand_only` | primary control | declares the same A/B/C fragments, dependent scalar update, in-place A-sign flip, and source epilogue but issues no MMA; ptxas reduces it to fewer registers than treatment, so it is a lightweight no-MMA control rather than a register-footprint-matched pure Tensor control |
+| `reg_resident_stall_no_mma` | experimental diagnostic | keeps extra registers live and inserts sparse `nanosleep` to study a low-issue resident-stall counterfactual; not selected by the v3 package |
+| `reg_issue_dependency_no_mma` | experimental diagnostic | adds dependent integer issue work and register padding to study issue-rate matching; its non-Tensor ALU energy prevents direct use as a pure Tensor control |
+| `reg_scheduler_matched_no_mma` | experimental diagnostic | uses a dependent FP32 scheduler proxy; it intentionally consumes FP32 ALU energy and is not the standard v3 no-MMA control |
 | `reg_pressure` | diagnostic | scalar register-pressure payload sweep; do not report as pure register-file energy |
 | `addr_only` | diagnostic | global-memory tile address walk without issuing operand loads |
 | `shared_load_only` | diagnostic | shared WMMA operand loads without MMA; useful for NCU comparison, not primary coefficient |

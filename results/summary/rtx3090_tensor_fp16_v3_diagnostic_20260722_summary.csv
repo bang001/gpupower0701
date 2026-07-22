@@ -1,0 +1,4 @@
+component,estimate_method,coefficient_unit,measurement_valid_rows,positive_rows,total_rows,positive_fraction,min,median,mean,max,stdev,bootstrap_ci_low,bootstrap_ci_high,status,invalid_reasons
+tensor,matched_iter_completion,pJ/FLOP,17,17,18,1.0,2.29250381928205,2.7196471840072975,2.716474214505929,3.1277996926782685,0.26814239161480047,2.4998680841143317,2.9767780662827374,diagnostic_only_quiescence_unverified,active_baseline_drift_too_high:1
+tensor,mi_atc,pJ/FLOP,17,17,18,1.0,0.020705073370251407,0.8400036511001584,0.7264473491770843,1.2508051712365802,0.41696539633203145,0.3234228136393022,1.072524150660635,diagnostic_only_quiescence_unverified,active_baseline_drift_too_high:1
+tensor,control_rate_atc,pJ/FLOP,17,17,18,1.0,0.41502165010004155,0.8972043518375962,0.8926310015714537,1.3970582381447056,0.2567135110290452,0.8339215831452317,1.0084908880619794,diagnostic_only_quiescence_unverified,active_baseline_drift_too_high:1

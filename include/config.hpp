@@ -14,6 +14,8 @@ constexpr int kWarpSize = 32;
 constexpr int kLogicalMmaInputBytes = 1024;
 constexpr int kLogicalMmaInputBits = 8192;
 constexpr int kLogicalMmaFlop = 8192;
+constexpr std::uint64_t kMinWSmKiB = 1;
+constexpr std::uint64_t kMaxWSmKiB = 131072;
 
 struct HardwareProfile {
   const char* name = "rtx3090";
@@ -201,6 +203,8 @@ inline std::vector<int> allowed_blocks_per_sm(const HardwareProfile& profile) {
 }
 
 inline const std::vector<std::uint64_t>& allowed_w_sm_kib() {
+  // Default broad sweep points. Explicit capacity-edge experiments may use
+  // any integer KiB value in [kMinWSmKiB, kMaxWSmKiB].
   static const std::vector<std::uint64_t> values{
       1,     2,     4,      8,      16,     32,
       64,    128,   256,    512,    1024,   2048,
@@ -214,6 +218,9 @@ enum class Mode {
   clocked_empty,
   reg_fragment_only,
   reg_operand_only,
+  reg_resident_stall_no_mma,
+  reg_issue_dependency_no_mma,
+  reg_scheduler_matched_no_mma,
   reg_mma,
   reg_pressure,
   addr_only,
@@ -245,6 +252,12 @@ inline std::string to_string(Mode mode) {
       return "reg_fragment_only";
     case Mode::reg_operand_only:
       return "reg_operand_only";
+    case Mode::reg_resident_stall_no_mma:
+      return "reg_resident_stall_no_mma";
+    case Mode::reg_issue_dependency_no_mma:
+      return "reg_issue_dependency_no_mma";
+    case Mode::reg_scheduler_matched_no_mma:
+      return "reg_scheduler_matched_no_mma";
     case Mode::reg_mma:
       return "reg_mma";
     case Mode::reg_pressure:
@@ -289,6 +302,15 @@ inline Mode mode_from_string(const std::string& value) {
   if (value == "clocked_empty") return Mode::clocked_empty;
   if (value == "reg_fragment_only") return Mode::reg_fragment_only;
   if (value == "reg_operand_only") return Mode::reg_operand_only;
+  if (value == "reg_resident_stall_no_mma") {
+    return Mode::reg_resident_stall_no_mma;
+  }
+  if (value == "reg_issue_dependency_no_mma") {
+    return Mode::reg_issue_dependency_no_mma;
+  }
+  if (value == "reg_scheduler_matched_no_mma") {
+    return Mode::reg_scheduler_matched_no_mma;
+  }
   if (value == "reg_mma") return Mode::reg_mma;
   if (value == "reg_pressure") return Mode::reg_pressure;
   if (value == "addr_only") return Mode::addr_only;
@@ -316,8 +338,7 @@ inline bool is_allowed_blocks_per_sm(int blocks_per_sm,
 }
 
 inline bool is_allowed_w_sm_kib(std::uint64_t w_sm_kib) {
-  const auto& values = allowed_w_sm_kib();
-  return std::find(values.begin(), values.end(), w_sm_kib) != values.end();
+  return w_sm_kib >= kMinWSmKiB && w_sm_kib <= kMaxWSmKiB;
 }
 
 struct Feasibility {
@@ -332,6 +353,7 @@ struct Feasibility {
   std::uint64_t w_block_bytes = 0;
   std::uint64_t tiles_per_block = 0;
   double full_gpu_working_set_mib = 0.0;
+  double full_gpu_accessed_working_set_mib = 0.0;
 };
 
 inline Feasibility classify_feasibility(std::uint64_t w_sm_kib,
@@ -355,7 +377,7 @@ inline Feasibility classify_feasibility(std::uint64_t w_sm_kib,
   }
   if (!is_allowed_w_sm_kib(w_sm_kib)) {
     f.regime = "invalid_w_sm";
-    f.reason = "W_SM_KiB must be a power-of-two sweep point from 1KiB to 128MiB";
+    f.reason = "W_SM_KiB must be an integer from 1 KiB to 128 MiB";
     return f;
   }
   f.valid = true;
@@ -365,6 +387,11 @@ inline Feasibility classify_feasibility(std::uint64_t w_sm_kib,
       static_cast<std::uint64_t>(blocks_per_sm);
   f.tiles_per_block =
       std::max<std::uint64_t>(1, f.w_block_bytes / kLogicalMmaInputBytes);
+  f.full_gpu_accessed_working_set_mib =
+      static_cast<double>(working_set_sm_count) *
+      static_cast<double>(blocks_per_sm) *
+      static_cast<double>(f.tiles_per_block) *
+      static_cast<double>(kLogicalMmaInputBytes) / (1024.0 * 1024.0);
   f.below_logical_tile = w_sm_kib < static_cast<std::uint64_t>(blocks_per_sm);
 
   if (f.below_logical_tile) {
@@ -383,7 +410,10 @@ inline Feasibility classify_feasibility(std::uint64_t w_sm_kib,
   const bool within_block_capacity =
       f.w_block_kib <= profile.max_shared_per_block_kib;
   f.shared_resident = within_sm_capacity && within_block_capacity;
-  f.l2_candidate = f.full_gpu_working_set_mib <= profile.l2_mib;
+  // Cache residency is determined by bytes actually touched, not by unused
+  // tail bytes in each block-private allocation.
+  f.l2_candidate =
+      f.full_gpu_accessed_working_set_mib <= profile.l2_mib;
   f.dram_candidate = !f.l2_candidate;
 
   if (f.shared_resident) {
@@ -392,7 +422,7 @@ inline Feasibility classify_feasibility(std::uint64_t w_sm_kib,
     oss << "W_SM + B KiB fits " << profile.name
         << " shared memory capacity";
     if (f.l2_candidate) {
-      oss << "; full-GPU working set also fits nominal L2";
+      oss << "; accessed full-GPU working set also fits nominal L2";
     }
     f.reason = oss.str();
     return f;
@@ -401,7 +431,7 @@ inline Feasibility classify_feasibility(std::uint64_t w_sm_kib,
   if (f.l2_candidate) {
     f.regime = "l2_candidate";
     f.reason =
-        "shared-resident is impossible, but full-GPU working set is within the nominal L2 size";
+        "shared-resident is impossible, but the accessed full-GPU working set is within nominal L2";
     return f;
   }
 

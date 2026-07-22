@@ -9,7 +9,14 @@ import tempfile
 from pathlib import Path
 
 
-def merge(paths: list[Path]) -> tuple[list[str], list[dict[str, str]]]:
+def merge(
+    paths: list[Path],
+    *,
+    ncu_binary_sha256: str = "",
+    ncu_binary_path: str = "",
+    ncu_binary_hash_capture: str = "",
+    ncu_quiescence_status: str = "",
+) -> tuple[list[str], list[dict[str, str]]]:
     fieldnames: list[str] = []
     rows: list[dict[str, str]] = []
     labels: set[str] = set()
@@ -31,9 +38,20 @@ def merge(paths: list[Path]) -> tuple[list[str], list[dict[str, str]]]:
                     )
                 labels.add(label)
                 row["ncu_summary_source"] = str(path)
+                row["ncu_binary_sha256"] = ncu_binary_sha256
+                row["ncu_binary_path"] = ncu_binary_path
+                row["ncu_binary_hash_capture"] = ncu_binary_hash_capture
+                row["ncu_quiescence_status"] = ncu_quiescence_status
                 rows.append(row)
-    if "ncu_summary_source" not in fieldnames:
-        fieldnames.append("ncu_summary_source")
+    for name in (
+        "ncu_summary_source",
+        "ncu_binary_sha256",
+        "ncu_binary_path",
+        "ncu_binary_hash_capture",
+        "ncu_quiescence_status",
+    ):
+        if name not in fieldnames:
+            fieldnames.append(name)
     return fieldnames, rows
 
 
@@ -60,6 +78,13 @@ def write_markdown(path: Path, inputs: list[Path], rows: list[dict[str, str]]) -
         out.write("## Inputs\n\n")
         for source in inputs:
             out.write(f"- `{source}`\n")
+        if rows and rows[0].get("ncu_binary_sha256"):
+            out.write(
+                f"- binary: `{rows[0].get('ncu_binary_path', '')}`\n"
+                f"- binary SHA-256: `{rows[0].get('ncu_binary_sha256', '')}`\n"
+                f"- hash capture: `{rows[0].get('ncu_binary_hash_capture', '')}`\n"
+                f"- NCU quiescence: `{rows[0].get('ncu_quiescence_status', '')}`\n"
+            )
         out.write("\n")
         out.write(
             "| label | mode | W_SM (KiB/SM) | blocks/SM | LR | metric profile | "
@@ -98,10 +123,22 @@ def self_test() -> None:
             "l2,l2_cg_load_only,l2_path_minimal,ok,1\n",
             encoding="utf-8",
         )
-        fields, rows = merge([full, minimal])
+        fields, rows = merge(
+            [full, minimal],
+            ncu_binary_sha256="abc",
+            ncu_binary_path="./build/test",
+            ncu_binary_hash_capture="pre_post_collection_verified",
+            ncu_quiescence_status="strict_passed",
+        )
         assert len(rows) == 2
         assert "l2_path_counter_coherent" in fields
         assert all(row["ncu_summary_source"] for row in rows)
+        assert all(row["ncu_binary_sha256"] == "abc" for row in rows)
+        assert all(
+            row["ncu_binary_hash_capture"] == "pre_post_collection_verified"
+            for row in rows
+        )
+        assert all(row["ncu_quiescence_status"] == "strict_passed" for row in rows)
         try:
             merge([full, full])
         except ValueError as exc:
@@ -116,6 +153,10 @@ def main() -> int:
     parser.add_argument("inputs", nargs="*")
     parser.add_argument("--out-csv", default="")
     parser.add_argument("--out-md", default="")
+    parser.add_argument("--ncu-binary-sha256", default="")
+    parser.add_argument("--ncu-binary-path", default="")
+    parser.add_argument("--ncu-binary-hash-capture", default="")
+    parser.add_argument("--ncu-quiescence-status", default="")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     if args.self_test:
@@ -124,7 +165,13 @@ def main() -> int:
     if not args.inputs or not args.out_csv or not args.out_md:
         parser.error("inputs, --out-csv, and --out-md are required")
     inputs = [Path(value) for value in args.inputs]
-    fieldnames, rows = merge(inputs)
+    fieldnames, rows = merge(
+        inputs,
+        ncu_binary_sha256=args.ncu_binary_sha256,
+        ncu_binary_path=args.ncu_binary_path,
+        ncu_binary_hash_capture=args.ncu_binary_hash_capture,
+        ncu_quiescence_status=args.ncu_quiescence_status,
+    )
     if not rows:
         raise ValueError("NCU summary merge produced no rows")
     write_csv(Path(args.out_csv), fieldnames, rows)

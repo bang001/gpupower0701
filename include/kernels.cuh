@@ -19,6 +19,11 @@ struct KernelLaunchConfig {
   std::uint64_t tiles_per_block = 1;
   std::uint64_t iters = 1;
   std::uint64_t reuse_factor = 1;
+  std::uint64_t issue_match_steps = 1;
+  unsigned issue_match_extra_period = 0;
+  unsigned latency_match_ns = 0;
+  unsigned latency_match_period = 1;
+  std::uint64_t scheduler_match_steps = 1;
   std::uint64_t load_repeat = 1;
   std::uint64_t store_repeat = 1;
   std::uint64_t reg_payload_bytes_per_block = 256;

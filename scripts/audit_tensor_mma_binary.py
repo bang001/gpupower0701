@@ -22,6 +22,9 @@ FIXED_REUSE_FACTORS = (1, 2, 4, 8, 16)
 MODE_PATTERNS = {
     "reg_mma": re.compile(r"reg_mma_kernelILi(\d+)EEE"),
     "reg_operand_only": re.compile(r"reg_operand_only_kernelILi(\d+)EEE"),
+    "reg_issue_dependency_no_mma": re.compile(
+        r"reg_issue_dependency_no_mma_kernelILi(\d+)EEE"
+    ),
 }
 RESOURCE_PATTERN = re.compile(
     r"REG:(?P<registers>\d+)\s+STACK:(?P<stack>\d+)\s+"
@@ -35,6 +38,11 @@ OPCODE_PATTERNS = {
     "lds_static": re.compile(r"\bLDS(?:\.|\b)"),
     "ldl_static": re.compile(r"\bLDL(?:\.|\b)"),
     "stl_static": re.compile(r"\bSTL(?:\.|\b)"),
+    "ffma_static": re.compile(r"\bFFMA(?:\.|\b)"),
+    "fp16_alu_static": re.compile(r"\b(?:HFMA2|HADD2|HMUL2)(?:\.|\b)"),
+    "fadd_or_fmul_static": re.compile(r"\b(?:FADD|FMUL)(?:\.|\b)"),
+    "lop3_static": re.compile(r"\bLOP3(?:\.|\b)"),
+    "integer_add_static": re.compile(r"\b(?:IADD3|UIADD3)(?:\.|\b)"),
 }
 SASS_ADDRESS_PATTERN = re.compile(r"/\*(?P<address>[0-9a-fA-F]+)\*/")
 BRANCH_TARGET_PATTERN = re.compile(r"\bBRA\s+0x(?P<target>[0-9a-fA-F]+)\b")
@@ -195,7 +203,11 @@ def build_rows(
 
     rows: list[dict[str, str]] = []
     for reuse_factor in FIXED_REUSE_FACTORS:
-        for mode in ("reg_mma", "reg_operand_only"):
+        for mode in (
+            "reg_mma",
+            "reg_operand_only",
+            "reg_issue_dependency_no_mma",
+        ):
             symbol = symbols.get((mode, reuse_factor), "")
             resource = resources.get(symbol, {})
             sass = sass_functions.get(symbol, "")
@@ -243,6 +255,9 @@ def build_rows(
                     reasons.append("control_loop_missing_after_ptxas")
                 if counts["runtime_token_loop_static"] <= 0:
                     reasons.append("runtime_token_loop_missing_in_control")
+                if mode == "reg_issue_dependency_no_mma":
+                    if counts["lop3_static"] <= 0 or counts["integer_add_static"] <= 0:
+                        reasons.append("integer_dependency_chain_missing")
             if resource.get("local", -1) != 0 or resource.get("stack", -1) != 0:
                 reasons.append("local_or_stack_allocation_present")
             if counts["ldl_static"] > 0 or counts["stl_static"] > 0:
@@ -265,9 +280,33 @@ def build_rows(
                     "instruction_api_scope": "wmma_m16n16k16_f16_f32",
                     "lowering_scope": "architecture_lowered_hmma_compatibility",
                     "static_count_semantics": "presence_only_not_runtime_execution_count",
+                    "pairing_notes": "",
                     "status": "pass" if not reasons else "fail",
                     "reasons": ";".join(reasons) if reasons else "pass",
                 }
+            )
+    by_key = {(row["reuse_factor"], row["mode"]): row for row in rows}
+    for reuse_factor in FIXED_REUSE_FACTORS:
+        operand = by_key.get((str(reuse_factor), "reg_operand_only"))
+        issue = by_key.get((str(reuse_factor), "reg_issue_dependency_no_mma"))
+        if operand is None or issue is None:
+            continue
+        pair_reasons: list[str] = []
+        for metric in ("ffma_static", "fp16_alu_static", "fadd_or_fmul_static"):
+            if int(issue[metric]) > int(operand[metric]):
+                pair_reasons.append(f"additional_{metric}_in_issue_control")
+        if pair_reasons:
+            existing = [] if issue["reasons"] == "pass" else issue["reasons"].split(";")
+            issue["reasons"] = ";".join(existing + pair_reasons)
+            issue["status"] = "fail"
+        treatment = by_key.get((str(reuse_factor), "reg_mma"))
+        if treatment is None:
+            continue
+        if issue["registers_per_thread"] == treatment["registers_per_thread"]:
+            issue["pairing_notes"] = "issue_treatment_register_footprint_match"
+        else:
+            issue["pairing_notes"] = (
+                "issue_treatment_register_footprint_mismatch"
             )
     return rows
 
@@ -300,40 +339,50 @@ def write_markdown(path: Path, rows: list[dict[str, str]]) -> None:
             "HMMA/logical-MMA linearity across RF and zero HMMA in the control.\n\n"
         )
         out.write(
-            "| RF | treatment HMMA | control HMMA | treatment/control registers/thread | "
-            "predicated treatment HMMA | runtime-token loops treatment/control | "
-            "control backward branches | WGMMA/TMA | LDG/LDS treatment | "
-            "local treatment/control | status |\n"
+            "| RF | treatment HMMA | operand/issue HMMA | registers treatment/operand/issue | "
+            "issue FFMA/FP16 ALU | issue LOP3/IADD | runtime-token loops treatment/operand/issue | "
+            "WGMMA/TMA treatment | local treatment/operand/issue | status |\n"
         )
-        out.write("|---:|---:|---:|---|---:|---|---:|---|---|---|---|\n")
+        out.write("|---:|---:|---|---|---|---|---|---|---|---|\n")
         for rf in FIXED_REUSE_FACTORS:
             treatment = by_key.get((str(rf), "reg_mma"), {})
             control = by_key.get((str(rf), "reg_operand_only"), {})
-            statuses = {treatment.get("status", "fail"), control.get("status", "fail")}
+            issue = by_key.get((str(rf), "reg_issue_dependency_no_mma"), {})
+            statuses = {
+                treatment.get("status", "fail"),
+                control.get("status", "fail"),
+                issue.get("status", "fail"),
+            }
             out.write(
                 f"| {rf} | {treatment.get('hmma_static', '')} | "
-                f"{control.get('hmma_static', '')} | "
+                f"{control.get('hmma_static', '')}/"
+                f"{issue.get('hmma_static', '')} | "
                 f"{treatment.get('registers_per_thread', '')}/"
-                f"{control.get('registers_per_thread', '')} | "
-                f"{treatment.get('hmma_predicated_static', '')} | "
+                f"{control.get('registers_per_thread', '')}/"
+                f"{issue.get('registers_per_thread', '')} | "
+                f"{issue.get('ffma_static', '')}/"
+                f"{issue.get('fp16_alu_static', '')} | "
+                f"{issue.get('lop3_static', '')}/"
+                f"{issue.get('integer_add_static', '')} | "
                 f"{treatment.get('runtime_token_loop_static', '')}/"
-                f"{control.get('runtime_token_loop_static', '')} | "
-                f"{control.get('backward_branch_static', '')} | "
+                f"{control.get('runtime_token_loop_static', '')}/"
+                f"{issue.get('runtime_token_loop_static', '')} | "
                 f"{treatment.get('wgmma_static', '')}/"
                 f"{treatment.get('tma_static', '')} | "
-                f"{treatment.get('ldg_static', '')}/"
-                f"{treatment.get('lds_static', '')} | "
                 f"{treatment.get('local_bytes', '')}/"
-                f"{control.get('local_bytes', '')} | "
+                f"{control.get('local_bytes', '')}/"
+                f"{issue.get('local_bytes', '')} | "
                 f"{'pass' if statuses == {'pass'} else 'fail'} |\n"
             )
         out.write("\n## Interpretation\n\n")
         out.write(
-            "A register-footprint difference is expected in the current implementation: "
-            "the treatment keeps WMMA operand and accumulator fragments live, while ptxas "
-            "reduces the no-MMA control. Therefore the measured coefficient is the "
-            "incremental effective board-level WMMA/HMMA plus its register/scheduler path, "
-            "not pure Tensor Core circuit energy and not an isolated register coefficient.\n"
+            "`reg_operand_only` remains the coefficient control and may have a smaller "
+            "register footprint. `reg_issue_dependency_no_mma` uses integer-only live "
+            "register padding to match the treatment footprint where ptxas permits it; "
+            "the match is architecture- and RF-specific and must be checked again with "
+            "runtime NCU. A runtime-disabled-HMMA control is intentionally absent: "
+            "GA102 NCU showed that source-level runtime predication did not produce a "
+            "zero-HMMA counterfactual.\n"
         )
 
 
@@ -342,6 +391,8 @@ def run_self_test() -> None:
  Function xxxreg_mma_kernelILi1EEEfoo:
   REG:32 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:10
  Function xxxreg_operand_only_kernelILi1EEEfoo:
+  REG:16 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:10
+ Function xxxreg_issue_dependency_no_mma_kernelILi1EEEfoo:
   REG:16 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:10
 """
     sass = """
@@ -353,6 +404,11 @@ def run_self_test() -> None:
  /*0000*/ CS2R R8, SR_CLOCKLO;
  /*0010*/ IADD3 R0, R0, R1, RZ;
  /*0020*/ BRA 0x0;
+ Function : xxxreg_issue_dependency_no_mma_kernelILi1EEEfoo
+ /*0000*/ CS2R R8, SR_CLOCKLO;
+ /*0010*/ LOP3.LUT R0, R0, R1, R2, 0x96;
+ /*0020*/ IADD3 R0, R0, R2, RZ;
+ /*0030*/ BRA 0x0;
 """
     resources = parse_resource_usage(resource)
     functions = parse_sass_functions(sass)
@@ -369,14 +425,24 @@ def run_self_test() -> None:
         for row in rows
         if row["mode"] == "reg_operand_only" and row["reuse_factor"] == "1"
     )
+    rf1_issue = next(
+        row
+        for row in rows
+        if row["mode"] == "reg_issue_dependency_no_mma"
+        and row["reuse_factor"] == "1"
+    )
     assert rf1_treatment["status"] == "pass"
     assert rf1_control["status"] == "pass"
+    assert rf1_issue["status"] == "pass"
     assert rf1_treatment["hmma_static"] == "1"
     assert rf1_treatment["hmma_predicated_static"] == "0"
     assert rf1_control["hmma_static"] == "0"
     assert rf1_control["backward_branch_static"] == "1"
     assert rf1_treatment["runtime_token_loop_static"] == "1"
     assert rf1_control["runtime_token_loop_static"] == "1"
+    assert rf1_issue["hmma_static"] == "0"
+    assert rf1_issue["ffma_static"] == "0"
+    assert rf1_issue["fp16_alu_static"] == "0"
     assert all(
         row["status"] == "fail" for row in rows if row["reuse_factor"] != "1"
     )
@@ -435,8 +501,18 @@ def main() -> int:
         parser.error("cuobjdump was not found; pass --cuobjdump")
     print(f"cuobjdump: {cuobjdump}")
 
-    resources_text = run_cuobjdump(cuobjdump, str(binary), "--dump-resource-usage")
-    sass_text = run_cuobjdump(cuobjdump, str(binary), "--dump-sass")
+    try:
+        resources_text = run_cuobjdump(
+            cuobjdump, str(binary), "--dump-resource-usage"
+        )
+        sass_text = run_cuobjdump(cuobjdump, str(binary), "--dump-sass")
+    except RuntimeError as exc:
+        print(
+            "Tensor MMA binary audit blocked: "
+            f"{exc}. Use cuobjdump from the same CUDA toolkit as nvcc.",
+            file=sys.stderr,
+        )
+        return 2
     rows = build_rows(
         profile=args.profile,
         binary=str(binary),

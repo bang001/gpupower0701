@@ -16,10 +16,11 @@ results:
 
 1. `README.md`
 2. `docs/methodology/howitworks.md`
-3. `docs/methodology/component_energy_final_experiment_plan_ko.md`
-4. `docs/methodology/ncu_validation_energy_calculation_ko.md`
-5. `docs/platforms/cross_platform_component_experiment_guide_ko.md`
-6. `docs/audits/component_energy_self_critique_ko.md`
+3. `docs/methodology/component_dynamic_attribution_protocol_ko.md`
+4. `docs/methodology/component_energy_final_experiment_plan_ko.md`
+5. `docs/methodology/ncu_validation_energy_calculation_ko.md`
+6. `docs/platforms/cross_platform_component_experiment_guide_ko.md`
+7. `docs/audits/component_energy_self_critique_ko.md`
 
 Platform routing:
 
@@ -114,6 +115,20 @@ or failed dry-run is a failed preflight, not a target-platform result.
 
 ## Standard Platform Run
 
+For a new FP16 Tensor-only coefficient run, generate the v3 package. It collects
+only `clocked_empty`, `reg_operand_only`, and `reg_mma`, then reports
+matched-ITER completion, clocked MI-ATC, control-rate ATC, and joint regression.
+Pilot output is diagnostic and cannot be promoted to final.
+
+```bash
+python3 scripts/plan_tensor_fp16_cross_platform_experiment.py \
+  --target-profile rtx3090 --gpu-id 0 --preset pilot \
+  --tag "$(date +%Y%m%d)"
+```
+
+Use the full-component planner below only when Shared, Global L1, L2, and
+external-memory paths are also required.
+
 Generate and review the command package instead of assembling final runs by
 hand:
 
@@ -207,9 +222,13 @@ numbers. At minimum, use this current table:
 | `l2_cg_load_only` | cache-global load selected and verified as L2-hit path | primary L2 treatment |
 | `dram_cg_load_only` | cache-global streaming load over an architecture-specific L2-multiple sweep | external-memory effective-path treatment (legacy mode name) |
 
-`idle`, `empty`, `reg_fragment_only`, `reg_pressure`, `addr_only`, `shared_load_only`,
-`shared_mma`, `l2_load_only`, `l2_mma`, `dram_load_only`, `dram_mma`,
-`store_only`, and `store_path` remain implemented diagnostics or legacy modes.
+`idle`, `empty`, `reg_fragment_only`, `reg_resident_stall_no_mma`,
+`reg_issue_dependency_no_mma`, `reg_scheduler_matched_no_mma`, `reg_pressure`,
+`addr_only`, `shared_load_only`,
+`shared_mma`, `l2_load_only`, `l2_mma`, `dram_load_only`, `dram_mma`, `store_only`,
+and `store_path` remain implemented diagnostics or legacy modes. The three
+additional no-MMA modes are experimental scheduler/latency counterfactuals;
+the standard Tensor-only v3 package still uses `reg_operand_only` as control.
 Do not put them in the strict component table unless the current plan and all
 acceptance gates explicitly select them.
 

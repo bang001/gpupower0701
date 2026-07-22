@@ -3,11 +3,23 @@
 External-memory 결과의 최신 명칭, read-only NCU 분모와 W sweep은
 [External-Memory Read-Path 설계](../methodology/external_memory_read_path_experiment_design_ko.md)를 우선 적용한다.
 
-작성일: 2026-07-08, updated 2026-07-15
+작성일: 2026-07-08, updated 2026-07-22
 
 ## 목적
 
 이 문서는 H100/GH100 노드에서 FP16 Tensor Core energy microbenchmark와 component-energy finalplan 실험을 실행하기 위한 가이드다. 기본 profile은 **H100 SXM5, 132 SM, 50 MiB L2, HBM3** planning profile이며 H100 PCIe 결과에는 그대로 쓰지 않는다. 현재 코드의 primary Tensor path는 CUDA WMMA compatibility path다. 따라서 H100에서 실행하더라도 이 결과는 **Hopper-native WGMMA/TMA/FP8 에너지**가 아니라, H100에서의 WMMA 기반 effective microbenchmark coefficient다.
+
+Tensor만 새 v3 방법으로 재측정할 때는 `sm_90` build 후 다음
+package를 생성한다. 이도 FP16 WMMA path이며 WGMMA/TMA 실험이 아니다.
+
+```bash
+TAG="$(date +%Y%m%d)"
+python3 scripts/plan_tensor_fp16_cross_platform_experiment.py \
+  --target-profile h100 --gpu-id 0 --preset pilot --tag "$TAG"
+bash "results/summary/h100_tensor_fp16_cross_platform_pilot_${TAG}_command.sh"
+```
+
+H100 Tensor v3 좌표는 B `4,16,32`, pilot RF `1,4,16`, duration `5,15 s`다.
 
 ## H100 기준 profile
 

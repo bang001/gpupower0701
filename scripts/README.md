@@ -2,6 +2,23 @@
 
 이 디렉토리에는 현재 finalplan 실행에 필요한 active script만 둔다. 과거 pair-centric, NNLS/regression, reference-aligned, register-footprint diagnostic script는 `archive/legacy_20260707/scripts/`로 이동했다.
 
+## Current FP16 Tensor-only v3 Flow
+
+| 단계 | script | 역할 |
+|---|---|---|
+| package plan | `plan_tensor_fp16_cross_platform_experiment.py` | RTX 3090/V100/A100/H100의 B/RF/duration 설계와 resumable shell 생성 |
+| quiescence | `audit_gpu_quiescence.py` | energy/NCU 전 GPU utilization, memory-controller, VRAM 변화, 외부 compute process gate |
+| energy bundle | `run_component_dynamic_attribution.py` | pair 인접 baseline, control/treatment 순서 반전, factorial-grid calibration, raw/manifest 수집 |
+| NCU bundle | `run_component_dynamic_attribution_ncu.sh` | 동일 binary hash의 Tensor HMMA/FLOP/register/spill/stall exact-coordinate 검증 |
+| analysis | `analyze_component_dynamic_attribution.py` | matched-ITER, MI-ATC, control-rate ATC, FLOP/time 공동회귀와 acceptance 계산 |
+| figures | `plot_component_dynamic_attribution.py` | B/RF/duration 경향, 방법별 계수, Tensor NCU 증거 시각화 |
+
+v3는 `clocked_empty`, `reg_operand_only`, `reg_mma`를 한 번 수집한 뒤 네
+계산 방법을 나란히 낸다. 따라서 v3는 MI-ATC 전용 또는 operand-rate
+arm 전용이 아니다. `pilot`은 파이프라인 진단용, `final`만 repeat 3과
+전체 RF/duration matrix를 갖는다. 상세 규칙은
+`docs/methodology/component_dynamic_attribution_protocol_ko.md`를 따른다.
+
 ## Active Finalplan Flow
 
 | 단계 | script | 역할 |

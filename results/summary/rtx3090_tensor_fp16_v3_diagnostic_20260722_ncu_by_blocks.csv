@@ -1,0 +1,4 @@
+component,blocks_per_SM,accepted_treatment_rows,operation_or_access_metric,operation_or_access_median,bytes_metric,bytes_median,path_hit_rate_median_pct,long_scoreboard_median_pct
+tensor,4,3,tensor_fp16_f32_ops,1074790000000.0,,nan,nan,0.003405
+tensor,8,3,tensor_fp16_f32_ops,2149580000000.0,,nan,nan,0.00454
+tensor,16,3,tensor_fp16_f32_ops,4299160000000.0,,nan,nan,0.007164

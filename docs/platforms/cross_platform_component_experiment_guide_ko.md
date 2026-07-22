@@ -1,8 +1,34 @@
 # Cross-Platform Component Energy 실험 가이드
 
-작성일: 2026-07-06, updated 2026-07-15
+작성일: 2026-07-06, updated 2026-07-22
 
 ## 1. 현재 코드와 실험 내용 요약
+
+새 FP16 Tensor-only 실험은 full-component finalplan과 별도로
+`scripts/plan_tensor_fp16_cross_platform_experiment.py`를 사용한다. 이 package는
+`clocked_empty`, `reg_operand_only`, `reg_mma`만 실행하고 matched-ITER,
+clocked MI-ATC, control-rate ATC, joint regression을 같이 생성한다.
+
+| profile | Tensor blocks/SM | pilot RF / duration / repeat | final RF / duration / repeat |
+|---|---|---|---|
+| RTX 3090 | 4, 8, 16 | 1,4,16 / 5,15 s / 1 | 1,2,4,8,16 / 5,15,30 s / 3 |
+| V100 | 4, 16, 32 | 1,4,16 / 5,15 s / 1 | 1,2,4,8,16 / 5,15,30 s / 3 |
+| A100 | 4, 16, 32 | 1,4,16 / 5,15 s / 1 | 1,2,4,8,16 / 5,15,30 s / 3 |
+| H100 | 4, 16, 32 | 1,4,16 / 5,15 s / 1 | 1,2,4,8,16 / 5,15,30 s / 3 |
+
+```bash
+TAG="$(date +%Y%m%d)"
+python3 scripts/plan_tensor_fp16_cross_platform_experiment.py \
+  --target-profile <rtx3090|v100|a100|h100> \
+  --gpu-id 0 --preset pilot --tag "$TAG"
+bash "results/summary/<profile>_tensor_fp16_cross_platform_pilot_${TAG}_command.sh"
+```
+
+Pilot는 경로와 calibration을 확인하는 진단용이며 최종 계수가 아니다.
+`final`로 승격하기 전에 pilot의 energy pair, NCU exact-coordinate,
+binary hash, zero-spill 검증을 먼저 통과시킨다. 상세 수식과 gate는
+[component dynamic attribution protocol](../methodology/component_dynamic_attribution_protocol_ko.md)이
+기준이다.
 
 이 저장소는 CUDA/NVML 기반 microbenchmark로 FP16 WMMA `m16n16k16` logical op를 실행하고, board-level 또는 GPU-level energy delta를 측정한다. component 분리는 순수 회로 에너지를 직접 읽는 방식이 아니라, NCU로 경로를 검증한 microbenchmark들을 matched-control 차분/회귀로 비교하는 방식이다. GPU 세대별 power/energy API 의미와 제약은 [power_measurement_api_matrix_ko.md](power_measurement_api_matrix_ko.md)를 함께 따른다. External-memory의 최신 명칭, 분모, working-set sweep은 [external_memory_read_path_experiment_design_ko.md](../methodology/external_memory_read_path_experiment_design_ko.md)가 우선한다.
 

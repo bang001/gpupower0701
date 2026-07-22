@@ -1,0 +1,10 @@
+component,blocks_per_SM,estimate_method,coefficient_unit,measurement_valid_rows,positive_rows,total_rows,positive_fraction,min,median,mean,max,stdev,status,invalid_reasons
+tensor,4,matched_iter_completion,pJ/FLOP,5,5,6,1.0,2.6791877155347796,2.977300590062334,2.907406238190799,3.1277996926782685,0.19785952726561234,diagnostic_only_quiescence_unverified,active_baseline_drift_too_high:1
+tensor,4,mi_atc,pJ/FLOP,5,5,6,1.0,0.8400036511001584,0.9506162684604436,0.9933048506995418,1.2219753922167147,0.15744855170207436,diagnostic_only_quiescence_unverified,active_baseline_drift_too_high:1
+tensor,4,control_rate_atc,pJ/FLOP,5,5,6,1.0,0.7545250482622365,0.8972043518375962,0.9135032196449272,1.0226892581446625,0.10731108804195935,diagnostic_only_quiescence_unverified,active_baseline_drift_too_high:1
+tensor,8,matched_iter_completion,pJ/FLOP,6,6,6,1.0,2.29250381928205,2.413582199939977,2.4123216327758406,2.52657609585145,0.09295534449447235,diagnostic_only_quiescence_unverified,
+tensor,8,mi_atc,pJ/FLOP,6,6,6,1.0,0.7388643247831884,1.0675558667539948,1.0073773230591125,1.2508051712365802,0.21750211017801563,diagnostic_only_quiescence_unverified,
+tensor,8,control_rate_atc,pJ/FLOP,6,6,6,1.0,0.8721014373726192,1.0844662753911665,1.099007521029401,1.3970582381447056,0.19537940227285874,diagnostic_only_quiescence_unverified,
+tensor,16,matched_iter_completion,pJ/FLOP,6,6,6,1.0,2.665380737682784,2.888079898523646,2.861516776498625,3.0013903480591697,0.13195181659080374,diagnostic_only_quiescence_unverified,
+tensor,16,mi_atc,pJ/FLOP,6,6,6,1.0,0.020705073370251407,0.29077124111794894,0.22313612402634142,0.3396800835389665,0.13895220350814338,diagnostic_only_quiescence_unverified,
+tensor,16,control_rate_atc,pJ/FLOP,6,6,6,1.0,0.41502165010004155,0.6791388445040689,0.6688609670522785,0.9292334575132549,0.22774414199183787,diagnostic_only_quiescence_unverified,

@@ -193,6 +193,9 @@ EXPECTED_CPP_MODES = (
     "clocked_empty",
     "reg_fragment_only",
     "reg_operand_only",
+    "reg_resident_stall_no_mma",
+    "reg_issue_dependency_no_mma",
+    "reg_scheduler_matched_no_mma",
     "reg_mma",
     "reg_pressure",
     "addr_only",
@@ -745,11 +748,11 @@ def main() -> int:
     parser.add_argument("--repo", default=".")
     parser.add_argument(
         "--out-csv",
-        default="results/summary/documentation_consistency_audit_20260714.csv",
+        default="results/summary/documentation_consistency_audit_20260722.csv",
     )
     parser.add_argument(
         "--out-md",
-        default="results/summary/documentation_consistency_audit_20260714.md",
+        default="results/summary/documentation_consistency_audit_20260722.md",
     )
     parser.add_argument("--fail-on-error", action="store_true")
     parser.add_argument("--self-test", action="store_true")
