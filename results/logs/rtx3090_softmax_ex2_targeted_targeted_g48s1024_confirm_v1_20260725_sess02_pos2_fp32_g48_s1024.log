@@ -1,0 +1,227 @@
+label=sess02_pos2_fp32_g48_s1024:runner
+started_at=2026-07-25T12:33:51+09:00
+command=python3 scripts/run_softmax_operand_rate_atc.py --binary build-softmax/a100_fp16_softmax_energy --gpu-id 0 --target-profile rtx3090 --exp-impl fp32 --softmax-cols 1024 --blocks-per-sm 2 --grid-blocks-list 48 --control-mode probe --logit-scale 4.0 --seconds 13.0 --idle-measure-seconds 1.0 --pairs 6 --bracket-warmup-pairs 1 --execution-mode persistent_bracket --bracket-idle-policy batch_once --bracket-order counterbalanced6 --preheat-seconds 20.0 --preheat-actual-min-seconds 16.0 --preheat-actual-max-seconds 30.0 --conditions cache_reuse_candidate --cache-policy default --energy-trace 1 --energy-trace-sample-ms 500.0 --energy-trace-min-updates 16 --tag targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024 --out-dir results/raw --max-gpu-util-pct 10.0 --max-memory-util-pct 15.0 --quiescence-timeout-s 60.0 --quiescence-poll-s 1.0 --quiescence-consecutive-samples 2
++ build-softmax/a100_fp16_softmax_energy --mode full --gpu-id 0 --target-profile rtx3090 --exp-impl fp32 --softmax-cols 1024 --blocks-per-sm 2 --seconds 13.0 --idle-measure-seconds 1.0 --logit-scale 4.0 --cache-condition cache_reuse_candidate --cache-policy default --grid-blocks 48 --dry-run
+gpu_name=NVIDIA GeForce RTX 3090
+compute_capability=8.6
+cuda_pci_bus_id=0000:01:00.0
+cuda_binary_arch=86
+runtime_sm_count=82
+runtime_l2_bytes=6291456
+grid_blocks=48
+grid_blocks_source=explicit
+row_tiles_per_block=1
+tile_stride=1
+working_set_bytes=196608
+exp_impl=fp32_fast___expf
+exp_input_dtype=fp32
+special_function_path=fp32_fast_expf_to_mufu_ex2
+exp_ptx_instruction=ex2.approx.f32
+exp_results_per_ptx_instruction=1
+sass_mufu_ex2_per_ptx_instruction_model=1
+sass_lowering_model_status=cuda_13_2_ampere_model_requires_final_binary_gate
+expected_control_ex2_scalar_results_per_cta_iter=1024
+expected_treatment_ex2_scalar_results_per_cta_iter=2048
+expected_probe_ex2_scalar_results_per_cta_iter=1024
+expected_control_ex2_ptx_instructions_per_cta_iter=1024
+expected_treatment_ex2_ptx_instructions_per_cta_iter=2048
+expected_probe_ex2_ptx_instructions_per_cta_iter=1024
+xu_documented_results_per_sm_cycle=16
+expected_control_xu_thread_ops_per_cta_iter=1280
+expected_treatment_xu_thread_ops_per_cta_iter=2304
+expected_probe_xu_thread_ops_per_cta_iter=1024
+ideal_control_xu_cycles_per_cta_iter=80
+ideal_treatment_xu_cycles_per_cta_iter=144
+ideal_probe_xu_cycles_per_cta_iter=64
+measurement_purpose=energy_atc
+occupancy_max_blocks_per_sm=6
+static_single_wave_capacity_blocks=492
+static_single_wave_capacity_gate_pass=1
+occupancy_gate_pass=1
+smid_sparse_id_self_check=pass
++ build-softmax/a100_fp16_softmax_energy --mode full --gpu-id 0 --target-profile rtx3090 --exp-impl fp32 --softmax-cols 1024 --blocks-per-sm 2 --seconds 13.0 --idle-measure-seconds 1.0 --logit-scale 4.0 --cache-condition cache_reuse_candidate --cache-policy default --grid-blocks 48 --validate-only
+gpu_name=NVIDIA GeForce RTX 3090
+compute_capability=8.6
+cuda_pci_bus_id=0000:01:00.0
+cuda_binary_arch=86
+runtime_sm_count=82
+runtime_l2_bytes=6291456
+grid_blocks=48
+grid_blocks_source=explicit
+row_tiles_per_block=1
+tile_stride=1
+working_set_bytes=196608
+exp_impl=fp32_fast___expf
+exp_input_dtype=fp32
+special_function_path=fp32_fast_expf_to_mufu_ex2
+exp_ptx_instruction=ex2.approx.f32
+exp_results_per_ptx_instruction=1
+sass_mufu_ex2_per_ptx_instruction_model=1
+sass_lowering_model_status=cuda_13_2_ampere_model_requires_final_binary_gate
+expected_control_ex2_scalar_results_per_cta_iter=1024
+expected_treatment_ex2_scalar_results_per_cta_iter=2048
+expected_probe_ex2_scalar_results_per_cta_iter=1024
+expected_control_ex2_ptx_instructions_per_cta_iter=1024
+expected_treatment_ex2_ptx_instructions_per_cta_iter=2048
+expected_probe_ex2_ptx_instructions_per_cta_iter=1024
+xu_documented_results_per_sm_cycle=16
+expected_control_xu_thread_ops_per_cta_iter=1280
+expected_treatment_xu_thread_ops_per_cta_iter=2304
+expected_probe_xu_thread_ops_per_cta_iter=1024
+ideal_control_xu_cycles_per_cta_iter=80
+ideal_treatment_xu_cycles_per_cta_iter=144
+ideal_probe_xu_cycles_per_cta_iter=64
+measurement_purpose=energy_atc
+occupancy_max_blocks_per_sm=6
+static_single_wave_capacity_blocks=492
+static_single_wave_capacity_gate_pass=1
+occupancy_gate_pass=1
+smid_sparse_id_self_check=pass
+numerical_check_id=fp16_softmax_cpu_fp64_v1_pass exp_impl=fp32_fast___expf max_abs_error=4.2918e-06 max_row_sum_error=0.000152588 control_treatment_bit_identical=true
++ build-softmax/a100_fp16_softmax_energy --mode full --gpu-id 0 --target-profile rtx3090 --exp-impl fp32 --softmax-cols 1024 --blocks-per-sm 2 --seconds 13.0 --idle-measure-seconds 1.0 --logit-scale 4.0 --cache-condition cache_reuse_candidate --cache-policy default --grid-blocks 48 --extra-exp-probe 1 --calibrate-only
+gpu_name=NVIDIA GeForce RTX 3090
+compute_capability=8.6
+cuda_pci_bus_id=0000:01:00.0
+cuda_binary_arch=86
+runtime_sm_count=82
+runtime_l2_bytes=6291456
+grid_blocks=48
+grid_blocks_source=explicit
+row_tiles_per_block=1
+tile_stride=1
+working_set_bytes=196608
+exp_impl=fp32_fast___expf
+exp_input_dtype=fp32
+special_function_path=fp32_fast_expf_to_mufu_ex2
+exp_ptx_instruction=ex2.approx.f32
+exp_results_per_ptx_instruction=1
+sass_mufu_ex2_per_ptx_instruction_model=1
+sass_lowering_model_status=cuda_13_2_ampere_model_requires_final_binary_gate
+expected_control_ex2_scalar_results_per_cta_iter=1024
+expected_treatment_ex2_scalar_results_per_cta_iter=2048
+expected_probe_ex2_scalar_results_per_cta_iter=1024
+expected_control_ex2_ptx_instructions_per_cta_iter=1024
+expected_treatment_ex2_ptx_instructions_per_cta_iter=2048
+expected_probe_ex2_ptx_instructions_per_cta_iter=1024
+xu_documented_results_per_sm_cycle=16
+expected_control_xu_thread_ops_per_cta_iter=1280
+expected_treatment_xu_thread_ops_per_cta_iter=2304
+expected_probe_xu_thread_ops_per_cta_iter=1024
+ideal_control_xu_cycles_per_cta_iter=80
+ideal_treatment_xu_cycles_per_cta_iter=144
+ideal_probe_xu_cycles_per_cta_iter=64
+measurement_purpose=energy_atc
+occupancy_max_blocks_per_sm=6
+static_single_wave_capacity_blocks=492
+static_single_wave_capacity_gate_pass=1
+occupancy_gate_pass=1
+smid_sparse_id_self_check=pass
+calibrated_iters=12308882 trial_iters=53071 trial_elapsed_s=0.0588534
+condition=cache_reuse_candidate grid_blocks=48 common_full_iters=12308882
++ build-softmax/a100_fp16_softmax_energy --mode full --gpu-id 0 --target-profile rtx3090 --exp-impl fp32 --softmax-cols 1024 --blocks-per-sm 2 --seconds 13.0 --idle-measure-seconds 1.0 --logit-scale 4.0 --cache-condition cache_reuse_candidate --cache-policy default --grid-blocks 48 --iters 18936742 --output results/raw/rtx3090_fp16_softmax_operand_rate_atc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_g48_preheat.csv --pair-id preheat_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_g48 --role preheat --repeat-index -1 --sequence-index -1 --extra-exp-probe 1 --energy-trace 0 --numerical-check-id fp16_softmax_cpu_fp64_v1_pass --binary-sha256 eeda8c0a1df3628d04c5bf15a486ba3dd0fc43935fbc51a18505a1dffb409b66
+gpu_name=NVIDIA GeForce RTX 3090
+compute_capability=8.6
+cuda_pci_bus_id=0000:01:00.0
+cuda_binary_arch=86
+runtime_sm_count=82
+runtime_l2_bytes=6291456
+grid_blocks=48
+grid_blocks_source=explicit
+row_tiles_per_block=1
+tile_stride=1
+working_set_bytes=196608
+exp_impl=fp32_fast___expf
+exp_input_dtype=fp32
+special_function_path=fp32_fast_expf_to_mufu_ex2
+exp_ptx_instruction=ex2.approx.f32
+exp_results_per_ptx_instruction=1
+sass_mufu_ex2_per_ptx_instruction_model=1
+sass_lowering_model_status=cuda_13_2_ampere_model_requires_final_binary_gate
+expected_control_ex2_scalar_results_per_cta_iter=1024
+expected_treatment_ex2_scalar_results_per_cta_iter=2048
+expected_probe_ex2_scalar_results_per_cta_iter=1024
+expected_control_ex2_ptx_instructions_per_cta_iter=1024
+expected_treatment_ex2_ptx_instructions_per_cta_iter=2048
+expected_probe_ex2_ptx_instructions_per_cta_iter=1024
+xu_documented_results_per_sm_cycle=16
+expected_control_xu_thread_ops_per_cta_iter=1280
+expected_treatment_xu_thread_ops_per_cta_iter=2304
+expected_probe_xu_thread_ops_per_cta_iter=1024
+ideal_control_xu_cycles_per_cta_iter=80
+ideal_treatment_xu_cycles_per_cta_iter=144
+ideal_probe_xu_cycles_per_cta_iter=64
+measurement_purpose=energy_atc
+occupancy_max_blocks_per_sm=6
+static_single_wave_capacity_blocks=492
+static_single_wave_capacity_gate_pass=1
+occupancy_gate_pass=1
+smid_sparse_id_self_check=pass
+run_id=softmax_1784950433822_softmax_full_f16io_f32acc_fp32_fast___expf_r0 mode=softmax_full_f16io_f32acc extra_exp_probe=1 ITER=18936742 elapsed_s=19.1017 trace_power_W=0 trace_status=disabled_endpoint_only delta_E_J=4527.77 net_E_J=1482.23 smid_ok=1
+condition=cache_reuse_candidate grid_blocks=48 thermal_preheat_seconds=20.0 thermal_preheat_iters=18936742
++ build-softmax/a100_fp16_softmax_energy --mode full --gpu-id 0 --target-profile rtx3090 --exp-impl fp32 --softmax-cols 1024 --blocks-per-sm 2 --seconds 13.0 --idle-measure-seconds 1.0 --logit-scale 4.0 --cache-condition cache_reuse_candidate --cache-policy default --grid-blocks 48 --iters 12308882 --output results/raw/rtx3090_fp16_softmax_operand_rate_atc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_raw.csv --bracket-control probe --bracket-pairs 6 --bracket-warmup-pairs 1 --pair-prefix softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00 --bracket-idle-policy batch_once --bracket-order counterbalanced6 --extra-exp-probe 0 --energy-trace 1 --energy-trace-sample-ms 500.0 --energy-trace-min-updates 16 --energy-trace-output results/raw/rtx3090_fp16_softmax_operand_rate_atc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_raw_energy_trace.csv --numerical-check-id fp16_softmax_cpu_fp64_v1_pass --binary-sha256 eeda8c0a1df3628d04c5bf15a486ba3dd0fc43935fbc51a18505a1dffb409b66
+gpu_name=NVIDIA GeForce RTX 3090
+compute_capability=8.6
+cuda_pci_bus_id=0000:01:00.0
+cuda_binary_arch=86
+runtime_sm_count=82
+runtime_l2_bytes=6291456
+grid_blocks=48
+grid_blocks_source=explicit
+row_tiles_per_block=1
+tile_stride=1
+working_set_bytes=196608
+exp_impl=fp32_fast___expf
+exp_input_dtype=fp32
+special_function_path=fp32_fast_expf_to_mufu_ex2
+exp_ptx_instruction=ex2.approx.f32
+exp_results_per_ptx_instruction=1
+sass_mufu_ex2_per_ptx_instruction_model=1
+sass_lowering_model_status=cuda_13_2_ampere_model_requires_final_binary_gate
+expected_control_ex2_scalar_results_per_cta_iter=1024
+expected_treatment_ex2_scalar_results_per_cta_iter=2048
+expected_probe_ex2_scalar_results_per_cta_iter=1024
+expected_control_ex2_ptx_instructions_per_cta_iter=1024
+expected_treatment_ex2_ptx_instructions_per_cta_iter=2048
+expected_probe_ex2_ptx_instructions_per_cta_iter=1024
+xu_documented_results_per_sm_cycle=16
+expected_control_xu_thread_ops_per_cta_iter=1280
+expected_treatment_xu_thread_ops_per_cta_iter=2304
+expected_probe_xu_thread_ops_per_cta_iter=1024
+ideal_control_xu_cycles_per_cta_iter=80
+ideal_treatment_xu_cycles_per_cta_iter=144
+ideal_probe_xu_cycles_per_cta_iter=64
+measurement_purpose=energy_atc
+occupancy_max_blocks_per_sm=6
+static_single_wave_capacity_blocks=492
+static_single_wave_capacity_gate_pass=1
+occupancy_gate_pass=1
+smid_sparse_id_self_check=pass
+unrecorded_bracket_warmup_pairs=1
+run_id=softmax_1784950493462_softmax_full_f16io_f32acc_fp32_fast___expf_r0 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p00 role=probe_before extra_exp_probe=0 ITER=12308882 elapsed_s=12.3653 gap_s=-1 trace_power_W=232.332 trace_status=pass delta_E_J=2872.86 net_E_J=1288.16 smid_ok=1
+run_id=softmax_1784950505841_softmax_full_f16io_f32acc_fp32_fast___expf_r0 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p00 role=full extra_exp_probe=1 ITER=12308882 elapsed_s=12.4256 gap_s=0.0125762 trace_power_W=232.523 trace_status=pass delta_E_J=2889.24 net_E_J=1296.8 smid_ok=1
+run_id=softmax_1784950518277_softmax_full_f16io_f32acc_fp32_fast___expf_r0 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p00 role=probe_after extra_exp_probe=0 ITER=12308882 elapsed_s=12.3645 gap_s=0.0102463 trace_power_W=229.075 trace_status=pass delta_E_J=2832.4 net_E_J=1247.79 smid_ok=1
+run_id=softmax_1784950530653_softmax_full_f16io_f32acc_fp32_fast___expf_r1 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p01 role=full_before extra_exp_probe=1 ITER=12308882 elapsed_s=12.4177 gap_s=0.011302 trace_power_W=236.875 trace_status=pass delta_E_J=2941.43 net_E_J=1350.01 smid_ok=1
+run_id=softmax_1784950543084_softmax_full_f16io_f32acc_fp32_fast___expf_r1 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p01 role=probe_middle extra_exp_probe=0 ITER=12308882 elapsed_s=12.3633 gap_s=0.0133829 trace_power_W=228.559 trace_status=pass delta_E_J=2825.73 net_E_J=1241.29 smid_ok=1
+run_id=softmax_1784950555461_softmax_full_f16io_f32acc_fp32_fast___expf_r1 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p01 role=full_after extra_exp_probe=1 ITER=12308882 elapsed_s=12.4198 gap_s=0.0130195 trace_power_W=233.31 trace_status=pass delta_E_J=2897.67 net_E_J=1305.97 smid_ok=1
+run_id=softmax_1784950567894_softmax_full_f16io_f32acc_fp32_fast___expf_r2 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p02 role=full_before extra_exp_probe=1 ITER=12308882 elapsed_s=12.4198 gap_s=0.0131225 trace_power_W=232.359 trace_status=pass delta_E_J=2885.87 net_E_J=1294.17 smid_ok=1
+run_id=softmax_1784950580329_softmax_full_f16io_f32acc_fp32_fast___expf_r2 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p02 role=probe_middle extra_exp_probe=0 ITER=12308882 elapsed_s=12.3668 gap_s=0.0145973 trace_power_W=229.476 trace_status=pass delta_E_J=2837.88 net_E_J=1252.98 smid_ok=1
+run_id=softmax_1784950592709_softmax_full_f16io_f32acc_fp32_fast___expf_r2 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p02 role=full_after extra_exp_probe=1 ITER=12308882 elapsed_s=12.4149 gap_s=0.0135308 trace_power_W=232.817 trace_status=pass delta_E_J=2890.4 net_E_J=1299.34 smid_ok=1
+run_id=softmax_1784950605135_softmax_full_f16io_f32acc_fp32_fast___expf_r3 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p03 role=probe_before extra_exp_probe=0 ITER=12308882 elapsed_s=12.3671 gap_s=0.0104924 trace_power_W=231.716 trace_status=pass delta_E_J=2865.66 net_E_J=1280.72 smid_ok=1
+run_id=softmax_1784950617512_softmax_full_f16io_f32acc_fp32_fast___expf_r3 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p03 role=full extra_exp_probe=1 ITER=12308882 elapsed_s=12.4172 gap_s=0.00946547 trace_power_W=233.548 trace_status=pass delta_E_J=2900.01 net_E_J=1308.66 smid_ok=1
+run_id=softmax_1784950629943_softmax_full_f16io_f32acc_fp32_fast___expf_r3 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p03 role=probe_after extra_exp_probe=0 ITER=12308882 elapsed_s=12.3711 gap_s=0.0137115 trace_power_W=229.117 trace_status=pass delta_E_J=2834.44 net_E_J=1248.99 smid_ok=1
+run_id=softmax_1784950642325_softmax_full_f16io_f32acc_fp32_fast___expf_r4 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p04 role=probe_before extra_exp_probe=0 ITER=12308882 elapsed_s=12.3638 gap_s=0.0102968 trace_power_W=231.67 trace_status=pass delta_E_J=2864.32 net_E_J=1279.81 smid_ok=1
+run_id=softmax_1784950654699_softmax_full_f16io_f32acc_fp32_fast___expf_r4 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p04 role=full extra_exp_probe=1 ITER=12308882 elapsed_s=12.4187 gap_s=0.00996682 trace_power_W=233.457 trace_status=pass delta_E_J=2899.24 net_E_J=1307.68 smid_ok=1
+run_id=softmax_1784950667130_softmax_full_f16io_f32acc_fp32_fast___expf_r4 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p04 role=probe_after extra_exp_probe=0 ITER=12308882 elapsed_s=12.364 gap_s=0.0127803 trace_power_W=229.514 trace_status=pass delta_E_J=2837.72 net_E_J=1253.17 smid_ok=1
+run_id=softmax_1784950679507_softmax_full_f16io_f32acc_fp32_fast___expf_r5 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p05 role=full_before extra_exp_probe=1 ITER=12308882 elapsed_s=12.4189 gap_s=0.0128958 trace_power_W=236.282 trace_status=pass delta_E_J=2934.35 net_E_J=1342.78 smid_ok=1
+run_id=softmax_1784950691940_softmax_full_f16io_f32acc_fp32_fast___expf_r5 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p05 role=probe_middle extra_exp_probe=0 ITER=12308882 elapsed_s=12.3682 gap_s=0.0132973 trace_power_W=229.065 trace_status=pass delta_E_J=2833.13 net_E_J=1248.05 smid_ok=1
+run_id=softmax_1784950704320_softmax_full_f16io_f32acc_fp32_fast___expf_r5 mode=softmax_full_f16io_f32acc pair_id=softmax_oratc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_cache_reuse_candidate_probe_g48_s00_p05 role=full_after extra_exp_probe=1 ITER=12308882 elapsed_s=12.4194 gap_s=0.0112808 trace_power_W=232.855 trace_status=pass delta_E_J=2891.92 net_E_J=1300.28 smid_ok=1
+raw_csv=results/raw/rtx3090_fp16_softmax_operand_rate_atc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_raw.csv
+manifest_csv=results/raw/rtx3090_fp16_softmax_operand_rate_atc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_manifest.csv
+energy_trace_csv=results/raw/rtx3090_fp16_softmax_operand_rate_atc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_raw_energy_trace.csv
+binary_sha256=eeda8c0a1df3628d04c5bf15a486ba3dd0fc43935fbc51a18505a1dffb409b66
+
+analyzer_command=python3 scripts/analyze_softmax_probe_counterbalanced.py --input results/raw/rtx3090_fp16_softmax_operand_rate_atc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_raw.csv --energy-trace-input results/raw/rtx3090_fp16_softmax_operand_rate_atc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_raw_energy_trace.csv --manifest results/raw/rtx3090_fp16_softmax_operand_rate_atc_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_manifest.csv --exp-impl fp32 --grid-blocks 48 --triplet-out results/summary/rtx3090_softmax_ex2_targeted_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_triplets.csv --matched-out results/summary/rtx3090_softmax_ex2_targeted_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_matched.csv --summary-out results/summary/rtx3090_softmax_ex2_targeted_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_summary.csv --report-out docs/results/rtx3090_softmax_ex2_targeted_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_ko.md --decision-stage pilot --energy-trace-min-fit-points 16 --bootstrap-samples 4000 --seed 20265770
+triplet_out=results/summary/rtx3090_softmax_ex2_targeted_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_triplets.csv
+matched_out=results/summary/rtx3090_softmax_ex2_targeted_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_matched.csv
+summary_out=results/summary/rtx3090_softmax_ex2_targeted_targeted_g48s1024_confirm_v1_20260725_sess02_pos2_fp32_g48_s1024_summary.csv
+verdict=positive_identified_pilot

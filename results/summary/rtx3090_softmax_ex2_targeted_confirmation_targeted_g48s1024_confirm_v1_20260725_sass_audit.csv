@@ -1,0 +1,4 @@
+implementation,canonical_implementation,ptx_f16_static_count,ptx_f16x2_static_count,sass_mufu_ex2_f16_static_count,predicated_probe_mufu_ex2_f16_static_count,prmt_static_count,registers_per_thread,local_bytes,spill_local_gate_pass,ptx_opcode_gate_pass,sass_opcode_gate_pass,predicated_probe_gate_pass,verdict,sass_audit_source
+fp32,fp32_fast___expf,0,0,0,0,1,32,0,true,true,true,true,pass,results/summary/rtx3090_softmax_targeted_g48s1024_sass_audit_20260725.csv
+ptx_f16,ptx_ex2_approx_f16,8,0,8,4,6,35,0,true,true,true,true,pass,results/summary/rtx3090_softmax_targeted_g48s1024_sass_audit_20260725.csv
+ptx_f16x2,ptx_ex2_approx_f16x2,0,4,8,4,2,34,0,true,true,true,true,pass,results/summary/rtx3090_softmax_targeted_g48s1024_sass_audit_20260725.csv

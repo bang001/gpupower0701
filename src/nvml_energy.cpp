@@ -75,6 +75,22 @@ NvmlEnergy::~NvmlEnergy() { nvmlShutdown(); }
 
 int NvmlEnergy::device_count() const { return device_count_; }
 
+namespace {
+
+int nvml_index_for_pci_bus_id(const std::string& pci_bus_id) {
+  if (pci_bus_id.empty()) {
+    throw std::invalid_argument("CUDA PCI bus id must not be empty");
+  }
+  nvmlDevice_t device{};
+  check_nvml(nvmlDeviceGetHandleByPciBusId_v2(pci_bus_id.c_str(), &device),
+             "nvmlDeviceGetHandleByPciBusId_v2");
+  unsigned int index = 0;
+  check_nvml(nvmlDeviceGetIndex(device, &index), "nvmlDeviceGetIndex");
+  return static_cast<int>(index);
+}
+
+}  // namespace
+
 GpuEnergySample NvmlEnergy::sample(int gpu_id) const {
   if (gpu_id < 0 || gpu_id >= device_count_) {
     throw std::out_of_range("NVML gpu_id out of range");
@@ -194,6 +210,45 @@ GpuEnergySample NvmlEnergy::sample(int gpu_id) const {
 
   sample.notes = notes.str();
   return sample;
+}
+
+GpuEnergySample NvmlEnergy::sample_by_pci_bus_id(
+    const std::string& pci_bus_id, int cuda_logical_gpu_id) const {
+  GpuEnergySample result = sample(nvml_index_for_pci_bus_id(pci_bus_id));
+  // gpu_id is intentionally the CUDA logical ordinal in the Softmax raw
+  // schema.  The PCI bus id is recorded separately by that harness.
+  result.gpu_id = cuda_logical_gpu_id;
+  return result;
+}
+
+GpuEnergyCounterSample NvmlEnergy::sample_energy_counter(int gpu_id) const {
+  if (gpu_id < 0 || gpu_id >= device_count_) {
+    throw std::out_of_range("NVML gpu_id out of range");
+  }
+
+  nvmlDevice_t device{};
+  check_nvml(nvmlDeviceGetHandleByIndex_v2(static_cast<unsigned int>(gpu_id),
+                                           &device),
+             "nvmlDeviceGetHandleByIndex_v2");
+
+  GpuEnergyCounterSample sample;
+  sample.query_start_s = now_seconds();
+  unsigned long long energy_mj = 0;
+  const nvmlReturn_t status =
+      nvmlDeviceGetTotalEnergyConsumption(device, &energy_mj);
+  sample.query_end_s = now_seconds();
+  sample.timestamp_s = 0.5 * (sample.query_start_s + sample.query_end_s);
+  sample.query_latency_s = sample.query_end_s - sample.query_start_s;
+  if (status == NVML_SUCCESS) {
+    sample.energy_mj = static_cast<std::uint64_t>(energy_mj);
+    sample.energy_counter_supported = true;
+  }
+  return sample;
+}
+
+GpuEnergyCounterSample NvmlEnergy::sample_energy_counter_by_pci_bus_id(
+    const std::string& pci_bus_id) const {
+  return sample_energy_counter(nvml_index_for_pci_bus_id(pci_bus_id));
 }
 
 std::vector<GpuEnergySample> NvmlEnergy::sample_all() const {

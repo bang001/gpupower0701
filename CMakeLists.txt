@@ -68,3 +68,37 @@ set_target_properties(a100_fp16_energy_v2 PROPERTIES
   CUDA_SEPARABLE_COMPILATION OFF
   CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
+
+# Softmax intentionally has a separate binary and CSV schema from the WMMA
+# benchmark.  Its 256-thread row kernel and element denominator are not
+# compatible with the Tensor-only Mode/ResultRow assumptions above.
+add_executable(a100_fp16_softmax_energy
+  src/softmax_main.cu
+  src/softmax_kernels.cu
+  src/softmax_result_writer.cpp
+  src/nvml_energy.cpp
+)
+
+target_include_directories(a100_fp16_softmax_energy PRIVATE
+  include
+)
+
+if(NVML_INCLUDE_DIR)
+  target_include_directories(a100_fp16_softmax_energy PRIVATE "${NVML_INCLUDE_DIR}")
+endif()
+
+target_link_libraries(a100_fp16_softmax_energy PRIVATE
+  CUDA::cudart
+  "${NVML_LIBRARY}"
+)
+
+target_compile_options(a100_fp16_softmax_energy PRIVATE
+  $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+  $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>
+  $<$<COMPILE_LANGUAGE:CUDA>:-Xptxas=-v>
+)
+
+set_target_properties(a100_fp16_softmax_energy PROPERTIES
+  CUDA_SEPARABLE_COMPILATION OFF
+  CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)
