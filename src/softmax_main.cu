@@ -128,23 +128,35 @@ struct ExpPathMetadata {
 };
 
 ExpPathMetadata exp_path_metadata(ExpImplementation implementation,
-                                  int cuda_major) {
+                                  int compute_capability_major,
+                                  int cuda_binary_arch) {
+  // The sm80/sm86 lowering model below is an observed compiler result, not a
+  // cross-architecture fact.  In particular, do not carry the Ampere model
+  // forward to Hopper merely because the PTX instruction is accepted there.
+  const bool ampere_lowering_model =
+      cuda_binary_arch == 80 || cuda_binary_arch == 86;
+  const std::string target_suffix =
+      "sm" + std::to_string(cuda_binary_arch) + "_requires_final_binary_gate";
   switch (implementation) {
     case ExpImplementation::fp32_expf:
       return {"fp32", "fp32", "fp32_fast_expf_to_mufu_ex2",
               "ex2.approx.f32", 1, 1,
-              "cuda_13_2_ampere_model_requires_final_binary_gate",
-              cuda_major == 8 ? 16 : 0};
+              "target_" + target_suffix,
+              compute_capability_major == 8 ? 16 : 0};
     case ExpImplementation::ptx_f16:
       return {"fp32_reduce_fp16_ex2", "fp16",
               "direct_inline_ptx_ex2_approx_f16",
-              "ex2.approx.f16", 1, 1,
-              "cuda_13_2_sm80_sm86_observed_requires_final_binary_gate", 0};
+              "ex2.approx.f16", 1, ampere_lowering_model ? 1 : 0,
+              ampere_lowering_model
+                  ? "cuda_13_2_sm80_sm86_observed_requires_final_binary_gate"
+                  : "target_lowering_not_assumed_requires_final_sass_audit", 0};
     case ExpImplementation::ptx_f16x2:
       return {"fp32_reduce_fp16x2_ex2", "fp16x2_packed_b32",
               "direct_inline_ptx_ex2_approx_f16x2",
-              "ex2.approx.f16x2", 2, 2,
-              "cuda_13_2_sm80_sm86_scalarized_requires_final_binary_gate", 0};
+              "ex2.approx.f16x2", 2, ampere_lowering_model ? 2 : 0,
+              ampere_lowering_model
+                  ? "cuda_13_2_sm80_sm86_scalarized_requires_final_binary_gate"
+                  : "target_lowering_not_assumed_requires_final_sass_audit", 0};
   }
   throw std::invalid_argument("unrecognized exponential implementation");
 }
@@ -408,7 +420,7 @@ void usage(const char* program) {
       << "  --energy-trace-output <csv>             optional raw counter trace\n"
       << "  --numerical-check-id <id> --binary-sha256 <hex>\n"
       << "  --measurement-purpose energy_atc|resource_sidecar\n"
-      << "  --output <csv> --gpu-id <n> --target-profile rtx3090|a100|auto\n";
+      << "  --output <csv> --gpu-id <n> --target-profile rtx3090|v100|a100|h100|auto\n";
 }
 
 Options parse_options(int argc, char** argv) {
@@ -529,10 +541,12 @@ Options parse_options(int argc, char** argv) {
     throw std::invalid_argument("--calibrate-only and --validate-only are exclusive");
   }
   if (options.target_profile != "rtx3090" &&
+      options.target_profile != "v100" &&
       options.target_profile != "a100" &&
+      options.target_profile != "h100" &&
       options.target_profile != "auto") {
     throw std::invalid_argument(
-        "--target-profile must be rtx3090, a100, or auto");
+        "--target-profile must be rtx3090, v100, a100, h100, or auto");
   }
   if (options.measurement_purpose != "energy_atc" &&
       options.measurement_purpose != "resource_sidecar") {
@@ -608,23 +622,57 @@ Options parse_options(int argc, char** argv) {
 
 void require_profile_match(const Options& options, const DeviceState& state) {
   if (options.target_profile == "auto") return;
+  std::string gpu_name = state.prop.name;
+  std::transform(gpu_name.begin(), gpu_name.end(), gpu_name.begin(),
+                 [](unsigned char value) {
+                   return static_cast<char>(std::tolower(value));
+                 });
   if (options.target_profile == "rtx3090") {
-    if (state.prop.major != 8 || state.prop.minor != 6) {
-      throw std::runtime_error("rtx3090 profile requires compute capability 8.6");
+    if (state.prop.major != 8 || state.prop.minor != 6 ||
+        gpu_name.find("rtx 3090") == std::string::npos) {
+      throw std::runtime_error(
+          "rtx3090 profile requires an NVIDIA GeForce RTX 3090 "
+          "compute-capability 8.6 device");
+    }
+    // RTX 3090 has 82 SMs.  A matching CC alone would also admit other
+    // GA10x products, whose physical-board NVML counter is a different
+    // experimental population.  Do not label those rows as RTX 3090 data.
+    constexpr int kFullRtx3090SmCount = 82;
+    if (state.prop.multiProcessorCount != kFullRtx3090SmCount) {
+      throw std::runtime_error(
+          "rtx3090 board-energy profile requires the full 82-SM device; a "
+          "different GA10x SKU or reduced partition is not an RTX 3090 "
+          "measurement");
     }
     if (state.cuda_binary_arch != 86) {
       throw std::runtime_error(
-          "rtx3090 profile requires a native sm_86 softmax cubin; rebuild with "
-          "-DCMAKE_CUDA_ARCHITECTURES=86");
+          "rtx3090 profile requires sm_86-compatible loaded device code; "
+          "rebuild with -DCMAKE_CUDA_ARCHITECTURES=86 and verify the cubin "
+          "with scripts/audit_softmax_native_ex2_sass.py");
+    }
+    return;
+  }
+  if (options.target_profile == "v100") {
+    if (state.prop.major != 7 || state.prop.minor != 0 ||
+        gpu_name.find("v100") == std::string::npos) {
+      throw std::runtime_error(
+          "v100 profile requires an NVIDIA V100 compute-capability 7.0 device");
+    }
+    constexpr int kFullV100SmCount = 80;
+    if (state.prop.multiProcessorCount != kFullV100SmCount) {
+      throw std::runtime_error(
+          "v100 board-energy profile requires the full 80-SM device; a "
+          "reduced partition is not attributable with the physical GPU "
+          "total-energy counter");
+    }
+    if (state.cuda_binary_arch != 70) {
+      throw std::runtime_error(
+          "v100 profile requires sm_70-compatible loaded device code; rebuild "
+          "with -DCMAKE_CUDA_ARCHITECTURES=70 using a CUDA 12.x toolchain");
     }
     return;
   }
   if (options.target_profile == "a100") {
-    std::string gpu_name = state.prop.name;
-    std::transform(gpu_name.begin(), gpu_name.end(), gpu_name.begin(),
-                   [](unsigned char value) {
-                     return static_cast<char>(std::tolower(value));
-                   });
     if (state.prop.major != 8 || state.prop.minor != 0 ||
         gpu_name.find("a100") == std::string::npos) {
       throw std::runtime_error(
@@ -642,8 +690,33 @@ void require_profile_match(const Options& options, const DeviceState& state) {
     }
     if (state.cuda_binary_arch != 80) {
       throw std::runtime_error(
-          "a100 profile requires a native sm_80 softmax cubin; rebuild with "
-          "-DCMAKE_CUDA_ARCHITECTURES=80");
+          "a100 profile requires sm_80-compatible loaded device code; rebuild "
+          "with -DCMAKE_CUDA_ARCHITECTURES=80 and verify the cubin with the "
+          "SASS audit");
+    }
+    return;
+  }
+  if (options.target_profile == "h100") {
+    if (state.prop.major != 9 || state.prop.minor != 0 ||
+        gpu_name.find("h100") == std::string::npos) {
+      throw std::runtime_error(
+          "h100 profile requires an NVIDIA H100 compute-capability 9.0 device");
+    }
+    // H100 SXM exposes 132 SMs while the PCIe SKU exposes 114.  Both are
+    // physical full-device profiles; smaller counts are normally MIG/vGPU
+    // partitions and cannot receive an attributable board-energy claim.
+    if (state.prop.multiProcessorCount != 132 &&
+        state.prop.multiProcessorCount != 114) {
+      throw std::runtime_error(
+          "h100 board-energy profile requires a full 132-SM SXM or 114-SM "
+          "PCIe device; reduced-SM partitions are not attributable with the "
+          "physical GPU total-energy counter");
+    }
+    if (state.cuda_binary_arch != 90) {
+      throw std::runtime_error(
+          "h100 profile requires sm_90-compatible loaded device code; rebuild "
+          "with -DCMAKE_CUDA_ARCHITECTURES=90 and verify the cubin with the "
+          "provisional SASS audit");
     }
     return;
   }
@@ -685,9 +758,15 @@ DeviceState create_device_state(const Options& options) {
   require_profile_match(options, state);
   if (is_native_f16_ex2(options.exp_implementation) &&
       (state.cuda_binary_arch < 75 ||
-       state.prop.major * 10 + state.prop.minor < 75)) {
+       !native_f16_ex2_supported(state.prop.major, state.prop.minor))) {
+    if (options.target_profile == "v100") {
+      throw std::runtime_error(
+          "v100 does not support native FP16 EX2: skip ptx_f16 and "
+          "ptx_f16x2 rather than measuring the sm_70 fallback path");
+    }
     throw std::runtime_error(
-        "native FP16 EX2 requires both a sm_75+ cubin and a sm_75+ device");
+        "native FP16 EX2 requires both sm_75+-compatible loaded device code "
+        "and a sm_75+ device; verify the final cubin with the SASS audit");
   }
   state.active_sm = state.prop.multiProcessorCount;
   state.explicit_grid_blocks = options.grid_blocks != 0;
@@ -1374,7 +1453,8 @@ SoftmaxResultRow make_result_row(const Options& options, const DeviceState& stat
   row.input_dtype = "fp16";
   row.output_dtype = "fp16";
   const ExpPathMetadata exp_metadata =
-      exp_path_metadata(options.exp_implementation, state.prop.major);
+      exp_path_metadata(options.exp_implementation, state.prop.major,
+                        state.cuda_binary_arch);
   row.compute_dtype = exp_metadata.compute_dtype;
   row.exp_impl = to_string(options.exp_implementation);
   row.exp_input_dtype = exp_metadata.exp_input_dtype;
@@ -1451,12 +1531,13 @@ SoftmaxResultRow make_result_row(const Options& options, const DeviceState& stat
     row.ideal_probe_xu_cycles_per_cta_iter = ceil_div(
         row.expected_probe_xu_thread_ops_per_cta_iter, capacity);
   }
+  const std::string target_sm = "sm" + std::to_string(state.cuda_binary_arch);
   row.sfu_regime_evidence_status = is_native_f16_ex2(options.exp_implementation)
-      ? (options.target_profile == "a100"
-             ? "not_established_native_f16_requires_sm80_runtime_ncu"
-             : "not_established_native_f16_requires_sm86_runtime_ncu")
-      : (options.target_profile == "a100"
-             ? "not_established_requires_sm80_ncu_and_108_216_cta_resource_sidecar"
+      ? "not_established_native_f16_requires_" + target_sm +
+            "_runtime_ncu_and_final_sass_audit"
+      : (options.target_profile == "a100" || options.target_profile == "h100"
+             ? "not_established_requires_" + target_sm +
+                   "_runtime_ncu_and_resource_sidecar"
              : "not_established");
   row.cache_condition = to_string(options.cache_condition);
   row.cache_policy = to_string(options.cache_policy);
@@ -1805,7 +1886,8 @@ void run_persistent_bracket(const Options& options, const DeviceState& state,
 
 void print_dry_run(const Options& options, const DeviceState& state) {
   const ExpPathMetadata exp_metadata =
-      exp_path_metadata(options.exp_implementation, state.prop.major);
+      exp_path_metadata(options.exp_implementation, state.prop.major,
+                        state.cuda_binary_arch);
   const std::uint64_t control_results =
       static_cast<std::uint64_t>(options.softmax_cols);
   const std::uint64_t treatment_results = 2 * control_results;

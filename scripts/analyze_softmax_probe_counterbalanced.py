@@ -49,6 +49,7 @@ A100_PROTOCOL_SOFTMAX_COLS = "512"
 A100_PROTOCOL_LOGIT_SCALE = 4.0
 A100_PROTOCOL_CACHE_CONDITION = "cache_reuse_candidate"
 A100_PROTOCOL_CACHE_POLICY = "default"
+CROSS_PLATFORM_ENVIRONMENT_PROFILES = frozenset({"a100", "h100"})
 EXP_IMPL_METADATA = {
     "fp32": {
         "canonical": "fp32_fast___expf",
@@ -93,6 +94,23 @@ EXP_IDENTITY_FIELDS = (
     "expected_treatment_ex2_ptx_instructions_per_cta_iter",
     "expected_probe_ex2_ptx_instructions_per_cta_iter",
 )
+
+
+def requires_profile_environment_status(
+    profile_name: str, *, cross_platform_design: bool
+) -> bool:
+    """Return whether the portable design requires the generic environment gate.
+
+    The frozen A100 protocol predates the generic field and keeps its legacy
+    ``a100_environment_status`` check. The portable 5-S x 4-CTA design uses
+    one runner field for both A100 and H100, so it cannot silently inherit the
+    A100-only gate.
+    """
+
+    return (
+        cross_platform_design
+        and profile_name in CROSS_PLATFORM_ENVIRONMENT_PROFILES
+    )
 
 
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -180,6 +198,7 @@ def analyze_triplet(
     args: argparse.Namespace,
 ) -> dict[str, Any]:
     index = pair_index(rows)
+    cross_platform_design = bool(getattr(args, "cross_platform_design", False))
     if index < 0 or index >= len(EXPECTED_ORIENTATIONS):
         raise ValueError(f"unexpected pair index {index}")
     orientation = EXPECTED_ORIENTATIONS[index]
@@ -281,16 +300,28 @@ def analyze_triplet(
             for field in EXP_IDENTITY_FIELDS:
                 if field in manifest and manifest.get(field, "") != row.get(field, ""):
                     reasons.append(f"{role}_manifest_{field}_mismatch")
-            if row.get("profile_name") == "a100" and (
-                manifest.get("softmax_cols") != A100_PROTOCOL_SOFTMAX_COLS
-                or manifest.get("cache_condition")
-                != A100_PROTOCOL_CACHE_CONDITION
-                or manifest.get("cache_policy") != A100_PROTOCOL_CACHE_POLICY
-                or manifest.get("logit_scale") != str(A100_PROTOCOL_LOGIT_SCALE)
+            profile_name = row.get("profile_name", "")
+            if (
+                not cross_platform_design
+                and profile_name == "a100"
+                and (
+                    manifest.get("softmax_cols") != A100_PROTOCOL_SOFTMAX_COLS
+                    or manifest.get("cache_condition")
+                    != A100_PROTOCOL_CACHE_CONDITION
+                    or manifest.get("cache_policy") != A100_PROTOCOL_CACHE_POLICY
+                    or manifest.get("logit_scale")
+                    != str(A100_PROTOCOL_LOGIT_SCALE)
+                )
             ):
                 reasons.append(f"{role}_manifest_protocol_coordinate_mismatch")
-            if (
-                row.get("profile_name") == "a100"
+            if requires_profile_environment_status(
+                profile_name,
+                cross_platform_design=cross_platform_design,
+            ):
+                if manifest.get("profile_environment_status") != "pass":
+                    reasons.append(f"{role}_profile_environment_not_pass")
+            elif (
+                profile_name == "a100"
                 and manifest.get("a100_environment_status") != "pass"
             ):
                 reasons.append(f"{role}_a100_environment_not_pass")
@@ -811,6 +842,15 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--energy-trace-input", type=Path, required=True)
     result.add_argument("--manifest", type=Path)
     result.add_argument(
+        "--cross-platform-design",
+        action="store_true",
+        help=(
+            "analyze the portable 5-S x 4-CTA design; bypass only the frozen "
+            "A100 S512/scale4/cache coordinate and require "
+            "profile_environment_status=pass for A100/H100"
+        ),
+    )
+    result.add_argument(
         "--exp-impl",
         choices=tuple(EXP_IMPL_METADATA),
         default=None,
@@ -881,7 +921,7 @@ def main() -> int:
     if len(contexts) != 1 or not next(iter(contexts), ""):
         raise SystemExit("all six triplets must share one non-empty CUDA context id")
     is_a100 = any(row.get("profile_name") == "a100" for row in raw)
-    if is_a100:
+    if is_a100 and not args.cross_platform_design:
         try:
             logit_scales = {
                 float(note_value(row.get("notes", ""), "logit_scale"))
@@ -948,7 +988,19 @@ def main() -> int:
             "native EX2 analysis requires --manifest so implementation and PTX "
             "denominator identity cannot be bypassed"
         )
-    if is_a100 and args.manifest is None:
+    requires_cross_platform_manifest = args.cross_platform_design and any(
+        requires_profile_environment_status(
+            row.get("profile_name", ""),
+            cross_platform_design=True,
+        )
+        for row in raw
+    )
+    if requires_cross_platform_manifest and args.manifest is None:
+        raise SystemExit(
+            "cross-platform A100/H100 counterbalanced analysis requires --manifest "
+            "so profile_environment_status can be enforced"
+        )
+    if is_a100 and not args.cross_platform_design and args.manifest is None:
         raise SystemExit(
             "A100 counterbalanced analysis requires --manifest so quiescence, "
             "device identity, competing-process, and slowdown-counter gates cannot be bypassed"

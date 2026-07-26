@@ -65,9 +65,23 @@ EXPECTED_VARIANTS = frozenset(
 )
 EXPECTED_COUNTER = Counter({variant: 1 for variant in EXPECTED_VARIANTS})
 
+# The expected SASS EX2 and predicate counts below have been established only
+# for the Ampere artifacts used by the existing RTX 3090 (sm_86) and A100
+# (sm_80) protocols.  PTX instruction counts are architecture-independent,
+# but Hopper may legally lower the same PTX through a different SASS sequence.
+# Keep that distinction explicit instead of treating an Ampere lowering model
+# as an SM90 contract.
+ESTABLISHED_SASS_LOWERING_ARCHITECTURES = frozenset((80, 86))
+
 
 def bool_text(value: bool) -> str:
     return "true" if value else "false"
+
+
+def gate_text(value: bool | None) -> str:
+    """Render a gate result without misrepresenting an unknown contract."""
+
+    return "not_established" if value is None else bool_text(value)
 
 
 def sha256(path: Path) -> str:
@@ -201,7 +215,9 @@ def expected_opcode_counts(
         "ptx_f16": 0,
         "ptx_f16x2": packed_ptx_count,
         # CUDA 13.2 lowers each packed PTX instruction to two scalar F16
-        # MUFU instructions on both sm_80 and sm_86.
+        # MUFU instructions on both sm_80 and sm_86.  Callers must not apply
+        # this SASS expectation to another architecture without a separate
+        # lowering contract.
         "sass_plain": 0,
         "sass_f16": 2 * packed_ptx_count,
         "pred_plain": 0,
@@ -230,16 +246,42 @@ def main() -> int:
     parser.add_argument(
         "--expected-cuda-arch",
         type=int,
-        choices=(80, 86),
+        choices=(80, 86, 90),
         required=True,
-        help="require a single native sm_80 or sm_86 artifact",
+        help="require a single native sm_80, sm_86, or sm_90 artifact",
+    )
+    parser.add_argument(
+        "--allow-unestablished-sass-lowering",
+        action="store_true",
+        help=(
+            "SM90 only: permit a provisional structural/PTX audit while "
+            "recording that the Hopper SASS-lowering contract is not "
+            "established.  It never produces a final SASS-lowering pass."
+        ),
     )
     args = parser.parse_args()
+
+    if (
+        args.allow_unestablished_sass_lowering
+        and args.expected_cuda_arch != 90
+    ):
+        parser.error(
+            "--allow-unestablished-sass-lowering is valid only with "
+            "--expected-cuda-arch 90"
+        )
 
     if not args.binary.is_file():
         raise SystemExit(f"binary does not exist: {args.binary}")
 
     binary_sha256 = sha256(args.binary)
+    sass_lowering_contract_established = (
+        args.expected_cuda_arch in ESTABLISHED_SASS_LOWERING_ARCHITECTURES
+    )
+    sass_lowering_contract = (
+        "established_ampere"
+        if sass_lowering_contract_established
+        else "not_established_sm90"
+    )
     elf_listing = run_cuobjdump(args.cuobjdump, "--list-elf", args.binary)
     ptx_listing = run_cuobjdump(args.cuobjdump, "--list-ptx", args.binary)
     ptx_dump = run_cuobjdump(args.cuobjdump, "--dump-ptx", args.binary)
@@ -366,14 +408,21 @@ def main() -> int:
                 and ptx_f16_count == expected["ptx_f16"]
                 and ptx_f16x2_count == expected["ptx_f16x2"]
             )
-            sass_opcode_gate_pass = (
-                sass_plain_count == expected["sass_plain"]
-                and sass_f16_count == expected["sass_f16"]
-            )
-            predicated_probe_gate_pass = (
-                pred_plain_count == expected["pred_plain"]
-                and pred_f16_count == expected["pred_f16"]
-            )
+            if sass_lowering_contract_established:
+                sass_opcode_gate_pass = (
+                    sass_plain_count == expected["sass_plain"]
+                    and sass_f16_count == expected["sass_f16"]
+                )
+                predicated_probe_gate_pass = (
+                    pred_plain_count == expected["pred_plain"]
+                    and pred_f16_count == expected["pred_f16"]
+                )
+            else:
+                # Do not claim that SM90 must have Ampere's MUFU/predicate
+                # sequence.  Keep observed counts in the CSV and require an
+                # explicit opt-in for a provisional structural audit.
+                sass_opcode_gate_pass = None
+                predicated_probe_gate_pass = None
 
         # This is recorded as a lowering observation.  Opcode counts above,
         # rather than a compiler-specific number of PRMT instructions, are the
@@ -396,16 +445,25 @@ def main() -> int:
             failure_reasons.append("sass_arch_header")
         if not ptx_opcode_gate_pass:
             failure_reasons.append("ptx_opcode_count")
-        if not sass_opcode_gate_pass:
+        if sass_opcode_gate_pass is False:
             failure_reasons.append("sass_opcode_count")
-        if not predicated_probe_gate_pass:
+        if predicated_probe_gate_pass is False:
             failure_reasons.append("predicated_probe_count")
         if not resource_metadata_gate_pass:
             failure_reasons.append("resource_metadata")
         if not spill_local_gate_pass:
             failure_reasons.append("spill_or_local_memory")
 
-        verdict = "pass" if not failure_reasons else "fail"
+        provisional_reasons: list[str] = []
+        if not sass_lowering_contract_established:
+            provisional_reasons.append("sm90_sass_lowering_not_established")
+        verdict = (
+            "fail"
+            if failure_reasons
+            else "provisional_pass"
+            if provisional_reasons
+            else "pass"
+        )
         expected_or_negative = expected or {
             "ptx_f32": -1,
             "ptx_ftz_f32": -1,
@@ -416,6 +474,16 @@ def main() -> int:
             "pred_plain": -1,
             "pred_f16": -1,
         }
+        expected_sass_or_negative = (
+            expected_or_negative
+            if sass_lowering_contract_established
+            else {
+                "sass_plain": -1,
+                "sass_f16": -1,
+                "pred_plain": -1,
+                "pred_f16": -1,
+            }
+        )
         rows.append(
             {
                 "mode": display_name(MODE_NAMES, variant.mode, "mode_e"),
@@ -435,6 +503,10 @@ def main() -> int:
                 "binary_architectures": "|".join(map(str, binary_architectures)),
                 "embedded_ptx_architectures": "|".join(map(str, ptx_architectures)),
                 "expected_cuda_arch": args.expected_cuda_arch,
+                "sass_lowering_contract": sass_lowering_contract,
+                "allow_unestablished_sass_lowering": bool_text(
+                    args.allow_unestablished_sass_lowering
+                ),
                 "native_arch_gate_pass": bool_text(native_arch_gate_pass),
                 "embedded_ptx_arch_gate_pass": bool_text(
                     embedded_ptx_arch_gate_pass
@@ -504,22 +576,22 @@ def main() -> int:
                 "ptx_opcode_count_gate_pass": bool_text(ptx_opcode_gate_pass),
                 "sass_mufu_ex2_plain_static_count": sass_plain_count,
                 "sass_mufu_ex2_f16_static_count": sass_f16_count,
-                "expected_sass_mufu_ex2_plain_static_count": expected_or_negative[
+                "expected_sass_mufu_ex2_plain_static_count": expected_sass_or_negative[
                     "sass_plain"
                 ],
-                "expected_sass_mufu_ex2_f16_static_count": expected_or_negative[
+                "expected_sass_mufu_ex2_f16_static_count": expected_sass_or_negative[
                     "sass_f16"
                 ],
-                "sass_opcode_count_gate_pass": bool_text(sass_opcode_gate_pass),
+                "sass_opcode_count_gate_pass": gate_text(sass_opcode_gate_pass),
                 "sass_predicated_mufu_ex2_plain_static_count": pred_plain_count,
                 "sass_predicated_mufu_ex2_f16_static_count": pred_f16_count,
-                "expected_sass_predicated_mufu_ex2_plain_static_count": expected_or_negative[
+                "expected_sass_predicated_mufu_ex2_plain_static_count": expected_sass_or_negative[
                     "pred_plain"
                 ],
-                "expected_sass_predicated_mufu_ex2_f16_static_count": expected_or_negative[
+                "expected_sass_predicated_mufu_ex2_f16_static_count": expected_sass_or_negative[
                     "pred_f16"
                 ],
-                "predicated_probe_count_gate_pass": bool_text(
+                "predicated_probe_count_gate_pass": gate_text(
                     predicated_probe_gate_pass
                 ),
                 "sass_prmt_static_count": prmt_count,
@@ -543,6 +615,7 @@ def main() -> int:
                 "spill_local_gate_pass": bool_text(spill_local_gate_pass),
                 "verdict": verdict,
                 "failure_reasons": "|".join(failure_reasons),
+                "provisional_reasons": "|".join(provisional_reasons),
                 "ptx_functions": "|".join(ptx_names),
                 "sass_functions": "|".join(sass_names),
                 "resource_functions": "|".join(resource_names),
@@ -560,13 +633,30 @@ def main() -> int:
             f"{row['mode']}/{row['exp_implementation']}/{row['cache_policy']}: "
             f"{row['verdict']}"
         )
-    passed = len(rows) == len(EXPECTED_VARIANTS) and all(
-        row["verdict"] == "pass" for row in rows
+    no_hard_failures = len(rows) == len(EXPECTED_VARIANTS) and all(
+        row["verdict"] != "fail" for row in rows
     )
-    print(f"audit_status={'pass' if passed else 'fail'}")
+    provisional = no_hard_failures and any(
+        row["verdict"] == "provisional_pass" for row in rows
+    )
+    passed = no_hard_failures and not provisional
+    if passed:
+        audit_status = "pass"
+        return_code = 0
+    elif provisional and args.allow_unestablished_sass_lowering:
+        audit_status = "provisional_pass"
+        return_code = 0
+    elif provisional:
+        audit_status = "provisional_requires_explicit_opt_in"
+        return_code = 1
+    else:
+        audit_status = "fail"
+        return_code = 1
+    print(f"sass_lowering_contract={sass_lowering_contract}")
+    print(f"audit_status={audit_status}")
     print(f"binary_sha256={binary_sha256}")
     print(f"output_csv={args.out}")
-    return 0 if passed else 1
+    return return_code
 
 
 if __name__ == "__main__":

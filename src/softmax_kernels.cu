@@ -94,10 +94,13 @@ __device__ __forceinline__ half ptx_ex2_approx_f16(half input) {
                : "=h"(output_bits)
                : "h"(input_bits));
 #else
-  // Every registered build targets sm_80 or sm_86.  Returning the input keeps
-  // the host compilation pass well formed; runtime/profile gates reject any
-  // native-EX2 binary below sm_75 before measurement.
-  output_bits = input_bits;
+  // This is deliberately a hard device failure, not an identity fallback.
+  // A caller that bypasses the host profile gate must not obtain numerically
+  // plausible but invalid V100 (sm70) native-EX2 results.
+#if defined(__CUDA_ARCH__)
+  asm volatile("trap;");
+#endif
+  output_bits = 0;
 #endif
   return __ushort_as_half(output_bits);
 }
@@ -123,7 +126,10 @@ __device__ __forceinline__ std::uint32_t ptx_ex2_approx_f16x2(
                : "=r"(output_bits)
                : "r"(input_bits));
 #else
-  output_bits = input_bits;
+#if defined(__CUDA_ARCH__)
+  asm volatile("trap;");
+#endif
+  output_bits = 0;
 #endif
   return output_bits;
 }
@@ -643,6 +649,17 @@ cudaError_t launch_softmax_kernel(const SoftmaxLaunchConfig& cfg) {
       cfg.grid_blocks > static_cast<std::uint64_t>(0xffffffffu)) {
     return cudaErrorInvalidValue;
   }
+  if (is_native_f16_ex2(cfg.exp_implementation)) {
+    int device = -1;
+    cudaDeviceProp properties{};
+    cudaError_t status = cudaGetDevice(&device);
+    if (status != cudaSuccess) return status;
+    status = cudaGetDeviceProperties(&properties, device);
+    if (status != cudaSuccess) return status;
+    if (!native_f16_ex2_supported(properties.major, properties.minor)) {
+      return cudaErrorNotSupported;
+    }
+  }
   return cfg.cache_policy == CachePolicy::cg
              ? launch_for_cols<true>(cfg, cfg.grid_blocks)
              : launch_for_cols<false>(cfg, cfg.grid_blocks);
@@ -669,6 +686,15 @@ cudaError_t launch_native_ex2_validation(const half* input,
   if (!input || !scalar_output || !packed_output || count == 0 ||
       (count & 1u) != 0u) {
     return cudaErrorInvalidValue;
+  }
+  int device = -1;
+  cudaDeviceProp properties{};
+  cudaError_t status = cudaGetDevice(&device);
+  if (status != cudaSuccess) return status;
+  status = cudaGetDeviceProperties(&properties, device);
+  if (status != cudaSuccess) return status;
+  if (!native_f16_ex2_supported(properties.major, properties.minor)) {
+    return cudaErrorNotSupported;
   }
   constexpr int kValidationThreads = 256;
   const std::size_t blocks =

@@ -1,6 +1,6 @@
 # FP16 Softmax Operand-rate ATC 설계 및 검증 기록
 
-작성일: 2026-07-22 / 최종 갱신: 2026-07-26
+작성일: 2026-07-22 / 최종 갱신: 2026-07-27
 
 상태: direct native FP16 PTX 구현과 RTX 3090 수치/SASS/NCU 검증 완료 /
 사전 지정한 implementation 3 × CTA 4 × Softmax S 5의 **기준/재연 matrix가
@@ -11,6 +11,20 @@ Pearson/Spearman 0.416/0.466, point-sign 50/60, standalone verdict 45/60 /
 coefficient·factor 인과효과는 미확정 / A100은 현행 short-row source를 실제
 장치에서 재빌드·검증하지 않았고 **runtime energy·NCU는
 `not_run_no_a100_device`**
+
+## Cross-platform 확장 상태 (2026-07-27)
+
+다른 GPU에서의 재현은 [Cross-platform Softmax EX2 실험 실행 가이드](docs/platforms/cross_platform_softmax_ex2_experiment_guide_ko.md)를 기준으로 한다. 실행 package는 `scripts/plan_softmax_cross_platform_ex2.py`가 생성하며, 이 문서의 fp32 조건은 Tensor Core FP32가 아닌 scalar FP32 `__expf` baseline이다.
+
+| profile | 실행 범위 | 결과 해석 |
+|---|---|---|
+| V100 / sm_70 | CUDA 12.x에서 fp32 4 CTA × 5 S baseline만 실행; native FP16 EXP2 두 구현은 skip | FP32-only이며 3-way 비교 또는 0 pJ native 행으로 쓰지 않음 |
+| A100 / sm_80 | 3 implementation × CTA 16/32/48/64 × S 128/256/512/1024/2048 | 별도 cross-platform protocol; target-native NCU 전에는 native final claim이 아님 |
+| H100 / sm_90 | 같은 60-cell energy matrix | sm90 provisional SASS audit과 target-native NCU 전에는 preliminary이며 final ranking에 넣지 않음 |
+
+이 표는 구현·실행 계획의 지원 범위이지 A100/H100 target-node에서 이미 얻은 측정값이 아니다.
+
+모든 platform은 GPU/device total-energy counter와 동일한 logical scalar exponent-result 분모를 사용하되, raw row와 binary/UUID/PCI/NCU evidence를 platform 간에 pool하지 않는다.
 
 ## 현재 로컬 저장소와 실험환경
 

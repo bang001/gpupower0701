@@ -27,6 +27,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from softmax_platform_profiles import (
+    EXP_IMPLEMENTATIONS,
+    assert_contract as assert_platform_contract,
+    implementation_status,
+    profile_for,
+    profile_names,
+)
+
 
 EXP_IMPL_METADATA = {
     "fp32": {
@@ -293,6 +301,11 @@ def output_exp_suffix(exp_impl: str) -> str:
 
 
 def protocol_revision(args: argparse.Namespace, execution: str) -> str:
+    if args.cross_platform_design:
+        return (
+            "fp16_softmax_cross_platform_ex2_v1_"
+            f"{args.target_profile}_{execution}_{args.control_mode}_{args.exp_impl}"
+        )
     if args.exp_impl == "fp32":
         return (
             "fp16_softmax_operand_rate_atc_v5_a100_xu_"
@@ -532,6 +545,101 @@ def require_a100_board_preflight(
         )
 
 
+def h100_required_binary_metadata(exp_impl: str) -> dict[str, str]:
+    """Return H100 preflight fields without importing an Ampere rate model."""
+
+    implementation = exp_metadata(exp_impl)
+    # The FP32 XU rate constant is documented/used only by the existing
+    # Ampere profile.  H100 must not inherit that 16-result/cycle model before
+    # a GH100-specific NCU audit establishes it; the binary reports zero for
+    # this intentionally unknown field on every H100 implementation.
+    required_binary = {
+        "compute_capability": "9.0",
+        "cuda_binary_arch": "90",
+        "exp_impl": str(implementation["canonical"]),
+        "exp_input_dtype": str(implementation["exp_input_dtype"]),
+        "xu_documented_results_per_sm_cycle": "0",
+        "smid_sparse_id_self_check": "pass",
+    }
+    return required_binary
+
+
+def require_h100_board_preflight(
+    binary_metadata: dict[str, str], inventory: dict[str, str], exp_impl: str
+) -> None:
+    """Apply the same board-identity rule to a full H100 device.
+
+    H100 SXM and PCIe have different complete-device SM counts.  The CUDA
+    binary already rejects every other count; the runner repeats the check so
+    the energy manifest also has a nvidia-smi/MIG/PCI identity gate.
+    """
+
+    required_binary = h100_required_binary_metadata(exp_impl)
+    for field, expected in required_binary.items():
+        if binary_metadata.get(field) != expected:
+            raise RuntimeError(
+                f"H100 binary preflight mismatch for {field}: "
+                f"{binary_metadata.get(field, '<missing>')} != {expected}"
+            )
+    if binary_metadata.get("runtime_sm_count") not in {"114", "132"}:
+        raise RuntimeError(
+            "H100 binary preflight requires a complete 114-SM PCIe or "
+            "132-SM SXM device"
+        )
+    if "h100" not in binary_metadata.get("gpu_name", "").lower():
+        raise RuntimeError("H100 binary preflight did not identify an H100 GPU")
+    if inventory.get("inventory_status") != "ok":
+        raise RuntimeError(f"H100 nvidia-smi inventory is required: {inventory}")
+    mig_mode = inventory.get("inventory_mig_mode_current", "").lower()
+    if mig_mode != "disabled":
+        raise RuntimeError(
+            "H100 board-energy measurement requires MIG mode Disabled; "
+            f"observed {mig_mode or '<missing>'}"
+        )
+    gpu_uuid = inventory.get("inventory_uuid", "")
+    if not gpu_uuid:
+        raise RuntimeError("H100 inventory did not expose the physical GPU UUID")
+    cuda_pci = normalize_pci_bus_id(binary_metadata.get("cuda_pci_bus_id", ""))
+    nvml_pci = normalize_pci_bus_id(inventory.get("inventory_pci_bus_id", ""))
+    if not cuda_pci or not nvml_pci or cuda_pci != nvml_pci:
+        raise RuntimeError(
+            "H100 CUDA/NVML PCI identity mismatch: "
+            f"{binary_metadata.get('cuda_pci_bus_id', '<missing>')} != "
+            f"{inventory.get('inventory_pci_bus_id', '<missing>')}"
+        )
+    competitors = running_compute_apps(gpu_uuid)
+    if competitors:
+        raise RuntimeError(
+            "H100 board-energy preflight found competing compute processes: "
+            + " | ".join(competitors)
+        )
+
+
+def audit_h100_batch_environment(
+    baseline: dict[str, str],
+    before: dict[str, str],
+    after: dict[str, str],
+    competitors_before: list[str],
+    competitors_during: list[str],
+    competitors_after: list[str],
+    process_monitor_errors: list[str],
+) -> dict[str, str]:
+    """Reuse the device-state invariant check with H100-prefixed evidence."""
+    a100_shaped = audit_a100_batch_environment(
+        baseline,
+        before,
+        after,
+        competitors_before,
+        competitors_during,
+        competitors_after,
+        process_monitor_errors,
+    )
+    return {
+        key.replace("a100_", "h100_", 1): value
+        for key, value in a100_shaped.items()
+    }
+
+
 def write_manifest(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     keys = sorted({key for row in rows for key in row})
@@ -552,6 +660,7 @@ def persistent_raw_rows(
     bracket_order: str,
     target_profile: str,
     exp_impl: str,
+    cross_platform_design: bool,
 ) -> list[dict[str, str]]:
     """Read exactly the rows emitted by one persistent bracket batch."""
     with raw_csv.open(newline="", encoding="utf-8") as handle:
@@ -629,7 +738,7 @@ def persistent_raw_rows(
         if len(grids) != 1:
             raise RuntimeError("A100 persistent batch contains multiple CTA grids")
         grid = next(iter(grids))
-        if grid not in {27, 54, 108}:
+        if not cross_platform_design and grid not in {27, 54, 108}:
             raise RuntimeError(f"A100 energy batch used an unsupported CTA grid: {grid}")
         for row in rows:
             if (
@@ -834,11 +943,11 @@ def args_parser() -> argparse.ArgumentParser:
         "--binary",
         type=Path,
         default=None,
-        help="defaults to build-a100 for the A100 profile and build-softmax for RTX 3090",
+        help="defaults to the profile-specific Softmax build directory",
     )
     parser.add_argument("--gpu-id", type=int, default=0)
     parser.add_argument(
-        "--target-profile", choices=("rtx3090", "a100"), default="rtx3090"
+        "--target-profile", choices=profile_names(), default="rtx3090"
     )
     parser.add_argument(
         "--exp-impl",
@@ -866,6 +975,15 @@ def args_parser() -> argparse.ArgumentParser:
         help=(
             "screen permits only the incremental 27/54 active-SM/SNR coordinates; "
             "confirm permits only 108 and is run only if the screen lacks precision"
+        ),
+    )
+    parser.add_argument(
+        "--cross-platform-design",
+        action="store_true",
+        help=(
+            "enable the portable 4-CTA x 5-S design; on A100 this explicitly "
+            "replaces the legacy S512/g27,g54-only screen while preserving "
+            "the full-board and environment gates"
         ),
     )
     parser.add_argument(
@@ -994,29 +1112,56 @@ def args_parser() -> argparse.ArgumentParser:
     parser.add_argument("--quiescence-consecutive-samples", type=int, default=2)
     parser.add_argument("--skip-quiescence", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="run the GPU-independent platform-contract check and exit",
+    )
     return parser
 
 
 def main() -> int:
     args = args_parser().parse_args()
+    if args.self_test:
+        assert_platform_contract()
+        for exp_impl in EXP_IMPLEMENTATIONS:
+            assert h100_required_binary_metadata(exp_impl)[
+                "xu_documented_results_per_sm_cycle"
+            ] == "0"
+        print("softmax_operand_rate_atc_platform_contract=pass")
+        return 0
+    profile = profile_for(args.target_profile)
+    platform_status, platform_skip_reason = implementation_status(
+        args.target_profile, args.exp_impl
+    )
+    if platform_status == "skipped":
+        print("experiment_status=skipped")
+        print(f"target_profile={args.target_profile}")
+        print(f"exp_impl={args.exp_impl}")
+        print(f"skip_reason={platform_skip_reason}")
+        return 0
     if args.binary is None:
-        args.binary = Path(
-            "build-a100/a100_fp16_softmax_energy"
-            if args.target_profile == "a100"
-            else "build-softmax/a100_fp16_softmax_energy"
-        )
+        args.binary = profile.default_binary
     if args.pairs is None:
         args.pairs = (
-            6 if args.target_profile == "a100" or args.exp_impl != "fp32" else 3
+            6
+            if args.cross_platform_design
+            or args.target_profile == "a100"
+            or args.exp_impl != "fp32"
+            else 3
         )
     if args.bracket_order is None:
         args.bracket_order = (
             "counterbalanced6"
-            if args.target_profile == "a100" or args.exp_impl != "fp32"
+            if args.cross_platform_design
+            or args.target_profile == "a100"
+            or args.exp_impl != "fp32"
             else "ctc"
         )
     if args.energy_trace_sample_ms is None:
-        args.energy_trace_sample_ms = 200.0 if args.target_profile == "a100" else 500.0
+        args.energy_trace_sample_ms = (
+            500.0 if args.target_profile == "rtx3090" else 200.0
+        )
     if args.seconds is None:
         args.seconds = (
             13.0
@@ -1026,12 +1171,18 @@ def main() -> int:
     if args.energy_trace_min_updates is None:
         args.energy_trace_min_updates = (
             16
-            if args.target_profile == "a100" or args.exp_impl != "fp32"
+            if args.cross_platform_design
+            or args.target_profile == "a100"
+            or args.exp_impl != "fp32"
             else 8
         )
     if args.grid_blocks_list is None:
         args.grid_blocks_list = (
-            "27,54" if args.target_profile == "a100" else "16"
+            (
+                "16,32,48,64"
+                if args.cross_platform_design
+                else "27,54" if args.target_profile == "a100" else "16"
+            )
         )
     if args.bracket_warmup_pairs is None:
         args.bracket_warmup_pairs = 1 if args.execution_mode == "persistent_bracket" else 0
@@ -1093,7 +1244,7 @@ def main() -> int:
             "native --exp-impl ptx_f16/ptx_f16x2 requires --control-mode probe; "
             "linear/io controls are different kernels and do not isolate native EX2"
         )
-    if args.target_profile == "a100" and (
+    if args.target_profile == "a100" and not args.cross_platform_design and (
         args.execution_mode != "persistent_bracket"
         or args.control_mode != "probe"
         or args.bracket_order != "counterbalanced6"
@@ -1104,8 +1255,10 @@ def main() -> int:
             "A100 energy runs require persistent same-kernel probe mode, "
             "counterbalanced6, exactly six brackets, and energy tracing"
         )
-    if args.target_profile == "a100" and args.skip_quiescence:
-        raise SystemExit("A100 energy runs cannot use --skip-quiescence")
+    if args.target_profile in {"a100", "h100"} and args.skip_quiescence:
+        raise SystemExit(
+            "A100/H100 board-energy runs cannot use --skip-quiescence"
+        )
     if (
         args.energy_trace
         and args.target_profile == "rtx3090"
@@ -1123,7 +1276,7 @@ def main() -> int:
         raise SystemExit("conditions must be cache_reuse_candidate and/or streaming_large_ws")
     if len(conditions) > 2:
         raise SystemExit("this bounded pilot accepts at most two cache conditions")
-    if args.target_profile == "a100" and (
+    if args.target_profile == "a100" and not args.cross_platform_design and (
         args.softmax_cols != A100_PROTOCOL_SOFTMAX_COLS
         or args.logit_scale != A100_PROTOCOL_LOGIT_SCALE
         or conditions != (A100_PROTOCOL_CACHE_CONDITION,)
@@ -1142,7 +1295,7 @@ def main() -> int:
         raise SystemExit("--grid-blocks-list must contain non-negative integers") from error
     if not grid_blocks_list or any(value < 0 for value in grid_blocks_list):
         raise SystemExit("--grid-blocks-list must contain one or more non-negative integers")
-    if args.target_profile == "a100":
+    if args.target_profile == "a100" and not args.cross_platform_design:
         if tuple(sorted(set(grid_blocks_list))) != grid_blocks_list:
             raise SystemExit("A100 CTA coordinates must be unique and strictly increasing")
         if args.a100_sweep_stage == "screen":
@@ -1210,6 +1363,10 @@ def main() -> int:
         inventory = nvidia_inventory(gpu_selector)
         if args.target_profile == "a100":
             require_a100_board_preflight(
+                preflight_metadata, inventory, args.exp_impl
+            )
+        elif args.target_profile == "h100":
+            require_h100_board_preflight(
                 preflight_metadata, inventory, args.exp_impl
             )
         preflight_manifest = {
@@ -1284,17 +1441,26 @@ def main() -> int:
                     )
                 batch_inventory_before: dict[str, str] = {}
                 competitors_before: list[str] = []
-                if args.target_profile == "a100" and not args.dry_run:
+                if args.target_profile in {"a100", "h100"} and not args.dry_run:
                     batch_inventory_before = nvidia_inventory(gpu_selector)
-                    require_a100_board_preflight(
-                        preflight_metadata, batch_inventory_before, args.exp_impl
-                    )
+                    if args.target_profile == "a100":
+                        require_a100_board_preflight(
+                            preflight_metadata,
+                            batch_inventory_before,
+                            args.exp_impl,
+                        )
+                    else:
+                        require_h100_board_preflight(
+                            preflight_metadata,
+                            batch_inventory_before,
+                            args.exp_impl,
+                        )
                     competitors_before = running_compute_apps(
                         batch_inventory_before["inventory_uuid"]
                     )
                     if competitors_before:
                         raise RuntimeError(
-                            "A100 batch preflight found competing compute processes: "
+                            f"{args.target_profile.upper()} batch preflight found competing compute processes: "
                             + " | ".join(competitors_before)
                         )
                 command = [
@@ -1329,7 +1495,7 @@ def main() -> int:
                 started = time.time()
                 competitors_during: list[str] = []
                 process_monitor_errors: list[str] = []
-                if args.target_profile == "a100" and not args.dry_run:
+                if args.target_profile in {"a100", "h100"} and not args.dry_run:
                     result, competitors_during, process_monitor_errors = (
                         run_command_with_a100_process_monitor(
                             command, batch_inventory_before["inventory_uuid"]
@@ -1343,24 +1509,59 @@ def main() -> int:
                 post_inventory = {
                     f"post_{key}": value for key, value in post_inventory_raw.items()
                 }
+                profile_environment: dict[str, str] = {
+                    "profile_environment_status": "not_applicable",
+                    "profile_environment_reasons": "",
+                }
                 a100_environment: dict[str, str] = {
                     "a100_environment_status": "not_applicable",
                     "a100_environment_reasons": "",
                 }
-                if args.target_profile == "a100" and result is not None:
+                h100_environment: dict[str, str] = {
+                    "h100_environment_status": "not_applicable",
+                    "h100_environment_reasons": "",
+                }
+                if args.target_profile in {"a100", "h100"} and result is not None:
                     after_uuid = post_inventory_raw.get("inventory_uuid", "")
                     competitors_after = (
                         running_compute_apps(after_uuid) if after_uuid else []
                     )
-                    a100_environment = audit_a100_batch_environment(
-                        inventory,
-                        batch_inventory_before,
-                        post_inventory_raw,
-                        competitors_before,
-                        competitors_during,
-                        competitors_after,
-                        process_monitor_errors,
-                    )
+                    if args.target_profile == "a100":
+                        a100_environment = audit_a100_batch_environment(
+                            inventory,
+                            batch_inventory_before,
+                            post_inventory_raw,
+                            competitors_before,
+                            competitors_during,
+                            competitors_after,
+                            process_monitor_errors,
+                        )
+                        profile_environment = {
+                            "profile_environment_status": a100_environment[
+                                "a100_environment_status"
+                            ],
+                            "profile_environment_reasons": a100_environment[
+                                "a100_environment_reasons"
+                            ],
+                        }
+                    else:
+                        h100_environment = audit_h100_batch_environment(
+                            inventory,
+                            batch_inventory_before,
+                            post_inventory_raw,
+                            competitors_before,
+                            competitors_during,
+                            competitors_after,
+                            process_monitor_errors,
+                        )
+                        profile_environment = {
+                            "profile_environment_status": h100_environment[
+                                "h100_environment_status"
+                            ],
+                            "profile_environment_reasons": h100_environment[
+                                "h100_environment_reasons"
+                            ],
+                        }
                 raw_rows = (
                     [] if result is None else persistent_raw_rows(
                         raw_csv, pair_prefix, expected_rows=3 * args.pairs,
@@ -1369,6 +1570,7 @@ def main() -> int:
                         bracket_order=args.bracket_order,
                         target_profile=args.target_profile,
                         exp_impl=args.exp_impl,
+                        cross_platform_design=args.cross_platform_design,
                     )
                 )
                 for row in raw_rows:
@@ -1378,6 +1580,7 @@ def main() -> int:
                                 args, "persistent"
                             ),
                             "target_profile": args.target_profile,
+                            "cross_platform_design": str(args.cross_platform_design).lower(),
                             "a100_sweep_stage": (
                                 args.a100_sweep_stage
                                 if args.target_profile == "a100"
@@ -1450,18 +1653,20 @@ def main() -> int:
                             },
                             **post_inventory,
                             **a100_environment,
+                            **h100_environment,
+                            **profile_environment,
                             **state,
                         }
                     )
                 if (
-                    args.target_profile == "a100"
+                    args.target_profile in {"a100", "h100"}
                     and result is not None
-                    and a100_environment.get("a100_environment_status") != "pass"
+                    and profile_environment.get("profile_environment_status") != "pass"
                 ):
                     write_manifest(manifest_csv, manifests)
                     raise RuntimeError(
-                        "A100 batch environment gate failed: "
-                        + a100_environment.get("a100_environment_reasons", "unknown")
+                        f"{args.target_profile.upper()} batch environment gate failed: "
+                        + profile_environment.get("profile_environment_reasons", "unknown")
                     )
                 if result is not None:
                     # Persist provenance after each successful batch so a
@@ -1520,6 +1725,7 @@ def main() -> int:
                                     args, "legacy"
                                 ),
                                 "target_profile": args.target_profile,
+                                "cross_platform_design": str(args.cross_platform_design).lower(),
                                 "pair_id": pair_id,
                                 "cache_condition": condition,
                                 "cache_policy": args.cache_policy,

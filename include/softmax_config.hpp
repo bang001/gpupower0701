@@ -7,6 +7,7 @@ namespace fp16softmax {
 
 constexpr int kThreadsPerBlock = 256;
 constexpr int kMaxSoftmaxCols = 4096;
+constexpr int kNativeF16Ex2MinComputeCapability = 75;
 
 enum class SoftmaxMode {
   full,
@@ -54,6 +55,12 @@ inline ExpImplementation exp_implementation_from_string(
 
 inline bool is_native_f16_ex2(ExpImplementation implementation) {
   return implementation != ExpImplementation::fp32_expf;
+}
+
+inline bool native_f16_ex2_supported(int compute_capability_major,
+                                     int compute_capability_minor) {
+  return compute_capability_major * 10 + compute_capability_minor >=
+         kNativeF16Ex2MinComputeCapability;
 }
 
 inline int ptx_ex2_results_per_instruction(
