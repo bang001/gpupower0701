@@ -66,3 +66,24 @@ No browser was downloaded; chart SVG extraction, viewport checks, and source
 dialog interaction were therefore not run. The delivered HTML retains its
 semantic chart/table fallback, and this is a QA limitation rather than an
 energy-data limitation.
+
+## Matplotlib companion figure QA (2026-07-26)
+
+The static Matplotlib figures are a companion for visualizing the primary
+fresh-session spread; they do not edit the canonical artifact or the portable
+HTML above. Their generator is
+[`scripts/plot_softmax_ex2_targeted_confirmation.py`](../../scripts/plot_softmax_ex2_targeted_confirmation.py),
+and its input/output contract is documented in the
+[asset inventory](../assets/softmax_ex2_targeted_confirmation/README.md).
+
+- Self-test passed against the frozen inputs: exactly 3 implementation summaries,
+  9 quality-pass session cells, 3 same-session contrast types, and 27 nested
+  quality-pass matched blocks.
+- The generator checks that each implementation appears in positions 1/2/3 once,
+  and that displayed summary/contrast means reproduce the session-cell arithmetic.
+- It writes PNG and SVG pairs for session spread, paired contrasts, cyclic-order
+  diagnostics, and nested matched-block diagnostics. PNG exports were decoded
+  with Pillow and checked for at least 1200×700 pixels.
+- The primary conclusion remains based on three fresh sessions per implementation;
+  the 27 matched blocks remain nested diagnostic measurements, not `n=27`
+  independent repetitions.

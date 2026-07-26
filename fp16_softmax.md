@@ -1,6 +1,6 @@
 # FP16 Softmax Operand-rate ATC 설계 및 검증 기록
 
-작성일: 2026-07-22 / 최종 갱신: 2026-07-25
+작성일: 2026-07-22 / 최종 갱신: 2026-07-26
 
 상태: direct native FP16 PTX 구현과 RTX 3090 수치/SASS/NCU 검증 완료 /
 사전 지정한 implementation 3 × CTA 4 × Softmax S 5의 **기준/재연 matrix가
@@ -1168,6 +1168,37 @@ issue나 반 에너지를 뜻하지 않는다.
 | `fp32` | 82.164 |
 | scalar `ptx_f16` | 19.393 |
 | packed `ptx_f16x2` | 25.055 |
+
+### Fresh-session 편차 시각화 (Matplotlib)
+
+평균 막대만으로는 세 구현의 안정성을 판단하기 어렵다. 아래 그림은 각 구현의 **raw
+fresh-session mean 3개**를 모두 노출하고, diamond로 평균, 굵은 선으로 descriptive
+df=2 t95를 함께 보인다. 오른쪽 선은 같은 session의 세 implementation을 연결할 뿐
+시간 추세를 뜻하지 않는다.
+
+![CTA=48, S=1024 fresh-session spread and paired paths](docs/assets/softmax_ex2_targeted_confirmation/rtx3090_softmax_ex2_targeted_confirmation_20260725_session_spread.png)
+
+| 구현 | session 표본 SD (pJ/element) | CV (SD/평균) | 3-session 범위 (pJ/element) |
+|---|---:|---:|---:|
+| `fp32` | 3.134 | 3.81% | 5.700 |
+| scalar `ptx_f16` | 5.223 | 26.94% | 10.058 |
+| packed `ptx_f16x2` | 5.484 | 21.89% | 9.914 |
+
+FP32의 절대 증분은 가장 크지만 session 간 상대 산포는 작다. 반대로 두 FP16 경로는
+절대값은 낮지만 CV가 약 22–27%다. 따라서 평균 `19.393`과 `25.055`만으로 packed의
+우열을 말할 수 없다.
+
+![CTA=48, S=1024 paired implementation-path contrasts](docs/assets/softmax_ex2_targeted_confirmation/rtx3090_softmax_ex2_targeted_confirmation_20260725_path_contrasts.png)
+
+특히 `packed - scalar`는 session별 `+4.584`, `-3.785`, `+16.187`
+`pJ/element`, 평균 `+5.662`, descriptive t95 `[-19.253, +30.577]`이다. 양수는
+packed 경로가 더 높은 증분 에너지를 뜻하며 구간은 0을 포함한다. 즉 이 fresh 3-session
+확인은 packed FP16의 에너지 이득을 지지하지 않는다. 그림의 contrast는 공통 Softmax
+shell을 포함한 complete implementation-path 차이이며 순수 opcode 에너지는 아니다.
+
+순환 순서와 cell 내부 block 산포를 포함한 네 그림 전체는
+[targeted confirmation 분석](docs/results/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_analysis_ko.md)과
+[Matplotlib asset 안내](docs/assets/softmax_ex2_targeted_confirmation/README.md)에 있다.
 
 세 scalar-FP16 session effect는 모두 양수여서 이전 재연의 매우 낮은 scalar 값이
 고정된 코드 특성이라고 확인되지는 않았다. Packed와 scalar FP16의 차이는 fresh
