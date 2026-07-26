@@ -1,0 +1,1602 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "RTX 3090 Softmax EX2 CTA=48/S=1024 targeted confirmation",
+    "description": "Technical confirmation of the disputed RTX 3090 Softmax EX2 CTA=48/S=1024 coordinate with three position-balanced fresh sessions.",
+    "generatedAt": "2026-07-25T13:20:21+09:00",
+    "sources": [
+      {
+        "id": "program",
+        "label": "Targeted confirmation program",
+        "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_program.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_program.csv');",
+          "description": "One fail-closed program row defining target coordinate, unit, frozen binary, and primary session-level unit.",
+          "tables_used": [
+            "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_program.csv"
+          ],
+          "metric_definitions": [
+            "Primary metric is treatment-control incremental board energy divided by CTA×ITER×S.",
+            "One added logical exponent result equals one processed input element in this treatment."
+          ],
+          "filters": [
+            "CTA=48",
+            "S=1024",
+            "3 fresh sessions",
+            "status=pass"
+          ]
+        }
+      },
+      {
+        "id": "session_cells",
+        "label": "Nine fresh session-cell results",
+        "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_session_cells.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_session_cells.csv');",
+          "description": "One row per fresh session and implementation, including effect, forward/reverse diagnostics, denominator proof, and operating-state fields.",
+          "tables_used": [
+            "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_session_cells.csv"
+          ],
+          "metric_definitions": [
+            "The independent repeat is the fresh session mean across three matched orientation blocks.",
+            "The pJ/logical-result and incremental-pJ/element fields are exact aliases for this probe only."
+          ],
+          "filters": [
+            "quality_status=pass",
+            "9 rows"
+          ],
+          "order_by": "session_index, implementation_position"
+        }
+      },
+      {
+        "id": "implementation_summary",
+        "label": "Fresh-session implementation summary",
+        "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_implementation_summary.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_implementation_summary.csv');",
+          "description": "Three implementation summaries recomputed from three independent fresh session effects each.",
+          "tables_used": [
+            "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_implementation_summary.csv"
+          ],
+          "metric_definitions": [
+            "Diagnostic t95 intervals have df=2 and are descriptive, not preregistered decision thresholds."
+          ],
+          "filters": [
+            "session_count=3",
+            "all_session_quality_pass=true"
+          ]
+        }
+      },
+      {
+        "id": "contrasts",
+        "label": "Within-session implementation-path contrasts",
+        "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_within_session_contrasts.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_within_session_contrasts.csv');",
+          "description": "Three complete implementation-path contrasts in each fresh session.",
+          "tables_used": [
+            "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_within_session_contrasts.csv"
+          ],
+          "metric_definitions": [
+            "Contrasts include operand construction, pack/unpack, compiler lowering, and scheduling; they are not pure functional-unit energy."
+          ],
+          "filters": [
+            "3 sessions × 3 contrasts"
+          ]
+        }
+      },
+      {
+        "id": "contrast_summary",
+        "label": "Within-session contrast summary",
+        "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_contrast_summary.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_contrast_summary.csv');",
+          "description": "Three descriptive summaries across the three matched fresh sessions.",
+          "tables_used": [
+            "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_contrast_summary.csv"
+          ],
+          "metric_definitions": [
+            "The packed-minus-scalar interval includes zero, so no packed energy advantage is identified at n=3."
+          ],
+          "filters": [
+            "session_count=3"
+          ]
+        }
+      },
+      {
+        "id": "historical",
+        "label": "Historical target coordinate context",
+        "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_historical_context.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_historical_context.csv');",
+          "description": "The two prior 60-cell target coordinate values, retained for context and excluded from the new primary aggregate.",
+          "tables_used": [
+            "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_historical_context.csv"
+          ],
+          "metric_definitions": [
+            "Historical values are not pooled with fresh confirmation sessions."
+          ],
+          "filters": [
+            "CTA=48",
+            "S=1024",
+            "context only"
+          ]
+        }
+      },
+      {
+        "id": "numerics",
+        "label": "Exact native numerical validation",
+        "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_numerical_validation.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_numerical_validation.csv');",
+          "description": "FP64-reference, treatment/control bit identity, and native all-encoding validation results.",
+          "tables_used": [
+            "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_numerical_validation.csv"
+          ],
+          "metric_definitions": [
+            "Packed/scalar mismatch count is a lane-function validation; it is not an energy result."
+          ],
+          "filters": [
+            "verdict=pass"
+          ]
+        }
+      },
+      {
+        "id": "sass",
+        "label": "Frozen binary SASS audit",
+        "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_sass_audit.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_sass_audit.csv');",
+          "description": "Static source PTX and final SASS opcode counts for the exact S=1024 specialization.",
+          "tables_used": [
+            "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_sass_audit.csv"
+          ],
+          "metric_definitions": [
+            "For sm86, packed f16x2 source PTX count 4 lowers to final scalar F16 MUFU count 8."
+          ],
+          "filters": [
+            "verdict=pass"
+          ]
+        }
+      },
+      {
+        "id": "ncu",
+        "label": "Dynamic native path audit",
+        "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_ncu_audit.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_ncu_audit.csv');",
+          "description": "Exact control-treatment XU counter delta, symbol/resource/traffic equality for native paths.",
+          "tables_used": [
+            "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_ncu_audit.csv"
+          ],
+          "metric_definitions": [
+            "NCU replay energy is explicitly excluded from the ATC numerator."
+          ],
+          "filters": [
+            "observed_xu_delta=expected_xu_delta=49152000",
+            "energy_usable=false"
+          ]
+        }
+      },
+      {
+        "id": "analysis",
+        "label": "Targeted confirmation analyzer note",
+        "path": "docs/results/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_analysis_ko.md",
+        "query": {
+          "description": "Analyzer-authored concise result and evidence inventory."
+        }
+      },
+      {
+        "id": "kernel",
+        "label": "Softmax CUDA kernel",
+        "path": "src/softmax_kernels.cu",
+        "query": {
+          "description": "Source implementation of FP32, scalar FP16, and packed FP16x2 exponent paths."
+        }
+      },
+      {
+        "id": "runner",
+        "label": "Targeted confirmation runner",
+        "path": "scripts/run_softmax_ex2_targeted_confirmation.py",
+        "query": {
+          "description": "Immutable 9-cell cyclic-order plan and execution binding."
+        }
+      },
+      {
+        "id": "analyzer",
+        "label": "Targeted confirmation analyzer",
+        "path": "scripts/analyze_softmax_ex2_targeted_confirmation.py",
+        "query": {
+          "description": "Fail-closed primary session-level aggregation and audit join."
+        }
+      }
+    ],
+    "charts": [
+      {
+        "id": "historical_and_fresh_effects",
+        "title": "Historical target values and fresh confirmation mean",
+        "subtitle": "CTA=48, S=1024; historical rows are context only and the fresh mean uses three independent sessions.",
+        "type": "bar",
+        "intent": "comparison",
+        "question": "How does the disputed target coordinate compare with the position-balanced confirmation?",
+        "rationale": "Grouped discrete bars are appropriate for three implementation paths and three explicitly labeled session scopes.",
+        "comparisonContext": {
+          "baseline": "0 incremental pJ/element",
+          "denominator": "one additional logical exponent result per input element",
+          "grain": "one historical target cell or fresh three-session mean",
+          "unit": "incremental pJ/element"
+        },
+        "dataset": "historical_and_fresh",
+        "sourceId": "historical",
+        "encodings": {
+          "x": {
+            "field": "implementation_label",
+            "type": "ordinal",
+            "label": "Implementation"
+          },
+          "y": {
+            "field": "effect_incremental_pj_per_element",
+            "type": "quantitative",
+            "label": "Energy increment",
+            "unit": "incremental pJ/element",
+            "format": "number"
+          },
+          "tooltip": [
+            {
+              "field": "implementation_label",
+              "type": "nominal",
+              "label": "Implementation"
+            },
+            {
+              "field": "series",
+              "type": "nominal",
+              "label": "Series"
+            },
+            {
+              "field": "effect_incremental_pj_per_element",
+              "type": "quantitative",
+              "label": "ΔpJ/element",
+              "unit": "incremental pJ/element",
+              "format": "number"
+            }
+          ],
+          "color": {
+            "field": "series",
+            "type": "nominal",
+            "label": "Evidence scope"
+          }
+        },
+        "palette": {
+          "kind": "categorical",
+          "name": "softmax-ex2-targeted"
+        },
+        "labels": {
+          "values": "auto"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        },
+        "legend": {
+          "position": "bottom"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 0,
+            "label": "0",
+            "color": "neutral",
+            "lineStyle": "solid"
+          }
+        ]
+      },
+      {
+        "id": "fresh_session_effects",
+        "title": "Fresh session effects",
+        "subtitle": "Nine quality-pass cell means; each implementation occupies positions 1, 2, and 3 once across the three sessions.",
+        "type": "scatter",
+        "intent": "relationship",
+        "question": "How variable are the three independent fresh session effects?",
+        "rationale": "A small labeled scatter retains all nine primary experimental-unit observations without pretending matched blocks are independent.",
+        "comparisonContext": {
+          "baseline": "0 incremental pJ/element",
+          "denominator": "one additional logical exponent result per input element",
+          "grain": "one fresh session implementation mean",
+          "unit": "incremental pJ/element"
+        },
+        "dataset": "fresh_session_effects",
+        "sourceId": "session_cells",
+        "encodings": {
+          "x": {
+            "field": "implementation_position",
+            "type": "quantitative",
+            "label": "Implementation position within session"
+          },
+          "y": {
+            "field": "effect_incremental_pj_per_element",
+            "type": "quantitative",
+            "label": "Energy increment",
+            "unit": "incremental pJ/element",
+            "format": "number"
+          },
+          "tooltip": [
+            {
+              "field": "session_label",
+              "type": "nominal",
+              "label": "Session"
+            },
+            {
+              "field": "implementation_label",
+              "type": "nominal",
+              "label": "Implementation"
+            },
+            {
+              "field": "implementation_position",
+              "type": "quantitative",
+              "label": "Position",
+              "format": "number"
+            },
+            {
+              "field": "effect_incremental_pj_per_element",
+              "type": "quantitative",
+              "label": "ΔpJ/element",
+              "unit": "incremental pJ/element",
+              "format": "number"
+            },
+            {
+              "field": "cell_verdict",
+              "type": "nominal",
+              "label": "Cell diagnostic verdict"
+            }
+          ],
+          "color": {
+            "field": "implementation_label",
+            "type": "nominal",
+            "label": "Implementation"
+          }
+        },
+        "palette": {
+          "kind": "categorical",
+          "name": "softmax-ex2-targeted"
+        },
+        "labels": {
+          "values": "none"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        },
+        "legend": {
+          "position": "bottom"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 0,
+            "label": "0",
+            "color": "neutral",
+            "lineStyle": "solid"
+          }
+        ]
+      },
+      {
+        "id": "within_session_contrasts",
+        "title": "Within-session implementation-path contrasts",
+        "subtitle": "Each point is a complete-path contrast in one fresh session; 0 means no observed difference.",
+        "type": "scatter",
+        "intent": "relationship",
+        "question": "Does packed FP16x2 differ from scalar FP16 consistently within the same session?",
+        "rationale": "Contrast dots show sign and session variation directly, including the uncertainty-relevant negative packed-minus-scalar session.",
+        "comparisonContext": {
+          "baseline": "0 incremental pJ/element",
+          "denominator": "one additional logical exponent result per input element",
+          "grain": "one within-session implementation-path contrast",
+          "unit": "incremental pJ/element"
+        },
+        "dataset": "within_session_contrasts",
+        "sourceId": "contrasts",
+        "encodings": {
+          "x": {
+            "field": "session_index",
+            "type": "quantitative",
+            "label": "Fresh session"
+          },
+          "y": {
+            "field": "effect_incremental_pj_per_element",
+            "type": "quantitative",
+            "label": "Path contrast",
+            "unit": "incremental pJ/element",
+            "format": "number"
+          },
+          "tooltip": [
+            {
+              "field": "session_label",
+              "type": "nominal",
+              "label": "Session"
+            },
+            {
+              "field": "contrast_label",
+              "type": "nominal",
+              "label": "Contrast"
+            },
+            {
+              "field": "effect_incremental_pj_per_element",
+              "type": "quantitative",
+              "label": "ΔpJ/element",
+              "unit": "incremental pJ/element",
+              "format": "number"
+            },
+            {
+              "field": "left_position",
+              "type": "quantitative",
+              "label": "Left position",
+              "format": "number"
+            },
+            {
+              "field": "right_position",
+              "type": "quantitative",
+              "label": "Right position",
+              "format": "number"
+            }
+          ],
+          "color": {
+            "field": "contrast_label",
+            "type": "nominal",
+            "label": "Contrast"
+          }
+        },
+        "palette": {
+          "kind": "categorical",
+          "name": "softmax-ex2-targeted"
+        },
+        "labels": {
+          "values": "none"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        },
+        "legend": {
+          "position": "bottom"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 0,
+            "label": "0",
+            "color": "neutral",
+            "lineStyle": "solid"
+          }
+        ]
+      },
+      {
+        "id": "static_lowering",
+        "title": "Static PTX-to-SASS EX2 instruction counts",
+        "subtitle": "Exact S=1024 generated specialization on the frozen RTX 3090 binary; counts are static code counts, not energy.",
+        "type": "bar",
+        "intent": "comparison",
+        "question": "Does packed f16x2 remain a single two-lane MUFU in final sm86 SASS?",
+        "rationale": "Paired category bars compare source PTX form with final SASS lowering without conflating instruction count with energy.",
+        "comparisonContext": {
+          "baseline": "0 incremental pJ/element",
+          "denominator": "one additional logical exponent result per input element",
+          "grain": "one static code specialization",
+          "unit": "count"
+        },
+        "dataset": "static_lowering",
+        "sourceId": "sass",
+        "encodings": {
+          "x": {
+            "field": "implementation_label",
+            "type": "ordinal",
+            "label": "Native implementation"
+          },
+          "y": {
+            "field": "static_instruction_count",
+            "type": "quantitative",
+            "label": "Static instruction count",
+            "unit": "count",
+            "format": "number"
+          },
+          "tooltip": [
+            {
+              "field": "implementation_label",
+              "type": "nominal",
+              "label": "Implementation"
+            },
+            {
+              "field": "stage",
+              "type": "nominal",
+              "label": "Stage"
+            },
+            {
+              "field": "static_instruction_count",
+              "type": "quantitative",
+              "label": "Count",
+              "unit": "count",
+              "format": "number"
+            }
+          ],
+          "color": {
+            "field": "stage",
+            "type": "nominal",
+            "label": "Code stage"
+          }
+        },
+        "palette": {
+          "kind": "categorical",
+          "name": "softmax-ex2-targeted"
+        },
+        "labels": {
+          "values": "auto"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        },
+        "legend": {
+          "position": "bottom"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 0,
+            "label": "0",
+            "color": "neutral",
+            "lineStyle": "solid"
+          }
+        ]
+      },
+      {
+        "id": "effect_vs_temperature",
+        "title": "Fresh effect and trace temperature midpoint",
+        "subtitle": "QA diagnostic only: nine cell means at the fixed coordinate; no thermal causal effect is estimated.",
+        "type": "scatter",
+        "intent": "relationship",
+        "question": "Are fresh cell effects visibly accompanied by a particular temperature pattern?",
+        "rationale": "A scatter preserves the small set of session-cell observations and prevents a causal trend claim from a sequential design.",
+        "comparisonContext": {
+          "baseline": "0 incremental pJ/element",
+          "denominator": "one additional logical exponent result per input element",
+          "grain": "one fresh session implementation mean",
+          "unit": "incremental pJ/element"
+        },
+        "dataset": "fresh_session_effects",
+        "sourceId": "session_cells",
+        "encodings": {
+          "x": {
+            "field": "temperature_mid_c",
+            "type": "quantitative",
+            "label": "Trace temperature midpoint"
+          },
+          "y": {
+            "field": "effect_incremental_pj_per_element",
+            "type": "quantitative",
+            "label": "Energy increment",
+            "unit": "incremental pJ/element",
+            "format": "number"
+          },
+          "tooltip": [
+            {
+              "field": "session_label",
+              "type": "nominal",
+              "label": "Session"
+            },
+            {
+              "field": "implementation_label",
+              "type": "nominal",
+              "label": "Implementation"
+            },
+            {
+              "field": "temperature_mid_c",
+              "type": "quantitative",
+              "label": "Temperature midpoint",
+              "unit": "°C",
+              "format": "number"
+            },
+            {
+              "field": "effect_incremental_pj_per_element",
+              "type": "quantitative",
+              "label": "ΔpJ/element",
+              "unit": "incremental pJ/element",
+              "format": "number"
+            },
+            {
+              "field": "preheat_actual_s",
+              "type": "quantitative",
+              "label": "Preheat actual",
+              "unit": "s",
+              "format": "number"
+            }
+          ],
+          "color": {
+            "field": "implementation_label",
+            "type": "nominal",
+            "label": "Implementation"
+          }
+        },
+        "palette": {
+          "kind": "categorical",
+          "name": "softmax-ex2-targeted"
+        },
+        "labels": {
+          "values": "none"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        },
+        "legend": {
+          "position": "bottom"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 0,
+            "label": "0",
+            "color": "neutral",
+            "lineStyle": "solid"
+          }
+        ]
+      }
+    ],
+    "tables": [
+      {
+        "id": "implementation_summary_table",
+        "title": "Fresh-session implementation summary",
+        "subtitle": "Each row summarizes three independent fresh sessions at CTA=48, S=1024; interval is descriptive df=2.",
+        "dataset": "implementation_summary",
+        "sourceId": "implementation_summary",
+        "defaultSort": {
+          "field": "mean_incremental_pj_per_element",
+          "direction": "desc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "implementation_label",
+            "label": "Implementation"
+          },
+          {
+            "field": "session_count",
+            "label": "Fresh sessions",
+            "format": "number"
+          },
+          {
+            "field": "mean_incremental_pj_per_element",
+            "label": "Mean ΔpJ/element",
+            "format": "number"
+          },
+          {
+            "field": "median_incremental_pj_per_element",
+            "label": "Median",
+            "format": "number"
+          },
+          {
+            "field": "sample_sd",
+            "label": "Session SD",
+            "format": "number"
+          },
+          {
+            "field": "diagnostic_t95_low",
+            "label": "Diagnostic t95 low",
+            "format": "number"
+          },
+          {
+            "field": "diagnostic_t95_high",
+            "label": "Diagnostic t95 high",
+            "format": "number"
+          },
+          {
+            "field": "positive_session_effects",
+            "label": "Positive session effects",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "fresh_session_table",
+        "title": "Fresh session-cell effects",
+        "subtitle": "One row is one implementation in one independently created CUDA measurement session; matched blocks are not pooled as independent repeats.",
+        "dataset": "fresh_session_effects",
+        "sourceId": "session_cells",
+        "defaultSort": {
+          "field": "session_index",
+          "direction": "asc"
+        },
+        "density": "dense",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "session_index",
+            "label": "Session",
+            "format": "number"
+          },
+          {
+            "field": "implementation_label",
+            "label": "Implementation"
+          },
+          {
+            "field": "implementation_position",
+            "label": "Position",
+            "format": "number"
+          },
+          {
+            "field": "effect_incremental_pj_per_element",
+            "label": "ΔpJ/element",
+            "format": "number"
+          },
+          {
+            "field": "forward_incremental_pj_per_element",
+            "label": "Forward",
+            "format": "number"
+          },
+          {
+            "field": "reverse_incremental_pj_per_element",
+            "label": "Reverse",
+            "format": "number"
+          },
+          {
+            "field": "temperature_min_c",
+            "label": "Temp min °C",
+            "format": "number"
+          },
+          {
+            "field": "temperature_max_c",
+            "label": "Temp max °C",
+            "format": "number"
+          },
+          {
+            "field": "preheat_actual_s",
+            "label": "Preheat actual s",
+            "format": "number"
+          },
+          {
+            "field": "trace_r2",
+            "label": "Min trace R²",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "audit_table",
+        "title": "Correctness and path-audit gates",
+        "subtitle": "Energy conclusions use board-energy evidence only; NCU is a path/count sidecar and its replay energy is excluded.",
+        "dataset": "audit_summary",
+        "sourceId": "ncu",
+        "defaultSort": {
+          "field": "check",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "check",
+            "label": "Check"
+          },
+          {
+            "field": "coverage",
+            "label": "Coverage"
+          },
+          {
+            "field": "result",
+            "label": "Result"
+          },
+          {
+            "field": "meaning",
+            "label": "Evidence"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# RTX 3090 Softmax EX2 CTA=48/S=1024 targeted confirmation"
+      },
+      {
+        "id": "technical_summary",
+        "type": "markdown",
+        "sourceId": "implementation_summary",
+        "body": "## 기술 요약\n\n**CTA=48, S=1024에서 fresh CUDA measurement session 3개를 cyclic implementation order로 실행한 결과, FP32는 82.164, scalar FP16은 19.393, packed FP16x2는 25.055 incremental ΔpJ/element였다.** 세 구현은 모두 양의 fresh-session point estimate를 보였지만, packed−scalar contrast는 5.662 ΔpJ/element이고 diagnostic t95가 [-19.253, 30.577]로 0을 포함한다. 따라서 이 데이터는 packed 우위를 식별하지 않는다.\n\n과거 60-cell 재연에서 scalar FP16이 10.994→1.632으로 움직인 값은 이번 position-balanced 3-session 평균 19.393으로 안정된 implementation 고유값으로 재현되지 않았다. 이 보고서는 추가 CTA/S sweep을 하지 않고 이 하나의 논쟁 좌표를 확인한 결과다."
+      },
+      {
+        "id": "unit_definition",
+        "type": "markdown",
+        "sourceId": "program",
+        "body": "## 단위: pJ/logical result와 incremental pJ/element\n\n이 probe의 treatment는 각 input element에 **추가 EX2 logical result 하나**를 정확히 넣는다. 따라서 `Nadded = CTA × ITER × S = processed elements`이고, 기존 `pJ/added logical scalar exponent result`는 수치상 `incremental ΔpJ/element`와 같다. 여기서 logical scalar는 **결과 개수 회계 단위**이지 FP32 정밀도나 physical scalar instruction이라는 뜻이 아니다. 이 값은 전체 Softmax의 absolute pJ/element도, pure MUFU energy도 아니다.\n\npacked 경로의 `pJ/PTX op`은 두 logical result를 하나의 PTX f16x2 op가 생성하므로 보조적으로 2배가 되지만, hardware-instruction energy라고 부르지 않는다."
+      },
+      {
+        "id": "implementation_definition",
+        "type": "markdown",
+        "sourceId": "kernel",
+        "body": "## 세 구현이 뜻하는 것\n\n세 구현은 모두 FP16 input/output와 FP32 max, sum, reduction, reciprocal, normalization을 공유한다. **다른 것은 exponent/probe 경로다.** `fp32`는 scalar FP32 `__expf`/F32 EX2 경로, `ptx_f16`은 FP32 centered-logit을 FP16으로 반올림한 scalar `ex2.approx.f16` 경로, `ptx_f16x2`는 인접 두 FP16 operand를 b32에 pack한 `ex2.approx.f16x2` PTX 경로다. 따라서 셋을 모두 “scalar FP32 연산”이라고 부르는 것은 맞지 않으며, cross-implementation 값은 순수 opcode 회로 계수가 아니라 complete implementation-path contrast다."
+      },
+      {
+        "id": "history_context_intro",
+        "type": "markdown",
+        "sourceId": "historical",
+        "body": "## 과거 scalar 하락은 새 session 평균으로 재현되지 않았다\n\n아래 비교는 historical two-session target values와 새 3-session mean을 함께 보되, historical rows를 primary aggregate에 합치지 않는다. 과거 scalar 재연의 낮은 값은 inverse order block의 음수 효과와 동반됐고, 이번 cyclic position balance에서는 세 scalar session mean 모두 양수였다. 이는 code defect나 temperature 단독 원인을 확정하는 증거가 아니라, 이 board-level differential 측정이 session/order state에 민감하다는 증거다."
+      },
+      {
+        "id": "history_chart",
+        "type": "chart",
+        "chartId": "historical_and_fresh_effects"
+      },
+      {
+        "id": "fresh_session_intro",
+        "type": "markdown",
+        "sourceId": "session_cells",
+        "body": "## 새 세션의 효과는 session 단위로 읽는다\n\n각 fresh session은 세 구현을 한 번씩 포함하고 각 구현이 position 1·2·3을 정확히 한 번씩 차지하도록 cyclic order를 사용했다. 따라서 차트의 점 하나가 primary repeat 하나다. cell 내부의 3 matched block은 control/treatment order-balance 진단을 위한 것이며, 27개 block을 27개의 독립 반복으로 pool하지 않았다."
+      },
+      {
+        "id": "fresh_session_chart",
+        "type": "chart",
+        "chartId": "fresh_session_effects"
+      },
+      {
+        "id": "fresh_session_table_block",
+        "type": "table",
+        "tableId": "fresh_session_table"
+      },
+      {
+        "id": "contrast_intro",
+        "type": "markdown",
+        "sourceId": "contrasts",
+        "body": "## scalar와 packed의 차이는 아직 불확실하다\n\n동일 fresh session 안에서의 packed−scalar contrast는 세 session에서 −3.785, +4.584, +16.187 ΔpJ/element였다. 평균은 양수지만 n=3 diagnostic interval이 0을 포함한다. 따라서 packed PTX의 존재나 higher-level pair packing은 확인됐어도, 이 결과만으로 packed가 scalar보다 에너지상 개선됐다고 결론내리지 않는다."
+      },
+      {
+        "id": "contrast_chart",
+        "type": "chart",
+        "chartId": "within_session_contrasts"
+      },
+      {
+        "id": "path_audit_intro",
+        "type": "markdown",
+        "sourceId": "sass",
+        "body": "## packed PTX는 존재하지만 sm86에서 physical two-lane MUFU는 아니다\n\nS=1024 specialization에서 scalar path는 source PTX `ex2.approx.f16` 8개와 final SASS `MUFU.EX2.F16` 8개를 보였다. packed path는 source PTX `ex2.approx.f16x2` 4개를 보였지만 final SASS `MUFU.EX2.F16`도 8개였다. 즉 packed는 **PTX 수준의 두-result representation**으로는 정상이나, 이 CUDA 13.2/sm86 frozen binary에서는 두 scalar F16 MUFU와 permutation으로 lowering된다."
+      },
+      {
+        "id": "path_audit_chart",
+        "type": "chart",
+        "chartId": "static_lowering"
+      },
+      {
+        "id": "correctness_intro",
+        "type": "markdown",
+        "sourceId": "numerics",
+        "body": "## 수치·정적·동적 path 검증은 통과했다\n\n세 implementation의 FP64-reference Softmax error와 treatment/control output bit identity를 확인했다. native scalar와 packed는 all-encoding validation에서 mismatch 0, NaN classification failure 0을 기록했다. dynamic NCU sidecar는 두 native path 모두 observed/expected XU delta 49,152,000과 symbol/resource/traffic equality를 통과했으나, NCU replay energy는 ATC numerator에 사용하지 않았다."
+      },
+      {
+        "id": "correctness_table",
+        "type": "table",
+        "tableId": "audit_table"
+      },
+      {
+        "id": "methodology",
+        "type": "markdown",
+        "sourceId": "program",
+        "body": "## 범위와 방법\n\n고정 조건은 RTX 3090 GPU 0, frozen binary SHA binding, CTA=48, S=1024, blocks-per-SM=2, logit scale=4, 13 s role, 6 counterbalanced pairs, warmup 1, nominal preheat 20 s다. actual preheat는 18.716–19.130 s였고 모든 9 cell은 raw/trace/manifest/plan/state quality gate를 통과했다. 온도와 clock은 기록하되 randomized treatment가 아니므로 에너지 효과의 인과 보정에 쓰지 않았다."
+      },
+      {
+        "id": "operating_state_intro",
+        "type": "markdown",
+        "sourceId": "session_cells",
+        "body": "## operating state는 결과를 설명하는 인과변수가 아니다\n\n아래 산점도는 fresh cell effect와 trace temperature midpoint를 함께 보이는 QA 진단이다. 세션 수가 작고 implementation, position, 시간 경과가 함께 존재하므로 기울기나 상관을 thermal coefficient로 해석하지 않는다."
+      },
+      {
+        "id": "operating_state_chart",
+        "type": "chart",
+        "chartId": "effect_vs_temperature"
+      },
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "body": "## 한계와 불확실성\n\n이 결과는 한 RTX 3090, 한 coordinate, 세 fresh session에 한정된다. NVML board-energy differential은 sub-watt 차이에 민감하고, n=3 interval은 넓은 descriptive diagnostic이다. FP32와 native FP16 경로는 operand generation/precision/compiler path가 다르며, packed path는 pack/unpack, predicate, XOR sink, scheduling, final SASS lowering 효과를 포함한다. 따라서 총 Softmax energy, physical MUFU energy, cross-GPU coefficient, packed throughput/energy superiority를 주장하지 않는다."
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "body": "## 권장 다음 단계\n\n1. 이 결과만으로 CTA/S sweep을 더 넓히지 않는다.\n2. scalar–packed 차이를 결정해야 하면 fresh session 수와 meter resolution을 사전에 고정한 별도 protocol을 사용한다.\n3. packed lane-order 불안을 더 줄이려면 asymmetric half-pair all-encoding test를 별도로 추가한다.\n4. 절대 component energy가 필요하면 external high-resolution meter 또는 더 큰, 사전등록된 measurement design을 사용한다."
+      },
+      {
+        "id": "further_questions",
+        "type": "markdown",
+        "body": "## 후속 질문\n\n새 independent date 또는 board에서도 scalar의 session variability가 같은 규모인가? fixed-clock 또는 external meter가 scalar–packed contrast의 interval을 실제로 줄이는가? sm80 또는 이후 architecture에서 f16x2의 final lowering과 result가 어떻게 달라지는가?"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-07-25T13:20:21+09:00",
+    "status": "ready",
+    "datasets": {
+      "implementation_summary": [
+        {
+          "implementation": "fp32",
+          "implementation_label": "FP32 __expf",
+          "mean_incremental_pj_per_element": 82.1641148261387,
+          "median_incremental_pj_per_element": 83.66942067234741,
+          "sample_sd": 3.134101930175635,
+          "diagnostic_t95_low": 74.37857402862711,
+          "diagnostic_t95_high": 89.94965562365029,
+          "positive_session_effects": 3,
+          "positive_cell_verdicts": 3,
+          "session_count": 3
+        },
+        {
+          "implementation": "ptx_f16",
+          "implementation_label": "scalar FP16 PTX",
+          "mean_incremental_pj_per_element": 19.39280566993849,
+          "median_incremental_pj_per_element": 17.76350180925147,
+          "sample_sd": 5.223399898739842,
+          "diagnostic_t95_low": 6.417160997438009,
+          "diagnostic_t95_high": 32.36845034243897,
+          "positive_session_effects": 3,
+          "positive_cell_verdicts": 1,
+          "session_count": 3
+        },
+        {
+          "implementation": "ptx_f16x2",
+          "implementation_label": "packed FP16x2 PTX",
+          "mean_incremental_pj_per_element": 25.05485745227375,
+          "median_incremental_pj_per_element": 22.347401871577265,
+          "sample_sd": 5.483501109490913,
+          "diagnostic_t95_low": 11.433085553250317,
+          "diagnostic_t95_high": 38.67662935129719,
+          "positive_session_effects": 3,
+          "positive_cell_verdicts": 1,
+          "session_count": 3
+        }
+      ],
+      "fresh_session_effects": [
+        {
+          "session_label": "session01_g48_s1024",
+          "session_index": 1,
+          "implementation_position": 1,
+          "session_order": "fp32>ptx_f16>ptx_f16x2",
+          "implementation": "fp32",
+          "implementation_label": "FP32 __expf",
+          "effect_incremental_pj_per_element": 83.66942067234741,
+          "forward_incremental_pj_per_element": 56.917973841540594,
+          "reverse_incremental_pj_per_element": 110.42086750315424,
+          "temperature_min_c": 66.0,
+          "temperature_max_c": 74.0,
+          "temperature_mid_c": 70.0,
+          "preheat_actual_s": 18.715625,
+          "trace_r2": 0.999757844807,
+          "cell_verdict": "positive_identified_pilot"
+        },
+        {
+          "session_label": "session01_g48_s1024",
+          "session_index": 1,
+          "implementation_position": 2,
+          "session_order": "fp32>ptx_f16>ptx_f16x2",
+          "implementation": "ptx_f16",
+          "implementation_label": "scalar FP16 PTX",
+          "effect_incremental_pj_per_element": 17.76350180925147,
+          "forward_incremental_pj_per_element": 29.81767727494579,
+          "reverse_incremental_pj_per_element": 5.709326343557147,
+          "temperature_min_c": 73.0,
+          "temperature_max_c": 76.0,
+          "temperature_mid_c": 74.5,
+          "preheat_actual_s": 19.0686738281,
+          "trace_r2": 0.99982311806,
+          "cell_verdict": "not_identified"
+        },
+        {
+          "session_label": "session01_g48_s1024",
+          "session_index": 1,
+          "implementation_position": 3,
+          "session_order": "fp32>ptx_f16>ptx_f16x2",
+          "implementation": "ptx_f16x2",
+          "implementation_label": "packed FP16x2 PTX",
+          "effect_incremental_pj_per_element": 22.347401871577265,
+          "forward_incremental_pj_per_element": 24.97244150918281,
+          "reverse_incremental_pj_per_element": 19.722362233971726,
+          "temperature_min_c": 72.0,
+          "temperature_max_c": 76.0,
+          "temperature_mid_c": 74.0,
+          "preheat_actual_s": 19.0537402344,
+          "trace_r2": 0.999793961332,
+          "cell_verdict": "not_identified"
+        },
+        {
+          "session_label": "session02_g48_s1024",
+          "session_index": 2,
+          "implementation_position": 1,
+          "session_order": "ptx_f16x2>fp32>ptx_f16",
+          "implementation": "ptx_f16x2",
+          "implementation_label": "packed FP16x2 PTX",
+          "effect_incremental_pj_per_element": 21.451666075769996,
+          "forward_incremental_pj_per_element": 27.49016354486727,
+          "reverse_incremental_pj_per_element": 15.413168606672727,
+          "temperature_min_c": 74.0,
+          "temperature_max_c": 76.0,
+          "temperature_mid_c": 75.0,
+          "preheat_actual_s": 19.130296875,
+          "trace_r2": 0.999802790892,
+          "cell_verdict": "not_identified"
+        },
+        {
+          "session_label": "session02_g48_s1024",
+          "session_index": 2,
+          "implementation_position": 2,
+          "session_order": "ptx_f16x2>fp32>ptx_f16",
+          "implementation": "fp32",
+          "implementation_label": "FP32 __expf",
+          "effect_incremental_pj_per_element": 78.56135038929351,
+          "forward_incremental_pj_per_element": 53.477497333334064,
+          "reverse_incremental_pj_per_element": 103.64520344525293,
+          "temperature_min_c": 74.0,
+          "temperature_max_c": 76.0,
+          "temperature_mid_c": 75.0,
+          "preheat_actual_s": 19.1016953125,
+          "trace_r2": 0.999777003455,
+          "cell_verdict": "positive_identified_pilot"
+        },
+        {
+          "session_label": "session02_g48_s1024",
+          "session_index": 2,
+          "implementation_position": 3,
+          "session_order": "ptx_f16x2>fp32>ptx_f16",
+          "implementation": "ptx_f16",
+          "implementation_label": "scalar FP16 PTX",
+          "effect_incremental_pj_per_element": 25.236665609433956,
+          "forward_incremental_pj_per_element": 7.962277995021232,
+          "reverse_incremental_pj_per_element": 42.51105322384669,
+          "temperature_min_c": 74.0,
+          "temperature_max_c": 78.0,
+          "temperature_mid_c": 76.0,
+          "preheat_actual_s": 18.9139667969,
+          "trace_r2": 0.999855580977,
+          "cell_verdict": "positive_identified_pilot"
+        },
+        {
+          "session_label": "session03_g48_s1024",
+          "session_index": 3,
+          "implementation_position": 1,
+          "session_order": "ptx_f16>ptx_f16x2>fp32",
+          "implementation": "ptx_f16",
+          "implementation_label": "scalar FP16 PTX",
+          "effect_incremental_pj_per_element": 15.178249591130045,
+          "forward_incremental_pj_per_element": 23.594224295217487,
+          "reverse_incremental_pj_per_element": 6.762274887042598,
+          "temperature_min_c": 74.0,
+          "temperature_max_c": 78.0,
+          "temperature_mid_c": 76.0,
+          "preheat_actual_s": 19.1347558594,
+          "trace_r2": 0.999814224519,
+          "cell_verdict": "not_identified"
+        },
+        {
+          "session_label": "session03_g48_s1024",
+          "session_index": 3,
+          "implementation_position": 2,
+          "session_order": "ptx_f16>ptx_f16x2>fp32",
+          "implementation": "ptx_f16x2",
+          "implementation_label": "packed FP16x2 PTX",
+          "effect_incremental_pj_per_element": 31.365504409473985,
+          "forward_incremental_pj_per_element": 52.97669753506489,
+          "reverse_incremental_pj_per_element": 9.754311283883075,
+          "temperature_min_c": 74.0,
+          "temperature_max_c": 77.0,
+          "temperature_mid_c": 75.5,
+          "preheat_actual_s": 19.0870742188,
+          "trace_r2": 0.999832454468,
+          "cell_verdict": "positive_identified_pilot"
+        },
+        {
+          "session_label": "session03_g48_s1024",
+          "session_index": 3,
+          "implementation_position": 3,
+          "session_order": "ptx_f16>ptx_f16x2>fp32",
+          "implementation": "fp32",
+          "implementation_label": "FP32 __expf",
+          "effect_incremental_pj_per_element": 84.26157341677516,
+          "forward_incremental_pj_per_element": 74.0059226234918,
+          "reverse_incremental_pj_per_element": 94.5172242100585,
+          "temperature_min_c": 74.0,
+          "temperature_max_c": 76.0,
+          "temperature_mid_c": 75.0,
+          "preheat_actual_s": 19.0499882812,
+          "trace_r2": 0.999811614003,
+          "cell_verdict": "positive_identified_pilot"
+        }
+      ],
+      "historical_and_fresh": [
+        {
+          "implementation": "fp32",
+          "implementation_label": "FP32 __expf",
+          "series": "historical original",
+          "effect_incremental_pj_per_element": 69.74045921829891,
+          "scope": "historical_context_not_primary_pool"
+        },
+        {
+          "implementation": "fp32",
+          "implementation_label": "FP32 __expf",
+          "series": "historical reproduction",
+          "effect_incremental_pj_per_element": 76.21158536170584,
+          "scope": "historical_context_not_primary_pool"
+        },
+        {
+          "implementation": "ptx_f16",
+          "implementation_label": "scalar FP16 PTX",
+          "series": "historical original",
+          "effect_incremental_pj_per_element": 10.993602667487925,
+          "scope": "historical_context_not_primary_pool"
+        },
+        {
+          "implementation": "ptx_f16",
+          "implementation_label": "scalar FP16 PTX",
+          "series": "historical reproduction",
+          "effect_incremental_pj_per_element": 1.631669067683933,
+          "scope": "historical_context_not_primary_pool"
+        },
+        {
+          "implementation": "ptx_f16x2",
+          "implementation_label": "packed FP16x2 PTX",
+          "series": "historical original",
+          "effect_incremental_pj_per_element": 26.235852467332705,
+          "scope": "historical_context_not_primary_pool"
+        },
+        {
+          "implementation": "ptx_f16x2",
+          "implementation_label": "packed FP16x2 PTX",
+          "series": "historical reproduction",
+          "effect_incremental_pj_per_element": 27.759121452435355,
+          "scope": "historical_context_not_primary_pool"
+        },
+        {
+          "implementation": "fp32",
+          "implementation_label": "FP32 __expf",
+          "series": "fresh 3-session mean",
+          "effect_incremental_pj_per_element": 82.1641148261387,
+          "scope": "primary_fresh_session_aggregate"
+        },
+        {
+          "implementation": "ptx_f16",
+          "implementation_label": "scalar FP16 PTX",
+          "series": "fresh 3-session mean",
+          "effect_incremental_pj_per_element": 19.39280566993849,
+          "scope": "primary_fresh_session_aggregate"
+        },
+        {
+          "implementation": "ptx_f16x2",
+          "implementation_label": "packed FP16x2 PTX",
+          "series": "fresh 3-session mean",
+          "effect_incremental_pj_per_element": 25.05485745227375,
+          "scope": "primary_fresh_session_aggregate"
+        }
+      ],
+      "within_session_contrasts": [
+        {
+          "session_index": 1,
+          "session_label": "session01_g48_s1024",
+          "contrast": "fp32_minus_ptx_f16",
+          "contrast_label": "FP32 − scalar FP16",
+          "effect_incremental_pj_per_element": 65.90591886309595,
+          "left_position": 1,
+          "right_position": 2
+        },
+        {
+          "session_index": 1,
+          "session_label": "session01_g48_s1024",
+          "contrast": "fp32_minus_ptx_f16x2",
+          "contrast_label": "FP32 − packed FP16x2",
+          "effect_incremental_pj_per_element": 61.32201880077015,
+          "left_position": 1,
+          "right_position": 3
+        },
+        {
+          "session_index": 1,
+          "session_label": "session01_g48_s1024",
+          "contrast": "ptx_f16x2_minus_ptx_f16",
+          "contrast_label": "packed FP16x2 − scalar FP16",
+          "effect_incremental_pj_per_element": 4.583900062325796,
+          "left_position": 3,
+          "right_position": 2
+        },
+        {
+          "session_index": 2,
+          "session_label": "session02_g48_s1024",
+          "contrast": "fp32_minus_ptx_f16",
+          "contrast_label": "FP32 − scalar FP16",
+          "effect_incremental_pj_per_element": 53.32468477985955,
+          "left_position": 2,
+          "right_position": 3
+        },
+        {
+          "session_index": 2,
+          "session_label": "session02_g48_s1024",
+          "contrast": "fp32_minus_ptx_f16x2",
+          "contrast_label": "FP32 − packed FP16x2",
+          "effect_incremental_pj_per_element": 57.109684313523516,
+          "left_position": 2,
+          "right_position": 1
+        },
+        {
+          "session_index": 2,
+          "session_label": "session02_g48_s1024",
+          "contrast": "ptx_f16x2_minus_ptx_f16",
+          "contrast_label": "packed FP16x2 − scalar FP16",
+          "effect_incremental_pj_per_element": -3.78499953366396,
+          "left_position": 1,
+          "right_position": 3
+        },
+        {
+          "session_index": 3,
+          "session_label": "session03_g48_s1024",
+          "contrast": "fp32_minus_ptx_f16",
+          "contrast_label": "FP32 − scalar FP16",
+          "effect_incremental_pj_per_element": 69.08332382564512,
+          "left_position": 3,
+          "right_position": 1
+        },
+        {
+          "session_index": 3,
+          "session_label": "session03_g48_s1024",
+          "contrast": "fp32_minus_ptx_f16x2",
+          "contrast_label": "FP32 − packed FP16x2",
+          "effect_incremental_pj_per_element": 52.89606900730118,
+          "left_position": 3,
+          "right_position": 2
+        },
+        {
+          "session_index": 3,
+          "session_label": "session03_g48_s1024",
+          "contrast": "ptx_f16x2_minus_ptx_f16",
+          "contrast_label": "packed FP16x2 − scalar FP16",
+          "effect_incremental_pj_per_element": 16.187254818343938,
+          "left_position": 2,
+          "right_position": 1
+        }
+      ],
+      "static_lowering": [
+        {
+          "implementation": "ptx_f16",
+          "implementation_label": "scalar FP16 PTX",
+          "stage": "PTX EX2 count",
+          "static_instruction_count": 8
+        },
+        {
+          "implementation": "ptx_f16",
+          "implementation_label": "scalar FP16 PTX",
+          "stage": "final SASS MUFU.EX2.F16 count",
+          "static_instruction_count": 8
+        },
+        {
+          "implementation": "ptx_f16x2",
+          "implementation_label": "packed FP16x2 PTX",
+          "stage": "PTX EX2 count",
+          "static_instruction_count": 4
+        },
+        {
+          "implementation": "ptx_f16x2",
+          "implementation_label": "packed FP16x2 PTX",
+          "stage": "final SASS MUFU.EX2.F16 count",
+          "static_instruction_count": 8
+        }
+      ],
+      "native_validation": [
+        {
+          "implementation": "fp32",
+          "implementation_label": "FP32 __expf",
+          "max_abs_error": 4.2918e-06,
+          "max_row_sum_error": 0.000152588,
+          "bit_identical": "true",
+          "packed_scalar_bit_mismatch_count": "not_applicable",
+          "native_verdict": "pass"
+        },
+        {
+          "implementation": "ptx_f16",
+          "implementation_label": "scalar FP16 PTX",
+          "max_abs_error": 1.34815e-05,
+          "max_row_sum_error": 0.000152588,
+          "bit_identical": "true",
+          "packed_scalar_bit_mismatch_count": "0",
+          "native_verdict": "pass"
+        },
+        {
+          "implementation": "ptx_f16x2",
+          "implementation_label": "packed FP16x2 PTX",
+          "max_abs_error": 1.34815e-05,
+          "max_row_sum_error": 0.000152588,
+          "bit_identical": "true",
+          "packed_scalar_bit_mismatch_count": "0",
+          "native_verdict": "pass"
+        }
+      ],
+      "audit_summary": [
+        {
+          "check": "cell execution",
+          "coverage": "9/9",
+          "result": "pass",
+          "meaning": "raw, trace, manifest, plan/state evidence present"
+        },
+        {
+          "check": "session position balance",
+          "coverage": "3 sessions",
+          "result": "pass",
+          "meaning": "each implementation occupies position 1, 2, and 3 once"
+        },
+        {
+          "check": "native numerical validation",
+          "coverage": "FP16 scalar + packed",
+          "result": "pass",
+          "meaning": "bit identity; native all-encoding mismatch count 0"
+        },
+        {
+          "check": "static SASS",
+          "coverage": "S=1024 / CTA=48 specialization",
+          "result": "pass",
+          "meaning": "packed f16x2 PTX lowers to 8 scalar F16 MUFU instructions"
+        },
+        {
+          "check": "dynamic NCU path",
+          "coverage": "two native paths",
+          "result": "pass (energy excluded)",
+          "meaning": "observed and expected XU delta both 49,152,000"
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "program",
+      "label": "Targeted confirmation program",
+      "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_program.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_program.csv');",
+        "description": "One fail-closed program row defining target coordinate, unit, frozen binary, and primary session-level unit.",
+        "tables_used": [
+          "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_program.csv"
+        ],
+        "metric_definitions": [
+          "Primary metric is treatment-control incremental board energy divided by CTA×ITER×S.",
+          "One added logical exponent result equals one processed input element in this treatment."
+        ],
+        "filters": [
+          "CTA=48",
+          "S=1024",
+          "3 fresh sessions",
+          "status=pass"
+        ]
+      }
+    },
+    {
+      "id": "session_cells",
+      "label": "Nine fresh session-cell results",
+      "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_session_cells.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_session_cells.csv');",
+        "description": "One row per fresh session and implementation, including effect, forward/reverse diagnostics, denominator proof, and operating-state fields.",
+        "tables_used": [
+          "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_session_cells.csv"
+        ],
+        "metric_definitions": [
+          "The independent repeat is the fresh session mean across three matched orientation blocks.",
+          "The pJ/logical-result and incremental-pJ/element fields are exact aliases for this probe only."
+        ],
+        "filters": [
+          "quality_status=pass",
+          "9 rows"
+        ],
+        "order_by": "session_index, implementation_position"
+      }
+    },
+    {
+      "id": "implementation_summary",
+      "label": "Fresh-session implementation summary",
+      "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_implementation_summary.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_implementation_summary.csv');",
+        "description": "Three implementation summaries recomputed from three independent fresh session effects each.",
+        "tables_used": [
+          "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_implementation_summary.csv"
+        ],
+        "metric_definitions": [
+          "Diagnostic t95 intervals have df=2 and are descriptive, not preregistered decision thresholds."
+        ],
+        "filters": [
+          "session_count=3",
+          "all_session_quality_pass=true"
+        ]
+      }
+    },
+    {
+      "id": "contrasts",
+      "label": "Within-session implementation-path contrasts",
+      "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_within_session_contrasts.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_within_session_contrasts.csv');",
+        "description": "Three complete implementation-path contrasts in each fresh session.",
+        "tables_used": [
+          "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_within_session_contrasts.csv"
+        ],
+        "metric_definitions": [
+          "Contrasts include operand construction, pack/unpack, compiler lowering, and scheduling; they are not pure functional-unit energy."
+        ],
+        "filters": [
+          "3 sessions × 3 contrasts"
+        ]
+      }
+    },
+    {
+      "id": "contrast_summary",
+      "label": "Within-session contrast summary",
+      "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_contrast_summary.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_contrast_summary.csv');",
+        "description": "Three descriptive summaries across the three matched fresh sessions.",
+        "tables_used": [
+          "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_contrast_summary.csv"
+        ],
+        "metric_definitions": [
+          "The packed-minus-scalar interval includes zero, so no packed energy advantage is identified at n=3."
+        ],
+        "filters": [
+          "session_count=3"
+        ]
+      }
+    },
+    {
+      "id": "historical",
+      "label": "Historical target coordinate context",
+      "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_historical_context.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_historical_context.csv');",
+        "description": "The two prior 60-cell target coordinate values, retained for context and excluded from the new primary aggregate.",
+        "tables_used": [
+          "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_historical_context.csv"
+        ],
+        "metric_definitions": [
+          "Historical values are not pooled with fresh confirmation sessions."
+        ],
+        "filters": [
+          "CTA=48",
+          "S=1024",
+          "context only"
+        ]
+      }
+    },
+    {
+      "id": "numerics",
+      "label": "Exact native numerical validation",
+      "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_numerical_validation.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_numerical_validation.csv');",
+        "description": "FP64-reference, treatment/control bit identity, and native all-encoding validation results.",
+        "tables_used": [
+          "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_numerical_validation.csv"
+        ],
+        "metric_definitions": [
+          "Packed/scalar mismatch count is a lane-function validation; it is not an energy result."
+        ],
+        "filters": [
+          "verdict=pass"
+        ]
+      }
+    },
+    {
+      "id": "sass",
+      "label": "Frozen binary SASS audit",
+      "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_sass_audit.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_sass_audit.csv');",
+        "description": "Static source PTX and final SASS opcode counts for the exact S=1024 specialization.",
+        "tables_used": [
+          "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_sass_audit.csv"
+        ],
+        "metric_definitions": [
+          "For sm86, packed f16x2 source PTX count 4 lowers to final scalar F16 MUFU count 8."
+        ],
+        "filters": [
+          "verdict=pass"
+        ]
+      }
+    },
+    {
+      "id": "ncu",
+      "label": "Dynamic native path audit",
+      "path": "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_ncu_audit.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_csv_auto('results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_ncu_audit.csv');",
+        "description": "Exact control-treatment XU counter delta, symbol/resource/traffic equality for native paths.",
+        "tables_used": [
+          "results/summary/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_ncu_audit.csv"
+        ],
+        "metric_definitions": [
+          "NCU replay energy is explicitly excluded from the ATC numerator."
+        ],
+        "filters": [
+          "observed_xu_delta=expected_xu_delta=49152000",
+          "energy_usable=false"
+        ]
+      }
+    },
+    {
+      "id": "analysis",
+      "label": "Targeted confirmation analyzer note",
+      "path": "docs/results/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_analysis_ko.md",
+      "query": {
+        "description": "Analyzer-authored concise result and evidence inventory."
+      }
+    },
+    {
+      "id": "kernel",
+      "label": "Softmax CUDA kernel",
+      "path": "src/softmax_kernels.cu",
+      "query": {
+        "description": "Source implementation of FP32, scalar FP16, and packed FP16x2 exponent paths."
+      }
+    },
+    {
+      "id": "runner",
+      "label": "Targeted confirmation runner",
+      "path": "scripts/run_softmax_ex2_targeted_confirmation.py",
+      "query": {
+        "description": "Immutable 9-cell cyclic-order plan and execution binding."
+      }
+    },
+    {
+      "id": "analyzer",
+      "label": "Targeted confirmation analyzer",
+      "path": "scripts/analyze_softmax_ex2_targeted_confirmation.py",
+      "query": {
+        "description": "Fail-closed primary session-level aggregation and audit join."
+      }
+    }
+  ]
+}

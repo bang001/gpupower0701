@@ -34,6 +34,9 @@ const char* nvmlErrorString(nvmlReturn_t result);
 nvmlReturn_t nvmlDeviceGetCount_v2(unsigned int* deviceCount);
 nvmlReturn_t nvmlDeviceGetHandleByIndex_v2(unsigned int index,
                                            nvmlDevice_t* device);
+nvmlReturn_t nvmlDeviceGetHandleByPciBusId_v2(const char* pciBusId,
+                                              nvmlDevice_t* device);
+nvmlReturn_t nvmlDeviceGetIndex(nvmlDevice_t device, unsigned int* index);
 nvmlReturn_t nvmlSystemGetDriverVersion(char* version, unsigned int length);
 nvmlReturn_t nvmlSystemGetNVMLVersion(char* version, unsigned int length);
 nvmlReturn_t nvmlDeviceGetName(nvmlDevice_t device, char* name,

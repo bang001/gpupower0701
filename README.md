@@ -394,6 +394,37 @@ logical `m16n16k16` op. Raw inline PTX `mma.sync.aligned.m16n8k16` and explicit
 `ldmatrix` are not the primary implementation yet; CSV rows mark
 `wmma_fallback=1` in `notes`.
 
+## RTX 3090 Softmax EX2 집중 재현 확인 (2026-07-25)
+
+논쟁 좌표인 `CTA=48, S=1024`를 새 CUDA 세션 3개와 순환 implementation 순서로
+재측정했다. 주 지표는 **입력 원소당 추가 EX2 결과 하나의 증분 에너지**다. 이 설계에서는
+`pJ/logical exponent result`와 수치상 같지만, 전체 Softmax `pJ/element`나 순수 MUFU
+에너지를 뜻하지 않는다.
+
+| Exponent path | Fresh-session mean incremental pJ/element |
+|---|---:|
+| FP32 `__expf` | 82.164 |
+| scalar FP16 `ex2.approx.f16` | 19.393 |
+| packed FP16 `ex2.approx.f16x2` PTX | 25.055 |
+
+![Fresh-session spread and paired paths for the targeted Softmax EX2 confirmation](docs/assets/softmax_ex2_targeted_confirmation/rtx3090_softmax_ex2_targeted_confirmation_20260725_session_spread.png)
+
+이 그림은 평균만이 아니라 구현별 raw fresh-session 3개, descriptive t95, 그리고
+같은 session 안의 paired path를 보여 준다. packed−scalar FP16의 session별 부호가
+바뀌므로 packed 우월성을 주장할 수 없다. 순환 순서·paired contrast·nested matched-block
+산포를 포함한 [Matplotlib 시각화와 해석](docs/results/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_analysis_ko.md)을 함께 확인한다.
+
+세 세션의 packed−scalar FP16 차이는 진단 구간이 0을 포함하므로 결론을 낼 수 없다.
+packed 경로는 PTX 수준 수치·경로 검증을 통과했지만, 동결한 CUDA 13.2 / RTX 3090
+sm86 binary에서는 `f16x2` PTX 1개가 scalar `MUFU.EX2.F16` 2개로 lowering된다.
+따라서 물리적 2-lane issue 또는 반 에너지 결과로 해석하지 않는다.
+
+- [Interactive technical report](docs/results/rtx3090_softmax_ex2_targeted_confirmation_20260725_report.html)
+- [Analysis and reproducible evidence index](docs/results/rtx3090_softmax_ex2_targeted_confirmation_targeted_g48s1024_confirm_v1_20260725_analysis_ko.md)
+- [Matplotlib figure inventory and regeneration](docs/assets/softmax_ex2_targeted_confirmation/README.md)
+- [Report QA and validation status](docs/results/rtx3090_softmax_ex2_targeted_confirmation_20260725_report_qa.md)
+- [Design and implementation notes](fp16_softmax.md)
+
 ## Build
 
 The default `build` directory below targets the local RTX 3090 profile
