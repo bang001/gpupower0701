@@ -22,8 +22,8 @@ GPUPWR_CMAKE_BIN="${GPUPWR_CMAKE_BIN:-${GPUPWR_CUDA_ENV}/bin/cmake}"
 GPUPWR_PYTHON_BIN="${GPUPWR_PYTHON_BIN:-${GPUPWR_CUDA_ENV}/bin/python}"
 GPUPWR_NVCC_BIN="${GPUPWR_NVCC_BIN:-${GPUPWR_CUDA_ENV}/bin/nvcc}"
 
-if [[ ! -d "${GPUPWR_REPO_ROOT}/.git" ||
-      ! -f "${GPUPWR_REPO_ROOT}/CMakeLists.txt" ]]; then
+if [[ ! -f "${GPUPWR_REPO_ROOT}/CMakeLists.txt" ||
+      "$(git -C "${GPUPWR_REPO_ROOT}" rev-parse --is-inside-work-tree 2>/dev/null || true)" != "true" ]]; then
   echo "ERROR: not a normal GPUPower repository: ${GPUPWR_REPO_ROOT}" >&2
   return 1
 fi
