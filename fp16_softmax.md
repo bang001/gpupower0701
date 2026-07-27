@@ -1,4 +1,4 @@
-# FP16 Softmax Operand-rate ATC 설계 및 검증 기록
+# FP16 Softmax: Operand-rate ATC와 전체 정밀도 단계 분리 기록
 
 작성일: 2026-07-22 / 최종 갱신: 2026-07-27
 
@@ -12,9 +12,12 @@ coefficient·factor 인과효과는 미확정 / A100은 현행 short-row source�
 장치에서 재빌드·검증하지 않았고 **runtime energy·NCU는
 `not_run_no_a100_device`**
 
-## Cross-platform 확장 상태 (2026-07-27)
+## EX2 Operand-rate ATC cross-platform 확장 상태 (2026-07-27)
 
-다른 GPU에서의 재현은 [Cross-platform Softmax EX2 실험 실행 가이드](docs/platforms/cross_platform_softmax_ex2_experiment_guide_ko.md)를 기준으로 한다. 실행 package는 `scripts/plan_softmax_cross_platform_ex2.py`가 생성하며, 이 문서의 fp32 조건은 Tensor Core FP32가 아닌 scalar FP32 `__expf` baseline이다.
+이 절은 `a100_fp16_softmax_energy`의 **추가 EX2 operand-rate probe**에만 적용한다.
+이는 아래의 complete-Softmax 정밀도 단계 분리 binary, `pJ/logical output element`,
+FP16 reduction/normalization 해석을 cross-platform으로 보장하지 않는다. 다른 GPU에서의
+probe 재현은 [Cross-platform Softmax EX2 실험 실행 가이드](docs/platforms/cross_platform_softmax_ex2_experiment_guide_ko.md)를 기준으로 한다. 실행 package는 `scripts/plan_softmax_cross_platform_ex2.py`가 생성하며, 이 문서의 fp32 조건은 Tensor Core FP32가 아닌 scalar FP32 `__expf` baseline이다.
 
 | profile | 실행 범위 | 결과 해석 |
 |---|---|---|
@@ -25,6 +28,95 @@ coefficient·factor 인과효과는 미확정 / A100은 현행 short-row source�
 이 표는 구현·실행 계획의 지원 범위이지 A100/H100 target-node에서 이미 얻은 측정값이 아니다.
 
 모든 platform은 GPU/device total-energy counter와 동일한 logical scalar exponent-result 분모를 사용하되, raw row와 binary/UUID/PCI/NCU evidence를 platform 간에 pool하지 않는다.
+
+## RTX 3090 전체 Softmax 정밀도 단계 분리 (2026-07-27)
+
+당초의 `ptx_f16`, `ptx_f16x2`, `__expf` 비교는 같은 Softmax shell 안에 추가 EX2를
+삽입한 operand-rate probe였다. 따라서 그것만으로는 complete Softmax의 `exp`,
+`max+sum reduction`, `normalization` 중 어느 단계가 energy 차이에 기여하는지 말할 수
+없다. 이를 분리하기 위해 새 binary
+`a100_fp16_softmax_whole_precision_energy`를 추가했다. 이 binary는 stabilized
+row-wise Softmax 전체를 계산하며, FP16 I/O를 고정한 뒤 한 단계만 변경한다.
+
+| stage group | FP32 기준 정책 | scalar FP16 treatment | packed FP16 treatment |
+|---|---|---|---|
+| `exp` | `fp16_io_fp32_all` | `exp_fp16_scalar` | `exp_fp16x2` |
+| `max+sum reduction` | `fp16_io_fp32_all` | `reduction_fp16_scalar` | `reduction_fp16x2` |
+| `normalization` | `fp16_io_fp32_all` | `normalization_fp16_scalar` | `normalization_fp16x2` |
+
+`fp32_io_fp32_all`, `fp16_scalar_all`, `fp16x2_all`은 수치 endpoint로 별도
+`--validate-only`를 통과했지만, stage effect와 all-FP16 endpoint 차이를 더해
+예측하지 않는다. nonlinear rounding, scheduling, shared-memory traffic가 있으므로
+그런 가법성은 이 설계의 가정이 아니다.
+
+### 구현 의미와 SASS 경계
+
+- `exp`는 inline `ex2.approx.f16` / `ex2.approx.f16x2` PTX다. 다만 frozen
+  CUDA 13.2 RTX 3090 sm86 binary에서는 두 정책 모두 네 개의 scalar
+  `MUFU.EX2.F16`로 lowering됐다. `f16x2` PTX 하나를 physical 2-result issue나
+  반 에너지로 해석하지 않는다.
+- scalar reduction은 scalar `max.f16`/`add.f16` PTX를 사용한다. sm86 SASS에서는
+  `HMNMX2`/`HADD2`의 `.H0_H0` lane replication으로 lowering된다. packed reduction은
+  `*.f16x2` PTX와 half2 lane을 쓰되, **한 row 안의 두 원소를 묶는 방식이 아니라
+  서로 독립된 두 CTA row를 lane에 배치**한다. 따라서 vector reduction의 의미를
+  과장하지 않는다.
+- normalization scalar/packed policy의 reciprocal은 native FP16 RCP가 아니다.
+  `hrcp(half)`는 FP32 reciprocal (`MUFU.RCP`) 후 FP16 round로 lowering되며,
+  policy 차이는 그 뒤 scalar half 또는 half2 probability multiply에 있다.
+
+동일 shared-memory scratch를 다음 reduction에 재사용하기 전, 마지막 consumer가
+읽은 뒤 `__syncthreads()`를 두어 scalar path race도 제거했다. SASS audit은 exp PTX
+형태와 lowering, reduction lane semantics, reciprocal lowering을 binary에서
+fail-closed로 확인한다.
+
+### 제한된 RTX 3090 재현 결과
+
+`S=512`, `CTA=16`, 256 threads/CTA, two rows/CTA, GPU 0 RTX 3090(sm86)를
+고정했다. 각 stage는 3개의 fresh CUDA-process session으로 실행했고 순서는
+`ABC → CAB → BCA`로 회전했다. session마다 baseline 20초 preheat를 한 번 수행했다.
+그 뒤 schedule 순서의 policy calibration과 unrecorded full-policy warm-up이 같은 순서로
+실행됐다. position은 회전하지만 directed carryover를 완전 counterbalance하지 않으므로,
+이 conditioning의 thermal/scheduling effect를 stage effect로 분리하지 않고 결과를
+descriptive로만 해석한다.
+energy trace, SMID placement, numerical output, binary/script hash gate를 27/27
+role에서 통과했다. 주 지표는 NVML GPU/device total-energy trace에서 계산한 **net
+`pJ/logical Softmax output element`**다. 이는 EX2 probe의 `pJ/logical scalar
+exponent result`와 다른 estimand다.
+
+| 변경 단계 | FP16 I/O + FP32-stage baseline mean | scalar FP16 mean | scalar Δ | packed FP16 mean | packed Δ |
+|---|---:|---:|---:|---:|---:|
+| `exp` | 2453.8 | 2091.7 | −362.1 | 1941.9 | −512.0 |
+| `max+sum reduction` | 2086.2 | 3345.3 | +1259.2 | 2084.4 | −1.8 |
+| `normalization` | 2158.1 | 2515.1 | +357.0 | 2415.8 | +257.7 |
+
+표 단위는 모두 pJ/logical output element이고, Δ는 같은 fresh session의 FP16 I/O +
+FP32-stage baseline 대비 mean paired contrast다. 모든 contrast의 `n=3` descriptive t95
+interval이 0을 포함한다. 따라서 위 부호를 성능/energy 개선의 확정이나 scalar·packed
+선택 근거로 쓰지 않는다. 제한된 후속 확인이 필요하다면 CTA/S 전체 sweep 대신 같은
+좌표에서 `exp packed vs baseline`, `reduction scalar vs baseline` 두 AB/BA pair만
+추가 fresh session으로 재측정하는 것이 우선이다.
+
+- [분석 보고서](docs/results/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_analysis_ko.md)
+- [Interactive report](docs/results/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_report.html)
+- [Matplotlib figures / 재생성](docs/assets/softmax_whole_precision_stage_isolation/README.md)
+- [QA와 artifact 검증 범위](docs/results/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_report_qa.md)
+
+### 재실행
+
+```bash
+source scripts/activate_softmax_experiment_env.sh
+cmake -S . -B build-whole-precision-rtx3090 \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=86
+cmake --build build-whole-precision-rtx3090 \
+  --target a100_fp16_softmax_whole_precision_energy -j
+
+python3 scripts/run_softmax_whole_precision_stage_isolation.py \
+  --build-dir build-whole-precision-rtx3090 \
+  --output-dir results/raw --session-tag "$(date +%Y%m%d)_stageiso" --execute
+```
+
+실행 뒤 analyzer, Matplotlib, SASS audit, report builder 순서와 immutable
+manifest/hash gate는 [Scripts Map](scripts/README.md)에 정리했다.
 
 ## 현재 로컬 저장소와 실험환경
 
@@ -82,9 +174,11 @@ frozen binary SHA는 이동·검증 전후 동일하다. 복사 범위, Git pari
 정리했다. 과거 결과 파일 안의 `/mnt/c/...` 절대경로는 당시 acquisition
 provenance이므로 새 경로로 치환하지 않는다.
 
-## Native FP16 PTX 확장 — 현재 권위 판정
+## EX2 Operand-rate ATC의 Native FP16 PTX 확장 — 현재 권위 판정
 
-이 절이 현재 설계와 결과의 기준이다. 뒤의 `__expf(float)` 절은 control 설계와 energy-trace 실패 원인을 보존한 **역사적 FP32 baseline**이며 native FP16 결과로 읽지 않는다.
+이 절은 추가 EX2 operand-rate probe의 설계와 결과 기준이다. 위 complete-Softmax
+stage-isolation 결과와 단위·estimand를 섞지 않는다. 뒤의 `__expf(float)` 절은 control
+설계와 energy-trace 실패 원인을 보존한 **역사적 FP32 baseline**이며 native FP16 결과로 읽지 않는다.
 
 ### 결론
 

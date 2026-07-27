@@ -1,0 +1,933 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "RTX 3090 전체 Softmax 정밀도 단계 분리 분석",
+    "description": "S=512, CTA=16에서 exp·max/sum·normalization을 FP32, scalar FP16, packed FP16으로 분리한 complete-Softmax energy analysis.",
+    "generatedAt": "2026-07-27T12:01:37+09:00",
+    "sources": [
+      {
+        "id": "analysis",
+        "label": "Fail-closed whole-Softmax stage analysis",
+        "path": "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/analysis/summary.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_csv_auto('results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/analysis/summary.csv');",
+          "description": "The chart/table source is the analyzer summary CSV. The preceding fail-closed analyzer validates raw/trace/manifest SHA bindings, exact stage schedule, qualified trace, SMID, numerical and denominator gates.",
+          "tables_used": [
+            "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/analysis/analysis.json",
+            "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/analysis/validated_cells.csv",
+            "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/analysis/summary.csv",
+            "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/manifest.json"
+          ],
+          "metric_definitions": [
+            "Primary metric = net pJ per logical Softmax output element.",
+            "A fresh session is the independent repeat; 27 measured roles are not pooled as 27 independent samples."
+          ],
+          "filters": [
+            "RTX 3090",
+            "S=512",
+            "grid CTA=16",
+            "FP16 I/O fixed",
+            "3 fresh sessions per stage-policy"
+          ]
+        }
+      },
+      {
+        "id": "sass",
+        "label": "sm86 PTX/SASS path audit",
+        "path": "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/sass_audit.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_json_auto('results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/sass_audit.json');",
+          "description": "Audits the compiled sm86 specialization for scalar/packed exp, scalar/packed max+sum reduction, and FP16-rounded reciprocal normalization lowering.",
+          "tables_used": [
+            "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/sass_audit.json"
+          ],
+          "metric_definitions": [
+            "Static PTX/SASS instruction counts are path evidence, not energy measurements."
+          ],
+          "filters": [
+            "native sm86",
+            "whole-Softmax precision kernel",
+            "fixed S=512 / two rows per CTA"
+          ]
+        }
+      }
+    ],
+    "charts": [
+      {
+        "id": "stage_energy",
+        "title": "Stage-isolated mean net energy",
+        "subtitle": "Three fresh sessions per policy; FP16 I/O is fixed and values are complete-Softmax net pJ/logical output element.",
+        "type": "bar",
+        "intent": "comparison",
+        "question": "How do the FP32-stage, scalar FP16, and packed FP16 paths compare within each isolated stage group?",
+        "rationale": "Grouped discrete bars compare the three complete-path policy means per stage; the detailed table retains n=3 spread.",
+        "comparisonContext": {
+          "baseline": "FP16 I/O + FP32 exp/reduction/normalization within each stage group",
+          "denominator": "one logical Softmax output element",
+          "grain": "stage-policy mean across three fresh sessions",
+          "unit": "net pJ/logical output element"
+        },
+        "dataset": "stage_summary",
+        "sourceId": "analysis",
+        "encodings": {
+          "x": {
+            "field": "stage_label",
+            "type": "ordinal",
+            "label": "Isolated stage"
+          },
+          "y": {
+            "field": "mean_net_pj_per_output",
+            "type": "quantitative",
+            "label": "Mean net energy",
+            "unit": "pJ/logical output element",
+            "format": "number"
+          },
+          "tooltip": [
+            {
+              "field": "stage_label",
+              "type": "nominal",
+              "label": "Stage"
+            },
+            {
+              "field": "precision",
+              "type": "nominal",
+              "label": "Policy"
+            },
+            {
+              "field": "mean_net_pj_per_output",
+              "type": "quantitative",
+              "label": "Mean",
+              "unit": "pJ/logical output element",
+              "format": "number"
+            },
+            {
+              "field": "sample_std_net_pj_per_output",
+              "type": "quantitative",
+              "label": "Session SD",
+              "unit": "pJ/logical output element",
+              "format": "number"
+            },
+            {
+              "field": "fresh_sessions",
+              "type": "quantitative",
+              "label": "Fresh sessions",
+              "format": "number"
+            }
+          ],
+          "color": {
+            "field": "precision",
+            "type": "nominal",
+            "label": "Precision path"
+          }
+        },
+        "palette": {
+          "kind": "categorical",
+          "name": "whole-softmax-precision"
+        },
+        "labels": {
+          "values": "auto"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        },
+        "legend": {
+          "position": "bottom"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 0,
+            "label": "0",
+            "color": "neutral",
+            "lineStyle": "solid"
+          }
+        ]
+      },
+      {
+        "id": "paired_delta",
+        "title": "Paired mean delta versus the FP32-stage baseline",
+        "subtitle": "Negative means lower observed net energy in the same fresh session; n=3 and intervals are descriptive only.",
+        "type": "bar",
+        "intent": "comparison",
+        "question": "What is the session-paired direction and size of each scalar/packed stage contrast?",
+        "rationale": "A signed bar chart centers the six paired mean contrasts on zero while the table preserves session spread and t95 diagnostics.",
+        "comparisonContext": {
+          "baseline": "same-session fp16_io_fp32_all",
+          "denominator": "one logical Softmax output element",
+          "grain": "mean of three session-paired deltas",
+          "unit": "net pJ/logical output element"
+        },
+        "dataset": "paired_contrasts",
+        "sourceId": "analysis",
+        "encodings": {
+          "x": {
+            "field": "contrast_label",
+            "type": "ordinal",
+            "label": "Paired contrast"
+          },
+          "y": {
+            "field": "mean_delta_net_pj_per_output",
+            "type": "quantitative",
+            "label": "Mean paired delta",
+            "unit": "pJ/logical output element",
+            "format": "number"
+          },
+          "tooltip": [
+            {
+              "field": "contrast_label",
+              "type": "nominal",
+              "label": "Contrast"
+            },
+            {
+              "field": "mean_delta_net_pj_per_output",
+              "type": "quantitative",
+              "label": "Mean delta",
+              "unit": "pJ/logical output element",
+              "format": "number"
+            },
+            {
+              "field": "t95_low_delta_net_pj_per_output",
+              "type": "quantitative",
+              "label": "Descriptive t95 low",
+              "unit": "pJ/logical output element",
+              "format": "number"
+            },
+            {
+              "field": "t95_high_delta_net_pj_per_output",
+              "type": "quantitative",
+              "label": "Descriptive t95 high",
+              "unit": "pJ/logical output element",
+              "format": "number"
+            },
+            {
+              "field": "fresh_sessions",
+              "type": "quantitative",
+              "label": "Fresh sessions",
+              "format": "number"
+            }
+          ],
+          "color": {
+            "field": "precision",
+            "type": "nominal",
+            "label": "Precision path"
+          }
+        },
+        "palette": {
+          "kind": "categorical",
+          "name": "whole-softmax-precision"
+        },
+        "labels": {
+          "values": "auto"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        },
+        "legend": {
+          "position": "bottom"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 0,
+            "label": "no observed difference",
+            "color": "neutral",
+            "lineStyle": "solid"
+          }
+        ]
+      }
+    ],
+    "tables": [
+      {
+        "id": "stage_summary_table",
+        "title": "Fresh-session absolute policy summary",
+        "subtitle": "One row is a policy mean across three fresh sessions in one stage group.",
+        "dataset": "stage_summary",
+        "sourceId": "analysis",
+        "defaultSort": {
+          "field": "stage_label",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "stage_label",
+            "label": "Stage"
+          },
+          {
+            "field": "precision",
+            "label": "Policy"
+          },
+          {
+            "field": "fresh_sessions",
+            "label": "Fresh sessions",
+            "format": "number"
+          },
+          {
+            "field": "mean_net_pj_per_output",
+            "label": "Mean net pJ/output",
+            "format": "number"
+          },
+          {
+            "field": "sample_std_net_pj_per_output",
+            "label": "Session SD",
+            "format": "number"
+          },
+          {
+            "field": "median_net_pj_per_output",
+            "label": "Median",
+            "format": "number"
+          },
+          {
+            "field": "min_net_pj_per_output",
+            "label": "Min",
+            "format": "number"
+          },
+          {
+            "field": "max_net_pj_per_output",
+            "label": "Max",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "paired_contrast_table",
+        "title": "Paired contrast uncertainty",
+        "subtitle": "Every row is three fresh-session paired deltas against the common FP32-stage baseline; t95 is descriptive, not a selection test.",
+        "dataset": "paired_contrasts",
+        "sourceId": "analysis",
+        "defaultSort": {
+          "field": "contrast_label",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "contrast_label",
+            "label": "Contrast"
+          },
+          {
+            "field": "mean_delta_net_pj_per_output",
+            "label": "Mean Δ",
+            "format": "number"
+          },
+          {
+            "field": "sample_std_delta_net_pj_per_output",
+            "label": "Session SD",
+            "format": "number"
+          },
+          {
+            "field": "t95_low_delta_net_pj_per_output",
+            "label": "t95 low",
+            "format": "number"
+          },
+          {
+            "field": "t95_high_delta_net_pj_per_output",
+            "label": "t95 high",
+            "format": "number"
+          },
+          {
+            "field": "negative_session_count",
+            "label": "Negative sessions",
+            "format": "number"
+          },
+          {
+            "field": "positive_session_count",
+            "label": "Positive sessions",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "quality_table",
+        "title": "Evidence and measurement-quality gates",
+        "subtitle": "All rows are supporting validity evidence; temperature is context rather than a causal adjustment.",
+        "dataset": "analysis_quality",
+        "sourceId": "analysis",
+        "defaultSort": {
+          "field": "check",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "check",
+            "label": "Check"
+          },
+          {
+            "field": "coverage",
+            "label": "Coverage"
+          },
+          {
+            "field": "result",
+            "label": "Result"
+          },
+          {
+            "field": "meaning",
+            "label": "Meaning"
+          }
+        ]
+      },
+      {
+        "id": "sass_audit_table",
+        "title": "sm86 compiled-path audit",
+        "subtitle": "One static code-path audit summary row; it is not a board-energy measurement.",
+        "dataset": "sass_quality",
+        "sourceId": "sass",
+        "defaultSort": {
+          "field": "check",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "check",
+            "label": "Check"
+          },
+          {
+            "field": "coverage",
+            "label": "Binary hash"
+          },
+          {
+            "field": "result",
+            "label": "Result"
+          },
+          {
+            "field": "meaning",
+            "label": "Meaning"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# RTX 3090 전체 Softmax 정밀도 단계 분리 분석"
+      },
+      {
+        "id": "technical_summary",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## 기술 요약\n\n**exp·max/sum reduction·normalization을 각각 FP32, scalar FP16, packed FP16으로 분리해 complete Softmax를 측정했다.** primary unit은 `net pJ/logical Softmax output element`이며, 기존 EX2 Operand-rate ATC의 `pJ/added logical exponent result`와 다르다. n=3 paired contrast가 모두 descriptive t95 interval에서 0을 포함하므로, 이번 결과는 energy superiority를 확정하지 않는다."
+      },
+      {
+        "id": "energy_result_intro",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## 방향성은 보이나, 선택 결론은 아직 이르다\n\nexp stage의 paired mean은 scalar와 packed 모두 음수였고, scalar reduction은 세 session 모두 양수였다. 반면 packed reduction은 baseline 근처 평균, normalization은 양의 평균과 큰 spread를 보였다. 이들은 제한된 coordinate의 관측이며 pure hardware-unit energy가 아니다."
+      },
+      {
+        "id": "stage_energy_block",
+        "type": "chart",
+        "chartId": "stage_energy"
+      },
+      {
+        "id": "stage_table_block",
+        "type": "table",
+        "tableId": "stage_summary_table"
+      },
+      {
+        "id": "paired_result_intro",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## paired contrast와 불확실성\n\n같은 fresh CUDA process 안에서 baseline과 treatment를 pairing했고, ABC/CAB/BCA로 position을 정확히 한 번씩 순환했다. 다만 fresh session은 3개뿐이므로 mean과 t95는 다음 confirmation의 범위를 정하는 descriptive 자료다."
+      },
+      {
+        "id": "paired_chart_block",
+        "type": "chart",
+        "chartId": "paired_delta"
+      },
+      {
+        "id": "paired_table_block",
+        "type": "table",
+        "tableId": "paired_contrast_table"
+      },
+      {
+        "id": "scope_definition",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## 범위·분모·방법\n\nRTX 3090 full 82-SM, sm86, S=512, 256 threads/CTA, grid CTA=16, CTA당 독립 row 2개, logit scale=4를 고정했다. FP16 I/O를 공통으로 두고 지정한 compute stage만 바꿨다. `net pJ/output = (qualified trace energy − idle power × elapsed) × 1e12 / logical output elements`다. 각 role은 약 13 s이고, baseline preheat는 session당 약 20 s다. 그 뒤 schedule-order calibration과 같은 순서의 unrecorded full-policy warm-up이 있으므로, ABC/CAB/BCA는 position만 회전하고 directed carryover를 완전히 counterbalance하지 않는다."
+      },
+      {
+        "id": "implementation_definition",
+        "type": "markdown",
+        "sourceId": "sass",
+        "body": "## 컴파일된 scalar/packed path의 의미\n\nexp는 scalar `ex2.approx.f16` 4개와 packed `ex2.approx.f16x2` 2개 PTX를 보였지만, fixed sm86 binary에서 둘 다 `MUFU.EX2.F16` 4개로 lowering됐다. reduction packed는 CTA의 독립 두 row를 half2 lane에 둔 9개 f16x2 max/sum tree이며, scalar는 18개 scalar PTX tree와 H0-lane-replicated SASS이다. normalization은 native FP16 reciprocal이 아니라 FP16-rounded FP32 reciprocal과 scalar/half2 multiply 비교다."
+      },
+      {
+        "id": "quality_intro",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## 수치·trace·placement 품질\n\n27/27 roles가 manifest/hash/schema/denominator, qualified trace, SMID, numerical gate를 통과했다. 온도는 52–58 °C로 기록했지만 hard fail이나 causal adjustment로 사용하지 않았다."
+      },
+      {
+        "id": "quality_table_block",
+        "type": "table",
+        "tableId": "quality_table"
+      },
+      {
+        "id": "sass_audit_table_block",
+        "type": "table",
+        "tableId": "sass_audit_table"
+      },
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "body": "## 한계와 다음 단계\n\n이 결과는 S=512·CTA=16·RTX 3090 한 coordinate에 한정되고, n=3 interval은 넓다. baseline preheat 뒤 same-order calibration/warm-up이 있어 position은 회전했지만 directed carryover는 완전 counterbalance하지 않았다. stage effect를 합산해 all-FP16 policy energy를 예측하거나 cross-GPU / pure unit energy로 일반화하지 않는다. 넓은 sweep 대신 exp packed vs baseline 및 scalar reduction vs baseline만, premeasurement conditioning을 common/fixed로 둔 AB/BA 추가 fresh-session confirmation을 권장한다."
+      },
+      {
+        "id": "further_questions",
+        "type": "markdown",
+        "body": "## 후속 질문\n\nfixed-clock 또는 external meter가 interval을 줄이는가? A100/H100에서 같은 PTX/SASS lowering이 유지되는가? workload-specific numerical tolerance가 더 엄격할 때 FP16 reduction/normalization boundary는 어디인가?"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-07-27T12:01:37+09:00",
+    "status": "ready",
+    "datasets": {
+      "stage_summary": [
+        {
+          "stage_order": 1,
+          "stage": "exp",
+          "stage_label": "exp",
+          "policy_order": 1,
+          "policy": "fp16_io_fp32_all",
+          "precision": "FP32 stages (FP16 I/O)",
+          "fresh_sessions": 3,
+          "mean_net_pj_per_output": 2453.8465008066664,
+          "sample_std_net_pj_per_output": 509.6713904333327,
+          "median_net_pj_per_output": 2341.18655733,
+          "min_net_pj_per_output": 2009.93080382,
+          "max_net_pj_per_output": 3010.42214127
+        },
+        {
+          "stage_order": 1,
+          "stage": "exp",
+          "stage_label": "exp",
+          "policy_order": 2,
+          "policy": "exp_fp16_scalar",
+          "precision": "scalar FP16",
+          "fresh_sessions": 3,
+          "mean_net_pj_per_output": 2091.72357319,
+          "sample_std_net_pj_per_output": 242.54655150112322,
+          "median_net_pj_per_output": 2161.81933357,
+          "min_net_pj_per_output": 1821.8485908,
+          "max_net_pj_per_output": 2291.5027952
+        },
+        {
+          "stage_order": 1,
+          "stage": "exp",
+          "stage_label": "exp",
+          "policy_order": 3,
+          "policy": "exp_fp16x2",
+          "precision": "packed FP16",
+          "fresh_sessions": 3,
+          "mean_net_pj_per_output": 1941.85682722,
+          "sample_std_net_pj_per_output": 115.84522147355287,
+          "median_net_pj_per_output": 1953.1660026,
+          "min_net_pj_per_output": 1820.77177452,
+          "max_net_pj_per_output": 2051.63270454
+        },
+        {
+          "stage_order": 2,
+          "stage": "reduction",
+          "stage_label": "max + sum reduction",
+          "policy_order": 1,
+          "policy": "fp16_io_fp32_all",
+          "precision": "FP32 stages (FP16 I/O)",
+          "fresh_sessions": 3,
+          "mean_net_pj_per_output": 2086.1625700166665,
+          "sample_std_net_pj_per_output": 124.55374053304577,
+          "median_net_pj_per_output": 2091.75727039,
+          "min_net_pj_per_output": 1958.90575343,
+          "max_net_pj_per_output": 2207.82468623
+        },
+        {
+          "stage_order": 2,
+          "stage": "reduction",
+          "stage_label": "max + sum reduction",
+          "policy_order": 2,
+          "policy": "reduction_fp16_scalar",
+          "precision": "scalar FP16",
+          "fresh_sessions": 3,
+          "mean_net_pj_per_output": 3345.3232399733333,
+          "sample_std_net_pj_per_output": 782.8112395839853,
+          "median_net_pj_per_output": 2990.19932405,
+          "min_net_pj_per_output": 2803.01806431,
+          "max_net_pj_per_output": 4242.75233156
+        },
+        {
+          "stage_order": 2,
+          "stage": "reduction",
+          "stage_label": "max + sum reduction",
+          "policy_order": 3,
+          "policy": "reduction_fp16x2",
+          "precision": "packed FP16",
+          "fresh_sessions": 3,
+          "mean_net_pj_per_output": 2084.3817307,
+          "sample_std_net_pj_per_output": 447.7969605296019,
+          "median_net_pj_per_output": 2118.02890136,
+          "min_net_pj_per_output": 1620.71027552,
+          "max_net_pj_per_output": 2514.40601522
+        },
+        {
+          "stage_order": 3,
+          "stage": "normalization",
+          "stage_label": "normalization",
+          "policy_order": 1,
+          "policy": "fp16_io_fp32_all",
+          "precision": "FP32 stages (FP16 I/O)",
+          "fresh_sessions": 3,
+          "mean_net_pj_per_output": 2158.05646183,
+          "sample_std_net_pj_per_output": 11.963019168772593,
+          "median_net_pj_per_output": 2156.49498836,
+          "min_net_pj_per_output": 2146.95085438,
+          "max_net_pj_per_output": 2170.72354275
+        },
+        {
+          "stage_order": 3,
+          "stage": "normalization",
+          "stage_label": "normalization",
+          "policy_order": 2,
+          "policy": "normalization_fp16_scalar",
+          "precision": "scalar FP16",
+          "fresh_sessions": 3,
+          "mean_net_pj_per_output": 2515.0754176433334,
+          "sample_std_net_pj_per_output": 422.4364572295127,
+          "median_net_pj_per_output": 2336.10192221,
+          "min_net_pj_per_output": 2211.58770519,
+          "max_net_pj_per_output": 2997.53662553
+        },
+        {
+          "stage_order": 3,
+          "stage": "normalization",
+          "stage_label": "normalization",
+          "policy_order": 3,
+          "policy": "normalization_fp16x2",
+          "precision": "packed FP16",
+          "fresh_sessions": 3,
+          "mean_net_pj_per_output": 2415.7553870366664,
+          "sample_std_net_pj_per_output": 405.2586036040591,
+          "median_net_pj_per_output": 2411.02600551,
+          "min_net_pj_per_output": 2012.88217174,
+          "max_net_pj_per_output": 2823.35798386
+        }
+      ],
+      "paired_contrasts": [
+        {
+          "stage_order": 1,
+          "stage": "exp",
+          "stage_label": "exp",
+          "policy_order": 2,
+          "policy": "exp_fp16_scalar",
+          "precision": "scalar FP16",
+          "contrast_label": "exp · scalar FP16",
+          "fresh_sessions": 3,
+          "mean_delta_net_pj_per_output": -362.1229276166667,
+          "sample_std_delta_net_pj_per_output": 309.02548588311447,
+          "t95_low_delta_net_pj_per_output": -1129.7847910195233,
+          "t95_high_delta_net_pj_per_output": 405.5389357861898,
+          "min_delta_net_pj_per_output": -718.9193460699998,
+          "max_delta_net_pj_per_output": -179.36722376000034,
+          "negative_session_count": 3,
+          "positive_session_count": 0
+        },
+        {
+          "stage_order": 1,
+          "stage": "exp",
+          "stage_label": "exp",
+          "policy_order": 3,
+          "policy": "exp_fp16x2",
+          "precision": "packed FP16",
+          "contrast_label": "exp · packed FP16",
+          "fresh_sessions": 3,
+          "mean_delta_net_pj_per_output": -511.9896735866667,
+          "sample_std_delta_net_pj_per_output": 549.5274605823142,
+          "t95_low_delta_net_pj_per_output": -1877.0915621125205,
+          "t95_high_delta_net_pj_per_output": 853.1122149391872,
+          "min_delta_net_pj_per_output": -1057.25613867,
+          "max_delta_net_pj_per_output": 41.70190071999991,
+          "negative_session_count": 2,
+          "positive_session_count": 1
+        },
+        {
+          "stage_order": 2,
+          "stage": "reduction",
+          "stage_label": "max + sum reduction",
+          "policy_order": 2,
+          "policy": "reduction_fp16_scalar",
+          "precision": "scalar FP16",
+          "contrast_label": "max + sum reduction · scalar FP16",
+          "fresh_sessions": 3,
+          "mean_delta_net_pj_per_output": 1259.1606699566667,
+          "sample_std_delta_net_pj_per_output": 900.2643209730201,
+          "t95_low_delta_net_pj_per_output": -977.2198803991585,
+          "t95_high_delta_net_pj_per_output": 3495.5412203124915,
+          "min_delta_net_pj_per_output": 595.19337808,
+          "max_delta_net_pj_per_output": 2283.84657813,
+          "negative_session_count": 0,
+          "positive_session_count": 3
+        },
+        {
+          "stage_order": 2,
+          "stage": "reduction",
+          "stage_label": "max + sum reduction",
+          "policy_order": 3,
+          "policy": "reduction_fp16x2",
+          "precision": "packed FP16",
+          "contrast_label": "max + sum reduction · packed FP16",
+          "fresh_sessions": 3,
+          "mean_delta_net_pj_per_output": -1.7808393166667429,
+          "sample_std_delta_net_pj_per_output": 571.8236426294027,
+          "t95_low_delta_net_pj_per_output": -1422.2695144958102,
+          "t95_high_delta_net_pj_per_output": 1418.7078358624767,
+          "min_delta_net_pj_per_output": -587.1144107100001,
+          "max_delta_net_pj_per_output": 555.50026179,
+          "negative_session_count": 1,
+          "positive_session_count": 2
+        },
+        {
+          "stage_order": 3,
+          "stage": "normalization",
+          "stage_label": "normalization",
+          "policy_order": 2,
+          "policy": "normalization_fp16_scalar",
+          "precision": "scalar FP16",
+          "contrast_label": "normalization · scalar FP16",
+          "fresh_sessions": 3,
+          "mean_delta_net_pj_per_output": 357.0189558133334,
+          "sample_std_delta_net_pj_per_output": 422.19152164563593,
+          "t95_low_delta_net_pj_per_output": -691.7629247269781,
+          "t95_high_delta_net_pj_per_output": 1405.8008363536449,
+          "min_delta_net_pj_per_output": 64.6368508100004,
+          "max_delta_net_pj_per_output": 841.0416371699998,
+          "negative_session_count": 0,
+          "positive_session_count": 3
+        },
+        {
+          "stage_order": 3,
+          "stage": "normalization",
+          "stage_label": "normalization",
+          "policy_order": 3,
+          "policy": "normalization_fp16x2",
+          "precision": "packed FP16",
+          "contrast_label": "normalization · packed FP16",
+          "fresh_sessions": 3,
+          "mean_delta_net_pj_per_output": 257.6989252066666,
+          "sample_std_delta_net_pj_per_output": 412.3891550804094,
+          "t95_low_delta_net_pj_per_output": -766.7325268836566,
+          "t95_high_delta_net_pj_per_output": 1282.13037729699,
+          "min_delta_net_pj_per_output": -157.84137100999988,
+          "max_delta_net_pj_per_output": 666.8629954999997,
+          "negative_session_count": 1,
+          "positive_session_count": 2
+        }
+      ],
+      "validation_summary": [
+        {
+          "stage_order": 1,
+          "stage_label": "exp",
+          "policy_order": 1,
+          "policy": "fp16_io_fp32_all",
+          "precision": "FP32 stages (FP16 I/O)",
+          "max_abs_error": 3.54528288365e-06,
+          "max_row_sum_error": 0.000136375427246,
+          "preheat_actual_s": 19.9781582031,
+          "trace_r2": 0.999912619051
+        },
+        {
+          "stage_order": 1,
+          "stage_label": "exp",
+          "policy_order": 2,
+          "policy": "exp_fp16_scalar",
+          "precision": "scalar FP16",
+          "max_abs_error": 7.54756081836e-06,
+          "max_row_sum_error": 0.000136375427246,
+          "preheat_actual_s": 19.9781582031,
+          "trace_r2": 0.999921487371
+        },
+        {
+          "stage_order": 1,
+          "stage_label": "exp",
+          "policy_order": 3,
+          "policy": "exp_fp16x2",
+          "precision": "packed FP16",
+          "max_abs_error": 7.54756081836e-06,
+          "max_row_sum_error": 0.000136375427246,
+          "preheat_actual_s": 19.9781582031,
+          "trace_r2": 0.999909973247
+        },
+        {
+          "stage_order": 2,
+          "stage_label": "max + sum reduction",
+          "policy_order": 1,
+          "policy": "fp16_io_fp32_all",
+          "precision": "FP32 stages (FP16 I/O)",
+          "max_abs_error": 3.54528288365e-06,
+          "max_row_sum_error": 0.000136375427246,
+          "preheat_actual_s": 19.9828876953,
+          "trace_r2": 0.999937772027
+        },
+        {
+          "stage_order": 2,
+          "stage_label": "max + sum reduction",
+          "policy_order": 2,
+          "policy": "reduction_fp16_scalar",
+          "precision": "scalar FP16",
+          "max_abs_error": 8.57576857502e-06,
+          "max_row_sum_error": 0.000624656677246,
+          "preheat_actual_s": 19.9828876953,
+          "trace_r2": 0.99991356153
+        },
+        {
+          "stage_order": 2,
+          "stage_label": "max + sum reduction",
+          "policy_order": 3,
+          "policy": "reduction_fp16x2",
+          "precision": "packed FP16",
+          "max_abs_error": 8.57576857502e-06,
+          "max_row_sum_error": 0.000624656677246,
+          "preheat_actual_s": 19.9828876953,
+          "trace_r2": 0.999931468333
+        },
+        {
+          "stage_order": 3,
+          "stage_label": "normalization",
+          "policy_order": 1,
+          "policy": "fp16_io_fp32_all",
+          "precision": "FP32 stages (FP16 I/O)",
+          "max_abs_error": 3.54528288365e-06,
+          "max_row_sum_error": 0.000136375427246,
+          "preheat_actual_s": 19.9435041504,
+          "trace_r2": 0.999924117322
+        },
+        {
+          "stage_order": 3,
+          "stage_label": "normalization",
+          "policy_order": 2,
+          "policy": "normalization_fp16_scalar",
+          "precision": "scalar FP16",
+          "max_abs_error": 4.60957765111e-06,
+          "max_row_sum_error": 0.000346183776855,
+          "preheat_actual_s": 19.9435041504,
+          "trace_r2": 0.999966828592
+        },
+        {
+          "stage_order": 3,
+          "stage_label": "normalization",
+          "policy_order": 3,
+          "policy": "normalization_fp16x2",
+          "precision": "packed FP16",
+          "max_abs_error": 4.60957765111e-06,
+          "max_row_sum_error": 0.000346183776855,
+          "preheat_actual_s": 19.9435041504,
+          "trace_r2": 0.999917743672
+        }
+      ],
+      "analysis_quality": [
+        {
+          "check": "evidence binding",
+          "coverage": "9 sessions / 27 roles",
+          "result": "pass",
+          "meaning": "manifest, raw CSV, energy trace, binary hash, runner hash, cyclic schedule, schema and denominator gates all passed"
+        },
+        {
+          "check": "preheat and trace quality",
+          "coverage": "preheat 19.944–20.046 s; R² 0.999885643–0.999966829",
+          "result": "pass",
+          "meaning": "shared FP32-stage baseline preheat is within the 16–25 s gate; qualified Theil–Sen energy traces exceed R²=0.98"
+        },
+        {
+          "check": "placement and numerics",
+          "coverage": "27 / 27 roles",
+          "result": "pass",
+          "meaning": "SMID placement, finite-output, FP64-reference absolute-error and row-sum gates passed"
+        },
+        {
+          "check": "recorded thermal context",
+          "coverage": "52–58 °C",
+          "result": "recorded",
+          "meaning": "temperature is recorded context, not a randomized causal adjustment or a hard rejection gate"
+        }
+      ],
+      "sass_quality": [
+        {
+          "check": "sm86 code-path audit",
+          "coverage": "2276f41518cc",
+          "result": "pass",
+          "meaning": "PTX/SASS policy specializations match the scalar/packed reduction and FP16-rounded reciprocal contracts"
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "analysis",
+      "label": "Fail-closed whole-Softmax stage analysis",
+      "path": "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/analysis/summary.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_csv_auto('results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/analysis/summary.csv');",
+        "description": "The chart/table source is the analyzer summary CSV. The preceding fail-closed analyzer validates raw/trace/manifest SHA bindings, exact stage schedule, qualified trace, SMID, numerical and denominator gates.",
+        "tables_used": [
+          "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/analysis/analysis.json",
+          "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/analysis/validated_cells.csv",
+          "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/analysis/summary.csv",
+          "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/manifest.json"
+        ],
+        "metric_definitions": [
+          "Primary metric = net pJ per logical Softmax output element.",
+          "A fresh session is the independent repeat; 27 measured roles are not pooled as 27 independent samples."
+        ],
+        "filters": [
+          "RTX 3090",
+          "S=512",
+          "grid CTA=16",
+          "FP16 I/O fixed",
+          "3 fresh sessions per stage-policy"
+        ]
+      }
+    },
+    {
+      "id": "sass",
+      "label": "sm86 PTX/SASS path audit",
+      "path": "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/sass_audit.json",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_json_auto('results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/sass_audit.json');",
+        "description": "Audits the compiled sm86 specialization for scalar/packed exp, scalar/packed max+sum reduction, and FP16-rounded reciprocal normalization lowering.",
+        "tables_used": [
+          "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/sass_audit.json"
+        ],
+        "metric_definitions": [
+          "Static PTX/SASS instruction counts are path evidence, not energy measurements."
+        ],
+        "filters": [
+          "native sm86",
+          "whole-Softmax precision kernel",
+          "fixed S=512 / two rows per CTA"
+        ]
+      }
+    }
+  ]
+}

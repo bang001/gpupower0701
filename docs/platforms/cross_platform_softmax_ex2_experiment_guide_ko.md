@@ -7,6 +7,12 @@
 증거 전에는 최종 비교 결과를 주장할 수 없다. V100의 native FP16 EXP2 두 구현은
 의도적으로 skip한다.
 
+> 범위 경계: 이 가이드는 `a100_fp16_softmax_energy`의 추가 EX2
+> Operand-rate ATC probe만 다룬다. `a100_fp16_softmax_whole_precision_energy`의
+> complete-Softmax stage isolation, `pJ/logical output element`, FP16
+> reduction/normalization 정책에는 적용되지 않는다. 후자의 현재 검증 범위는 RTX
+> 3090 sm86 한 좌표이며, 이 문서로 A100/V100/H100 지원 또는 결과를 주장하지 않는다.
+
 ## 1. 비교 대상과 분모
 
 세 조건은 FP16 I/O·FP32 accumulation Softmax 안에서 exponent 경로만 바꾼다.

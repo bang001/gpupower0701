@@ -102,3 +102,39 @@ set_target_properties(a100_fp16_softmax_energy PROPERTIES
   CUDA_SEPARABLE_COMPILATION OFF
   CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
+
+# This is deliberately a sibling of the EX2 operand-rate harness above.  It
+# measures complete Softmax policies and has an independent CSV schema, so its
+# stage-level precision comparisons cannot be mistaken for EX2-only results.
+add_executable(a100_fp16_softmax_whole_precision_energy
+  src/softmax_whole_precision_main.cu
+  src/softmax_whole_precision_kernels.cu
+  src/softmax_whole_precision_result_writer.cpp
+  src/nvml_energy.cpp
+)
+
+target_include_directories(a100_fp16_softmax_whole_precision_energy PRIVATE
+  include
+)
+
+if(NVML_INCLUDE_DIR)
+  target_include_directories(a100_fp16_softmax_whole_precision_energy PRIVATE
+    "${NVML_INCLUDE_DIR}"
+  )
+endif()
+
+target_link_libraries(a100_fp16_softmax_whole_precision_energy PRIVATE
+  CUDA::cudart
+  "${NVML_LIBRARY}"
+)
+
+target_compile_options(a100_fp16_softmax_whole_precision_energy PRIVATE
+  $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+  $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>
+  $<$<COMPILE_LANGUAGE:CUDA>:-Xptxas=-v>
+)
+
+set_target_properties(a100_fp16_softmax_whole_precision_energy PROPERTIES
+  CUDA_SEPARABLE_COMPILATION OFF
+  CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)

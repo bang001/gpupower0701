@@ -2,6 +2,53 @@
 
 이 디렉토리에는 현재 finalplan 실행에 필요한 active script만 둔다. 과거 pair-centric, NNLS/regression, reference-aligned, register-footprint diagnostic script는 `archive/legacy_20260707/scripts/`로 이동했다.
 
+## Whole-Softmax precision stage isolation (RTX 3090, 2026-07-27)
+
+`a100_fp16_softmax_whole_precision_energy`는 기존 Operand-rate EX2 probe와 별도다.
+FP16 I/O를 고정한 complete Softmax에서 `exp`, `max+sum reduction`,
+`normalization`을 한 단계씩 FP32/scalar FP16/packed FP16로 바꾼다. 주 단위는
+net `pJ/logical Softmax output element`이며, EX2 probe의
+`pJ/logical exponent result`와 pool하거나 더하지 않는다. 현재 runner는
+의도적으로 RTX 3090 `sm86`, `S=512`, `CTA=16`의 bounded design만 실행한다.
+현재 v1 protocol은 20초 baseline preheat 뒤 policy별 calibration과 same-order
+unrecorded warm-up을 수행한다. ABC/CAB/BCA는 policy position은 회전하지만 directed
+carryover를 완전 counterbalance하지 않으므로 결과는 descriptive evidence이며, 후속
+two-policy confirmation은 premeasurement conditioning을 common/fixed로 설계해야 한다.
+
+| 단계 | script | 역할 |
+|---|---|---|
+| acquisition | `run_softmax_whole_precision_stage_isolation.py` | 3 stage × 3 fresh session × (baseline/scalar/packed)의 cyclic-order schedule, 20-second baseline preheat, immutable manifest/hash gate |
+| fail-closed analysis | `analyze_softmax_whole_precision_stage_isolation.py` | 27 role·trace·placement·numerical·hash/schema gate 검증 및 paired contrast 요약 |
+| SASS audit | `audit_softmax_whole_precision_sass.py` | scalar/packed EXP2, reduction lane, FP32 reciprocal lowering의 sm86 contract 검증 |
+| figures | `plot_softmax_whole_precision_stage_isolation.py` | session spread, paired paths, quality-gate Matplotlib 그림 생성 |
+| report source | `build_softmax_whole_precision_stage_report.py` | analyzer/SASS audit만 소비하는 Korean Markdown 및 portable report artifact 생성 |
+
+```bash
+source scripts/activate_softmax_experiment_env.sh
+cmake -S . -B build-whole-precision-rtx3090 \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=86
+cmake --build build-whole-precision-rtx3090 \
+  --target a100_fp16_softmax_whole_precision_energy -j
+
+TAG="$(date +%Y%m%d)_stageiso"
+python3 scripts/run_softmax_whole_precision_stage_isolation.py \
+  --build-dir build-whole-precision-rtx3090 --output-dir results/raw \
+  --session-tag "$TAG" --execute
+RUN="results/raw/rtx3090_softmax_whole_precision_stage_isolation_$TAG"
+python3 scripts/analyze_softmax_whole_precision_stage_isolation.py --run-dir "$RUN"
+python3 scripts/plot_softmax_whole_precision_stage_isolation.py \
+  --run-dir "$RUN" --out-dir docs/assets/softmax_whole_precision_stage_isolation
+python3 scripts/audit_softmax_whole_precision_sass.py \
+  --binary build-whole-precision-rtx3090/a100_fp16_softmax_whole_precision_energy \
+  --cuobjdump "$CUOBJDUMP" --out "$RUN/sass_audit.json" --fail-on-unexpected
+python3 scripts/build_softmax_whole_precision_stage_report.py \
+  --run-dir "$RUN" --sass-audit "$RUN/sass_audit.json" --out-dir docs/results
+```
+
+해당 run의 분석, HTML report, 정적 figure, QA는
+`docs/results/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_*`와
+`docs/assets/softmax_whole_precision_stage_isolation/`에 있다.
+
 ## Current FP16 Tensor-only v3 Flow
 
 | 단계 | script | 역할 |

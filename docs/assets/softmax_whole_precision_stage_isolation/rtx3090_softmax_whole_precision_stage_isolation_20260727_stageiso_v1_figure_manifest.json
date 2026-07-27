@@ -1,0 +1,26 @@
+{
+  "schema_version": "softmax_whole_precision_stage_isolation_figures_v1",
+  "run_dir": "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1",
+  "analysis_input": "results/raw/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1/analysis/analysis.json",
+  "analyzed_run_manifest_sha256": "96c725505d7227ad90c16509cf6ffe30c64366e6be9157b9971864aa52609896",
+  "primary_unit": "net pJ per logical Softmax output element",
+  "fresh_sessions_per_stage_policy": 3,
+  "figures": [
+    {
+      "png": "docs/assets/softmax_whole_precision_stage_isolation/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_absolute_session_spread.png",
+      "svg": "docs/assets/softmax_whole_precision_stage_isolation/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_absolute_session_spread.svg"
+    },
+    {
+      "png": "docs/assets/softmax_whole_precision_stage_isolation/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_paired_contrasts.png",
+      "svg": "docs/assets/softmax_whole_precision_stage_isolation/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_paired_contrasts.svg"
+    },
+    {
+      "png": "docs/assets/softmax_whole_precision_stage_isolation/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_within_session_paths.png",
+      "svg": "docs/assets/softmax_whole_precision_stage_isolation/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_within_session_paths.svg"
+    },
+    {
+      "png": "docs/assets/softmax_whole_precision_stage_isolation/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_quality_gates.png",
+      "svg": "docs/assets/softmax_whole_precision_stage_isolation/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_quality_gates.svg"
+    }
+  ]
+}

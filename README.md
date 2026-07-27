@@ -394,7 +394,37 @@ logical `m16n16k16` op. Raw inline PTX `mma.sync.aligned.m16n8k16` and explicit
 `ldmatrix` are not the primary implementation yet; CSV rows mark
 `wmma_fallback=1` in `notes`.
 
-## RTX 3090 Softmax EX2 집중 재현 확인 (2026-07-25)
+## RTX 3090 전체 Softmax 정밀도 단계 분리 (2026-07-27)
+
+`exp`, `max+sum reduction`, `normalization`을 각각 FP32·scalar FP16·packed
+FP16으로 바꿔야 전체 Softmax에서 어느 단계의 영향을 보는지 분리할 수 있다.
+아래 실험은 FP16 I/O를 고정하고 `S=512`, `CTA=16`에서 한 단계만 바꾼
+complete-Softmax 측정이다. 주 단위는 **net pJ/logical Softmax output element**이며,
+뒤의 EX2 probe의 `pJ/logical exponent result`와 비교하거나 더할 수 없다.
+여기서 기준은 full-FP32 I/O가 아니라 **FP16 I/O + FP32 exp/reduction/normalization**이다.
+20초 baseline preheat 뒤에는 schedule 순서의 calibration과 unrecorded warm-up이 있어,
+ABC/CAB/BCA는 position만 회전하고 directed carryover를 완전히 counterbalance하지 않는다.
+따라서 이 결과는 descriptive evidence다.
+
+| 바꾼 단계 | scalar FP16 − FP32-stage baseline | packed FP16 − FP32-stage baseline | 판정 |
+|---|---:|---:|---|
+| `exp` | −362.1 pJ/output | −512.0 pJ/output | 방향은 보이나 n=3 descriptive interval이 0 포함 |
+| `max+sum reduction` | +1259.2 pJ/output | −1.8 pJ/output | 확정할 수 없음 |
+| `normalization` | +357.0 pJ/output | +257.7 pJ/output | 확정할 수 없음 |
+
+모든 paired contrast의 3-session descriptive interval이 0을 포함한다. 따라서
+이 결과만으로 scalar/packed 선택이나 넓은 CTA·S sweep을 정당화하지 않는다.
+특히 frozen RTX 3090 sm86 binary에서는 packed `ex2.approx.f16x2`가 네 개의
+scalar `MUFU.EX2.F16`로 lowering됐고, FP16 normalization reciprocal도 native
+FP16 RCP가 아니라 FP32 reciprocal 후 FP16 round로 구현됐다. reduction의 packed
+lane은 한 row 안 두 원소가 아니라 **서로 독립된 두 CTA row**다.
+
+- [분석 및 재현 근거](docs/results/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_analysis_ko.md)
+- [Interactive technical report](docs/results/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_report.html)
+- [Matplotlib 그림과 재생성 방법](docs/assets/softmax_whole_precision_stage_isolation/README.md)
+- [Report QA / 제한](docs/results/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_report_qa.md)
+
+## RTX 3090 Softmax EX2 추가-지수 probe 집중 재현 확인 (2026-07-25)
 
 논쟁 좌표인 `CTA=48, S=1024`를 새 CUDA 세션 3개와 순환 implementation 순서로
 재측정했다. 주 지표는 **입력 원소당 추가 EX2 결과 하나의 증분 에너지**다. 이 설계에서는
