@@ -1,0 +1,639 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "RTX 3090 Softmax EX2 main 재현 점검",
+    "description": "main에 반영된 portable Softmax EX2 코드의 RTX 3090 3-implementation 최소 재현 측정 기술 보고서.",
+    "generatedAt": "2026-07-27T09:10:23+09:00",
+    "sources": [
+      {
+        "id": "comparison",
+        "label": "RTX 3090 3-way recheck comparison",
+        "path": "results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_comparison.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_csv_auto('results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_comparison.csv') ORDER BY implementation_id;",
+          "description": "Three implementation-level estimates from one S=512, CTA=16 counterbalanced persistent-bracket recheck per implementation.",
+          "tables_used": [
+            "results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_comparison.csv"
+          ],
+          "filters": [
+            "NVIDIA GeForce RTX 3090 / CC 8.6 / 82 SM",
+            "S=512, grid CTA=16, blocks-per-SM=2",
+            "cache_reuse_candidate/default, logit scale=4",
+            "20-second requested full-treatment preheat",
+            "six counterbalanced persistent brackets per implementation"
+          ],
+          "metric_definitions": [
+            "Primary effect = order-balanced mean board-energy increment divided by one added logical scalar exponent result in the treatment role.",
+            "The conservative interval is the paired t 95% interval over the three matched orientation blocks; its inclusion of zero yields verdict not_identified.",
+            "Packed f16x2 creates two logical results per PTX instruction, but the primary denominator remains logical scalar exponent result for all three implementations."
+          ]
+        }
+      },
+      {
+        "id": "quality_audit",
+        "label": "Raw, trace, and manifest quality audit",
+        "path": "results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_quality_audit.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_csv_auto('results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_quality_audit.csv') ORDER BY implementation_id;",
+          "description": "Independent row-level reconciliation of raw, trace, manifest, preheat, identity, and quiescence gates for each implementation.",
+          "tables_used": [
+            "results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_quality_audit.csv"
+          ],
+          "filters": [
+            "18 measured raw roles and 18 manifest rows per implementation",
+            "all raw/manifest composite keys matched",
+            "minimum guarded trace fit points >=16 and minimum R² >=0.98"
+          ],
+          "metric_definitions": [
+            "quality_status=pass requires exact raw/manifest identity, counterbalanced role coverage, trace coverage and fit-point agreement, trace status pass, SMID pass, RTX 3090 identity, preheat gate pass, and quiescence pass."
+          ]
+        }
+      },
+      {
+        "id": "sass_audit",
+        "label": "sm_86 native EX2 SASS audit",
+        "path": "results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_sass_s512.csv",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT mode, exp_implementation, cache_policy, softmax_cols, binary_sha256, verdict FROM read_csv_auto('results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_sass_s512.csv') ORDER BY mode, exp_implementation, cache_policy;",
+          "description": "Static audit of the clean main-worktree sm_86 binary for all S=512 full/control variants.",
+          "tables_used": [
+            "results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_sass_s512.csv"
+          ],
+          "filters": [
+            "expected CUDA architecture=86",
+            "Softmax S=512",
+            "established Ampere SASS lowering contract"
+          ],
+          "metric_definitions": [
+            "The audit checks exact selected-specialization sets, PTX native EXP2 opcodes, expected SASS MUFU.EX2 structure, predicate counts, and no spill/local-memory evidence."
+          ]
+        }
+      }
+    ],
+    "charts": [
+      {
+        "id": "effect_point_estimates",
+        "title": "Implementation별 order-balanced point estimate",
+        "subtitle": "S=512, CTA=16; common denominator is pJ per added logical scalar exponent result. All conservative intervals cross zero.",
+        "type": "bar",
+        "intent": "comparison",
+        "question": "main code의 세 exponent implementation이 동일 최소 좌표에서 어떤 board-energy increment point estimate를 보였는가?",
+        "rationale": "세 개의 이산 implementation을 zero-baseline bar로 비교하고, uncertainty는 인접한 table과 CI-width chart에서 분리해 표시한다.",
+        "comparisonContext": {
+          "baseline": "0 pJ/logical scalar exponent result",
+          "denominator": "one added logical scalar exponent result",
+          "grain": "one six-bracket recheck per implementation; three matched orientation blocks",
+          "unit": "pJ/logical scalar exponent result"
+        },
+        "dataset": "implementation_comparison",
+        "sourceId": "comparison",
+        "encodings": {
+          "x": {
+            "field": "implementation_label",
+            "type": "ordinal",
+            "label": "Exponent implementation"
+          },
+          "y": {
+            "field": "point_estimate_pj_per_logical_result",
+            "type": "quantitative",
+            "label": "Order-balanced energy increment",
+            "unit": "pJ/logical result",
+            "format": "number"
+          },
+          "tooltip": [
+            {
+              "field": "implementation_label",
+              "type": "nominal",
+              "label": "Implementation"
+            },
+            {
+              "field": "point_estimate_pj_per_logical_result",
+              "type": "quantitative",
+              "label": "Point estimate",
+              "unit": "pJ/logical result",
+              "format": "number"
+            },
+            {
+              "field": "conservative_ci_low_pj_per_logical_result",
+              "type": "quantitative",
+              "label": "Conservative CI low",
+              "unit": "pJ/logical result",
+              "format": "number"
+            },
+            {
+              "field": "conservative_ci_high_pj_per_logical_result",
+              "type": "quantitative",
+              "label": "Conservative CI high",
+              "unit": "pJ/logical result",
+              "format": "number"
+            },
+            {
+              "field": "verdict",
+              "type": "nominal",
+              "label": "Verdict"
+            }
+          ]
+        },
+        "palette": {
+          "kind": "single-root",
+          "name": "blue"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 0,
+            "label": "0 pJ/logical result",
+            "color": "neutral",
+            "lineStyle": "solid"
+          }
+        ],
+        "labels": {
+          "values": "auto"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        }
+      },
+      {
+        "id": "conservative_ci_width",
+        "title": "Implementation별 conservative 95% interval width",
+        "subtitle": "같은 one-batch recheck의 matched-block paired-t interval; width가 point estimate보다 커서 positive identification을 지원하지 않는다.",
+        "type": "bar",
+        "intent": "comparison",
+        "question": "세 implementation의 최소 재현에서 추정치의 불확실성은 어느 정도인가?",
+        "rationale": "불확실성 폭을 별도 zero-baseline bar로 표시해 point estimate와 precision을 혼동하지 않게 한다.",
+        "comparisonContext": {
+          "baseline": "0 pJ/logical scalar exponent result interval width",
+          "denominator": "one added logical scalar exponent result",
+          "grain": "one implementation-level paired-t interval from three matched orientation blocks",
+          "unit": "pJ/logical scalar exponent result"
+        },
+        "dataset": "implementation_comparison",
+        "sourceId": "comparison",
+        "encodings": {
+          "x": {
+            "field": "implementation_label",
+            "type": "ordinal",
+            "label": "Exponent implementation"
+          },
+          "y": {
+            "field": "conservative_ci_width_pj",
+            "type": "quantitative",
+            "label": "Conservative 95% interval width",
+            "unit": "pJ/logical result",
+            "format": "number"
+          },
+          "tooltip": [
+            {
+              "field": "implementation_label",
+              "type": "nominal",
+              "label": "Implementation"
+            },
+            {
+              "field": "conservative_ci_width_pj",
+              "type": "quantitative",
+              "label": "CI width",
+              "unit": "pJ/logical result",
+              "format": "number"
+            },
+            {
+              "field": "matched_orientation_blocks",
+              "type": "quantitative",
+              "label": "Matched blocks",
+              "format": "number"
+            }
+          ]
+        },
+        "palette": {
+          "kind": "single-root",
+          "name": "gold"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 0,
+            "label": "0 pJ/logical result",
+            "color": "neutral",
+            "lineStyle": "solid"
+          }
+        ],
+        "labels": {
+          "values": "auto"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "recheck_comparison_table",
+        "title": "3-way recheck effect and interval detail",
+        "subtitle": "각 row는 동일 binary SHA의 하나의 counterbalanced persistent batch 결과다.",
+        "dataset": "implementation_comparison",
+        "sourceId": "comparison",
+        "defaultSort": {
+          "field": "implementation_label",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "implementation_label",
+            "label": "Implementation"
+          },
+          {
+            "field": "exp_ptx_instruction",
+            "label": "PTX exponent path"
+          },
+          {
+            "field": "point_estimate_pj_per_logical_result",
+            "label": "Point estimate",
+            "format": "number",
+            "movement": true,
+            "semantic": "movement"
+          },
+          {
+            "field": "conservative_ci_low_pj_per_logical_result",
+            "label": "95% CI low",
+            "format": "number"
+          },
+          {
+            "field": "conservative_ci_high_pj_per_logical_result",
+            "label": "95% CI high",
+            "format": "number"
+          },
+          {
+            "field": "matched_orientation_blocks",
+            "label": "Matched blocks",
+            "format": "number"
+          },
+          {
+            "field": "quality_status",
+            "label": "Quality"
+          },
+          {
+            "field": "verdict",
+            "label": "Inference"
+          }
+        ]
+      },
+      {
+        "id": "quality_audit_table",
+        "title": "Raw and trace quality audit",
+        "subtitle": "각 implementation의 18 raw roles, 18 manifest rows, preheat, trace, identity, and quiescence reconciliation.",
+        "dataset": "quality_audit",
+        "sourceId": "quality_audit",
+        "defaultSort": {
+          "field": "implementation_label",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "implementation_label",
+            "label": "Implementation"
+          },
+          {
+            "field": "raw_rows",
+            "label": "Raw roles",
+            "format": "number"
+          },
+          {
+            "field": "trace_rows",
+            "label": "Trace samples",
+            "format": "number"
+          },
+          {
+            "field": "min_trace_fit_points",
+            "label": "Min fit points",
+            "format": "number"
+          },
+          {
+            "field": "min_trace_r2_label",
+            "label": "Min trace R²"
+          },
+          {
+            "field": "preheat_elapsed_s",
+            "label": "Actual preheat (s)",
+            "format": "number"
+          },
+          {
+            "field": "temperature_range_label",
+            "label": "Temperature (°C)"
+          },
+          {
+            "field": "quality_status",
+            "label": "Quality"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# RTX 3090 Softmax EX2 main 재현 점검"
+      },
+      {
+        "id": "technical_summary",
+        "type": "markdown",
+        "sourceId": "comparison",
+        "body": "## 기술 요약\n\n**main에 반영한 clean sm_86 binary는 RTX 3090에서 정상 빌드·수치 검증·SASS audit·NVML counter-trace 측정을 모두 통과했다.** S=512, CTA=16에서 FP32 `__expf`, scalar FP16 `ex2.approx.f16`, packed FP16 `ex2.approx.f16x2`를 각각 한 번의 6-bracket persistent batch로 재실행했다. 세 batch의 data-quality status는 모두 `pass`지만 보수적 paired-t 95% interval이 모두 0을 포함해, 이번 최소 재현만으로는 어느 implementation의 positive increment나 구현 간 우열도 확정할 수 없다.\n\n점 추정치는 FP32 110.930, scalar FP16 20.705, packed FP16 3.369 pJ/logical scalar exponent result였다. 이 숫자는 whole-Softmax pJ/element나 SFU 단독 에너지가 아니라 같은 Softmax kernel에서 한 logical exponent result를 추가할 때의 board-energy increment다."
+      },
+      {
+        "id": "effect_finding",
+        "type": "markdown",
+        "sourceId": "comparison",
+        "body": "## Point estimate는 관측됐지만 세 조건 모두 positive identification에 도달하지 않았다\n\n아래 막대는 각 implementation의 order-balanced point estimate다. FP32가 가장 큰 point estimate를 보였지만, paired-t interval은 FP32 [-65.360, 287.219], scalar FP16 [-214.009, 255.418], packed FP16 [-171.045, 177.783] pJ/logical result로 모두 0을 지난다. 따라서 막대 높이를 효율 ranking으로 해석해서는 안 된다."
+      },
+      {
+        "id": "effect_chart_block",
+        "type": "chart",
+        "chartId": "effect_point_estimates"
+      },
+      {
+        "id": "uncertainty_finding",
+        "type": "markdown",
+        "sourceId": "comparison",
+        "body": "## 추정 불확실성은 point estimate와 분리해 봐야 한다\n\nconservative interval width는 FP32 352.580, scalar FP16 469.427, packed FP16 348.828 pJ/logical result다. 각 implementation은 3개의 matched orientation block만 가지므로, positive/negative point estimate의 부호나 implementation 간 차이는 이번 one-batch smoke의 결정 근거가 아니다."
+      },
+      {
+        "id": "uncertainty_chart_block",
+        "type": "chart",
+        "chartId": "conservative_ci_width"
+      },
+      {
+        "id": "scope_and_definitions",
+        "type": "markdown",
+        "sourceId": "comparison",
+        "body": "## Scope와 분모\n\n이 재현은 full-SM saturation 실험이 아니다. CTA=16은 요청한 grid block 수이며, 82 SM RTX 3090에 대한 의도적인 under-filled incremental operating point다. 공통 primary denominator는 treatment role에서 control 대비 추가된 logical scalar exponent result 하나다. packed f16x2는 PTX instruction 하나가 두 결과를 만들지만, 세 implementation의 primary effect는 공통 logical-result 분모로만 비교했다."
+      },
+      {
+        "id": "comparison_table_block",
+        "type": "table",
+        "tableId": "recheck_comparison_table"
+      },
+      {
+        "id": "static_path_finding",
+        "type": "markdown",
+        "sourceId": "sass_audit",
+        "body": "## Native EXP2 path는 clean main binary의 sm_86 static audit으로도 확인됐다\n\n실측에 사용한 binary SHA-256은 `07800c5f4feeb12985fb61bbd5e4da3da7604bcc869b7e75ba17043fdbe389ae`다. S=512 audit은 FP32, scalar FP16, packed FP16의 full/default·cg와 control variants 모두 `pass`로 판정했다. 이 gate는 runtime `binaryVersion`만으로 cubin lowering을 과장하지 않고, selected specialization의 PTX/SASS opcode structure와 spill/local traffic을 함께 확인한다."
+      },
+      {
+        "id": "methodology",
+        "type": "markdown",
+        "body": "## 측정 설계\n\n각 implementation은 하나의 CUDA context에서 unrecorded warm-up bracket 1회 뒤, `counterbalanced6` 순서의 6개 bracket를 실행했다. 한 bracket은 probe-control, full-treatment(extra exponent probe), probe-control의 CTC 또는 역순 TCT로 구성된다. 각 role은 NVML total-energy counter trace를 500 ms cadence로 수집했고, raw output과 manifest의 identity를 분석 전에 재대조했다. standalone 20초 nominal preheat는 thermal conditioning 용도이며 ATC numerator에서 제외했다."
+      },
+      {
+        "id": "quality_finding",
+        "type": "markdown",
+        "sourceId": "quality_audit",
+        "body": "## Raw·trace·manifest 품질 gate는 세 implementation 모두 통과했다\n\n각 package는 18 raw roles, 18 manifest rows, 1개 preheat row, 18개 trace run을 가졌고 raw/manifest composite key가 정확히 일치했다. 최소 trace fit point는 19 이상, 최소 R²는 0.999645 이상이었다. 실제 preheat는 17.910–19.925초로 16–30초 gate 안에 있었고, 관측 온도 범위는 55–59°C였다."
+      },
+      {
+        "id": "quality_table_block",
+        "type": "table",
+        "tableId": "quality_audit_table"
+      },
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "sourceId": "comparison",
+        "body": "## 이 재현이 말하지 않는 것\n\n이 결과는 main code와 measurement path가 RTX 3090에서 동작한다는 operational recheck이며, 과거 60-cell matrix를 새로 확정하거나 대체하지 않는다. implementation들은 서로 다른 시간대에 한 batch씩만 실행됐고, independent session 반복·global implementation order balancing·다른 CTA/S coordinate가 없다. 따라서 이 report의 point estimate를 23.04 pJ/element 같은 일반 계수, physical SFU throughput, 또는 cross-SKU 비교로 확장하면 안 된다."
+      },
+      {
+        "id": "recommended_next_steps",
+        "type": "markdown",
+        "body": "## 권장 다음 단계\n\n1. 계수 또는 implementation 우열이 목적이면, 동일 S=512·CTA=16 coordinate에서 implementation별 독립 3-session 이상을 새 tag로 수집하고 global order를 session 사이에 balance한다.\n2. 그 뒤에만 CTA 32·48·64와 S 128·256·1024·2048로 확장한다. 한 번에 60-cell을 재실행해 최소 재현의 불확실성을 숨기지 않는다.\n3. final native claim에는 이 binary SHA와 coordinate에 묶인 target NCU dynamic-path evidence를 별도로 보관한다."
+      },
+      {
+        "id": "further_questions",
+        "type": "markdown",
+        "body": "## 추가 확인 질문\n\n- 같은 coordinate의 independent sessions에서 paired-t interval이 안정적으로 0 위로 이동하는가?\n- CTA 증가가 signal-to-noise ratio를 개선하는가, 아니면 thermal/clock state의 영향을 더 크게 받는가?\n- packed f16x2의 logical-result-normalized effect가 scalar f16과 다른지를 판단할 충분한 session-level precision이 확보되는가?"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-07-27T09:10:23+09:00",
+    "status": "ready",
+    "datasets": {
+      "implementation_comparison": [
+        {
+          "implementation_order": 1,
+          "implementation_id": "fp32",
+          "implementation_label": "FP32 __expf",
+          "exp_ptx_instruction": "ex2.approx.f32",
+          "exp_results_per_ptx_instruction": 1,
+          "point_estimate_pj_per_logical_result": 110.92959930766479,
+          "conservative_ci_low_pj_per_logical_result": -65.3601848107917,
+          "conservative_ci_high_pj_per_logical_result": 287.2193834261213,
+          "conservative_ci_width_pj": 352.57956823691296,
+          "residual_bootstrap_ci_low_pj_per_logical_result": 44.21048188325703,
+          "residual_bootstrap_ci_high_pj_per_logical_result": 183.2330043717659,
+          "measured_triplets": 6,
+          "matched_orientation_blocks": 3,
+          "quality_status": "pass",
+          "verdict": "not_identified",
+          "preheat_elapsed_s": 19.882203125,
+          "min_trace_fit_points": 22,
+          "min_trace_r2": 0.9998855623199397,
+          "temperature_min_c": 58,
+          "temperature_max_c": 59,
+          "sm_clock_min_mhz": 1950,
+          "sm_clock_max_mhz": 1950,
+          "binary_sha256": "07800c5f4feeb12985fb61bbd5e4da3da7604bcc869b7e75ba17043fdbe389ae"
+        },
+        {
+          "implementation_order": 2,
+          "implementation_id": "ptx_f16",
+          "implementation_label": "scalar FP16 ptx_f16",
+          "exp_ptx_instruction": "ex2.approx.f16",
+          "exp_results_per_ptx_instruction": 1,
+          "point_estimate_pj_per_logical_result": 20.704748983081515,
+          "conservative_ci_low_pj_per_logical_result": -214.0090009230772,
+          "conservative_ci_high_pj_per_logical_result": 255.41849888924023,
+          "conservative_ci_width_pj": 469.4274998123174,
+          "residual_bootstrap_ci_low_pj_per_logical_result": -62.22102416853022,
+          "residual_bootstrap_ci_high_pj_per_logical_result": 113.1532863094074,
+          "measured_triplets": 6,
+          "matched_orientation_blocks": 3,
+          "quality_status": "pass",
+          "verdict": "not_identified",
+          "preheat_elapsed_s": 17.9096074219,
+          "min_trace_fit_points": 19,
+          "min_trace_r2": 0.9996450478541475,
+          "temperature_min_c": 55,
+          "temperature_max_c": 59,
+          "sm_clock_min_mhz": 1965,
+          "sm_clock_max_mhz": 1965,
+          "binary_sha256": "07800c5f4feeb12985fb61bbd5e4da3da7604bcc869b7e75ba17043fdbe389ae"
+        },
+        {
+          "implementation_order": 3,
+          "implementation_id": "ptx_f16x2",
+          "implementation_label": "packed FP16 ptx_f16x2",
+          "exp_ptx_instruction": "ex2.approx.f16x2",
+          "exp_results_per_ptx_instruction": 2,
+          "point_estimate_pj_per_logical_result": 3.3691459866634923,
+          "conservative_ci_low_pj_per_logical_result": -171.0447023061467,
+          "conservative_ci_high_pj_per_logical_result": 177.78299427947366,
+          "conservative_ci_width_pj": 348.82769658562034,
+          "residual_bootstrap_ci_low_pj_per_logical_result": -68.4721630300264,
+          "residual_bootstrap_ci_high_pj_per_logical_result": 66.68653370765783,
+          "measured_triplets": 6,
+          "matched_orientation_blocks": 3,
+          "quality_status": "pass",
+          "verdict": "not_identified",
+          "preheat_elapsed_s": 19.9248066406,
+          "min_trace_fit_points": 22,
+          "min_trace_r2": 0.9998794749784923,
+          "temperature_min_c": 58,
+          "temperature_max_c": 59,
+          "sm_clock_min_mhz": 1950,
+          "sm_clock_max_mhz": 1965,
+          "binary_sha256": "07800c5f4feeb12985fb61bbd5e4da3da7604bcc869b7e75ba17043fdbe389ae"
+        }
+      ],
+      "quality_audit": [
+        {
+          "implementation_order": 1,
+          "implementation_label": "FP32 __expf",
+          "raw_rows": 18,
+          "manifest_rows": 18,
+          "preheat_rows": 1,
+          "trace_rows": 504,
+          "trace_runs": 18,
+          "min_trace_fit_points": 22,
+          "min_trace_r2": 0.999885562374,
+          "min_trace_r2_label": "0.999886",
+          "max_trace_query_latency_ms": 5.93256300635,
+          "preheat_elapsed_s": 19.882203125,
+          "temperature_range_label": "58–59",
+          "quality_status": "pass"
+        },
+        {
+          "implementation_order": 2,
+          "implementation_label": "scalar FP16 ptx_f16",
+          "raw_rows": 18,
+          "manifest_rows": 18,
+          "preheat_rows": 1,
+          "trace_rows": 452,
+          "trace_runs": 18,
+          "min_trace_fit_points": 19,
+          "min_trace_r2": 0.999645048174,
+          "min_trace_r2_label": "0.999645",
+          "max_trace_query_latency_ms": 5.83388899395,
+          "preheat_elapsed_s": 17.9096074219,
+          "temperature_range_label": "55–59",
+          "quality_status": "pass"
+        },
+        {
+          "implementation_order": 3,
+          "implementation_label": "packed FP16 ptx_f16x2",
+          "raw_rows": 18,
+          "manifest_rows": 18,
+          "preheat_rows": 1,
+          "trace_rows": 505,
+          "trace_runs": 18,
+          "min_trace_fit_points": 22,
+          "min_trace_r2": 0.99987947494,
+          "min_trace_r2_label": "0.999879",
+          "max_trace_query_latency_ms": 6.09013099893,
+          "preheat_elapsed_s": 19.9248066406,
+          "temperature_range_label": "58–59",
+          "quality_status": "pass"
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "comparison",
+      "label": "RTX 3090 3-way recheck comparison",
+      "path": "results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_comparison.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_csv_auto('results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_comparison.csv') ORDER BY implementation_id;",
+        "description": "Three implementation-level estimates from one S=512, CTA=16 counterbalanced persistent-bracket recheck per implementation.",
+        "tables_used": [
+          "results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_comparison.csv"
+        ],
+        "filters": [
+          "NVIDIA GeForce RTX 3090 / CC 8.6 / 82 SM",
+          "S=512, grid CTA=16, blocks-per-SM=2",
+          "cache_reuse_candidate/default, logit scale=4",
+          "20-second requested full-treatment preheat",
+          "six counterbalanced persistent brackets per implementation"
+        ],
+        "metric_definitions": [
+          "Primary effect = order-balanced mean board-energy increment divided by one added logical scalar exponent result in the treatment role.",
+          "The conservative interval is the paired t 95% interval over the three matched orientation blocks; its inclusion of zero yields verdict not_identified.",
+          "Packed f16x2 creates two logical results per PTX instruction, but the primary denominator remains logical scalar exponent result for all three implementations."
+        ]
+      }
+    },
+    {
+      "id": "quality_audit",
+      "label": "Raw, trace, and manifest quality audit",
+      "path": "results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_quality_audit.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_csv_auto('results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_quality_audit.csv') ORDER BY implementation_id;",
+        "description": "Independent row-level reconciliation of raw, trace, manifest, preheat, identity, and quiescence gates for each implementation.",
+        "tables_used": [
+          "results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_quality_audit.csv"
+        ],
+        "filters": [
+          "18 measured raw roles and 18 manifest rows per implementation",
+          "all raw/manifest composite keys matched",
+          "minimum guarded trace fit points >=16 and minimum R² >=0.98"
+        ],
+        "metric_definitions": [
+          "quality_status=pass requires exact raw/manifest identity, counterbalanced role coverage, trace coverage and fit-point agreement, trace status pass, SMID pass, RTX 3090 identity, preheat gate pass, and quiescence pass."
+        ]
+      }
+    },
+    {
+      "id": "sass_audit",
+      "label": "sm_86 native EX2 SASS audit",
+      "path": "results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_sass_s512.csv",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT mode, exp_implementation, cache_policy, softmax_cols, binary_sha256, verdict FROM read_csv_auto('results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_sass_s512.csv') ORDER BY mode, exp_implementation, cache_policy;",
+        "description": "Static audit of the clean main-worktree sm_86 binary for all S=512 full/control variants.",
+        "tables_used": [
+          "results/summary/main_crossplatform_smoke_20260727/main_crossplatform_smoke_20260727_sass_s512.csv"
+        ],
+        "filters": [
+          "expected CUDA architecture=86",
+          "Softmax S=512",
+          "established Ampere SASS lowering contract"
+        ],
+        "metric_definitions": [
+          "The audit checks exact selected-specialization sets, PTX native EXP2 opcodes, expected SASS MUFU.EX2 structure, predicate counts, and no spill/local-memory evidence."
+        ]
+      }
+    }
+  ]
+}
