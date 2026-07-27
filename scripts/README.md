@@ -49,6 +49,55 @@ python3 scripts/build_softmax_whole_precision_stage_report.py \
 `docs/results/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_*`와
 `docs/assets/softmax_whole_precision_stage_isolation/`에 있다.
 
+## Whole-Softmax targeted fresh AB/BA confirmation (RTX 3090, 2026-07-27)
+
+이 bounded follow-up은 stage-isolation 탐색 데이터를 pool하지 않는다. RTX 3090
+sm86의 고정 `S=512`, grid `CTA=16`, 2 rows/CTA에서 `exp_fp16x2`와
+`reduction_fp16_scalar`만 각각 6 fresh pair session(AB 3 + BA 3)으로 재측정한다.
+각 fresh process는 validation과 모든 calibration을 canonical order로 끝낸 뒤 20 s
+`fp16_io_fp32_all` common conditioner를 수행하고, unrecorded policy warm-up 없이
+원래 AB 또는 BA two-role measurement schedule을 실행한다.
+
+| 단계 | script | 역할 |
+|---|---|---|
+| acquisition | `run_softmax_whole_precision_targeted_confirmation.py` | 12개 interleaved fresh process plan, exact candidate/order CLI contract, acquisition 전 binary/runner (새 run에서는 selection origin도) freeze |
+| SASS bind | `bind_softmax_whole_precision_confirmation_sass.py` | 완료된 12 session과 raw/trace SHA를 다시 검증한 뒤 run-local `sass_audit.json`만 manifest에 post-execution static evidence로 결속 |
+| fail-closed analysis | `analyze_softmax_whole_precision_targeted_confirmation.py` | AB/BA balance, canonical conditioner, numerical/SMID/trace, frozen binary/runner, raw/trace/SASS evidence를 fail-closed로 확인하고 paired `n=6` summary 생성 |
+| figures | `plot_softmax_whole_precision_targeted_confirmation.py` | SHA-bound `analysis.json`과 CSV view를 교차 검증한 뒤 paired paths, delta/t95, AB/BA diagnostic, temperature/trace context PNG/SVG 생성 |
+| report source | `build_softmax_whole_precision_targeted_confirmation_report.py` | analysis JSON 배열만 authoritative source로 사용해 Korean Markdown, portable artifact/HTML, QA 생성 |
+
+```bash
+source scripts/activate_softmax_experiment_env.sh
+cmake -S . -B build-whole-precision-confirmation-rtx3090 \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=86
+cmake --build build-whole-precision-confirmation-rtx3090 \
+  --target a100_fp16_softmax_whole_precision_confirmation_energy -j
+
+TAG="$(date +%Y%m%d)_abba_confirm_v1"
+"$GPUPWR_PYTHON_BIN" scripts/run_softmax_whole_precision_targeted_confirmation.py \
+  --build-dir build-whole-precision-confirmation-rtx3090 \
+  --output-dir results/raw --session-tag "$TAG" --gpu-id 0 --execute
+RUN="results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_$TAG"
+
+"$GPUPWR_PYTHON_BIN" scripts/audit_softmax_whole_precision_sass.py \
+  --binary "$RUN/frozen/a100_fp16_softmax_whole_precision_confirmation_energy" \
+  --cuobjdump "$CUOBJDUMP" --out "$RUN/sass_audit.json" --fail-on-unexpected
+"$GPUPWR_PYTHON_BIN" scripts/bind_softmax_whole_precision_confirmation_sass.py \
+  --run-dir "$RUN" --sass-audit "$RUN/sass_audit.json"
+"$GPUPWR_PYTHON_BIN" scripts/analyze_softmax_whole_precision_targeted_confirmation.py --run-dir "$RUN"
+"$GPUPWR_PYTHON_BIN" scripts/plot_softmax_whole_precision_targeted_confirmation.py \
+  --run-dir "$RUN" --out-dir docs/assets/softmax_whole_precision_targeted_confirmation
+FIG="docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_${TAG}_figure_manifest.json"
+"$GPUPWR_PYTHON_BIN" scripts/build_softmax_whole_precision_targeted_confirmation_report.py \
+  --run-dir "$RUN" --out-dir docs/results --figure-manifest "$FIG"
+```
+
+`bind_*`는 measurement가 끝나기 전에 실행하면 거부한다. 이 순서는 frozen binary가
+acquisition 전에 존재했고 SASS 검사는 acquisition 뒤 수행한 정적 evidence라는 사실을
+명시한다. 2026-07-27 결과와 그림은
+`docs/results/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_*`와
+`docs/assets/softmax_whole_precision_targeted_confirmation/`에 있다.
+
 ## Current FP16 Tensor-only v3 Flow
 
 | 단계 | script | 역할 |

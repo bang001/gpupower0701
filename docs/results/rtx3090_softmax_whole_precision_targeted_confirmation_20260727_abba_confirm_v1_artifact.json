@@ -1,0 +1,786 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "RTX 3090 Softmax targeted AB/BA confirmation",
+    "description": "Two exploratory-selected complete-Softmax implementation contrasts remeasured in six fresh AB/BA pair sessions each.",
+    "generatedAt": "2026-07-27T13:49:25+09:00",
+    "sources": [
+      {
+        "id": "analysis",
+        "label": "Fail-closed targeted AB/BA confirmation analysis",
+        "path": "results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/analysis/analysis.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT candidate_summary FROM read_json_auto('results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/analysis/analysis.json');",
+          "description": "The report consumes the SHA-bound authoritative arrays embedded in analysis.json. The analyzer validates frozen binary/runner, manifest, raw/trace SHA-256, exact AB/BA balance, canonical conditioning, qualified trace, SMID, numerical and logical-denominator contracts before producing those summaries.",
+          "tables_used": [
+            "results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/manifest.json",
+            "results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/analysis/analysis.json"
+          ],
+          "metric_definitions": [
+            "Primary metric = idle-subtracted NVML GPU/device total-energy trace in net pJ per logical Softmax output element.",
+            "One fresh CUDA-process pair session is the independent repeat; individual role rows are not pooled."
+          ],
+          "filters": [
+            "RTX 3090 sm86",
+            "S=512",
+            "grid CTA=16",
+            "2 rows/CTA",
+            "FP16 I/O",
+            "AB=3 BA=3 per candidate",
+            "no exploratory pooling"
+          ]
+        }
+      },
+      {
+        "id": "sass",
+        "label": "sm86 frozen confirmation-binary PTX/SASS audit",
+        "path": "results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/sass_audit.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_json_auto('results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/sass_audit.json');",
+          "description": "Static code-path audit for the exact frozen confirmation executable; instruction-path evidence is not a board-energy measurement.",
+          "tables_used": [
+            "results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/sass_audit.json"
+          ],
+          "metric_definitions": [
+            "Audit binary SHA-256 must equal the measured frozen binary SHA-256."
+          ],
+          "filters": [
+            "sm86",
+            "complete Softmax",
+            "fixed S=512 / two rows per CTA"
+          ]
+        }
+      }
+    ],
+    "charts": [
+      {
+        "id": "paired_delta",
+        "title": "Candidate-wise paired mean delta",
+        "subtitle": "Treatment minus FP16-I/O + FP32-stage baseline; n=6 fresh pair sessions per candidate, signed pJ/logical output element.",
+        "type": "bar",
+        "intent": "comparison",
+        "question": "How large and in which direction is each candidate's same-session treatment-minus-baseline delta?",
+        "rationale": "A signed bar chart centers the two independent candidate summaries on zero; the paired table retains interval and raw-session context.",
+        "comparisonContext": {
+          "baseline": "same-session fp16_io_fp32_all",
+          "denominator": "one logical Softmax output element",
+          "grain": "mean of six fresh paired deltas",
+          "unit": "net pJ/logical output element"
+        },
+        "dataset": "candidate_summary",
+        "sourceId": "analysis",
+        "encodings": {
+          "x": {
+            "field": "candidate_label",
+            "type": "ordinal",
+            "label": "Targeted contrast"
+          },
+          "y": {
+            "field": "mean_delta_net_pj",
+            "type": "quantitative",
+            "label": "Mean paired delta",
+            "unit": "pJ/logical output element",
+            "format": "number"
+          },
+          "tooltip": [
+            {
+              "field": "candidate_label",
+              "type": "nominal",
+              "label": "Candidate"
+            },
+            {
+              "field": "mean_delta_net_pj",
+              "type": "quantitative",
+              "label": "Mean Δ",
+              "unit": "pJ/logical output element",
+              "format": "number"
+            },
+            {
+              "field": "t95_low_delta_net_pj",
+              "type": "quantitative",
+              "label": "Descriptive t95 low",
+              "unit": "pJ/logical output element",
+              "format": "number"
+            },
+            {
+              "field": "t95_high_delta_net_pj",
+              "type": "quantitative",
+              "label": "Descriptive t95 high",
+              "unit": "pJ/logical output element",
+              "format": "number"
+            },
+            {
+              "field": "fresh_pair_sessions",
+              "type": "quantitative",
+              "label": "Fresh pairs",
+              "format": "number"
+            }
+          ]
+        },
+        "palette": {
+          "kind": "single-root",
+          "name": "whole-softmax-confirmation"
+        },
+        "labels": {
+          "values": "auto"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        },
+        "legend": {
+          "position": "none"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 0,
+            "label": "no observed difference",
+            "color": "neutral",
+            "lineStyle": "solid"
+          }
+        ]
+      },
+      {
+        "id": "order_orientation",
+        "title": "AB versus BA orientation diagnostic",
+        "subtitle": "Each bar summarizes three fresh pair sessions; it is a carryover diagnostic, not an order-effect estimate.",
+        "type": "bar",
+        "intent": "comparison",
+        "question": "Do AB and BA sessions show materially different descriptive treatment-minus-baseline directions?",
+        "rationale": "Two order groups per candidate expose the balanced orientation diagnostic without pooling candidates.",
+        "comparisonContext": {
+          "baseline": "same-session fp16_io_fp32_all",
+          "denominator": "one logical Softmax output element",
+          "grain": "three pair sessions per candidate/order",
+          "unit": "net pJ/logical output element"
+        },
+        "dataset": "orientation",
+        "sourceId": "analysis",
+        "encodings": {
+          "x": {
+            "field": "candidate_label",
+            "type": "ordinal",
+            "label": "Targeted contrast"
+          },
+          "y": {
+            "field": "mean_delta_net_pj",
+            "type": "quantitative",
+            "label": "Mean paired delta",
+            "unit": "pJ/logical output element",
+            "format": "number"
+          },
+          "color": {
+            "field": "session_order",
+            "type": "nominal",
+            "label": "Measurement order"
+          },
+          "tooltip": [
+            {
+              "field": "candidate_label",
+              "type": "nominal",
+              "label": "Candidate"
+            },
+            {
+              "field": "session_order",
+              "type": "nominal",
+              "label": "Order"
+            },
+            {
+              "field": "mean_delta_net_pj",
+              "type": "quantitative",
+              "label": "Mean Δ",
+              "unit": "pJ/logical output element",
+              "format": "number"
+            },
+            {
+              "field": "fresh_pair_sessions",
+              "type": "quantitative",
+              "label": "Fresh pairs",
+              "format": "number"
+            }
+          ]
+        },
+        "palette": {
+          "kind": "hard-two-root",
+          "name": "whole-softmax-confirmation-order"
+        },
+        "labels": {
+          "values": "auto"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        },
+        "legend": {
+          "position": "bottom"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 0,
+            "label": "no observed difference",
+            "color": "neutral",
+            "lineStyle": "solid"
+          }
+        ]
+      }
+    ],
+    "tables": [
+      {
+        "id": "candidate_table",
+        "title": "Candidate paired-summary table",
+        "subtitle": "Each row is a separate six-session targeted replication; descriptive t95 intervals are not a broad selection test.",
+        "dataset": "candidate_summary",
+        "sourceId": "analysis",
+        "defaultSort": {
+          "field": "candidate_label",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "candidate_label",
+            "label": "Candidate"
+          },
+          {
+            "field": "treatment_policy",
+            "label": "Treatment"
+          },
+          {
+            "field": "fresh_pair_sessions",
+            "label": "Fresh pairs",
+            "format": "number"
+          },
+          {
+            "field": "ab_sessions",
+            "label": "AB",
+            "format": "number"
+          },
+          {
+            "field": "ba_sessions",
+            "label": "BA",
+            "format": "number"
+          },
+          {
+            "field": "mean_delta_net_pj",
+            "label": "Mean Δ pJ/output",
+            "format": "number"
+          },
+          {
+            "field": "sample_std_delta_net_pj",
+            "label": "Session SD",
+            "format": "number"
+          },
+          {
+            "field": "t95_low_delta_net_pj",
+            "label": "t95 low",
+            "format": "number"
+          },
+          {
+            "field": "t95_high_delta_net_pj",
+            "label": "t95 high",
+            "format": "number"
+          },
+          {
+            "field": "negative_sessions",
+            "label": "Negative sessions",
+            "format": "number"
+          },
+          {
+            "field": "positive_sessions",
+            "label": "Positive sessions",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "pair_table",
+        "title": "Fresh-session paired deltas",
+        "subtitle": "One row is one fresh CUDA-process pair; raw role rows are not treated as independent samples.",
+        "dataset": "paired_sessions",
+        "sourceId": "analysis",
+        "defaultSort": {
+          "field": "global_session_index",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "candidate_label",
+            "label": "Candidate"
+          },
+          {
+            "field": "global_session_index",
+            "label": "Run order",
+            "format": "number"
+          },
+          {
+            "field": "session_order",
+            "label": "AB/BA"
+          },
+          {
+            "field": "baseline_net_pj",
+            "label": "Baseline net pJ/output",
+            "format": "number"
+          },
+          {
+            "field": "treatment_net_pj",
+            "label": "Treatment net pJ/output",
+            "format": "number"
+          },
+          {
+            "field": "delta_net_pj",
+            "label": "Treatment−baseline Δ",
+            "format": "number",
+            "movement": true
+          },
+          {
+            "field": "preheat_s",
+            "label": "Conditioning seconds",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "quality_table",
+        "title": "Evidence and measurement-quality gates",
+        "subtitle": "Temperature is retained as context rather than a causal adjustment or hard rejection gate.",
+        "dataset": "quality",
+        "sourceId": "analysis",
+        "defaultSort": {
+          "field": "check",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "check",
+            "label": "Check"
+          },
+          {
+            "field": "coverage",
+            "label": "Coverage"
+          },
+          {
+            "field": "result",
+            "label": "Result"
+          },
+          {
+            "field": "meaning",
+            "label": "Meaning"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# RTX 3090 Softmax targeted AB/BA confirmation"
+      },
+      {
+        "id": "technical_summary",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## 기술 요약\n\n**이 run은 exploratory stage-isolation에서 선택된 exp packed와 reduction scalar 두 complete-Softmax contrast의 fresh targeted replication이다.** 각 candidate는 AB 3회와 BA 3회, n=6 fresh CUDA-process paired session으로 측정했다. primary unit은 `net pJ/logical Softmax output element`이며, individual role 24개나 이전 exploratory result와 pool하지 않는다."
+      },
+      {
+        "id": "finding_intro",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## 두 candidate의 paired evidence\n\n음수 Δ는 같은 session에서 treatment가 FP16 I/O + FP32-stage baseline보다 낮게 관측된 net pJ/output을 뜻한다. 아래 bar는 두 independent candidate의 mean paired delta만 보여 주며, descriptive t95와 raw pair evidence는 표에서 함께 확인한다."
+      },
+      {
+        "id": "paired_delta_block",
+        "type": "chart",
+        "chartId": "paired_delta"
+      },
+      {
+        "id": "candidate_table_block",
+        "type": "table",
+        "tableId": "candidate_table"
+      },
+      {
+        "id": "orientation_intro",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## AB/BA balance는 순서효과를 진단하기 위한 장치다\n\n각 candidate에서 AB와 BA를 세 번씩 실행해 first/second position과 directed predecessor를 균형화했다. order별 bar는 carryover diagnostic일 뿐, small-n order effect의 causal estimate나 post-hoc selection rule이 아니다."
+      },
+      {
+        "id": "orientation_block",
+        "type": "chart",
+        "chartId": "order_orientation"
+      },
+      {
+        "id": "pair_table_block",
+        "type": "table",
+        "tableId": "pair_table"
+      },
+      {
+        "id": "scope",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## Scope, data, and metric definition\n\nRTX 3090 sm86 is an 82-SM device, but this fixed grid uses 16 CTA and is not a full-SM-saturation experiment. S=512, two independent rows/CTA, logit scale=4, ~13 s role and 20 s baseline conditioner are fixed. `net pJ/output = (qualified trace energy − idle power × elapsed) × 1e12 / logical output elements`. This is complete Softmax forward, not the older EX2 Operand-rate ATC denominator."
+      },
+      {
+        "id": "method",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## Canonical preparation and common conditioning\n\nWithin each fresh process, validation and all calibration happen in canonical policy-enum order before a fixed 20 s `fp16_io_fp32_all` conditioner. There is no unrecorded policy warm-up. Only then does the untouched two-role AB or BA schedule run, with the same 1 s idle baseline before each role."
+      },
+      {
+        "id": "quality_intro",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## Trace, placement, numerical, and static-code evidence\n\nAll 24 roles passed qualified Theil-Sen trace, SMID placement, logical denominator, and FP64-reference numerical gates. The manifest binds the frozen executable, runner, raw/trace SHA-256, and a passing sm86 SASS audit for that exact binary."
+      },
+      {
+        "id": "quality_table_block",
+        "type": "table",
+        "tableId": "quality_table"
+      },
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "body": "## What this result does not establish\n\nCandidate choice came from exploratory evidence, so the intervals are descriptive targeted-replication summaries, not a broad generalization or pure unit-energy measurement. AB/BA reduces a documented order problem but does not remove all DVFS, temperature, or device-state variation. The result does not transfer automatically to other S/CTA coordinates or V100/A100/H100; stage deltas are not additive all-FP16 endpoint predictions."
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "body": "## Recommended next steps\n\n`exp_fp16x2`는 평균 Δ=-69.8 pJ/output, descriptive t95 [-372.4, 232.9]다. 0을 포함하므로 이 좌표에서 energy-saving endpoint 후보로 승격하지 않는다.\n\n`reduction_fp16_scalar`는 평균 Δ=1,127.5 pJ/output, descriptive t95 [39.5, 2,215.6]다. 이 고정 좌표에서는 개선 후보가 아니라 관측된 비용 증가이므로 endpoint 또는 CTA/S sweep으로 확대하지 않는다.\n\nIf the exp contrast must be resolved, use a separate fixed-clock or external-meter sensitivity run at this same coordinate before increasing a broad CTA/S sweep."
+      },
+      {
+        "id": "questions",
+        "type": "markdown",
+        "body": "## Further questions\n\nDoes target-specific lowering change on A100/H100? Does a workload-specific numerical tolerance preserve the candidate boundary? Does an external power meter materially reduce board-level trace variance?"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-07-27T13:49:25+09:00",
+    "status": "ready",
+    "datasets": {
+      "candidate_summary": [
+        {
+          "candidate_order": 1,
+          "candidate_id": "exp_packed",
+          "candidate_label": "exp · packed FP16",
+          "baseline_policy": "fp16_io_fp32_all",
+          "treatment_policy": "exp_fp16x2",
+          "fresh_pair_sessions": 6,
+          "ab_sessions": 3,
+          "ba_sessions": 3,
+          "baseline_mean_net_pj": 2090.01170374,
+          "treatment_mean_net_pj": 2020.2462007283332,
+          "mean_delta_net_pj": -69.76550301166667,
+          "sample_std_delta_net_pj": 288.3685326301408,
+          "t95_low_delta_net_pj": -372.3897185782445,
+          "t95_high_delta_net_pj": 232.85871255491116,
+          "negative_sessions": 4,
+          "positive_sessions": 2,
+          "zero_excluded": false,
+          "all_same_direction": false
+        },
+        {
+          "candidate_order": 2,
+          "candidate_id": "reduction_scalar",
+          "candidate_label": "max+sum reduction · scalar FP16",
+          "baseline_policy": "fp16_io_fp32_all",
+          "treatment_policy": "reduction_fp16_scalar",
+          "fresh_pair_sessions": 6,
+          "ab_sessions": 3,
+          "ba_sessions": 3,
+          "baseline_mean_net_pj": 2376.21566974,
+          "treatment_mean_net_pj": 3503.74088172,
+          "mean_delta_net_pj": 1127.52521198,
+          "sample_std_delta_net_pj": 1036.8062830824033,
+          "t95_low_delta_net_pj": 39.463746845241076,
+          "t95_high_delta_net_pj": 2215.586677114759,
+          "negative_sessions": 1,
+          "positive_sessions": 5,
+          "zero_excluded": true,
+          "all_same_direction": false
+        }
+      ],
+      "paired_sessions": [
+        {
+          "candidate_id": "exp_packed",
+          "candidate_label": "exp · packed FP16",
+          "global_session_index": 1,
+          "session_order": "AB",
+          "baseline_net_pj": 1783.28803143,
+          "treatment_net_pj": 2074.42628571,
+          "delta_net_pj": 291.1382542799997,
+          "preheat_s": 19.9639819336,
+          "temperature_min_c": 52.0,
+          "temperature_max_c": 55.0
+        },
+        {
+          "candidate_id": "exp_packed",
+          "candidate_label": "exp · packed FP16",
+          "global_session_index": 3,
+          "session_order": "BA",
+          "baseline_net_pj": 1849.95059937,
+          "treatment_net_pj": 1841.49498102,
+          "delta_net_pj": -8.455618349999895,
+          "preheat_s": 19.962567749,
+          "temperature_min_c": 53.0,
+          "temperature_max_c": 55.0
+        },
+        {
+          "candidate_id": "exp_packed",
+          "candidate_label": "exp · packed FP16",
+          "global_session_index": 5,
+          "session_order": "BA",
+          "baseline_net_pj": 2213.1919642,
+          "treatment_net_pj": 2081.48704284,
+          "delta_net_pj": -131.70492135999984,
+          "preheat_s": 19.964677002,
+          "temperature_min_c": 54.0,
+          "temperature_max_c": 55.0
+        },
+        {
+          "candidate_id": "exp_packed",
+          "candidate_label": "exp · packed FP16",
+          "global_session_index": 7,
+          "session_order": "AB",
+          "baseline_net_pj": 1889.20478744,
+          "treatment_net_pj": 2059.81405466,
+          "delta_net_pj": 170.60926721999977,
+          "preheat_s": 19.9643342285,
+          "temperature_min_c": 54.0,
+          "temperature_max_c": 57.0
+        },
+        {
+          "candidate_id": "exp_packed",
+          "candidate_label": "exp · packed FP16",
+          "global_session_index": 9,
+          "session_order": "AB",
+          "baseline_net_pj": 2288.89830282,
+          "treatment_net_pj": 1777.80209653,
+          "delta_net_pj": -511.09620629000005,
+          "preheat_s": 19.9630288086,
+          "temperature_min_c": 54.0,
+          "temperature_max_c": 57.0
+        },
+        {
+          "candidate_id": "exp_packed",
+          "candidate_label": "exp · packed FP16",
+          "global_session_index": 11,
+          "session_order": "BA",
+          "baseline_net_pj": 2515.53653718,
+          "treatment_net_pj": 2286.45274361,
+          "delta_net_pj": -229.08379356999967,
+          "preheat_s": 19.8864622803,
+          "temperature_min_c": 55.0,
+          "temperature_max_c": 56.0
+        },
+        {
+          "candidate_id": "reduction_scalar",
+          "candidate_label": "max+sum reduction · scalar FP16",
+          "global_session_index": 2,
+          "session_order": "BA",
+          "baseline_net_pj": 2079.73344748,
+          "treatment_net_pj": 2661.58020632,
+          "delta_net_pj": 581.8467588399999,
+          "preheat_s": 19.9335855713,
+          "temperature_min_c": 52.0,
+          "temperature_max_c": 56.0
+        },
+        {
+          "candidate_id": "reduction_scalar",
+          "candidate_label": "max+sum reduction · scalar FP16",
+          "global_session_index": 4,
+          "session_order": "AB",
+          "baseline_net_pj": 2077.9571252,
+          "treatment_net_pj": 3961.75731115,
+          "delta_net_pj": 1883.80018595,
+          "preheat_s": 19.87790979,
+          "temperature_min_c": 54.0,
+          "temperature_max_c": 56.0
+        },
+        {
+          "candidate_id": "reduction_scalar",
+          "candidate_label": "max+sum reduction · scalar FP16",
+          "global_session_index": 6,
+          "session_order": "AB",
+          "baseline_net_pj": 2317.60880021,
+          "treatment_net_pj": 4251.74395661,
+          "delta_net_pj": 1934.1351564000001,
+          "preheat_s": 19.9756486816,
+          "temperature_min_c": 54.0,
+          "temperature_max_c": 56.0
+        },
+        {
+          "candidate_id": "reduction_scalar",
+          "candidate_label": "max+sum reduction · scalar FP16",
+          "global_session_index": 8,
+          "session_order": "BA",
+          "baseline_net_pj": 1841.6016951,
+          "treatment_net_pj": 4108.6635322,
+          "delta_net_pj": 2267.0618371,
+          "preheat_s": 19.9637720947,
+          "temperature_min_c": 54.0,
+          "temperature_max_c": 57.0
+        },
+        {
+          "candidate_id": "reduction_scalar",
+          "candidate_label": "max+sum reduction · scalar FP16",
+          "global_session_index": 10,
+          "session_order": "BA",
+          "baseline_net_pj": 3017.44391096,
+          "treatment_net_pj": 2727.34410956,
+          "delta_net_pj": -290.0998013999997,
+          "preheat_s": 19.9665769043,
+          "temperature_min_c": 54.0,
+          "temperature_max_c": 57.0
+        },
+        {
+          "candidate_id": "reduction_scalar",
+          "candidate_label": "max+sum reduction · scalar FP16",
+          "global_session_index": 12,
+          "session_order": "AB",
+          "baseline_net_pj": 2922.94903949,
+          "treatment_net_pj": 3311.35617448,
+          "delta_net_pj": 388.40713499000003,
+          "preheat_s": 19.9612434082,
+          "temperature_min_c": 55.0,
+          "temperature_max_c": 55.0
+        }
+      ],
+      "orientation": [
+        {
+          "candidate_id": "exp_packed",
+          "candidate_label": "exp · packed FP16",
+          "session_order": "AB",
+          "fresh_pair_sessions": 3,
+          "mean_delta_net_pj": -16.449561596666854,
+          "sample_std_delta_net_pj": 432.59482950008413
+        },
+        {
+          "candidate_id": "exp_packed",
+          "candidate_label": "exp · packed FP16",
+          "session_order": "BA",
+          "fresh_pair_sessions": 3,
+          "mean_delta_net_pj": -123.08144442666647,
+          "sample_std_delta_net_pj": 110.56659165878963
+        },
+        {
+          "candidate_id": "reduction_scalar",
+          "candidate_label": "max+sum reduction · scalar FP16",
+          "session_order": "AB",
+          "fresh_pair_sessions": 3,
+          "mean_delta_net_pj": 1402.1141591133335,
+          "sample_std_delta_net_pj": 878.2567109793633
+        },
+        {
+          "candidate_id": "reduction_scalar",
+          "candidate_label": "max+sum reduction · scalar FP16",
+          "session_order": "BA",
+          "fresh_pair_sessions": 3,
+          "mean_delta_net_pj": 852.9362648466667,
+          "sample_std_delta_net_pj": 1299.9561729359204
+        }
+      ],
+      "quality": [
+        {
+          "check": "evidence binding",
+          "coverage": "12 fresh processes / 24 measured roles",
+          "meaning": "manifest, frozen binary/runner, all raw/trace SHA-256 values and exact AB/BA plan passed",
+          "result": "pass"
+        },
+        {
+          "check": "AB/BA and conditioning",
+          "coverage": "exp packed: AB=3 BA=3; reduction scalar: AB=3 BA=3",
+          "meaning": "canonical validation/calibration precede the 20 s common baseline conditioner; no unrecorded policy warm-up",
+          "result": "pass"
+        },
+        {
+          "check": "trace, placement and numerics",
+          "coverage": "preheat 19.878-19.976 s; R² 0.999714829-0.999955990; 24/24 roles",
+          "meaning": "qualified Theil-Sen trace, SMID placement, complete-Softmax denominator and FP64-reference numerical gates passed",
+          "result": "pass"
+        },
+        {
+          "check": "recorded thermal context",
+          "coverage": "52-57 °C",
+          "meaning": "temperature is recorded context only, not a hard rejection gate or causal adjustment",
+          "result": "recorded"
+        },
+        {
+          "check": "sm86 compiled path",
+          "coverage": "ad33175b2388 (results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/sass_audit.json)",
+          "meaning": "the frozen confirmation binary passed the whole-Softmax scalar/packed PTX/SASS audit",
+          "result": "pass"
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "analysis",
+      "label": "Fail-closed targeted AB/BA confirmation analysis",
+      "path": "results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/analysis/analysis.json",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT candidate_summary FROM read_json_auto('results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/analysis/analysis.json');",
+        "description": "The report consumes the SHA-bound authoritative arrays embedded in analysis.json. The analyzer validates frozen binary/runner, manifest, raw/trace SHA-256, exact AB/BA balance, canonical conditioning, qualified trace, SMID, numerical and logical-denominator contracts before producing those summaries.",
+        "tables_used": [
+          "results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/manifest.json",
+          "results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/analysis/analysis.json"
+        ],
+        "metric_definitions": [
+          "Primary metric = idle-subtracted NVML GPU/device total-energy trace in net pJ per logical Softmax output element.",
+          "One fresh CUDA-process pair session is the independent repeat; individual role rows are not pooled."
+        ],
+        "filters": [
+          "RTX 3090 sm86",
+          "S=512",
+          "grid CTA=16",
+          "2 rows/CTA",
+          "FP16 I/O",
+          "AB=3 BA=3 per candidate",
+          "no exploratory pooling"
+        ]
+      }
+    },
+    {
+      "id": "sass",
+      "label": "sm86 frozen confirmation-binary PTX/SASS audit",
+      "path": "results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/sass_audit.json",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_json_auto('results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/sass_audit.json');",
+        "description": "Static code-path audit for the exact frozen confirmation executable; instruction-path evidence is not a board-energy measurement.",
+        "tables_used": [
+          "results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/sass_audit.json"
+        ],
+        "metric_definitions": [
+          "Audit binary SHA-256 must equal the measured frozen binary SHA-256."
+        ],
+        "filters": [
+          "sm86",
+          "complete Softmax",
+          "fixed S=512 / two rows per CTA"
+        ]
+      }
+    }
+  ]
+}

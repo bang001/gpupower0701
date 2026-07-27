@@ -138,3 +138,39 @@ set_target_properties(a100_fp16_softmax_whole_precision_energy PROPERTIES
   CUDA_SEPARABLE_COMPILATION OFF
   CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
+
+# Keep the targeted AB/BA confirmation binary distinct from the historical
+# stage-isolation target.  Existing raw evidence binds its binary SHA-256 to
+# the old executable, so rebuilding this new target must not overwrite it.
+add_executable(a100_fp16_softmax_whole_precision_confirmation_energy
+  src/softmax_whole_precision_main.cu
+  src/softmax_whole_precision_kernels.cu
+  src/softmax_whole_precision_result_writer.cpp
+  src/nvml_energy.cpp
+)
+
+target_include_directories(a100_fp16_softmax_whole_precision_confirmation_energy PRIVATE
+  include
+)
+
+if(NVML_INCLUDE_DIR)
+  target_include_directories(a100_fp16_softmax_whole_precision_confirmation_energy PRIVATE
+    "${NVML_INCLUDE_DIR}"
+  )
+endif()
+
+target_link_libraries(a100_fp16_softmax_whole_precision_confirmation_energy PRIVATE
+  CUDA::cudart
+  "${NVML_LIBRARY}"
+)
+
+target_compile_options(a100_fp16_softmax_whole_precision_confirmation_energy PRIVATE
+  $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+  $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>
+  $<$<COMPILE_LANGUAGE:CUDA>:-Xptxas=-v>
+)
+
+set_target_properties(a100_fp16_softmax_whole_precision_confirmation_energy PROPERTIES
+  CUDA_SEPARABLE_COMPILATION OFF
+  CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)

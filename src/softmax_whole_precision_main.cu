@@ -17,6 +17,7 @@
 #include <map>
 #include <mutex>
 #include <numeric>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -64,8 +65,26 @@ struct Options {
   std::string output = "results/raw/softmax_whole_precision_raw.csv";
   std::string trace_output;
   std::string binary_sha256;
+  // Defaults preserve the historical stage-isolation executable contract.
+  // The separate confirmation target opts into canonical_common_v1 explicitly.
+  std::string schema_version = "softmax_whole_precision_v2";
+  std::string experiment_kind = "whole_softmax_precision";
+  std::string protocol_revision = "whole_softmax_precision_stage_isolation_v1";
+  std::string conditioning_mode = "legacy_stage_isolation_v1";
+  std::string confirmation_pair;
   bool validate_only = false;
   bool dry_run = false;
+};
+
+struct ConditioningMetadata {
+  std::string mode;
+  std::string policy;
+  std::string preparation_order;
+  std::string preparation_policy_order;
+  bool validation_before_conditioning = false;
+  bool calibration_before_conditioning = false;
+  std::string calibration;
+  std::string schedule_warmup;
 };
 
 struct DeviceState {
@@ -182,6 +201,30 @@ std::vector<std::vector<Policy>> parse_schedule(const std::string& value) {
   return schedule;
 }
 
+std::optional<Policy> confirmation_treatment(const std::string& pair) {
+  if (pair.empty()) return std::nullopt;
+  if (pair == "exp_packed") return Policy::exp_fp16x2;
+  if (pair == "reduction_scalar") return Policy::reduction_fp16_scalar;
+  throw std::invalid_argument(
+      "--confirmation-pair must be exp_packed or reduction_scalar");
+}
+
+std::vector<Policy> canonical_policy_order(std::vector<Policy> policies) {
+  std::sort(policies.begin(), policies.end(), [](Policy left, Policy right) {
+    return static_cast<int>(left) < static_cast<int>(right);
+  });
+  return policies;
+}
+
+std::string render_policy_order(const std::vector<Policy>& policies) {
+  std::ostringstream result;
+  for (std::size_t index = 0; index < policies.size(); ++index) {
+    if (index != 0) result << ',';
+    result << policy_spec(policies[index]).name;
+  }
+  return result.str();
+}
+
 std::string default_trace_path(const std::string& output) {
   const std::filesystem::path path(output);
   const std::string stem = path.stem().string();
@@ -201,6 +244,9 @@ void usage(const char* program) {
       << "  --energy-trace-sample-ms <ms>          default 500\n"
       << "  --energy-trace-min-updates <n>         default 16\n"
       << "  --target-profile rtx3090|auto\n"
+      << "  --conditioning-mode legacy_stage_isolation_v1|canonical_common_v1\n"
+      << "  --confirmation-pair exp_packed|reduction_scalar\n"
+      << "  --schema-version <id> --experiment-kind <id> --protocol-revision <id>\n"
       << "  --design-id <id> --stage-group <id> --session-order <id>\n"
       << "  --session-id <id> --output <csv> --energy-trace-output <csv>\n"
       << "  --binary-sha256 <hex> --validate-only --dry-run\n\n"
@@ -269,6 +315,16 @@ Options parse_options(int argc, char** argv) {
       options.trace_output = value();
     } else if (argument == "--binary-sha256") {
       options.binary_sha256 = value();
+    } else if (argument == "--schema-version") {
+      options.schema_version = value();
+    } else if (argument == "--experiment-kind") {
+      options.experiment_kind = value();
+    } else if (argument == "--protocol-revision") {
+      options.protocol_revision = value();
+    } else if (argument == "--conditioning-mode") {
+      options.conditioning_mode = value();
+    } else if (argument == "--confirmation-pair") {
+      options.confirmation_pair = value();
     } else if (argument == "--validate-only") {
       options.validate_only = true;
     } else if (argument == "--dry-run") {
@@ -290,6 +346,50 @@ Options parse_options(int argc, char** argv) {
   }
   if (options.target_profile != "rtx3090" && options.target_profile != "auto") {
     throw std::invalid_argument("--target-profile must be rtx3090 or auto");
+  }
+  if (options.conditioning_mode != "legacy_stage_isolation_v1" &&
+      options.conditioning_mode != "canonical_common_v1") {
+    throw std::invalid_argument(
+        "--conditioning-mode must be legacy_stage_isolation_v1 or canonical_common_v1");
+  }
+  const std::optional<Policy> treatment = confirmation_treatment(options.confirmation_pair);
+  if (treatment.has_value()) {
+    if (options.conditioning_mode != "canonical_common_v1") {
+      throw std::invalid_argument(
+          "confirmation pairs require --conditioning-mode canonical_common_v1");
+    }
+    if (options.schema_version != "softmax_whole_precision_v3" ||
+        options.experiment_kind != "whole_softmax_targeted_confirmation" ||
+        options.protocol_revision != "whole_softmax_precision_canonical_common_v1" ||
+        options.design_id != "targeted_confirmation_abba_v1" ||
+        options.stage_group != options.confirmation_pair) {
+      throw std::invalid_argument(
+          "confirmation-pair metadata contract is incomplete or inconsistent");
+    }
+    if (options.schedule.size() != 1 || options.schedule.front().size() != 2) {
+      throw std::invalid_argument(
+          "confirmation pairs require exactly one two-policy schedule block");
+    }
+    const auto& pair_schedule = options.schedule.front();
+    const bool contains_expected =
+        (pair_schedule[0] == Policy::fp16_io_fp32_all && pair_schedule[1] == *treatment) ||
+        (pair_schedule[1] == Policy::fp16_io_fp32_all && pair_schedule[0] == *treatment);
+    if (!contains_expected) {
+      throw std::invalid_argument(
+          "confirmation schedule must contain the common baseline and the selected treatment exactly once");
+    }
+    if (options.session_order != "AB" && options.session_order != "BA") {
+      throw std::invalid_argument("confirmation session_order must be AB or BA");
+    }
+    const bool expected_ab = pair_schedule[0] == Policy::fp16_io_fp32_all &&
+        pair_schedule[1] == *treatment;
+    if ((options.session_order == "AB") != expected_ab) {
+      throw std::invalid_argument(
+          "confirmation session_order does not match the supplied policy schedule");
+    }
+  } else if (options.conditioning_mode == "canonical_common_v1") {
+    throw std::invalid_argument(
+        "canonical_common_v1 requires an explicit --confirmation-pair");
   }
   if (options.gpu_id < 0 || options.grid_blocks == 0 || options.seconds <= 0.0 ||
       options.preheat_seconds <= 0.0 || options.idle_seconds <= 0.0 ||
@@ -822,10 +922,12 @@ ValidationResult validate_policy(Policy policy, DeviceState& state,
 }
 
 double preheat_policy(Policy policy, const DeviceState& state,
-                      const Options& options) {
+                      const Options& options, std::uint64_t one_second_iters) {
   // One-second chunks keep the requested 20 s preheat close to its contract
   // without the 5 s quantization overshoot of the early implementation.
-  const std::uint64_t one_second_iters = calibrate_iters(policy, state, 1.0);
+  if (one_second_iters == 0) {
+    throw std::runtime_error("whole-precision preheat requires a positive calibrated iteration count");
+  }
   double elapsed = 0.0;
   while (elapsed < options.preheat_seconds - 0.15) {
     const double remaining = options.preheat_seconds - elapsed;
@@ -850,9 +952,13 @@ ResultRow make_row(const Options& options, const DeviceState& state,
                    std::uint64_t iters, const IdleMeasurement& idle,
                    const KernelMeasurement& measurement,
                    const ValidationResult& validation,
-                   double preheat_actual_s) {
+                   double preheat_actual_s,
+                   const ConditioningMetadata& conditioning) {
   const auto spec = policy_spec(policy);
   ResultRow row;
+  row.schema_version = options.schema_version;
+  row.experiment_kind = options.experiment_kind;
+  row.protocol_revision = options.protocol_revision;
   row.design_id = options.design_id;
   row.stage_group = options.stage_group;
   row.session_order = options.session_order;
@@ -910,6 +1016,16 @@ ResultRow make_row(const Options& options, const DeviceState& state,
   row.preheat_requested_s = options.preheat_seconds;
   row.preheat_actual_s = preheat_actual_s;
   row.preheat_policy = policy_spec(Policy::fp16_io_fp32_all).name;
+  row.conditioning_mode = conditioning.mode;
+  row.conditioning_policy = conditioning.policy;
+  row.conditioning_requested_s = options.preheat_seconds;
+  row.conditioning_actual_s = preheat_actual_s;
+  row.preparation_order = conditioning.preparation_order;
+  row.preparation_policy_order = conditioning.preparation_policy_order;
+  row.validation_before_conditioning = conditioning.validation_before_conditioning;
+  row.calibration_before_conditioning = conditioning.calibration_before_conditioning;
+  row.conditioning_calibration = conditioning.calibration;
+  row.premeasurement_schedule_warmup = conditioning.schedule_warmup;
   row.E_before_mJ = measurement.before.energy_mj;
   row.E_after_mJ = measurement.after.energy_mj;
   row.endpoint_delta_E_J = measurement.endpoint_delta_j;
@@ -951,6 +1067,10 @@ ResultRow make_row(const Options& options, const DeviceState& state,
         << "canonical_input=fp16_quantized_promoted_to_fp32_v1;"
         << "preheat_policy=fp16_io_fp32_all;"
         << "preheat_actual_s=" << preheat_actual_s << ";"
+        << "conditioning_mode=" << conditioning.mode << ";"
+        << "preparation_order=" << conditioning.preparation_order << ";"
+        << "preparation_policy_order=" << conditioning.preparation_policy_order << ";"
+        << "premeasurement_schedule_warmup=" << conditioning.schedule_warmup << ";"
         << "packed_reduction_semantics=half2_across_two_rows_then_vector_tree;"
         << "metric=net_pJ_per_logical_output_element;"
         << "sfu_attribution=not_claimed;"
@@ -970,7 +1090,9 @@ void print_dry_run(const DeviceState& state, const Options& options,
             << "whole_precision_softmax_cols=" << kSoftmaxCols << "\n"
             << "grid_blocks=" << state.grid_blocks << "\n"
             << "rows_per_block=" << kRowsPerBlock << "\n"
-            << "logical_input_contract=fp16_quantized_promoted_to_fp32\n";
+            << "logical_input_contract=fp16_quantized_promoted_to_fp32\n"
+            << "conditioning_mode=" << options.conditioning_mode << "\n"
+            << "confirmation_pair=" << options.confirmation_pair << "\n";
   for (const Policy policy : policies) {
     const auto spec = policy_spec(policy);
     std::cout << "policy=" << spec.name << " io=" << to_string(spec.io)
@@ -986,11 +1108,36 @@ void print_dry_run(const DeviceState& state, const Options& options,
 
 int run(const Options& options) {
   const std::vector<Policy> policies = unique_policies(options);
+  const bool canonical_common = options.conditioning_mode == "canonical_common_v1";
+  const std::vector<Policy> preparation_policies = canonical_common
+      ? canonical_policy_order(policies)
+      : policies;
+  ConditioningMetadata conditioning;
+  conditioning.mode = options.conditioning_mode;
+  conditioning.policy = policy_spec(Policy::fp16_io_fp32_all).name;
+  conditioning.preparation_order = canonical_common
+      ? "canonical_policy_enum_ascending"
+      : "schedule_first_seen_legacy";
+  conditioning.preparation_policy_order = render_policy_order(preparation_policies);
+  conditioning.validation_before_conditioning = true;
+  conditioning.calibration_before_conditioning = canonical_common;
+  conditioning.calibration = canonical_common
+      ? "one_second_and_role_iters_precomputed_before_conditioning"
+      : "one_second_iters_before_conditioning_role_iters_after_conditioning";
+  conditioning.schedule_warmup = canonical_common ? "none" : "schedule_front_once";
   DeviceState state = create_state(options, policies);
   try {
     print_dry_run(state, options, policies);
+    std::cout << "preparation_order=" << conditioning.preparation_order
+              << " preparation_policy_order=" << conditioning.preparation_policy_order
+              << " validation_before_conditioning="
+              << (conditioning.validation_before_conditioning ? 1 : 0)
+              << " calibration_before_conditioning="
+              << (conditioning.calibration_before_conditioning ? 1 : 0)
+              << " premeasurement_schedule_warmup=" << conditioning.schedule_warmup
+              << "\n";
     std::map<Policy, ValidationResult> validation;
-    for (const Policy policy : policies) {
+    for (const Policy policy : preparation_policies) {
       validation.emplace(policy, validate_policy(policy, state, options));
       std::cout << "validation_policy=" << policy_spec(policy).name
                 << " validation_id=" << validation.at(policy).id
@@ -1002,26 +1149,53 @@ int run(const Options& options) {
       destroy_state(state);
       return 0;
     }
-    a100fp16::NvmlEnergy nvml;
+    std::map<Policy, std::uint64_t> iters;
+    // The confirmation protocol performs every policy-specific preparation
+    // before the common baseline conditioning.  The measurement schedule is
+    // intentionally not sorted: it remains AB or BA and is balanced by the
+    // runner across fresh processes.
+    std::uint64_t conditioner_one_second_iters = 0;
+    if (canonical_common) {
+      conditioner_one_second_iters = calibrate_iters(
+          Policy::fp16_io_fp32_all, state, 1.0);
+      std::cout << "conditioning_calibration_policy=fp16_io_fp32_all"
+                << " one_second_iters=" << conditioner_one_second_iters << "\n";
+      for (const Policy policy : preparation_policies) {
+        iters.emplace(policy, calibrate_iters(policy, state, options.seconds));
+        std::cout << "calibration_policy=" << policy_spec(policy).name
+                  << " iters=" << iters.at(policy) << "\n";
+      }
+    } else {
+      // Preserve the legacy stage-isolation sequence for the original target:
+      // only the one-second conditioner calibration precedes preheat.
+      conditioner_one_second_iters = calibrate_iters(
+          Policy::fp16_io_fp32_all, state, 1.0);
+    }
     // A fixed baseline establishes the thermal state once per session.  It is
     // deliberately not repeated per policy, which would inject a policy-order
     // dependent thermal workload before measurement.
     const double preheat_actual_s = preheat_policy(
-        Policy::fp16_io_fp32_all, state, options);
+        Policy::fp16_io_fp32_all, state, options, conditioner_one_second_iters);
     std::cout << "preheat_policy=fp16_io_fp32_all preheat_actual_s="
               << preheat_actual_s << "\n";
-    std::map<Policy, std::uint64_t> iters;
-    for (const Policy policy : policies) {
-      iters.emplace(policy, calibrate_iters(policy, state, options.seconds));
-      std::cout << "calibration_policy=" << policy_spec(policy).name
-                << " iters=" << iters.at(policy) << "\n";
+    if (!canonical_common) {
+      for (const Policy policy : preparation_policies) {
+        iters.emplace(policy, calibrate_iters(policy, state, options.seconds));
+        std::cout << "calibration_policy=" << policy_spec(policy).name
+                  << " iters=" << iters.at(policy) << "\n";
+      }
     }
     // One unrecorded policy block stabilizes the same persistent CUDA context
     // without turning warm-up energy into measured roles.  Repeating every
     // Latin block here would add a large, undocumented thermal workload.
-    for (const Policy policy : options.schedule.front()) {
-      (void)time_kernel(policy, state, iters.at(policy));
+    if (!canonical_common) {
+      for (const Policy policy : options.schedule.front()) {
+        (void)time_kernel(policy, state, iters.at(policy));
+      }
+    } else {
+      std::cout << "premeasurement_schedule_warmup=none\n";
     }
+    a100fp16::NvmlEnergy nvml;
     CsvWriter writer(options.output);
     for (std::size_t block_index = 0; block_index < options.schedule.size(); ++block_index) {
       const auto& block = options.schedule[block_index];
@@ -1038,7 +1212,7 @@ int run(const Options& options) {
         const ResultRow row = make_row(
             options, state, policy, schedule_id.str(), static_cast<int>(block_index),
             static_cast<int>(sequence_index), iters.at(policy), idle, measurement,
-            validation.at(policy), preheat_actual_s);
+            validation.at(policy), preheat_actual_s, conditioning);
         writer.write(row);
         write_trace_csv(options.trace_output, row, measurement);
         std::cout << "run_id=" << row.run_id << " policy=" << row.policy

@@ -424,6 +424,34 @@ lane은 한 row 안 두 원소가 아니라 **서로 독립된 두 CTA row**다.
 - [Matplotlib 그림과 재생성 방법](docs/assets/softmax_whole_precision_stage_isolation/README.md)
 - [Report QA / 제한](docs/results/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_report_qa.md)
 
+### Targeted fresh AB/BA confirmation: what to do instead of a broad CTA/S sweep
+
+stage-isolation의 `n=3` cyclic result를 다시 합산하지 않고, `S=512`, `CTA=16`,
+2 rows/CTA에서 두 candidate만 fresh CUDA process로 AB 3회 + BA 3회씩 재측정했다.
+각 role은 13 s, baseline common conditioner는 20 s이며, numerical validation과
+calibration을 canonical order로 먼저 마친 뒤 unrecorded policy warm-up 없이 AB/BA를
+측정했다. 따라서 이 run은 full-Softmax `net pJ/logical output element` 결과이고
+EX2 Operand-rate ATC의 `pJ/logical exponent result`와 비교하거나 합산하지 않는다.
+
+| candidate | treatment−baseline mean Δ pJ/output | descriptive t95 | 판단 |
+|---|---:|---:|---|
+| packed FP16 exp | −69.8 | [−372.4, 232.9] | 0 포함: energy-saving endpoint로 승격하지 않음 |
+| scalar FP16 max+sum reduction | +1,127.5 | [39.5, 2,215.6] | 이 좌표에서 관측된 비용 증가: endpoint/CTA/S sweep으로 확대하지 않음 |
+
+![Whole-Softmax fresh paired deltas](docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_paired_deltas.png)
+
+12 fresh process/24 role은 manifest/raw/trace SHA, canonical conditioner metadata,
+SMID, numerical gate, qualified trace 및 동일 frozen sm86 binary의 PTX/SASS audit을
+통과했다. 온도 52–57 °C는 기록만 했고 hard rejection이나 causal correction에는
+사용하지 않았다. 이 small-`n` post-selection replication의 다음 합리적 단계는
+CTA/S sweep이 아니라, 필요할 때 packed exp만 같은 좌표에서 fixed-clock 또는
+external-meter sensitivity run으로 판별하는 것이다.
+
+- [Fail-closed analysis and Korean report](docs/results/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_analysis_ko.md)
+- [Portable HTML report](docs/results/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_report.html)
+- [Static figures / regeneration](docs/assets/softmax_whole_precision_targeted_confirmation/README.md)
+- [Bound raw manifest](results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/manifest.json)
+
 ## RTX 3090 Softmax EX2 추가-지수 probe 집중 재현 확인 (2026-07-25)
 
 논쟁 좌표인 `CTA=48, S=1024`를 새 CUDA 세션 3개와 순환 implementation 순서로

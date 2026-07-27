@@ -56,6 +56,19 @@ struct ResultRow {
   double preheat_requested_s = 0.0;
   double preheat_actual_s = 0.0;
   std::string preheat_policy;
+  // These fields make the pre-measurement state auditable.  The historical
+  // stage-isolation flow leaves them at its legacy values; the targeted
+  // confirmation flow requires the canonical-common contract below.
+  std::string conditioning_mode = "legacy_stage_isolation_v1";
+  std::string conditioning_policy;
+  double conditioning_requested_s = 0.0;
+  double conditioning_actual_s = 0.0;
+  std::string preparation_order;
+  std::string preparation_policy_order;
+  bool validation_before_conditioning = false;
+  bool calibration_before_conditioning = false;
+  std::string conditioning_calibration;
+  std::string premeasurement_schedule_warmup;
   std::uint64_t E_before_mJ = 0;
   std::uint64_t E_after_mJ = 0;
   double endpoint_delta_E_J = 0.0;

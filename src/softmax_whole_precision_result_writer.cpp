@@ -34,6 +34,10 @@ const char* header() {
          "logical_output_elements,physical_input_bytes,physical_output_bytes,"
          "elapsed_s,ns_per_output_element,gelement_per_s,idle_elapsed_s,"
          "idle_delta_E_J,idle_power_W,preheat_requested_s,preheat_actual_s,preheat_policy,"
+         "conditioning_mode,conditioning_policy,conditioning_requested_s,"
+         "conditioning_actual_s,preparation_order,preparation_policy_order,"
+         "validation_before_conditioning,calibration_before_conditioning,"
+         "conditioning_calibration,premeasurement_schedule_warmup,"
          "E_before_mJ,E_after_mJ,endpoint_delta_E_J,"
          "delta_E_J,net_E_J,gross_pJ_per_output_element,"
          "net_pJ_per_output_element,energy_trace_sample_count,"
@@ -105,7 +109,17 @@ void CsvWriter::write(const ResultRow& row) {
          << row.gelement_per_s << ',' << row.idle_elapsed_s << ','
          << row.idle_delta_E_J << ',' << row.idle_power_W << ','
          << row.preheat_requested_s << ',' << row.preheat_actual_s << ','
-         << csv_escape(row.preheat_policy) << ',' << row.E_before_mJ << ','
+         << csv_escape(row.preheat_policy) << ','
+         << csv_escape(row.conditioning_mode) << ','
+         << csv_escape(row.conditioning_policy) << ','
+         << row.conditioning_requested_s << ',' << row.conditioning_actual_s << ','
+         << csv_escape(row.preparation_order) << ','
+         << csv_escape(row.preparation_policy_order) << ','
+         << (row.validation_before_conditioning ? "true" : "false") << ','
+         << (row.calibration_before_conditioning ? "true" : "false") << ','
+         << csv_escape(row.conditioning_calibration) << ','
+         << csv_escape(row.premeasurement_schedule_warmup) << ','
+         << row.E_before_mJ << ','
          << row.E_after_mJ << ','
          << row.endpoint_delta_E_J << ',' << row.delta_E_J << ','
          << row.net_E_J << ',' << row.gross_pJ_per_output_element << ','

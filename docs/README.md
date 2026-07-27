@@ -18,6 +18,7 @@
 | A100 L2 source/fabric/final-service를 어떻게 분리하는가 | `docs/methodology/a100_l2_fabric_aware_experiment_design_ko.md` |
 | 현재 확정된 결과와 미확정 결과는 무엇인가 | `docs/results/gpu_power_modeling_experiment_results_ko.md` |
 | 전체 Softmax의 exp/reduction/normalization 정밀도 영향은 무엇인가 | `docs/results/rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_analysis_ko.md` |
+| stage-isolation 후보를 fresh AB/BA로 재확인한 결과는 무엇인가 | `docs/results/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_analysis_ko.md` |
 | 백서에 어떤 표현을 써야 하는가 | `docs/reports/gpu_power_modeling_whitepaper_synthesis_ko.md` |
 | 다른 GPU에서 어떻게 실행하는가 | `docs/platforms/README.md` |
 | 코드/문서/결과의 현재 한계는 무엇인가 | `docs/audits/component_energy_self_critique_ko.md` |
@@ -93,6 +94,7 @@ python3 scripts/plan_platform_component_experiment.py \
 | methodology | `a100_l2_fabric_aware_experiment_design_ko.md` | GA100 source/LTC-fabric counter 모델, sweep, gate, 계수 해석 |
 | results | `gpu_power_modeling_experiment_results_ko.md` | current/historical/provisional 결과 상태 |
 | results | `rtx3090_softmax_whole_precision_stage_isolation_20260727_stageiso_v1_analysis_ko.md` | RTX 3090 complete-Softmax 정밀도 단계 분리 분석과 재현 근거 |
+| results | `rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_analysis_ko.md` | 선택된 exp packed / reduction scalar contrast의 fresh AB/BA confirmation; exploratory data와 pool 금지 |
 | reports | `gpu_power_modeling_whitepaper_synthesis_ko.md` | 백서용 종합 주장 |
 | platforms | `README.md` | GPU별 가이드와 package routing |
 | platforms | `cross_platform_component_experiment_guide_ko.md` | 공통 실행·검증·반입 절차 |

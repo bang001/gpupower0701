@@ -1,0 +1,5 @@
+candidate_id,session_order,fresh_pair_session_count,mean_delta_treatment_minus_baseline_net_pJ_per_logical_output_element,sample_std_delta_net_pJ_per_logical_output_element,median_delta_net_pJ_per_logical_output_element
+exp_packed,AB,3,-16.449561596666854,432.59482950008413,170.60926721999977
+exp_packed,BA,3,-123.08144442666647,110.56659165878963,-131.70492135999984
+reduction_scalar,AB,3,1402.1141591133335,878.2567109793633,1883.80018595
+reduction_scalar,BA,3,852.9362648466667,1299.9561729359204,581.8467588399999

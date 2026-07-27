@@ -1,0 +1,6 @@
+check,coverage,result,meaning
+evidence binding,12 fresh processes / 24 measured roles,pass,"manifest, frozen binary/runner, all raw/trace SHA-256 values and exact AB/BA plan passed"
+AB/BA and conditioning,exp packed: AB=3 BA=3; reduction scalar: AB=3 BA=3,pass,canonical validation/calibration precede the 20 s common baseline conditioner; no unrecorded policy warm-up
+"trace, placement and numerics",preheat 19.878-19.976 s; R² 0.999714829-0.999955990; 24/24 roles,pass,"qualified Theil-Sen trace, SMID placement, complete-Softmax denominator and FP64-reference numerical gates passed"
+recorded thermal context,52-57 °C,recorded,"temperature is recorded context only, not a hard rejection gate or causal adjustment"
+sm86 compiled path,ad33175b2388 (results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/sass_audit.json),pass,the frozen confirmation binary passed the whole-Softmax scalar/packed PTX/SASS audit

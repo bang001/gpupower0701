@@ -118,6 +118,93 @@ python3 scripts/run_softmax_whole_precision_stage_isolation.py \
 실행 뒤 analyzer, Matplotlib, SASS audit, report builder 순서와 immutable
 manifest/hash gate는 [Scripts Map](scripts/README.md)에 정리했다.
 
+### 제한된 fresh AB/BA confirmation — broad CTA/S sweep 대신 variance를 먼저 점검 (2026-07-27)
+
+위 stage-isolation의 `n=3` cyclic schedule은 후보를 고르는 탐색 결과로만 남겼다.
+새 confirmation은 그 데이터를 합치지 않고, 다음 두 contrast만 새 CUDA process에서
+각각 AB 3회 + BA 3회(`n=6` paired session)로 재측정했다.
+
+| candidate | baseline | treatment | 선택 이유 |
+|---|---|---|---|
+| exp packed | `fp16_io_fp32_all` | `exp_fp16x2` | 탐색의 packed exp 평균 Δ가 가장 음수였음 |
+| reduction scalar | `fp16_io_fp32_all` | `reduction_fp16_scalar` | 탐색의 scalar reduction 평균 Δ가 가장 양수였음 |
+
+기준 좌표는 RTX 3090 sm86, `S=512`, grid `CTA=16`, CTA당 독립 row 2개,
+logit scale 4, role당 13 s, idle baseline 1 s다. 각 새 process에서 두 policy의
+수치 validation과 iteration calibration을 **measurement order와 독립적인 canonical
+enum 순서로 먼저** 끝낸 뒤, baseline `fp16_io_fp32_all`만 20 s common conditioner로
+실행한다. 이어서 기록되지 않는 policy warm-up 없이 AB 또는 BA의 원래 두-role
+schedule을 측정한다. 즉 기존 stage-isolation의 `ABC/CAB/BCA` carryover 한계를
+후속 후보 확인에 그대로 가져오지 않았다.
+
+모든 12 process/24 role은 frozen executable SHA
+`ad33175b238804b97aaab77afe4de665215bd786e5e7c637c5f789ae41b5f2a9`, raw/trace
+SHA, canonical conditioning metadata, SMID placement, FP64-reference numerical
+gate와 qualified trace를 통과했다. actual conditioner는 19.878–19.976 s, trace
+R²는 0.999714829–0.999955990, 기록 온도 범위는 52–57 °C다. 온도는 context로
+남겼으며 hard reject나 causal correction에는 쓰지 않았다. 같은 frozen binary의
+whole-Softmax sm86 PTX/SASS audit도 `--fail-on-unexpected`로 통과했다.
+
+| candidate | baseline mean | treatment mean | mean treatment−baseline Δ | descriptive t95 | Δ < 0 / Δ > 0 | 이 좌표에서의 결정 |
+|---|---:|---:|---:|---:|---:|---|
+| exp packed | 2,090.0 | 2,020.2 | −69.8 | [−372.4, 232.9] | 4 / 2 | 0을 포함하므로 energy-saving endpoint로 승격하지 않음 |
+| reduction scalar | 2,376.2 | 3,503.7 | +1,127.5 | [39.5, 2,215.6] | 1 / 5 | 관측된 비용 증가이므로 endpoint/CTA/S sweep으로 확대하지 않음 |
+
+단위는 모두 net `pJ/logical Softmax output element`다. descriptive t95는
+후보 선택 뒤의 작은 `n=6` 요약이지 population-wide p-value 또는 cross-platform
+ranking이 아니다. 특히 packed exp의 평균 부호만 보고 개선이라 부르면 안 된다.
+반대로 scalar reduction의 양수 구간은 이 **고정 좌표·구현 경계**에서 그 후보를
+다음 endpoint 실험으로 밀어 올릴 근거가 없다는 뜻이지 pure ALU/reduction 회로
+에너지를 측정했다는 뜻은 아니다.
+
+![Fresh AB/BA paired paths](docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_paired_slopes.png)
+
+![Paired delta distribution and descriptive interval](docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_paired_deltas.png)
+
+따라서 다음 개선은 CTA/S를 다시 넓게 sweep하는 것이 아니다. packed exp를 꼭
+판별해야 할 필요가 생길 때만 같은 좌표에서 fixed-clock 또는 external-meter
+sensitivity run으로 residual variance source를 분리한다. scalar reduction은 이
+좌표에서 더 이상 후보로 확장하지 않는다.
+
+- [fail-closed analysis/report source](docs/results/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_analysis_ko.md)
+- [portable HTML report](docs/results/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_report.html)
+- [report artifact](docs/results/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_artifact.json)
+- [report QA](docs/results/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_report_qa.md) — Chromium 부재로 structural verification만 수행
+- [Matplotlib figure inventory / 재생성](docs/assets/softmax_whole_precision_targeted_confirmation/README.md)
+- [raw manifest and bound SASS evidence](results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/manifest.json)
+
+재실행은 dedicated confirmation binary를 사용한다. binary 이름만으로 mode가
+compile-time 고정되는 것은 아니며, frozen runner가 `--confirmation-pair`, canonical
+conditioning 및 exact AB/BA schedule contract를 모두 넘기고 C++ CLI가 이를
+검증한다.
+
+```bash
+source scripts/activate_softmax_experiment_env.sh
+cmake -S . -B build-whole-precision-confirmation-rtx3090 \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=86
+cmake --build build-whole-precision-confirmation-rtx3090 \
+  --target a100_fp16_softmax_whole_precision_confirmation_energy -j
+
+TAG="$(date +%Y%m%d)_abba_confirm_v1"
+"$GPUPWR_PYTHON_BIN" scripts/run_softmax_whole_precision_targeted_confirmation.py \
+  --build-dir build-whole-precision-confirmation-rtx3090 \
+  --output-dir results/raw --session-tag "$TAG" --gpu-id 0 --execute
+RUN="results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_$TAG"
+
+"$GPUPWR_PYTHON_BIN" scripts/audit_softmax_whole_precision_sass.py \
+  --binary "$RUN/frozen/a100_fp16_softmax_whole_precision_confirmation_energy" \
+  --cuobjdump "$CUOBJDUMP" --out "$RUN/sass_audit.json" --fail-on-unexpected
+"$GPUPWR_PYTHON_BIN" scripts/bind_softmax_whole_precision_confirmation_sass.py \
+  --run-dir "$RUN" --sass-audit "$RUN/sass_audit.json"
+"$GPUPWR_PYTHON_BIN" scripts/analyze_softmax_whole_precision_targeted_confirmation.py \
+  --run-dir "$RUN"
+"$GPUPWR_PYTHON_BIN" scripts/plot_softmax_whole_precision_targeted_confirmation.py \
+  --run-dir "$RUN" --out-dir docs/assets/softmax_whole_precision_targeted_confirmation
+FIG="docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_${TAG}_figure_manifest.json"
+"$GPUPWR_PYTHON_BIN" scripts/build_softmax_whole_precision_targeted_confirmation_report.py \
+  --run-dir "$RUN" --out-dir docs/results --figure-manifest "$FIG"
+```
+
 ## 현재 로컬 저장소와 실험환경
 
 현행 작업 root는

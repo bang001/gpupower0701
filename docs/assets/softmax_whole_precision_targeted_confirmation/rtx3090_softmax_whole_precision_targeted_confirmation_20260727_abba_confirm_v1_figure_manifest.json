@@ -1,0 +1,44 @@
+{
+  "analysis": {
+    "manifest_sha256": "fd6f6a89d739787229cf9ff1ca9a3a3dd21d1d3af4c600fbdf852a954ffaa7a9",
+    "path": "results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/analysis/analysis.json",
+    "sha256": "08c0f395d7cdd468c264ca5f2e381b51c53d9e43f9aab2ec541678ddaa406dd9"
+  },
+  "figures": [
+    {
+      "id": "paired_slopes",
+      "png": "docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_paired_slopes.png",
+      "png_sha256": "af33d7f338dea0a2260494a9b88b9944f821a105a36d0fe215973b12c700686a",
+      "svg": "docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_paired_slopes.svg",
+      "svg_sha256": "402bd1856a1a15ee6a32ec75a2c3bde1e24107384a3e68fc7a604cc8b8618915",
+      "title": "Fresh-process paired paths"
+    },
+    {
+      "id": "paired_deltas",
+      "png": "docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_paired_deltas.png",
+      "png_sha256": "9d6a1c00500303d47003f3b2135d8f7e3e9bbc970d7292fcfcfa4c3284c6c64d",
+      "svg": "docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_paired_deltas.svg",
+      "svg_sha256": "be4f8a3aa4a9d25d04b85de7f150075f49c00c4665c16b227355ced8899732f5",
+      "title": "Paired delta distribution and descriptive t95"
+    },
+    {
+      "id": "orientation_diagnostic",
+      "png": "docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_orientation_diagnostic.png",
+      "png_sha256": "c46831ef415f8144eab1089f2b2878739bd202ca3ccf8fdd75cdb2f29349ada1",
+      "svg": "docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_orientation_diagnostic.svg",
+      "svg_sha256": "8361776e775519b8a559d2f82ba9e39ab76663339ca0ad35a0ed34c89de6b9d7",
+      "title": "AB/BA orientation diagnostic"
+    },
+    {
+      "id": "quality_context",
+      "png": "docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_quality_context.png",
+      "png_sha256": "7a7fdbe870c96b57ff0f4da4eeae1e0a8b918b60e34358abca0255fda7ea96be",
+      "svg": "docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_quality_context.svg",
+      "svg_sha256": "0f4d025f100ed200b2f8fe3578c44370e12584e3146ca3eb7a74d1323bc58815",
+      "title": "Recorded temperature and trace-fit context"
+    }
+  ],
+  "generated_at": "2026-07-27T13:53:05+09:00",
+  "interpretation_boundary": "two separate fresh targeted contrasts; no exploratory pooling or cross-candidate ranking",
+  "schema_version": "softmax_whole_precision_targeted_confirmation_figures_v1"
+}
