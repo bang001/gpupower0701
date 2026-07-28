@@ -605,6 +605,31 @@ def report_markdown(
             "S 또는 CTA 한 축의 양 끝점 두 곳만 targeted verification으로 추가한다."
         )
 
+    scalar_reduction_rows = [
+        row
+        for row in cells
+        if row.get("stage") == "reduction" and row.get("policy") == "fp16_scalar"
+    ]
+    require(
+        len(scalar_reduction_rows) == 1,
+        "report requires one scalar FP16 reduction summary",
+    )
+    scalar_reduction = scalar_reduction_rows[0]
+    fp32_by_stage = {
+        row["stage"]: row for row in cells if row.get("policy") == "fp32"
+    }
+    require(
+        set(fp32_by_stage) == set(plotter.STAGES),
+        "report requires one FP32 summary for every stage",
+    )
+    fp32_sum = sum(
+        numeric(
+            fp32_by_stage[stage],
+            "mean_atc_delta_pJ_per_logical_output_element",
+        )
+        for stage in plotter.STAGES
+    )
+
     lines = [
         "# RTX 3090 Whole-Softmax stage Operand-rate ATC 보고서",
         "",
@@ -632,6 +657,146 @@ def report_markdown(
         "특히 음수는 treatment가 control보다 오래 실행되면서 평균 board power가 "
         "낮아진 signed contrast이며, 추가 연산이 음의 물리 에너지를 소비하거나 "
         "Softmax 에너지를 절감했다는 뜻이 아니다.",
+        "",
+        "## Primary Operand-rate ATC를 stage의 물리적 에너지 원가와 구분하는 법",
+        "",
+        "### 비교 대상은 idle(유휴 상태)이 아니라 같은 Softmax를 실행하는 "
+        "active control(활성 대조군)이다",
+        "",
+        "- **Active control(활성 대조군, C):** GPU가 쉬는 idle 상태가 아니다. "
+        "Treatment와 같은 "
+        "kernel symbol, 입력·출력, grid/CTA geometry, ITER 및 resource 계약으로 "
+        "complete Softmax를 반복 실행하되, 측정 대상 added-stage pass만 runtime "
+        "flag로 끈 실행이다.",
+        "- **Treatment(처리군, T):** 동일한 complete-Softmax kernel을 실행하면서, 선택된 "
+        "stage의 계산 지점에서 main output과 분리된 redundant exp, reduction(max+sum) "
+        "또는 normalization(reciprocal+multiply) probe path를 runtime flag로 켠 "
+        "실행이다. Primary output path는 그대로 유지되며 control과 treatment의 main "
+        "Softmax output은 bit-identical gate를 통과해야 한다.",
+        "",
+        "따라서 C와 T 모두 GPU가 실제 작업을 수행한다. 이 비교가 묻는 질문은 "
+        "“Softmax 한 번의 절대 에너지는 얼마인가?”가 아니라 다음과 같다.",
+        "",
+        "> 이미 complete Softmax를 수행 중인 active control과 비교했을 때, "
+        "added-stage pass를 켠 treatment의 board power(보드 전체 전력)가 얼마나 "
+        "달라졌고, 그 차이를 treatment의 logical-output rate(논리 출력 처리율)로 "
+        "나누면 scalar output 하나당 얼마인가?",
+        "",
+        "### 계산식은 active-power 차이를 treatment 처리율로 환산한다",
+        "",
+        "C-T-C bracket의 단순화된 표기는 다음과 같다.",
+        "",
+        "```text",
+        "ΔATC = (P_T - P_C*) / R_T × 10^12  [pJ/logical output]",
+        "R_T  = N_T / t_T",
+        f"N_T  = {coordinate.get('grid_blocks')} CTA × "
+        f"{coordinate.get('rows_per_block')} rows/CTA × observed ITER × "
+        f"{coordinate.get('softmax_cols')} logical outputs/row",
+        "```",
+        "",
+        "- `P_T`는 qualified NVML total-energy trace에서 얻은 treatment의 board-power "
+        "estimate다.",
+        "- `P_C*`는 treatment의 시간 위치에 맞추어 두 outer active-control power를 "
+        "보간한 값이다. 별표는 단일 control 측정값이 아니라 시간보간 기준값임을 뜻한다.",
+        "- `R_T`는 treatment가 초당 생성한 logical Softmax output 수다. 여기서 logical "
+        "output은 scalar element 하나이며, packed FP16x2는 두 lane을 각각 세므로 "
+        "별도의 `/2` 보정이 없다.",
+        "- T-C-T bracket에서는 두 outer treatment의 power와 output rate를 가운데 "
+        "control 시점으로 보간한다. 한 fresh session의 effect는 C-T-C와 T-C-T "
+        "effect의 평균이다.",
+        "",
+        "`W = J/s`이므로 `W ÷ (logical output/s) = J/logical output`이고, "
+        "`10^12`를 곱해 pJ/logical output으로 표시한다. 그러나 단위가 에너지/원소라고 "
+        "해서 실제 role energy를 직접 뺀 값은 아니다. C-T-C 식은 다음처럼 쓸 수 있다.",
+        "",
+        "```text",
+        "(P_T - P_C*) / (N_T/t_T) = (P_T - P_C*) × t_T / N_T",
+        "```",
+        "",
+        "즉 관측된 active-power 차이가 treatment 실행시간 동안 유지된다고 놓고 "
+        "treatment 처리량에 배분한 값이다. 실제 control의 `P_C × t_C`를 treatment의 "
+        "`P_T × t_T`에서 빼는 계산이 아니므로 **power projection**이라고 부른다. "
+        "`signed`는 절댓값을 취하지 않고 `P_T−P_C*`의 방향을 그대로 보존한다는 뜻이다.",
+        "",
+        "### 왜 added stage의 물리적 에너지 원가가 아닌가",
+        "",
+        "Active-control 차분은 두 실행의 공통 complete-Softmax board-power 성분을 "
+        "상당 부분 상쇄하여 added pass에 민감한 contrast를 만들려는 설계다. 이 상쇄가 "
+        "공통 작업의 물리적 에너지를 완전히 제거했음을 보장하지는 않는다. 또한 added "
+        "stage에 속한 회로나 명령만 별도 전력계로 계측한 것이 아니므로 다음 효과가 "
+        "분자에 함께 결합될 수 있다.",
+        "",
+        "- NVML 수치는 GPU core만이 아니라 장치 전체의 board-level power다.",
+        "- Added pass는 명령 스케줄, memory traffic, synchronization, resource "
+        "contention, clock/power state와 전체 runtime을 함께 바꿀 수 있다.",
+        "- 원래 complete Softmax의 해당 stage는 그대로 남아 있고, 선택된 stage 계산 "
+        "지점에서 main output과 분리된 redundant probe가 활성화된다. 원래 stage를 "
+        "제거하거나 다른 precision stage로 교체한 endpoint 비교가 아니다.",
+        "- 공통 작업의 상쇄는 active-control 비교가 confounding을 줄이는 방식이지, "
+        "complete Softmax를 서로 독립적인 stage별 joule 항으로 정확히 분해했다는 "
+        "보장이 아니다.",
+        "",
+        "따라서 이 수치는 **이 GPU·이 geometry·이 처리율에서 added pass를 켰을 때의 "
+        "board-power contrast**로는 읽을 수 있지만, 다른 실행에도 그대로 적용되는 "
+        "opcode 에너지나 stage 고유의 보편적 pJ/element 계수로 읽을 수 없다.",
+        "",
+        "### 부호는 물리적 stage energy의 부호가 아니라 active-power contrast의 부호다",
+        "",
+        "| Primary 결과 | 말할 수 있는 것 | 말하면 안 되는 것 |",
+        "|---|---|---|",
+        "| 양수 | Treatment의 active board power가 대응 control보다 높았고, 이를 "
+        "treatment rate로 환산한 값이 양수다. | Added stage가 그만큼의 독립적인 "
+        "물리 에너지를 소비했다. |",
+        "| 음수 | Treatment의 active board power가 대응 control보다 낮았다. | GPU가 "
+        "에너지를 만들었다, added stage가 음의 에너지를 소비했다, 또는 complete "
+        "Softmax 에너지가 절감됐다. |",
+        "| 0에 가깝거나 t95가 0을 포함 | 관측된 active-power contrast가 작거나 "
+        "fresh-session 방향이 불확실하다. | 해당 stage의 물리적 에너지 비용이 0이다. |",
+        "",
+        "Treatment는 평균 board power가 더 낮더라도 더 오래 실행될 수 있다. 그러면 "
+        "signed Operand-rate ATC는 음수지만 같은 수의 output을 처리하는 총 board "
+        "energy는 더 클 수 있다. 이 때문에 음수 값을 ‘에너지 절감량’으로 바꾸어 읽을 "
+        "수 없다.",
+        "",
+        "### 같은 pJ/output 표기라도 추정 대상(estimand)이 다르며 stage끼리 합산할 수 없다",
+        "",
+        "| 지표 | 계산의 핵심 | 실행시간을 다루는 방식 | 대답하는 질문 |",
+        "|---|---|---|---|",
+        "| **Primary Operand-rate ATC** | `(P_T−P_C*)/(N_T/t_T)` | Treatment "
+        "처리율로 active-power 차이를 투영 | Active control 대비 power contrast는 "
+        "treatment output 하나당 얼마인가? |",
+        "| **Idle-subtracted complete-Softmax energy** | 예: "
+        "`(E_softmax−P_idle×t_softmax)/N` | Complete workload의 실제 실행시간과 "
+        "idle baseline을 사용 | Softmax 전체가 idle 위에서 소비한 energy/output은 "
+        "얼마인가? **이번 primary estimand가 아니며 ATC 값으로 복원할 수 없다.** |",
+        "| **Same-ITER gross ΔE/N diagnostic** | `(E_T−E_C*)/N`, "
+        "`E_role=P_role×t_role` | C와 T 각각의 실제 runtime을 energy에 포함 | 같은 "
+        "ITER에서 treatment와 active control의 gross board-energy 차이는 얼마인가? |",
+        "",
+        "표의 `E_C*`는 두 outer control 각각의 `E_role=P_role×t_role`을 treatment "
+        "midpoint에 보간한 energy이며, T-C-T에서는 같은 방식의 `E_T*`를 사용한다. "
+        "Same-ITER 진단도 idle을 빼지 않으며 treatment의 늘어난 실행시간 동안 반복된 "
+        "complete-Softmax 공통 작업까지 포함한다. 따라서 primary를 대체하지 않고, "
+        "그 자체도 순수 added-stage 원가로 재명명하지 않는다. "
+        f"실제 scalar FP16 reduction은 primary가 "
+        f"{signed(numeric(scalar_reduction, 'mean_atc_delta_pJ_per_logical_output_element'))} "
+        "pJ/output이지만 treatment/control elapsed 비가 "
+        f"{fmt(numeric(scalar_reduction, 'mean_treatment_over_control_elapsed_ratio'), 3)}×이고, "
+        "same-ITER gross 진단은 "
+        f"{signed(numeric(scalar_reduction, 'mean_same_iter_gross_board_energy_contrast_pJ_per_logical_output'))} "
+        "pJ/output이었다. 같은 단위에서 반대 부호가 나온 것은 계산 오류가 아니라 "
+        "두 지표가 서로 다른 질문에 답하기 때문이다.",
+        "",
+        "Stage별 ATC도 각각 별도의 control/treatment 실행, power, runtime 및 처리율에서 "
+        "얻은 contrast라 서로 더할 수 없다. 예를 들어 FP32의 Exp "
+        f"{signed(numeric(fp32_by_stage['exp'], 'mean_atc_delta_pJ_per_logical_output_element'))}, "
+        "Reduction "
+        f"{signed(numeric(fp32_by_stage['reduction'], 'mean_atc_delta_pJ_per_logical_output_element'))}, "
+        "Normalization "
+        f"{signed(numeric(fp32_by_stage['normalization'], 'mean_atc_delta_pJ_per_logical_output_element'))}을 "
+        f"산술적으로 더한 {signed(fp32_sum)} pJ/output은 complete-Softmax 절대 "
+        "에너지, 세 stage의 물리 원가 합, 실제 fused treatment의 에너지 중 어느 것도 "
+        "나타내지 않는다.",
         "",
         "## 3×3 결과와 fresh-session 편차",
         "",
@@ -761,8 +926,10 @@ def report_markdown(
         "9개 cell의 동시 추론이나 일반화 보장을 제공하지 않는다.",
         "- RTX 3090의 S=1024, q50 underfilled grid 한 좌표만 측정했다. V100/A100/H100, "
         "다른 S/CTA, full-SM saturation으로 자동 전이되지 않는다.",
-        "- Added pass는 원래 complete Softmax 뒤의 redundant probe다. 원래 stage를 "
-        "제거·교체한 endpoint 비교가 아니며 compiler lowering과 live-sink 상호작용을 포함한다.",
+        "- Added pass는 원래 stage를 제거·교체하지 않고, complete-Softmax kernel "
+        "내부의 선택된 stage 계산 지점에서 treatment가 활성화하는 redundant probe다. "
+        "Probe 결과는 main output이 아니라 live sink로 관측되므로 compiler lowering과 "
+        "sink dataflow의 영향도 포함한다.",
         "- 이 공식 acquisition의 입력은 frozen binary 기본값인 logit scale `4.0`, "
         "seed `5573589319906701683`으로 결정론적으로 생성됐다. 당시 command/raw/manifest가 "
         "두 값을 중복 기록하지 않은 provenance 한계가 있으나 frozen binary SHA로 경로는 "
@@ -887,6 +1054,11 @@ def self_test() -> None:
         require(first == second, "self-test report generation is not deterministic")
         required_text = (
             "## 기술 요약",
+            "## Primary Operand-rate ATC를 stage의 물리적 에너지 원가와 구분하는 법",
+            "### 계산식은 active-power 차이를 treatment 처리율로 환산한다",
+            "### 왜 added stage의 물리적 에너지 원가가 아닌가",
+            "Same-ITER gross ΔE/N diagnostic",
+            "stage끼리 합산할 수 없다",
             "## 3×3 결과와 fresh-session 편차",
             "## 음수 ATC와 same-ITER gross board-energy 진단은 서로 다른 질문이다",
             "## 측정 범위와 metric 정의",
