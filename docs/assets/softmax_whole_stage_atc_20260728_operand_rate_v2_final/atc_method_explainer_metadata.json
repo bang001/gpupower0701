@@ -5,10 +5,11 @@
   "use_case": "scientific-educational",
   "generation_mode": "openai_builtin_image_generation",
   "generated_at_utc": "2026-07-28T23:04:53Z",
+  "last_edited_at_utc": "2026-07-28T23:30:57Z",
   "image": {
     "path": "docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_atc_method_explainer.png",
-    "sha256": "986ca6ab24e36dc155e675c4b81762ca8e5cfc8a5f0504968abbd4787b11ec37",
-    "bytes": 1539903,
+    "sha256": "3bdc046345f4c6f41e54be7393b6a97b70cbc441b2f4a853fe963fcd03de4488",
+    "bytes": 1558090,
     "width_px": 1672,
     "height_px": 941,
     "color_mode": "RGB"
@@ -37,10 +38,22 @@
       "do not imply negative energy"
     ]
   },
-  "targeted_edit": {
-    "request": "Change only the center equation from P_C to P_C* so the asterisk denotes time-interpolated active-control power.",
-    "invariants": "Preserve all other text, icons, charts, colors, spacing, panels, and layout."
-  },
+  "targeted_edits": [
+    {
+      "request": "Change only the center equation from P_C to P_C* so the asterisk denotes time-interpolated active-control power.",
+      "invariants": "Preserve all other text, icons, charts, colors, spacing, panels, and layout."
+    },
+    {
+      "request": "Change only the bottom-right recommendation box so it labels equal-duration power and same-ITER delta-E/N as two separate arms and explicitly says not to add them.",
+      "rendered_text": [
+        "개선: 두 Arm을 별도 보고",
+        "A 동일시간 power",
+        "B same-ITER ΔE/N",
+        "서로 합산하지 않음"
+      ],
+      "invariants": "Preserve all other text, equations, icons, charts, colors, spacing, panels, and layout."
+    }
+  ],
   "human_qa": {
     "status": "pass",
     "checks": {
