@@ -1,0 +1,1 @@
+validation=pass stage=reduction cells=3 output_bit_identical=1 live_sink_written=1 treatment_invariant_sink=1

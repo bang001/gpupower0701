@@ -394,23 +394,83 @@ logical `m16n16k16` op. Raw inline PTX `mma.sync.aligned.m16n8k16` and explicit
 `ldmatrix` are not the primary implementation yet; CSV rows mark
 `wmma_fallback=1` in `notes`.
 
+## Softmax 에너지 지표 이름
+
+이 저장소의 Softmax 결과에는 서로 다른 두 추정량이 있다. 짧게
+`pJ/element`라고만 쓰면 두 값이 같은 측정처럼 보이므로 다음 이름을 사용한다.
+
+| 구분 | 정확한 지표 이름 | numerator / denominator | 해석 |
+|---|---|---|---|
+| A | **absolute idle-subtracted complete-Softmax net pJ/logical output** | `(qualified trace energy - idle power × elapsed) × 1e12 / logical output count` | complete forward의 board-level 절대 endpoint. 여기서 `net`은 idle만 뺀다는 뜻이며 C/T 차감이 아니다. |
+| B | **`active-control Operand-rate ATC delta pJ per logical Softmax output element for one added <stage> pass`** | 시간 보간한 `treatment - active control` power / treatment added-output rate | complete Softmax 공통 작업 위에 stage pass 하나를 더했을 때의 signed rate projection. 이 ATC에서 role 전 idle은 진단 전용이며 primary numerator에 들어가지 않는다. |
+
+기존 `82.164 / 19.393 / 25.055`는 B 중에서도 **EX2-only added pass**의
+`ΔpJ/added logical EX2 result`다. 수천 pJ 범위의 값은 A이므로 계산 대상이 다르며,
+둘을 평균·차감·합산하지 않는다.
+Stage-isolation 27 row와 range 63 row를 raw 식으로 다시 계산했을 때 denominator
+mismatch는 0이고 저장값과의 최대 차이는 `9e-8 pJ/logical output` 미만이었다.
+따라서 확인된 문제는 `10^3` 단위 변환 오류가 아니라 지표 이름의 혼동이다.
+
+### RTX 3090 whole-stage Operand-rate ATC 완료 결과 (2026-07-28)
+
+공식 run
+[`rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final`](results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/manifest.json)은
+`S=1024`, grid 41 CTA(q50), 256 threads/CTA, 2 rows/CTA와 5초 preheat에서
+3 stage × 3 implementation × fresh 3 session을 완료했다. 아래 각 cell은
+**mean ± sample SD; [descriptive t95]**이며, 단위는 manifest/CSV의 정확한
+`primary_estimand` template인
+**`active-control Operand-rate ATC delta pJ per logical Softmax output element
+for one added <stage> pass`**다.
+
+| Added stage | FP32 | scalar FP16 | packed FP16x2 |
+|---|---:|---:|---:|
+| Exp | +34.978 ± 127.818; [−282.539, +352.494] | +16.335 ± 34.846; [−70.228, +102.897] | +12.169 ± 32.096; [−67.561, +91.900] |
+| Max + sum reduction | −600.909 ± 103.083; [−856.981, −344.836] | −700.436 ± 116.748; [−990.453, −410.419] | −473.433 ± 51.194; [−600.606, −346.260] |
+| Normalization | +34.630 ± 98.027; [−208.883, +278.143] | +47.067 ± 15.392; [+8.832, +85.302] | −52.910 ± 13.889; [−87.414, −18.407] |
+
+> **중요:** reduction의 세 음수값은 treatment 평균 전력이 control보다 낮고
+> treatment 실행시간은 더 길었던 상황에서 나온 **signed Operand-rate power
+> projection**이다. 음의 물리적 에너지, GPU가 에너지를 생성했다는 뜻, 또는
+> reduction stage의 음수 원가가 아니다. 세 stage 값을 더해 complete-Softmax
+> 에너지로 만들 수도 없다.
+
+Idle은 role 전 상태를 확인하는 진단값으로만 기록했고 위 ATC numerator에서는
+완전히 제외했다. Packed FP16x2의 분모는 두 scalar logical output lane을 이미 모두
+세므로 결과를 다시 2로 나누지 않는다. Frozen sm86 binary의 static added-stage
+audit은 9/9 specialization, NCU dynamic audit은 18/18 target launch와 9/9 C/T
+pair를 통과했다. NCU는 instruction-delta 증거만 제공하며 energy 산출에는 사용하지
+않았다. Energy는 NVML total-energy trace에서 계산했다.
+
+해석·Matplotlib 시각화·재현 근거는
+[완료 보고서](docs/results/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final_ko.md)에
+정리했다. 보고서에는 primary를 바꾸지 않고 같은 좌표의
+**non-primary same-ITER gross board-energy diagnostic**도 별도 표기했다.
+Reduction의 FP32/scalar FP16/packed FP16x2 진단값은 각각
+`+1,826.390 / +3,530.892 / +1,423.060 pJ/logical output`이고 18/18 bracket이
+양수였다. 이는 위 음수 ATC가 음의 물리적 에너지를 뜻하지 않음을 확인하지만,
+complete Softmax 공통 작업의 늘어난 runtime까지 포함하므로 순수 reduction
+stage 원가는 아니다. 다음 단계는 이 두 추정량을 계속 분리하고 논쟁 cell만
+fixed-clock에서 targeted 재측정하는 것이다. CTA×S 전체 sweep은 우선순위가
+아니다.
+
 ## RTX 3090 전체 Softmax 정밀도 단계 분리 (2026-07-27)
 
 `exp`, `max+sum reduction`, `normalization`을 각각 FP32·scalar FP16·packed
 FP16으로 바꿔야 전체 Softmax에서 어느 단계의 영향을 보는지 분리할 수 있다.
 아래 실험은 FP16 I/O를 고정하고 `S=512`, `CTA=16`에서 한 단계만 바꾼
-complete-Softmax 측정이다. 주 단위는 **net pJ/logical Softmax output element**이며,
-뒤의 EX2 probe의 `pJ/logical exponent result`와 비교하거나 더할 수 없다.
+complete-Softmax 측정이다. 주 지표는 A인 **absolute idle-subtracted
+complete-Softmax net pJ/logical output**이며, 뒤의 EX2-only B인
+`paired incremental ΔpJ/added logical EX2 result`와 비교하거나 더할 수 없다.
 여기서 기준은 full-FP32 I/O가 아니라 **FP16 I/O + FP32 exp/reduction/normalization**이다.
 20초 baseline preheat 뒤에는 schedule 순서의 calibration과 unrecorded warm-up이 있어,
 ABC/CAB/BCA는 position만 회전하고 directed carryover를 완전히 counterbalance하지 않는다.
 따라서 이 결과는 descriptive evidence다.
 
-| 바꾼 단계 | scalar FP16 − FP32-stage baseline | packed FP16 − FP32-stage baseline | 판정 |
+| 바꾼 단계 | scalar FP16 − baseline (Δ absolute net pJ/logical output) | packed FP16 − baseline (Δ absolute net pJ/logical output) | 판정 |
 |---|---:|---:|---|
-| `exp` | −362.1 pJ/output | −512.0 pJ/output | 방향은 보이나 n=3 descriptive interval이 0 포함 |
-| `max+sum reduction` | +1259.2 pJ/output | −1.8 pJ/output | 확정할 수 없음 |
-| `normalization` | +357.0 pJ/output | +257.7 pJ/output | 확정할 수 없음 |
+| `exp` | −362.1 | −512.0 | 방향은 보이나 n=3 descriptive interval이 0 포함 |
+| `max+sum reduction` | +1259.2 | −1.8 | 확정할 수 없음 |
+| `normalization` | +357.0 | +257.7 | 확정할 수 없음 |
 
 모든 paired contrast의 3-session descriptive interval이 0을 포함한다. 따라서
 이 결과만으로 scalar/packed 선택이나 넓은 CTA·S sweep을 정당화하지 않는다.
@@ -430,10 +490,11 @@ stage-isolation의 `n=3` cyclic result를 다시 합산하지 않고, `S=512`, `
 2 rows/CTA에서 두 candidate만 fresh CUDA process로 AB 3회 + BA 3회씩 재측정했다.
 각 role은 13 s, baseline common conditioner는 20 s이며, numerical validation과
 calibration을 canonical order로 먼저 마친 뒤 unrecorded policy warm-up 없이 AB/BA를
-측정했다. 따라서 이 run은 full-Softmax `net pJ/logical output element` 결과이고
-EX2 Operand-rate ATC의 `pJ/logical exponent result`와 비교하거나 합산하지 않는다.
+측정했다. 따라서 이 run은 A인 **absolute idle-subtracted complete-Softmax
+net pJ/logical output** 결과이고, EX2 Operand-rate ATC의 B인
+`paired incremental ΔpJ/added logical EX2 result`와 비교하거나 합산하지 않는다.
 
-| candidate | treatment−baseline mean Δ pJ/output | descriptive t95 | 판단 |
+| candidate | treatment−baseline mean Δ absolute net pJ/logical output | descriptive t95 | 판단 |
 |---|---:|---:|---|
 | packed FP16 exp | −69.8 | [−372.4, 232.9] | 0 포함: energy-saving endpoint로 승격하지 않음 |
 | scalar FP16 max+sum reduction | +1,127.5 | [39.5, 2,215.6] | 이 좌표에서 관측된 비용 증가: endpoint/CTA/S sweep으로 확대하지 않음 |
@@ -460,16 +521,16 @@ FP32 / scalar FP16 / packed FP16x2 **complete Softmax endpoint**의 범위를
 `S=1024,q25`만 사용한다. 3-way GPU는 coordinate당 fresh process 3개를
 `ABC/BCA/CAB`으로 실행하고, V100은 native FP16 EX2 지원 범위 때문에 FP32-only로
 명시한다. session conditioner는 요청 5초이며 actual 3.75–6.25초 gate를 raw row에
-남긴다. 따라서 이 결과의 단위는 EX2 probe의 pJ/result가 아니라
-**net pJ/element**다. 여기서 element는 logical Softmax output element 하나이므로,
-packed FP16x2도 이미 두 scalar element를 분모에 포함하며 값을 다시 2로 나누지 않는다.
+남긴다. 따라서 이 결과의 지표는 EX2 probe와 다른
+**idle-subtracted board pJ/logical Softmax output element — complete forward**다.
+Packed FP16x2도 이미 두 scalar output을 분모에 포함하며 값을 다시 2로 나누지 않는다.
 
 RTX 3090의 5초 conditioner cohort는 initial 36 role과 gate-triggered adaptive
 27 role, 총 63 role을 통과했다. 아래 값은 사전 지정 envelope 안의 fresh
 3-session median인 **screened** 범위이며, 별도 fresh extrema confirmation 전에는
 보편적인 최저/최고값으로 해석하지 않는다.
 
-| complete Softmax endpoint | screened best (pJ/element) | fixed representative `S=1024,q50` (pJ/element) | screened worst (pJ/element) |
+| complete Softmax endpoint | screened best (absolute net pJ/logical output) | fixed representative `S=1024,q50` (absolute net pJ/logical output) | screened worst (absolute net pJ/logical output) |
 |---|---:|---:|---:|
 | FP32 | 2,089.3 (`S=512,q50`) | 2,596.7 | 6,456.4 (`S=4096,q25`) |
 | scalar FP16 | 2,055.8 (`S=1024,q50`) | 2,055.8 | 5,056.1 (`S=4096,q25`) |
@@ -489,10 +550,10 @@ RTX 3090의 5초 conditioner cohort는 initial 36 role과 gate-triggered adaptiv
 
 논쟁 좌표인 `CTA=48, S=1024`를 새 CUDA 세션 3개와 순환 implementation 순서로
 재측정했다. 주 지표는 **입력 원소당 추가 EX2 결과 하나의 증분 에너지**다. 이 설계에서는
-`pJ/logical exponent result`와 수치상 같지만, 전체 Softmax `pJ/element`나 순수 MUFU
-에너지를 뜻하지 않는다.
+`ΔpJ/added logical EX2 result`이며, A의 absolute idle-subtracted
+complete-Softmax net pJ/logical output이나 순수 MUFU 에너지를 뜻하지 않는다.
 
-| Exponent path | Fresh-session mean incremental pJ/element |
+| Exponent path | Fresh-session mean Operand-rate ATC ΔpJ/added logical EX2 result |
 |---|---:|
 | FP32 `__expf` | 82.164 |
 | scalar FP16 `ex2.approx.f16` | 19.393 |

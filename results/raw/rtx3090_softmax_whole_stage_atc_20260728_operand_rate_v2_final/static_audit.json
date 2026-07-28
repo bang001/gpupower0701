@@ -1,0 +1,1342 @@
+{
+  "binary_path": "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/frozen/a100_fp16_softmax_whole_stage_atc",
+  "binary_sha256": "5dff3859ad319cb37301e68cfc6fde00723e3a42110ca93adb44c05e97098167",
+  "captures": {
+    "list_elf": {
+      "path": "static_audit_captures/list_elf.txt",
+      "sha256": "78f45e386c1486b3043f63c63ce5d1ab42c9901b15a673db5d4f3a6e88074abf"
+    },
+    "ptx": {
+      "path": "static_audit_captures/dump_ptx.txt",
+      "sha256": "b46553404c5064b175f93eb3b8da393a1ed238f94c0edb5df9a8c4e1be158b73"
+    },
+    "sass": {
+      "path": "static_audit_captures/dump_sass.txt",
+      "sha256": "aa3b10bc57f59dc2260c355fb7c7a1c43ca1da7d6683bd668047630d74b97238"
+    }
+  },
+  "checks": {
+    "extra_exp_pass_0": "pass",
+    "extra_exp_pass_1": "pass",
+    "extra_exp_pass_2": "pass",
+    "extra_normalization_pass_0": "pass",
+    "extra_normalization_pass_1": "pass",
+    "extra_normalization_pass_2": "pass",
+    "extra_reduction_pass_0": "pass",
+    "extra_reduction_pass_1": "pass",
+    "extra_reduction_pass_2": "pass",
+    "extra_stage_pass_survives": "pass",
+    "live_sink_dataflow": "pass",
+    "live_sink_store_0_0": "pass",
+    "live_sink_store_0_1": "pass",
+    "live_sink_store_0_2": "pass",
+    "live_sink_store_1_0": "pass",
+    "live_sink_store_1_1": "pass",
+    "live_sink_store_1_2": "pass",
+    "live_sink_store_2_0": "pass",
+    "live_sink_store_2_1": "pass",
+    "live_sink_store_2_2": "pass",
+    "no_role_specific_kernel_symbols": "pass",
+    "policy_opcode_types_0": "pass",
+    "policy_opcode_types_1": "pass",
+    "policy_opcode_types_2": "pass",
+    "ptx_sass_symbol_identity": "pass",
+    "required_ptx_specializations": "pass",
+    "required_sass_specializations": "pass",
+    "runtime_flag_0_0": "pass",
+    "runtime_flag_0_1": "pass",
+    "runtime_flag_0_2": "pass",
+    "runtime_flag_1_0": "pass",
+    "runtime_flag_1_1": "pass",
+    "runtime_flag_1_2": "pass",
+    "runtime_flag_2_0": "pass",
+    "runtime_flag_2_1": "pass",
+    "runtime_flag_2_2": "pass",
+    "same_symbol_runtime_flag": "pass",
+    "sass_added_stage_0_0": "pass",
+    "sass_added_stage_0_1": "pass",
+    "sass_added_stage_0_2": "pass",
+    "sass_added_stage_1_0": "pass",
+    "sass_added_stage_1_1": "pass",
+    "sass_added_stage_1_2": "pass",
+    "sass_added_stage_2_0": "pass",
+    "sass_added_stage_2_1": "pass",
+    "sass_added_stage_2_2": "pass",
+    "target_native_sm86": "pass"
+  },
+  "cuda_arch": 86,
+  "cuobjdump_path": "/home/bang001/miniforge3/lib/python3.12/site-packages/triton/backends/nvidia/bin/cuobjdump",
+  "generated_at": "2026-07-28T23:09:07+09:00",
+  "interpretation": "PTX records same-symbol runtime-flag stage intent; sm86 SASS proves a flag-controlled policy-typed added arithmetic path and its data dependence on the live sink; NVML supplies energy",
+  "kernel_contract": "whole_softmax_stage_atc_same_symbol_runtime_flag_v2",
+  "observed_cubin_architectures": [
+    86
+  ],
+  "observed_specialization_count": 9,
+  "required_specialization_count": 9,
+  "schema_version": "softmax_whole_stage_atc_static_audit_v2",
+  "softmax_cols": 1024,
+  "specializations": [
+    {
+      "policy": "fp32",
+      "policy_id": 0,
+      "ptx_opcode_counts": {
+        "add_f16": 0,
+        "add_f16x2": 0,
+        "add_f32": 28,
+        "conditional_branch": 29,
+        "ex2_f16": 0,
+        "ex2_f16x2": 0,
+        "ex2_f32": 16,
+        "global_store": 2,
+        "max_f16": 0,
+        "max_f16x2": 0,
+        "max_f32": 26,
+        "mul_f16": 0,
+        "mul_f16x2": 0,
+        "mul_f32": 24,
+        "predicate_set": 17,
+        "rcp_f32": 2,
+        "u32_parameter": 1,
+        "u32_parameter_load": 1
+      },
+      "ptx_section_sha256": "e6c016947cb0a0b730099d775c7f8e2d6d564d3776c584169e85b5a444874c7d",
+      "sass_added_stage_evidence": {
+        "control_evidence": [
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xa30",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xad0",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xaf0",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xb00",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xb20",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xb50",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xb90",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xbd0",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xc10",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xc80",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xcc0",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xd10",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xd20",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xd50",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xd60",
+            "predicate": "!P4"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xd80",
+            "predicate": "!P4"
+          }
+        ],
+        "controlled_branch_count": 0,
+        "controlled_predicate_instruction_count": 16,
+        "flag_parameter_offset": "0x198",
+        "operation_addresses": {
+          "ex2": [
+            "0xad0",
+            "0xb00",
+            "0xb50",
+            "0xbd0",
+            "0xc80",
+            "0xd20",
+            "0xd50",
+            "0xd80"
+          ],
+          "log2e_scale": [
+            "0xa30",
+            "0xaf0",
+            "0xb20",
+            "0xb90",
+            "0xc10",
+            "0xcc0",
+            "0xd10",
+            "0xd60"
+          ]
+        },
+        "result_to_sink_dataflow": "pass",
+        "sink_parameter_offset": "0x180",
+        "sink_store_address": "0x13e0"
+      },
+      "sass_opcode_counts": {
+        "branch": 27,
+        "extra_flag_parameter": 1,
+        "f32_add": 42,
+        "f32_max": 32,
+        "f32_mul": 24,
+        "f32_to_half": 0,
+        "global_store": 10,
+        "half_add": 0,
+        "half_max": 0,
+        "half_mul": 0,
+        "half_to_f32": 0,
+        "mufu_ex2": 16,
+        "mufu_rcp": 2,
+        "sink_parameter": 2
+      },
+      "sass_section_sha256": "f423d5ac72f1aca676cd7671accc50cb498f274290feca2d1c87c128996528ea",
+      "sass_symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE0ELNS0_6PolicyE0EEEvPK6__halfPKfPS5_PfPjPimi",
+      "softmax_cols": 1024,
+      "stage": "exp",
+      "stage_id": 0,
+      "symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE0ELNS0_6PolicyE0EEEvPK6__halfPKfPS5_PfPjPimi"
+    },
+    {
+      "policy": "fp16_scalar",
+      "policy_id": 1,
+      "ptx_opcode_counts": {
+        "add_f16": 22,
+        "add_f16x2": 0,
+        "add_f32": 0,
+        "conditional_branch": 45,
+        "ex2_f16": 16,
+        "ex2_f16x2": 0,
+        "ex2_f32": 0,
+        "global_store": 2,
+        "max_f16": 22,
+        "max_f16x2": 0,
+        "max_f32": 0,
+        "mul_f16": 24,
+        "mul_f16x2": 0,
+        "mul_f32": 0,
+        "predicate_set": 21,
+        "rcp_f32": 2,
+        "u32_parameter": 1,
+        "u32_parameter_load": 1
+      },
+      "ptx_section_sha256": "4908c0a7cc2f9f8a89548791a154da12f78fc6e3d3b5a22a31ef94a8c243fabc",
+      "sass_added_stage_evidence": {
+        "control_evidence": [
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1400",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1410",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1420",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1430",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x14f0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1510",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1540",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1570",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1590",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x15b0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x15d0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1630",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1650",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1670",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x16b0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x16d0",
+            "predicate": "!P0"
+          }
+        ],
+        "controlled_branch_count": 0,
+        "controlled_predicate_instruction_count": 16,
+        "flag_parameter_offset": "0x198",
+        "operation_addresses": {
+          "ex2": [
+            "0x1410",
+            "0x1430",
+            "0x1510",
+            "0x1590",
+            "0x15d0",
+            "0x1650",
+            "0x1670",
+            "0x16d0"
+          ],
+          "log2e_scale": [
+            "0x1400",
+            "0x1420",
+            "0x14f0",
+            "0x1540",
+            "0x1570",
+            "0x15b0",
+            "0x1630",
+            "0x16b0"
+          ]
+        },
+        "result_to_sink_dataflow": "pass",
+        "sink_parameter_offset": "0x180",
+        "sink_store_address": "0x19e0"
+      },
+      "sass_opcode_counts": {
+        "branch": 3,
+        "extra_flag_parameter": 1,
+        "f32_add": 0,
+        "f32_max": 0,
+        "f32_mul": 0,
+        "f32_to_half": 1,
+        "global_store": 10,
+        "half_add": 25,
+        "half_max": 19,
+        "half_mul": 18,
+        "half_to_f32": 2,
+        "mufu_ex2": 16,
+        "mufu_rcp": 2,
+        "sink_parameter": 2
+      },
+      "sass_section_sha256": "f49fa69b42898a2f19d2a173f14bf3fc2cae6bebeee40ac49af3bc4ee399d357",
+      "sass_symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE0ELNS0_6PolicyE1EEEvPK6__halfPKfPS5_PfPjPimi",
+      "softmax_cols": 1024,
+      "stage": "exp",
+      "stage_id": 0,
+      "symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE0ELNS0_6PolicyE1EEEvPK6__halfPKfPS5_PfPjPimi"
+    },
+    {
+      "policy": "fp16x2",
+      "policy_id": 2,
+      "ptx_opcode_counts": {
+        "add_f16": 0,
+        "add_f16x2": 11,
+        "add_f32": 0,
+        "conditional_branch": 25,
+        "ex2_f16": 0,
+        "ex2_f16x2": 8,
+        "ex2_f32": 0,
+        "global_store": 2,
+        "max_f16": 0,
+        "max_f16x2": 11,
+        "max_f32": 0,
+        "mul_f16": 0,
+        "mul_f16x2": 12,
+        "mul_f32": 0,
+        "predicate_set": 17,
+        "rcp_f32": 2,
+        "u32_parameter": 1,
+        "u32_parameter_load": 1
+      },
+      "ptx_section_sha256": "1b7c37b97e04d5f7ec0af948a2f697aaa65033f84a47a88c7b4ad3268a1f0375",
+      "sass_added_stage_evidence": {
+        "control_evidence": [
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xb00",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xb10",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xb20",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xb30",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xb40",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xb60",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xb80",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xb90",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xba0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xce0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xcf0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xd50",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xd90",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xdc0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xdd0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xe00",
+            "predicate": "!P0"
+          }
+        ],
+        "controlled_branch_count": 0,
+        "controlled_predicate_instruction_count": 16,
+        "flag_parameter_offset": "0x198",
+        "operation_addresses": {
+          "ex2": [
+            "0xb20",
+            "0xb60",
+            "0xb80",
+            "0xba0",
+            "0xce0",
+            "0xd50",
+            "0xd90",
+            "0xdc0"
+          ],
+          "log2e_scale": [
+            "0xb00",
+            "0xb10",
+            "0xb30",
+            "0xb40"
+          ]
+        },
+        "result_to_sink_dataflow": "pass",
+        "sink_parameter_offset": "0x180",
+        "sink_store_address": "0x1140"
+      },
+      "sass_opcode_counts": {
+        "branch": 3,
+        "extra_flag_parameter": 1,
+        "f32_add": 0,
+        "f32_max": 0,
+        "f32_mul": 0,
+        "f32_to_half": 1,
+        "global_store": 10,
+        "half_add": 17,
+        "half_max": 11,
+        "half_mul": 12,
+        "half_to_f32": 2,
+        "mufu_ex2": 16,
+        "mufu_rcp": 2,
+        "sink_parameter": 2
+      },
+      "sass_section_sha256": "3ae89cf472ddbdd8387bff39008b94d03e50828d807c1351fc6c05c895dee683",
+      "sass_symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE0ELNS0_6PolicyE2EEEvPK6__halfPKfPS5_PfPjPimi",
+      "softmax_cols": 1024,
+      "stage": "exp",
+      "stage_id": 0,
+      "symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE0ELNS0_6PolicyE2EEEvPK6__halfPKfPS5_PfPjPimi"
+    },
+    {
+      "policy": "fp32",
+      "policy_id": 0,
+      "ptx_opcode_counts": {
+        "add_f16": 0,
+        "add_f16x2": 0,
+        "add_f32": 48,
+        "conditional_branch": 39,
+        "ex2_f16": 0,
+        "ex2_f16x2": 0,
+        "ex2_f32": 8,
+        "global_store": 2,
+        "max_f16": 0,
+        "max_f16x2": 0,
+        "max_f32": 46,
+        "mul_f16": 0,
+        "mul_f16x2": 0,
+        "mul_f32": 16,
+        "predicate_set": 13,
+        "rcp_f32": 2,
+        "u32_parameter": 1,
+        "u32_parameter_load": 1
+      },
+      "ptx_section_sha256": "0197a437578d29b1735f1ed0f1a14467b8fca71f6d3e36a349270aba8b4c3b00",
+      "sass_added_stage_evidence": {
+        "control_evidence": [
+          {
+            "branch_target": "0xc90",
+            "control_kind": "forward_branch_fallthrough",
+            "first_controlled_address": "0x840",
+            "flag_branch_address": "0x830",
+            "last_controlled_address": "0xc80",
+            "predicate": "!P4"
+          },
+          {
+            "branch_target": "0x1780",
+            "control_kind": "forward_branch_fallthrough",
+            "first_controlled_address": "0x1330",
+            "flag_branch_address": "0x1320",
+            "last_controlled_address": "0x1770",
+            "predicate": "!P4"
+          }
+        ],
+        "controlled_branch_count": 2,
+        "controlled_predicate_instruction_count": 0,
+        "flag_parameter_offset": "0x198",
+        "operation_addresses": {
+          "maximum": [
+            "0x870",
+            "0x890",
+            "0x8b0",
+            "0x8d0",
+            "0x8f0",
+            "0x960",
+            "0x990",
+            "0x9b0",
+            "0x9d0",
+            "0x9f0",
+            "0xa80",
+            "0xac0",
+            "0xae0",
+            "0xb00",
+            "0xb20",
+            "0xb90",
+            "0xbc0",
+            "0xbe0",
+            "0xc00",
+            "0xc20"
+          ],
+          "sum_add": [
+            "0x1350",
+            "0x1370",
+            "0x1390",
+            "0x13b0",
+            "0x13d0",
+            "0x1450",
+            "0x1480",
+            "0x14a0",
+            "0x14c0",
+            "0x14e0",
+            "0x1570",
+            "0x15a0",
+            "0x15c0",
+            "0x15e0",
+            "0x1600",
+            "0x1680",
+            "0x16b0",
+            "0x16d0",
+            "0x16f0",
+            "0x1710"
+          ]
+        },
+        "result_to_sink_dataflow": "pass",
+        "sink_parameter_offset": "0x180",
+        "sink_store_address": "0x1a30"
+      },
+      "sass_opcode_counts": {
+        "branch": 53,
+        "extra_flag_parameter": 2,
+        "f32_add": 68,
+        "f32_max": 58,
+        "f32_mul": 16,
+        "f32_to_half": 0,
+        "global_store": 10,
+        "half_add": 0,
+        "half_max": 0,
+        "half_mul": 0,
+        "half_to_f32": 0,
+        "mufu_ex2": 8,
+        "mufu_rcp": 2,
+        "sink_parameter": 2
+      },
+      "sass_section_sha256": "02950ef2370053d4997e9963150cbefe35ee19201f936c369b8c1221ebd0813c",
+      "sass_symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE1ELNS0_6PolicyE0EEEvPK6__halfPKfPS5_PfPjPimi",
+      "softmax_cols": 1024,
+      "stage": "reduction",
+      "stage_id": 1,
+      "symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE1ELNS0_6PolicyE0EEEvPK6__halfPKfPS5_PfPjPimi"
+    },
+    {
+      "policy": "fp16_scalar",
+      "policy_id": 1,
+      "ptx_opcode_counts": {
+        "add_f16": 44,
+        "add_f16x2": 0,
+        "add_f32": 0,
+        "conditional_branch": 71,
+        "ex2_f16": 8,
+        "ex2_f16x2": 0,
+        "ex2_f32": 0,
+        "global_store": 2,
+        "max_f16": 44,
+        "max_f16x2": 0,
+        "max_f32": 0,
+        "mul_f16": 16,
+        "mul_f16x2": 0,
+        "mul_f32": 0,
+        "predicate_set": 17,
+        "rcp_f32": 2,
+        "u32_parameter": 1,
+        "u32_parameter_load": 1
+      },
+      "ptx_section_sha256": "4a89b2e787ccdd8f394f11a6bb28904c45c67933c1084ac4ab4d76827fe5a148",
+      "sass_added_stage_evidence": {
+        "control_evidence": [
+          {
+            "branch_target": "0x13d0",
+            "control_kind": "forward_branch_fallthrough",
+            "first_controlled_address": "0xca0",
+            "flag_branch_address": "0xc90",
+            "last_controlled_address": "0x13c0",
+            "predicate": "!P6"
+          },
+          {
+            "branch_target": "0x2220",
+            "control_kind": "forward_branch_fallthrough",
+            "first_controlled_address": "0x1b10",
+            "flag_branch_address": "0x1b00",
+            "last_controlled_address": "0x2210",
+            "predicate": "!P6"
+          }
+        ],
+        "controlled_branch_count": 2,
+        "controlled_predicate_instruction_count": 0,
+        "flag_parameter_offset": "0x198",
+        "operation_addresses": {
+          "maximum": [
+            "0xd20",
+            "0xda0",
+            "0xe10",
+            "0xe70",
+            "0xed0",
+            "0xf30",
+            "0xfa0",
+            "0x1000",
+            "0x10a0",
+            "0x1110",
+            "0x1180",
+            "0x11e0",
+            "0x1240",
+            "0x12a0",
+            "0x1300",
+            "0x1360"
+          ],
+          "sum_add": [
+            "0x1b80",
+            "0x1c00",
+            "0x1c70",
+            "0x1cd0",
+            "0x1d30",
+            "0x1d90",
+            "0x1e00",
+            "0x1e60",
+            "0x1f00",
+            "0x1f70",
+            "0x1fd0",
+            "0x2030",
+            "0x2090",
+            "0x20f0",
+            "0x2150",
+            "0x21b0"
+          ]
+        },
+        "result_to_sink_dataflow": "pass",
+        "sink_parameter_offset": "0x180",
+        "sink_store_address": "0x2530"
+      },
+      "sass_opcode_counts": {
+        "branch": 5,
+        "extra_flag_parameter": 1,
+        "f32_add": 0,
+        "f32_max": 0,
+        "f32_mul": 0,
+        "f32_to_half": 1,
+        "global_store": 10,
+        "half_add": 41,
+        "half_max": 35,
+        "half_mul": 8,
+        "half_to_f32": 2,
+        "mufu_ex2": 8,
+        "mufu_rcp": 2,
+        "sink_parameter": 2
+      },
+      "sass_section_sha256": "97049bff21f6966cc64e3a775daa034aeb46fe9365f14c19973fb343df1f2c9c",
+      "sass_symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE1ELNS0_6PolicyE1EEEvPK6__halfPKfPS5_PfPjPimi",
+      "softmax_cols": 1024,
+      "stage": "reduction",
+      "stage_id": 1,
+      "symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE1ELNS0_6PolicyE1EEEvPK6__halfPKfPS5_PfPjPimi"
+    },
+    {
+      "policy": "fp16x2",
+      "policy_id": 2,
+      "ptx_opcode_counts": {
+        "add_f16": 0,
+        "add_f16x2": 22,
+        "add_f32": 0,
+        "conditional_branch": 39,
+        "ex2_f16": 0,
+        "ex2_f16x2": 4,
+        "ex2_f32": 0,
+        "global_store": 2,
+        "max_f16": 0,
+        "max_f16x2": 22,
+        "max_f32": 0,
+        "mul_f16": 0,
+        "mul_f16x2": 8,
+        "mul_f32": 0,
+        "predicate_set": 17,
+        "rcp_f32": 2,
+        "u32_parameter": 1,
+        "u32_parameter_load": 1
+      },
+      "ptx_section_sha256": "86320a698f3c56ea9d0db40640950f87966f319d68dcf375c1bbe16c955f35a3",
+      "sass_added_stage_evidence": {
+        "control_evidence": [
+          {
+            "branch_target": "0xc90",
+            "control_kind": "forward_branch_fallthrough",
+            "first_controlled_address": "0x970",
+            "flag_branch_address": "0x960",
+            "last_controlled_address": "0xc80",
+            "predicate": "!P6"
+          },
+          {
+            "branch_target": "0x12d0",
+            "control_kind": "forward_branch_fallthrough",
+            "first_controlled_address": "0xfd0",
+            "flag_branch_address": "0xfc0",
+            "last_controlled_address": "0x12c0",
+            "predicate": "!P6"
+          }
+        ],
+        "controlled_branch_count": 2,
+        "controlled_predicate_instruction_count": 0,
+        "flag_parameter_offset": "0x198",
+        "operation_addresses": {
+          "maximum": [
+            "0x9f0",
+            "0xa50",
+            "0xab0",
+            "0xb00",
+            "0xb50",
+            "0xba0",
+            "0xbf0",
+            "0xc40"
+          ],
+          "sum_add": [
+            "0x1040",
+            "0x10a0",
+            "0x10f0",
+            "0x1140",
+            "0x1190",
+            "0x11e0",
+            "0x1230",
+            "0x1280"
+          ]
+        },
+        "result_to_sink_dataflow": "pass",
+        "sink_parameter_offset": "0x180",
+        "sink_store_address": "0x1610"
+      },
+      "sass_opcode_counts": {
+        "branch": 5,
+        "extra_flag_parameter": 1,
+        "f32_add": 0,
+        "f32_max": 0,
+        "f32_mul": 0,
+        "f32_to_half": 1,
+        "global_store": 10,
+        "half_add": 25,
+        "half_max": 19,
+        "half_mul": 8,
+        "half_to_f32": 2,
+        "mufu_ex2": 8,
+        "mufu_rcp": 2,
+        "sink_parameter": 2
+      },
+      "sass_section_sha256": "baaf5c4a738298ee666111a78b795856734dbd826dabe866aa3a37759e4648a7",
+      "sass_symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE1ELNS0_6PolicyE2EEEvPK6__halfPKfPS5_PfPjPimi",
+      "softmax_cols": 1024,
+      "stage": "reduction",
+      "stage_id": 1,
+      "symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE1ELNS0_6PolicyE2EEEvPK6__halfPKfPS5_PfPjPimi"
+    },
+    {
+      "policy": "fp32",
+      "policy_id": 0,
+      "ptx_opcode_counts": {
+        "add_f16": 0,
+        "add_f16x2": 0,
+        "add_f32": 28,
+        "conditional_branch": 31,
+        "ex2_f16": 0,
+        "ex2_f16x2": 0,
+        "ex2_f32": 8,
+        "global_store": 2,
+        "max_f16": 0,
+        "max_f16x2": 0,
+        "max_f32": 26,
+        "mul_f16": 0,
+        "mul_f16x2": 0,
+        "mul_f32": 24,
+        "predicate_set": 19,
+        "rcp_f32": 4,
+        "u32_parameter": 1,
+        "u32_parameter_load": 1
+      },
+      "ptx_section_sha256": "1efc9e67d5dbe8e8bcea93dd6d2ac0ab98ca90ec983daca2e15c263993b9da35",
+      "sass_added_stage_evidence": {
+        "control_evidence": [
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xfd0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xfe0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1000",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1010",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1040",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1050",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x10c0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x10d0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1100",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1130",
+            "predicate": "!P0"
+          }
+        ],
+        "controlled_branch_count": 0,
+        "controlled_predicate_instruction_count": 10,
+        "flag_parameter_offset": "0x198",
+        "operation_addresses": {
+          "multiply_f32": [
+            "0x1000",
+            "0x1010",
+            "0x1040",
+            "0x1050",
+            "0x10c0",
+            "0x10d0",
+            "0x1100",
+            "0x1130"
+          ],
+          "rcp_f32": [
+            "0xfd0",
+            "0xfe0"
+          ]
+        },
+        "result_to_sink_dataflow": "pass",
+        "sink_parameter_offset": "0x180",
+        "sink_store_address": "0x12e0"
+      },
+      "sass_opcode_counts": {
+        "branch": 29,
+        "extra_flag_parameter": 1,
+        "f32_add": 42,
+        "f32_max": 32,
+        "f32_mul": 24,
+        "f32_to_half": 0,
+        "global_store": 10,
+        "half_add": 0,
+        "half_max": 0,
+        "half_mul": 0,
+        "half_to_f32": 0,
+        "mufu_ex2": 8,
+        "mufu_rcp": 4,
+        "sink_parameter": 2
+      },
+      "sass_section_sha256": "ccba64d2ec5b04fe5a6b02823abc576e1d21abc9defabd7de14b756d391a8f81",
+      "sass_symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE2ELNS0_6PolicyE0EEEvPK6__halfPKfPS5_PfPjPimi",
+      "softmax_cols": 1024,
+      "stage": "normalization",
+      "stage_id": 2,
+      "symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE2ELNS0_6PolicyE0EEEvPK6__halfPKfPS5_PfPjPimi"
+    },
+    {
+      "policy": "fp16_scalar",
+      "policy_id": 1,
+      "ptx_opcode_counts": {
+        "add_f16": 22,
+        "add_f16x2": 0,
+        "add_f32": 0,
+        "conditional_branch": 47,
+        "ex2_f16": 8,
+        "ex2_f16x2": 0,
+        "ex2_f32": 0,
+        "global_store": 2,
+        "max_f16": 22,
+        "max_f16x2": 0,
+        "max_f32": 0,
+        "mul_f16": 24,
+        "mul_f16x2": 0,
+        "mul_f32": 0,
+        "predicate_set": 23,
+        "rcp_f32": 4,
+        "u32_parameter": 1,
+        "u32_parameter_load": 1
+      },
+      "ptx_section_sha256": "d0247247d807e488cb3bdf5eb5f6c1b18dd73489c7091dc1911e76b9aa0ebfb0",
+      "sass_added_stage_evidence": {
+        "control_evidence": [
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x13e0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1420",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1460",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1470",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1480",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x14a0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x14d0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x14e0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x14f0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1520",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1530",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1590",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x15a0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x15d0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x15f0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1640",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1660",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1670",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1680",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x16a0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x16c0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1700",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1710",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0x1720",
+            "predicate": "!P0"
+          }
+        ],
+        "controlled_branch_count": 0,
+        "controlled_predicate_instruction_count": 24,
+        "flag_parameter_offset": "0x198",
+        "operation_addresses": {
+          "f32_to_half": [
+            "0x1480",
+            "0x14e0"
+          ],
+          "half_to_f32": [
+            "0x13e0",
+            "0x1460"
+          ],
+          "multiply_f16": [
+            "0x14d0",
+            "0x14f0",
+            "0x1530",
+            "0x15d0",
+            "0x15f0",
+            "0x1640",
+            "0x1680",
+            "0x16a0"
+          ],
+          "rcp_f32": [
+            "0x1420",
+            "0x1470"
+          ]
+        },
+        "result_to_sink_dataflow": "pass",
+        "sink_parameter_offset": "0x180",
+        "sink_store_address": "0x1980"
+      },
+      "sass_opcode_counts": {
+        "branch": 3,
+        "extra_flag_parameter": 1,
+        "f32_add": 0,
+        "f32_max": 0,
+        "f32_mul": 0,
+        "f32_to_half": 3,
+        "global_store": 10,
+        "half_add": 27,
+        "half_max": 19,
+        "half_mul": 16,
+        "half_to_f32": 4,
+        "mufu_ex2": 8,
+        "mufu_rcp": 4,
+        "sink_parameter": 2
+      },
+      "sass_section_sha256": "928f7e62702b7a8d62d449e8628bc39ba5f9ad87b7af92e8df9220b70ff5d5b9",
+      "sass_symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE2ELNS0_6PolicyE1EEEvPK6__halfPKfPS5_PfPjPimi",
+      "softmax_cols": 1024,
+      "stage": "normalization",
+      "stage_id": 2,
+      "symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE2ELNS0_6PolicyE1EEEvPK6__halfPKfPS5_PfPjPimi"
+    },
+    {
+      "policy": "fp16x2",
+      "policy_id": 2,
+      "ptx_opcode_counts": {
+        "add_f16": 0,
+        "add_f16x2": 11,
+        "add_f32": 0,
+        "conditional_branch": 27,
+        "ex2_f16": 0,
+        "ex2_f16x2": 4,
+        "ex2_f32": 0,
+        "global_store": 2,
+        "max_f16": 0,
+        "max_f16x2": 11,
+        "max_f32": 0,
+        "mul_f16": 0,
+        "mul_f16x2": 12,
+        "mul_f32": 0,
+        "predicate_set": 19,
+        "rcp_f32": 4,
+        "u32_parameter": 1,
+        "u32_parameter_load": 1
+      },
+      "ptx_section_sha256": "94a5860048099f1d88bd515551bfc6f5fa3293e1bea3bb103fef115075472bd4",
+      "sass_added_stage_evidence": {
+        "control_evidence": [
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xd70",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xd80",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xd90",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xda0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xdb0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xde0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xe10",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xe20",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xe40",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xe90",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xeb0",
+            "predicate": "!P0"
+          },
+          {
+            "control_kind": "predicate",
+            "instruction_address": "0xed0",
+            "predicate": "!P0"
+          }
+        ],
+        "controlled_branch_count": 0,
+        "controlled_predicate_instruction_count": 12,
+        "flag_parameter_offset": "0x198",
+        "operation_addresses": {
+          "f32_to_half": [
+            "0xdb0",
+            "0xe10"
+          ],
+          "half_to_f32": [
+            "0xd70",
+            "0xd90"
+          ],
+          "multiply_f16": [
+            "0xe20",
+            "0xe90",
+            "0xeb0",
+            "0xed0"
+          ],
+          "rcp_f32": [
+            "0xd80",
+            "0xda0"
+          ]
+        },
+        "result_to_sink_dataflow": "pass",
+        "sink_parameter_offset": "0x180",
+        "sink_store_address": "0x1150"
+      },
+      "sass_opcode_counts": {
+        "branch": 3,
+        "extra_flag_parameter": 1,
+        "f32_add": 0,
+        "f32_max": 0,
+        "f32_mul": 0,
+        "f32_to_half": 3,
+        "global_store": 10,
+        "half_add": 19,
+        "half_max": 11,
+        "half_mul": 12,
+        "half_to_f32": 4,
+        "mufu_ex2": 8,
+        "mufu_rcp": 4,
+        "sink_parameter": 2
+      },
+      "sass_section_sha256": "7010df2cd331030f2470900d5f3673d7fe9ac869e8438d319b71fa3ebb491e79",
+      "sass_symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE2ELNS0_6PolicyE2EEEvPK6__halfPKfPS5_PfPjPimi",
+      "softmax_cols": 1024,
+      "stage": "normalization",
+      "stage_id": 2,
+      "symbol": "_ZN11fp16softmax15whole_stage_atc67_GLOBAL__N__a2070323_34_softmax_whole_stage_atc_kernels_cu_bde0386730whole_softmax_stage_atc_kernelILi1024ELNS0_5StageE2ELNS0_6PolicyE2EEEvPK6__halfPKfPS5_PfPjPimi"
+    }
+  ],
+  "status": "pass",
+  "target_profile": "rtx3090"
+}

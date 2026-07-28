@@ -1,0 +1,160 @@
+{
+  "analysis": {
+    "manifest_path": "results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/manifest.json",
+    "manifest_sha256": "0cf0f16fea34a95e21cd7ddfd077b58ae471cc4ee424a3b461dda0f69ccfbbe5",
+    "path": "results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/analysis/analysis.json",
+    "schema_version": "softmax_whole_stage_atc_analysis_v1",
+    "sha256": "d72eb597c0f53d5ab54eb557ef9d538d2ddd1ba4257c7afa517c17605990395b",
+    "status": "pass"
+  },
+  "cardinalities": {
+    "bracket_effects": 54,
+    "figures": 4,
+    "fresh_session_cells": 27,
+    "measured_roles": 162,
+    "rendered_files": 8,
+    "stage_policy_summaries": 9
+  },
+  "caveat": "n=3 fresh sessions per stage/policy cell; t95 intervals are descriptive and no multiple-comparison claim is made.",
+  "chart_map": [
+    {
+      "encoding": "stage facets; policy x; ATC y; raw sessions and mean interval",
+      "family": "uncertainty and benchmark",
+      "id": "mean_t95_sessions",
+      "palette": "three restrained policy roots plus marker shapes",
+      "question": "What is each cell's mean, descriptive t95, and raw-session spread?"
+    },
+    {
+      "encoding": "stage rows; policy columns; signed mean fill and direct labels",
+      "family": "matrix",
+      "id": "stage_policy_heatmap",
+      "palette": "blue–neutral–orange diverging scale centered at zero",
+      "question": "How do signed cell means compare across the 3×3 matrix?"
+    },
+    {
+      "encoding": "C-T-C x; T-C-T y; policy color; stage marker",
+      "family": "relationship",
+      "id": "ctc_vs_tct",
+      "palette": "three restrained policy roots plus stage marker shapes",
+      "question": "Do the two balanced brackets agree in sign and magnitude?"
+    },
+    {
+      "encoding": "policy position x; session effect y; stage facets",
+      "family": "ordered comparison",
+      "id": "position_stability",
+      "palette": "three restrained policy roots plus marker shapes",
+      "question": "Does the session effect change with policy position?"
+    }
+  ],
+  "figures": [
+    {
+      "files": {
+        "png": {
+          "bytes": 138038,
+          "path": "docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_mean_t95_sessions.png",
+          "sha256": "f2c356aba49cbab38c45886b0f8d4f6134e26bf88f527f0ac683e5310ffd9bdb"
+        },
+        "svg": {
+          "bytes": 94839,
+          "path": "docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_mean_t95_sessions.svg",
+          "sha256": "f0b7518567e268fabc5809d0d3c24c55edd91d49217e8f27f3ff800bdf8bcffb"
+        }
+      },
+      "fresh_sessions_per_cell": 3,
+      "id": "mean_t95_sessions",
+      "metric": "Operand-rate ATC ΔpJ/logical Softmax output element for one added stage pass",
+      "subtitle": "All nine cells; filled summaries and three open fresh-session markers.",
+      "title": "Three-stage × three-policy mean, descriptive t95, and sessions"
+    },
+    {
+      "files": {
+        "png": {
+          "bytes": 150611,
+          "path": "docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_stage_policy_heatmap.png",
+          "sha256": "0eb384f913437001e3a064e5428d3763503f1e42cc93b8ccb348726078f3aed9"
+        },
+        "svg": {
+          "bytes": 88381,
+          "path": "docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_stage_policy_heatmap.svg",
+          "sha256": "4052e2dee18885c57930e93cd31cee629e9528e614eb933d0e4ab0c32cc8d7c0"
+        }
+      },
+      "fresh_sessions_per_cell": 3,
+      "id": "stage_policy_heatmap",
+      "metric": "Operand-rate ATC ΔpJ/logical Softmax output element for one added stage pass",
+      "subtitle": "Signed mean with positive-session count in every cell.",
+      "title": "Stage × implementation mean ATC matrix"
+    },
+    {
+      "files": {
+        "png": {
+          "bytes": 145190,
+          "path": "docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_ctc_vs_tct.png",
+          "sha256": "e1eaedace14d0fc6986a68507569b7bd951876a1cc57e134a3bba9df8fc731be"
+        },
+        "svg": {
+          "bytes": 79473,
+          "path": "docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_ctc_vs_tct.svg",
+          "sha256": "043cb1f287daa3321271234c6deac9f405afdb5b85289d7b56f2c62dfd180432"
+        }
+      },
+      "fresh_sessions_per_cell": 3,
+      "id": "ctc_vs_tct",
+      "metric": "Operand-rate ATC ΔpJ/logical Softmax output element for one added stage pass",
+      "subtitle": "Twenty-seven fresh-session cells with diagonal and zero context.",
+      "title": "C-T-C versus T-C-T bracket agreement"
+    },
+    {
+      "files": {
+        "png": {
+          "bytes": 187982,
+          "path": "docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_position_stability.png",
+          "sha256": "11d43ba8e4ee66a9774eb1f20dcd0944fa8978bf623340810e61a38f4e2ceb96"
+        },
+        "svg": {
+          "bytes": 97693,
+          "path": "docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_position_stability.svg",
+          "sha256": "422ad674fe4f7b2586d9bfa76157cffd7643af228ea33223a6c2bbe528a7cd2a"
+        }
+      },
+      "fresh_sessions_per_cell": 3,
+      "id": "position_stability",
+      "metric": "Operand-rate ATC ΔpJ/logical Softmax output element for one added stage pass",
+      "subtitle": "Cyclic ABC/BCA/CAB position diagnostic for each stage and policy.",
+      "title": "Fresh-session policy-position stability"
+    }
+  ],
+  "metric": "Operand-rate ATC ΔpJ/logical Softmax output element for one added stage pass",
+  "render_options": {
+    "out_dir": "docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final",
+    "prefix": "rtx3090_softmax_whole_stage_atc_operand_rate_v2"
+  },
+  "schema_version": "softmax_whole_stage_atc_figures_v1",
+  "source_artifacts": {
+    "analysis_json": {
+      "path": "results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/analysis/analysis.json",
+      "sha256": "d72eb597c0f53d5ab54eb557ef9d538d2ddd1ba4257c7afa517c17605990395b"
+    },
+    "cell_summary": {
+      "path": "results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/analysis/cell_summary.csv",
+      "sha256": "de44d889e8eb3f4fd8f0cdbc2cc681c1b70480e29e8091d0e0cb4fb7fca8b240"
+    },
+    "manifest": {
+      "path": "results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/manifest.json",
+      "sha256": "0cf0f16fea34a95e21cd7ddfd077b58ae471cc4ee424a3b461dda0f69ccfbbe5"
+    },
+    "matched_effects": {
+      "path": "results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/analysis/matched_effects.csv",
+      "sha256": "77ac31f30ba45c0163c93e3840efa51ef6ceb9cd8e834f8d51daf5a2e97d88de"
+    },
+    "quality_gates": {
+      "path": "results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/analysis/quality_gates.csv",
+      "sha256": "c2c942fd07954146f74c1addc34cdf83174fd100a3d01fb5e25b4464eee0fcfd"
+    },
+    "session_summary": {
+      "path": "results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/analysis/session_summary.csv",
+      "sha256": "0c569d06e3295224d77b1d00bf3ad6f08be3b4d73694be250d893d1b535ab731"
+    }
+  },
+  "status": "pass"
+}

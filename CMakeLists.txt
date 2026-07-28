@@ -215,3 +215,38 @@ set_target_properties(a100_fp16_softmax_whole_precision_range_energy PROPERTIES
   CUDA_SEPARABLE_COMPILATION OFF
   CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
+
+# Operand-rate ATC probes for complete-Softmax stages.  Control and treatment
+# use the same stage/policy kernel specialization; a uniform runtime flag adds
+# exactly one redundant selected-stage pass while preserving primary output.
+add_executable(a100_fp16_softmax_whole_stage_atc
+  src/softmax_whole_stage_atc_main.cu
+  src/softmax_whole_stage_atc_kernels.cu
+  src/nvml_energy.cpp
+)
+
+target_include_directories(a100_fp16_softmax_whole_stage_atc PRIVATE
+  include
+)
+
+if(NVML_INCLUDE_DIR)
+  target_include_directories(a100_fp16_softmax_whole_stage_atc PRIVATE
+    "${NVML_INCLUDE_DIR}"
+  )
+endif()
+
+target_link_libraries(a100_fp16_softmax_whole_stage_atc PRIVATE
+  CUDA::cudart
+  "${NVML_LIBRARY}"
+)
+
+target_compile_options(a100_fp16_softmax_whole_stage_atc PRIVATE
+  $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+  $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>
+  $<$<COMPILE_LANGUAGE:CUDA>:-Xptxas=-v>
+)
+
+set_target_properties(a100_fp16_softmax_whole_stage_atc PROPERTIES
+  CUDA_SEPARABLE_COMPILATION OFF
+  CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)

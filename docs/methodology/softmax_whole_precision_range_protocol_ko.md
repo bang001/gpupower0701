@@ -38,22 +38,34 @@ I/O를 포함하는 하나의 Softmax forward다.
 기본 지표는 다음과 같다.
 
 ```text
-net pJ / element
+absolute idle-subtracted complete-Softmax net pJ/logical output
 = (qualified NVML trace energy - idle power × kernel elapsed) × 1e12
   / logical_output_elements
 ```
 
 여기서 `element`는 **logical Softmax output element 1개**다. Softmax의 입력과
 출력 element 수는 같고, packed FP16x2도 두 scalar output element를 모두 분모에
-넣는다. 따라서 내부 schema의 `net_pJ_per_logical_output_element`은 이 문서에서
-표기하는 `net pJ/element`와 수치적으로 완전히 같으며, packed 값만 다시 2로
-나누지 않는다.
+넣는다. 따라서 내부 schema의 `net_pJ_per_logical_output_element`은 위의 정확한
+지표 이름과 수치적으로 완전히 같으며, packed 값만 다시 2로 나누지 않는다.
+여기서 `net`은 idle 전력을 차감했다는 뜻일 뿐 treatment-control을 차감했다는
+뜻이 아니다. 이 complete-forward endpoint 실험에서는 idle baseline이 위 식에
+들어간다.
 
 이는 end-to-end policy 차이다. FP32는 FP32 I/O이고 두 FP16 policy는 FP16
 I/O이므로, “순수 EX2/SFU/ALU 회로 에너지”라고 해석하면 안 된다. 기존
-Operand-rate ATC의 `pJ/logical exponent result`와 단위·분모가 다르므로
-`82.164 / 19.393 / 25.055 pJ` 같은 EX2 probe 값과 같은 표에서 평균, 차감,
-합산하지 않는다.
+Operand-rate ATC의 정확한 이름은 **paired incremental
+`ΔpJ/added-stage logical output`**이다. 그 primary numerator는 시간 보간한
+`treatment - active control` power contrast이고, role 전 idle은 진단 전용이라
+ATC numerator에 들어가지 않는다. 두 실험에서 분모의 정수 개수가 우연히
+processed element 수와 같더라도 회계 대상은 각각 complete output과 added-stage
+output이다.
+
+기존 `82.164 / 19.393 / 25.055`는 complete-forward 절대값이 아니라
+**EX2-only paired incremental `ΔpJ/added logical EX2 result`**다. 새 whole-stage
+ATC의 공식 RTX 3090 NVML acquisition도 2026-07-28에 완료됐지만, 그 9-cell 결과는
+`active-control Operand-rate ATC delta pJ per logical Softmax output element for
+one added <stage> pass`라는 별도 signed rate projection이다. 이 문서의 수천 pJ
+complete-forward endpoint와 같은 표에서 평균, 차감, 합산하지 않는다.
 
 이 harness는 CTA가 반복 iteration에서 같은 row storage를 재사용한다. 따라서
 결과 범위는 **이 cache-reuse/compute 중심 Softmax 좌표**의 범위이며, DRAM
@@ -296,3 +308,8 @@ CHILD="results/raw/rtx3090_softmax_whole_precision_range_${FOLLOWUP_TAG}_followu
   pJ 범위는 target node fresh acquisition 전까지 비어 있다.
 - A100/V100/H100의 final pJ 범위는 해당 hardware에서 native build와 fresh
   acquisition을 완료하기 전에는 이 문서에 수치로 채우지 않는다.
+- 이 range의 absolute complete-forward 결과를 whole-stage Operand-rate ATC의
+  paired incremental 결과로 재명명하지 않는다. 완료된 whole-stage RTX 3090
+  acquisition과 해석은
+  [별도 보고서](../results/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final_ko.md)를
+  따른다.

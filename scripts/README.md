@@ -2,6 +2,65 @@
 
 이 디렉토리에는 현재 finalplan 실행에 필요한 active script만 둔다. 과거 pair-centric, NNLS/regression, reference-aligned, register-footprint diagnostic script는 `archive/legacy_20260707/scripts/`로 이동했다.
 
+## Whole-Softmax stage Operand-rate ATC (RTX 3090, 2026-07-28)
+
+현재 단계별 주 실험은 idle subtraction이 아니라 **Operand-rate ATC**다. 고정 좌표
+`S=1024`, grid `41`(82 SM의 q50), `256 threads/CTA`, `2 rows/CTA`에서
+`exp`, `max+sum reduction`, `normalization` 각각에 FP32/scalar FP16/packed
+FP16x2의 단계 pass 하나를 추가한다. 각 stage×policy는 fresh session 3개이며,
+한 session 안에서 C-T-C와 T-C-T를 모두 측정한다. 공통 FP32 conditioner는 5초다.
+role별 1초 idle trace는 계측 진단 전용이고 ATC 분자에는 들어가지 않는다.
+
+주 단위는 signed
+`Operand-rate ATC ΔpJ/logical Softmax output element for one added stage pass`다.
+complete-Softmax의 idle-subtracted 절대 에너지나 독립 opcode 에너지로 해석하지 않는다.
+packed FP16x2 분모는 이미 두 scalar logical output lane을 모두 세므로 결과를 다시
+2로 나누지 않는다.
+
+```bash
+source scripts/activate_softmax_experiment_env.sh
+cmake -S . -B build-whole-stage-atc-rtx3090 \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=86
+cmake --build build-whole-stage-atc-rtx3090 \
+  --target a100_fp16_softmax_whole_stage_atc -j
+
+TAG="$(date +%Y%m%d)_operand_rate_v2"
+"$GPUPWR_PYTHON_BIN" scripts/run_softmax_whole_stage_atc.py \
+  --build-dir build-whole-stage-atc-rtx3090 \
+  --output-dir results/raw --session-tag "$TAG" --execute
+RUN="results/raw/rtx3090_softmax_whole_stage_atc_${TAG}"
+
+"$GPUPWR_PYTHON_BIN" scripts/audit_softmax_whole_stage_atc_static.py \
+  --binary "$RUN/frozen/a100_fp16_softmax_whole_stage_atc" \
+  --out "$RUN/static_audit.json" \
+  --capture-dir "$RUN/static_audit_captures" --cuobjdump "$CUOBJDUMP"
+"$GPUPWR_PYTHON_BIN" scripts/bind_softmax_whole_stage_atc_static_audit.py "$RUN"
+
+"$GPUPWR_PYTHON_BIN" scripts/audit_softmax_whole_stage_atc_ncu.py \
+  --binary "$RUN/frozen/a100_fp16_softmax_whole_stage_atc" \
+  --out-dir "$RUN/ncu_audit" --ncu "$NCU_BIN" --gpu-id 0
+"$GPUPWR_PYTHON_BIN" scripts/bind_softmax_whole_stage_atc_ncu_audit.py "$RUN"
+
+"$GPUPWR_PYTHON_BIN" scripts/analyze_softmax_whole_stage_atc.py --run-dir "$RUN"
+FIG_DIR="docs/assets/softmax_whole_stage_atc_${TAG}"
+"$GPUPWR_PYTHON_BIN" scripts/plot_softmax_whole_stage_atc.py \
+  --run-dir "$RUN" --analysis-dir "$RUN/analysis" --out-dir "$FIG_DIR" \
+  --prefix "rtx3090_softmax_whole_stage_atc_${TAG}"
+"$GPUPWR_PYTHON_BIN" scripts/build_softmax_whole_stage_atc_report.py \
+  --run-dir "$RUN" --analysis-dir "$RUN/analysis" \
+  --figure-manifest "$FIG_DIR/figure_manifest.json" \
+  --out "docs/results/rtx3090_softmax_whole_stage_atc_${TAG}_ko.md"
+```
+
+runner는 binary를 acquisition 전에 freeze하며 9개 fresh process에서 총 162개 C/T
+role을 수집한다. analyzer는 static SASS 및 NCU audit가 manifest에 결속되지 않았거나,
+idle이 주 estimand에 들어가거나, 분모·trace·schedule·binary hash가 달라지면
+fail-closed한다. NCU는 동적 명령 구조의 증거이며 전력 측정은 NVML total-energy trace다.
+analyzer는 primary Operand-rate ATC와 별도로 same-ITER
+`(E_T−E_C)/N` gross board-energy diagnostic도 출력한다. 이 진단은 role별
+qualified trace power×elapsed를 사용하고 idle을 쓰지 않으며 primary를 대체하지
+않는다.
+
 ## Whole-Softmax precision stage isolation (RTX 3090, 2026-07-27)
 
 `a100_fp16_softmax_whole_precision_energy`는 기존 Operand-rate EX2 probe와 별도다.
