@@ -212,7 +212,9 @@ EX2 Operand-rate ATC의 `pJ/logical exponent result`와 stage-isolation의 고�
 `S=512` 결과는 complete-Softmax endpoint의 범위를 답하지 않는다. 그래서 새
 `a100_fp16_softmax_whole_precision_range_energy` target은 FP32, scalar FP16,
 packed FP16x2가 max/subtract, exp, reduction, normalization, I/O를 모두 수행하는
-endpoint만 비교한다. 주 단위는 **net pJ/logical Softmax output element**다.
+endpoint만 비교한다. 주 단위는 **net pJ/element**다. 여기서 element는 logical
+Softmax output element 하나이며, packed FP16x2도 두 scalar element를 이미 분모에
+포함하므로 packed 수치를 다시 2로 나누지 않는다.
 
 처음부터 CTA×S factorial sweep을 하지 않는다. `S=512,q50`, `S=1024,q50`
 (사전 고정 representative), `S=4096,q50`, `S=1024,q25` 네 좌표만 사용하고,
@@ -235,10 +237,10 @@ RTX 3090에서는 initial 4좌표(36 role) 뒤 두 10% gate가 모두 trigger되
 사전 규칙에 따라 `S=2048,q50`, `S=512,q25`, `S=4096,q25`만 27 role 추가했다.
 parent/child manifest, frozen binary/runner, raw/trace SHA, target-native PTX/SASS
 audit, numerical/trace/SMID/denominator gate를 결합 검증한 최종 screened 결과는 다음과
-같다. 단위는 모두 **net pJ/logical Softmax output element**이고 각각 fresh 3-session
+같다. 단위는 모두 **net pJ/element**이고 각각 fresh 3-session
 median이다.
 
-| endpoint | screened best | 사전 고정 representative `S=1024,q50` | screened worst |
+| endpoint | screened best (pJ/element) | 사전 고정 representative `S=1024,q50` (pJ/element) | screened worst (pJ/element) |
 |---|---:|---:|---:|
 | FP32 | 2,089.3 (`S=512,q50`) | 2,596.7 | 6,456.4 (`S=4096,q25`) |
 | scalar FP16 | 2,055.8 (`S=1024,q50`) | 2,055.8 | 5,056.1 (`S=4096,q25`) |

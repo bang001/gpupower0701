@@ -23,6 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ANALYSIS_SCHEMA = "softmax_whole_precision_range_analysis_v1"
 STATIC_AUDIT_SCHEMA = "softmax_whole_precision_range_static_audit_v1"
 METRIC = "net_pJ_per_logical_output_element"
+DISPLAY_UNIT = "pJ/element"
+DISPLAY_METRIC = "net pJ/element"
 PLUGIN_ROOT = Path(
     "/home/bang001/.codex/plugins/cache/openai-curated-remote/data-analytics/"
     "0.2.8-13ceeea1f599"
@@ -253,7 +255,8 @@ def representative_readout(rows: list[Mapping[str, Any]]) -> str:
     return (
         "사전 고정 대표 좌표 `S=1024,q50`의 median은 "
         f"FP32 {fmt(fp32)}, scalar FP16 {fmt(scalar)}, packed FP16x2 {fmt(packed)} "
-        "pJ/logical output element였다. packed가 이 대표 좌표에서는 가장 낮지만, "
+        "pJ/element였다. 여기서 element는 logical Softmax output element 하나이고, "
+        "packed FP16x2도 두 scalar element를 이미 분모에 포함한다. packed가 이 대표 좌표에서는 가장 낮지만, "
         "screened envelope 전체의 범위는 coordinate에 따라 겹친다. 따라서 이를 모든 "
         "S·CTA 조건에서 packed가 보편적으로 우월하다는 주장으로 일반화하지 않는다."
     )
@@ -285,7 +288,7 @@ def source_record(run_dir: Path, analysis: Mapping[str, Any]) -> dict[str, Any]:
             ),
             "tables_used": tables,
             "metric_definitions": [
-                "Primary metric = (qualified NVML trace energy − idle power × elapsed) × 1e12 / logical Softmax output elements.",
+                "Primary metric = (qualified NVML trace energy − idle power × elapsed) × 1e12 / logical Softmax output elements; displayed as net pJ/element.",
                 "A coordinate/policy estimate is the median of three fresh CUDA-process sessions.",
                 "Best/worst are screened coordinate medians; the representative is predeclared S=1024,q50.",
             ],
@@ -334,24 +337,24 @@ def artifact_payload(
                     "type": "bar",
                     "intent": "comparison",
                     "question": "각 complete-Softmax precision endpoint에서 사전 지정 envelope의 범위와 대표값은 무엇인가?",
-                    "rationale": "best/representative/worst를 한 common pJ/output axis에 두되, coordinate label을 tooltip으로 남겨 post-hoc 단일 우승자로 과장하지 않는다.",
+                    "rationale": "best/representative/worst를 한 common pJ/element axis에 두되, coordinate label을 tooltip으로 남겨 post-hoc 단일 우승자로 과장하지 않는다.",
                     "comparisonContext": {
                         "baseline": "not a paired baseline; within-policy coordinate medians",
                         "denominator": "one logical Softmax output element",
                         "grain": "three fresh CUDA-process sessions per coordinate/policy",
-                        "unit": "net pJ/logical output element",
+                        "unit": DISPLAY_METRIC,
                     },
                     "dataset": "range_points",
                     "sourceId": "analysis",
                     "encodings": {
                         "x": {"field": "policy_label", "type": "ordinal", "label": "Complete Softmax endpoint"},
-                        "y": {"field": "median_net_pj", "type": "quantitative", "label": "Fresh-session median", "unit": "pJ/logical output element", "format": "number"},
+                        "y": {"field": "median_net_pj", "type": "quantitative", "label": "Fresh-session median", "unit": DISPLAY_UNIT, "format": "number"},
                         "color": {"field": "range_role", "type": "nominal", "label": "Range role"},
                         "tooltip": [
                             {"field": "policy_label", "type": "nominal", "label": "Endpoint"},
                             {"field": "range_role", "type": "nominal", "label": "Role"},
                             {"field": "coordinate_label", "type": "nominal", "label": "Coordinate"},
-                            {"field": "median_net_pj", "type": "quantitative", "label": "Median", "unit": "pJ/logical output element", "format": "number"},
+                            {"field": "median_net_pj", "type": "quantitative", "label": "Median", "unit": DISPLAY_UNIT, "format": "number"},
                         ],
                     },
                     "palette": {"kind": "hard-three-root", "name": "whole-softmax-range-roles"},
@@ -366,25 +369,25 @@ def artifact_payload(
                     "subtitle": "S width와 requested q의 영향은 endpoint별로 별도 표시한다; platform 간 수치는 pool하지 않는다.",
                     "type": "bar",
                     "intent": "comparison",
-                    "question": "initial/adaptive coordinate가 pJ/output에 practical 차이를 보이는가?",
+                    "question": "initial/adaptive coordinate가 pJ/element에 practical 차이를 보이는가?",
                     "rationale": "adaptive stop decision이 쓰는 coordinate median을 endpoint color로 직접 보여 준다.",
                     "comparisonContext": {
                         "baseline": "not applicable; independent coordinate medians",
                         "denominator": "one logical Softmax output element",
                         "grain": "three fresh CUDA-process sessions per coordinate/policy",
-                        "unit": "net pJ/logical output element",
+                        "unit": DISPLAY_METRIC,
                     },
                     "dataset": "coordinate_summary",
                     "sourceId": "analysis",
                     "encodings": {
                         "x": {"field": "coordinate_label", "type": "ordinal", "label": "Coordinate"},
-                        "y": {"field": "median_net_pj", "type": "quantitative", "label": "Fresh-session median", "unit": "pJ/logical output element", "format": "number"},
+                        "y": {"field": "median_net_pj", "type": "quantitative", "label": "Fresh-session median", "unit": DISPLAY_UNIT, "format": "number"},
                         "color": {"field": "policy_label", "type": "nominal", "label": "Endpoint"},
                         "tooltip": [
                             {"field": "coordinate_label", "type": "nominal", "label": "Coordinate"},
                             {"field": "policy_label", "type": "nominal", "label": "Endpoint"},
-                            {"field": "median_net_pj", "type": "quantitative", "label": "Median", "unit": "pJ/logical output element", "format": "number"},
-                            {"field": "sample_std_net_pj", "type": "quantitative", "label": "Session SD", "unit": "pJ/logical output element", "format": "number"},
+                            {"field": "median_net_pj", "type": "quantitative", "label": "Median", "unit": DISPLAY_UNIT, "format": "number"},
+                            {"field": "sample_std_net_pj", "type": "quantitative", "label": "Session SD", "unit": DISPLAY_UNIT, "format": "number"},
                         ],
                     },
                     "palette": {"kind": "hard-three-root", "name": "whole-softmax-range-policies"},
@@ -444,7 +447,7 @@ def artifact_payload(
                     "## 기술 요약\n\n"
                     f"**{device}에서 complete Softmax FP32, scalar FP16, packed FP16x2 endpoint를 작은 사전 지정 envelope로 측정했다.** "
                     "대표값은 결과를 본 뒤 고르지 않은 `S=1024,q50`이고, best/worst는 fresh 3-session coordinate median의 screened 범위다. "
-                    "이 값은 `net pJ/logical Softmax output element`이며 EX2 Operand-rate ATC의 pJ/logical exponent result와 평균·차감·합산할 수 없다.\n\n"
+                    "이 값은 `net pJ/element`이며, element는 logical Softmax output element 하나다. packed FP16x2도 두 scalar element를 이미 분모에 포함한다. EX2 Operand-rate ATC의 pJ/logical exponent result와 평균·차감·합산할 수 없다.\n\n"
                     f"{readout}"
                 )},
                 {"id": "range_intro", "type": "markdown", "sourceId": "analysis", "body": (
@@ -510,11 +513,11 @@ def markdown_report(
     lines = [
         "# Whole-Softmax precision range analysis",
         "",
-        "이 문서는 complete Softmax forward의 `net pJ/logical output element`만 다룬다. EX2 Operand-rate ATC의 `pJ/logical exponent result`와 섞지 않는다.",
+        "이 문서는 complete Softmax forward의 `net pJ/element`만 다룬다. element는 logical Softmax output element 하나이며, packed FP16x2도 두 scalar element를 이미 분모에 포함한다. EX2 Operand-rate ATC의 `pJ/logical exponent result`와 섞지 않는다.",
         "",
         "## Best / representative / worst (screened)",
         "",
-        "| endpoint | screened best | fixed representative S1024/q50 | screened worst | status |",
+        "| endpoint | screened best (pJ/element) | fixed representative S1024/q50 (pJ/element) | screened worst (pJ/element) | status |",
         "|---|---:|---:|---:|---|",
     ]
     for row in range_rows:

@@ -1,10 +1,10 @@
 # Whole-Softmax precision range analysis
 
-이 문서는 complete Softmax forward의 `net pJ/logical output element`만 다룬다. EX2 Operand-rate ATC의 `pJ/logical exponent result`와 섞지 않는다.
+이 문서는 complete Softmax forward의 `net pJ/element`만 다룬다. element는 logical Softmax output element 하나이며, packed FP16x2도 두 scalar element를 이미 분모에 포함한다. EX2 Operand-rate ATC의 `pJ/logical exponent result`와 섞지 않는다.
 
 ## Best / representative / worst (screened)
 
-| endpoint | screened best | fixed representative S1024/q50 | screened worst | status |
+| endpoint | screened best (pJ/element) | fixed representative S1024/q50 (pJ/element) | screened worst (pJ/element) | status |
 |---|---:|---:|---:|---|
 | scalar FP16 endpoint | 2,055.8 (s1024_q50) | 2,055.8 | 5,056.1 (s4096_q25) | followup_complete_screened_range_not_fresh_extrema_confirmed |
 | packed FP16x2 endpoint | 1,626.8 (s512_q50) | 1,738.9 | 5,320.5 (s4096_q25) | followup_complete_screened_range_not_fresh_extrema_confirmed |
@@ -12,7 +12,7 @@
 
 ## Fixed representative interpretation
 
-사전 고정 대표 좌표 `S=1024,q50`의 median은 FP32 2,596.7, scalar FP16 2,055.8, packed FP16x2 1,738.9 pJ/logical output element였다. packed가 이 대표 좌표에서는 가장 낮지만, screened envelope 전체의 범위는 coordinate에 따라 겹친다. 따라서 이를 모든 S·CTA 조건에서 packed가 보편적으로 우월하다는 주장으로 일반화하지 않는다.
+사전 고정 대표 좌표 `S=1024,q50`의 median은 FP32 2,596.7, scalar FP16 2,055.8, packed FP16x2 1,738.9 pJ/element였다. 여기서 element는 logical Softmax output element 하나이고, packed FP16x2도 두 scalar element를 이미 분모에 포함한다. packed가 이 대표 좌표에서는 가장 낮지만, screened envelope 전체의 범위는 coordinate에 따라 겹친다. 따라서 이를 모든 S·CTA 조건에서 packed가 보편적으로 우월하다는 주장으로 일반화하지 않는다.
 
 ## Coordinate summary
 

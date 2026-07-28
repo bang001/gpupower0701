@@ -38,10 +38,16 @@ I/O를 포함하는 하나의 Softmax forward다.
 기본 지표는 다음과 같다.
 
 ```text
-net pJ / logical Softmax output element
+net pJ / element
 = (qualified NVML trace energy - idle power × kernel elapsed) × 1e12
   / logical_output_elements
 ```
+
+여기서 `element`는 **logical Softmax output element 1개**다. Softmax의 입력과
+출력 element 수는 같고, packed FP16x2도 두 scalar output element를 모두 분모에
+넣는다. 따라서 내부 schema의 `net_pJ_per_logical_output_element`은 이 문서에서
+표기하는 `net pJ/element`와 수치적으로 완전히 같으며, packed 값만 다시 2로
+나누지 않는다.
 
 이는 end-to-end policy 차이다. FP32는 FP32 I/O이고 두 FP16 policy는 FP16
 I/O이므로, “순수 EX2/SFU/ALU 회로 에너지”라고 해석하면 안 된다. 기존

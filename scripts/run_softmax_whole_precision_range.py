@@ -3,7 +3,8 @@
 
 The experiment answers a deliberately narrow question: within a predeclared
 compute/cache-reuse envelope, which complete Softmax endpoint is observed as
-best, representative, and worst in net pJ per *logical output element*?  It
+best, representative, and worst in net pJ per *element* (one logical Softmax
+output element)?  It
 does not pool the older EX2 Operand-rate ATC data or the fixed-S=512
 stage-isolation data.
 

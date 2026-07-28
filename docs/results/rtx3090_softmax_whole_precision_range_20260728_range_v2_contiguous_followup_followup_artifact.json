@@ -5,7 +5,7 @@
     "surface": "report",
     "title": "RTX 3090 complete-Softmax FP32 / FP16 / FP16x2 range screen",
     "description": "Minimal cross-platform-ready endpoint range screen with fixed representative and adaptive stop rule.",
-    "generatedAt": "2026-07-28T20:34:14+09:00",
+    "generatedAt": "2026-07-28T20:43:04+09:00",
     "sources": [
       {
         "id": "analysis",
@@ -22,7 +22,7 @@
             "results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/manifest.json"
           ],
           "metric_definitions": [
-            "Primary metric = (qualified NVML trace energy − idle power × elapsed) × 1e12 / logical Softmax output elements.",
+            "Primary metric = (qualified NVML trace energy − idle power × elapsed) × 1e12 / logical Softmax output elements; displayed as net pJ/element.",
             "A coordinate/policy estimate is the median of three fresh CUDA-process sessions.",
             "Best/worst are screened coordinate medians; the representative is predeclared S=1024,q50."
           ],
@@ -44,12 +44,12 @@
         "type": "bar",
         "intent": "comparison",
         "question": "각 complete-Softmax precision endpoint에서 사전 지정 envelope의 범위와 대표값은 무엇인가?",
-        "rationale": "best/representative/worst를 한 common pJ/output axis에 두되, coordinate label을 tooltip으로 남겨 post-hoc 단일 우승자로 과장하지 않는다.",
+        "rationale": "best/representative/worst를 한 common pJ/element axis에 두되, coordinate label을 tooltip으로 남겨 post-hoc 단일 우승자로 과장하지 않는다.",
         "comparisonContext": {
           "baseline": "not a paired baseline; within-policy coordinate medians",
           "denominator": "one logical Softmax output element",
           "grain": "three fresh CUDA-process sessions per coordinate/policy",
-          "unit": "net pJ/logical output element"
+          "unit": "net pJ/element"
         },
         "dataset": "range_points",
         "sourceId": "analysis",
@@ -63,7 +63,7 @@
             "field": "median_net_pj",
             "type": "quantitative",
             "label": "Fresh-session median",
-            "unit": "pJ/logical output element",
+            "unit": "pJ/element",
             "format": "number"
           },
           "color": {
@@ -91,7 +91,7 @@
               "field": "median_net_pj",
               "type": "quantitative",
               "label": "Median",
-              "unit": "pJ/logical output element",
+              "unit": "pJ/element",
               "format": "number"
             }
           ]
@@ -119,13 +119,13 @@
         "subtitle": "S width와 requested q의 영향은 endpoint별로 별도 표시한다; platform 간 수치는 pool하지 않는다.",
         "type": "bar",
         "intent": "comparison",
-        "question": "initial/adaptive coordinate가 pJ/output에 practical 차이를 보이는가?",
+        "question": "initial/adaptive coordinate가 pJ/element에 practical 차이를 보이는가?",
         "rationale": "adaptive stop decision이 쓰는 coordinate median을 endpoint color로 직접 보여 준다.",
         "comparisonContext": {
           "baseline": "not applicable; independent coordinate medians",
           "denominator": "one logical Softmax output element",
           "grain": "three fresh CUDA-process sessions per coordinate/policy",
-          "unit": "net pJ/logical output element"
+          "unit": "net pJ/element"
         },
         "dataset": "coordinate_summary",
         "sourceId": "analysis",
@@ -139,7 +139,7 @@
             "field": "median_net_pj",
             "type": "quantitative",
             "label": "Fresh-session median",
-            "unit": "pJ/logical output element",
+            "unit": "pJ/element",
             "format": "number"
           },
           "color": {
@@ -162,14 +162,14 @@
               "field": "median_net_pj",
               "type": "quantitative",
               "label": "Median",
-              "unit": "pJ/logical output element",
+              "unit": "pJ/element",
               "format": "number"
             },
             {
               "field": "sample_std_net_pj",
               "type": "quantitative",
               "label": "Session SD",
-              "unit": "pJ/logical output element",
+              "unit": "pJ/element",
               "format": "number"
             }
           ]
@@ -338,7 +338,7 @@
         "id": "technical_summary",
         "type": "markdown",
         "sourceId": "analysis",
-        "body": "## 기술 요약\n\n**RTX 3090에서 complete Softmax FP32, scalar FP16, packed FP16x2 endpoint를 작은 사전 지정 envelope로 측정했다.** 대표값은 결과를 본 뒤 고르지 않은 `S=1024,q50`이고, best/worst는 fresh 3-session coordinate median의 screened 범위다. 이 값은 `net pJ/logical Softmax output element`이며 EX2 Operand-rate ATC의 pJ/logical exponent result와 평균·차감·합산할 수 없다.\n\n사전 고정 대표 좌표 `S=1024,q50`의 median은 FP32 2,596.7, scalar FP16 2,055.8, packed FP16x2 1,738.9 pJ/logical output element였다. packed가 이 대표 좌표에서는 가장 낮지만, screened envelope 전체의 범위는 coordinate에 따라 겹친다. 따라서 이를 모든 S·CTA 조건에서 packed가 보편적으로 우월하다는 주장으로 일반화하지 않는다."
+        "body": "## 기술 요약\n\n**RTX 3090에서 complete Softmax FP32, scalar FP16, packed FP16x2 endpoint를 작은 사전 지정 envelope로 측정했다.** 대표값은 결과를 본 뒤 고르지 않은 `S=1024,q50`이고, best/worst는 fresh 3-session coordinate median의 screened 범위다. 이 값은 `net pJ/element`이며, element는 logical Softmax output element 하나다. packed FP16x2도 두 scalar element를 이미 분모에 포함한다. EX2 Operand-rate ATC의 pJ/logical exponent result와 평균·차감·합산할 수 없다.\n\n사전 고정 대표 좌표 `S=1024,q50`의 median은 FP32 2,596.7, scalar FP16 2,055.8, packed FP16x2 1,738.9 pJ/element였다. 여기서 element는 logical Softmax output element 하나이고, packed FP16x2도 두 scalar element를 이미 분모에 포함한다. packed가 이 대표 좌표에서는 가장 낮지만, screened envelope 전체의 범위는 coordinate에 따라 겹친다. 따라서 이를 모든 S·CTA 조건에서 packed가 보편적으로 우월하다는 주장으로 일반화하지 않는다."
       },
       {
         "id": "range_intro",
@@ -402,7 +402,7 @@
   },
   "snapshot": {
     "version": 1,
-    "generatedAt": "2026-07-28T20:34:14+09:00",
+    "generatedAt": "2026-07-28T20:43:04+09:00",
     "status": "ready",
     "datasets": {
       "range_summary": [
@@ -954,7 +954,7 @@
           "results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/manifest.json"
         ],
         "metric_definitions": [
-          "Primary metric = (qualified NVML trace energy − idle power × elapsed) × 1e12 / logical Softmax output elements.",
+          "Primary metric = (qualified NVML trace energy − idle power × elapsed) × 1e12 / logical Softmax output elements; displayed as net pJ/element.",
           "A coordinate/policy estimate is the median of three fresh CUDA-process sessions.",
           "Best/worst are screened coordinate medians; the representative is predeclared S=1024,q50."
         ],

@@ -461,14 +461,15 @@ FP32 / scalar FP16 / packed FP16x2 **complete Softmax endpoint**의 범위를
 `ABC/BCA/CAB`으로 실행하고, V100은 native FP16 EX2 지원 범위 때문에 FP32-only로
 명시한다. session conditioner는 요청 5초이며 actual 3.75–6.25초 gate를 raw row에
 남긴다. 따라서 이 결과의 단위는 EX2 probe의 pJ/result가 아니라
-**net pJ/logical Softmax output element**다.
+**net pJ/element**다. 여기서 element는 logical Softmax output element 하나이므로,
+packed FP16x2도 이미 두 scalar element를 분모에 포함하며 값을 다시 2로 나누지 않는다.
 
 RTX 3090의 5초 conditioner cohort는 initial 36 role과 gate-triggered adaptive
 27 role, 총 63 role을 통과했다. 아래 값은 사전 지정 envelope 안의 fresh
 3-session median인 **screened** 범위이며, 별도 fresh extrema confirmation 전에는
 보편적인 최저/최고값으로 해석하지 않는다.
 
-| complete Softmax endpoint | screened best | fixed representative `S=1024,q50` | screened worst |
+| complete Softmax endpoint | screened best (pJ/element) | fixed representative `S=1024,q50` (pJ/element) | screened worst (pJ/element) |
 |---|---:|---:|---:|
 | FP32 | 2,089.3 (`S=512,q50`) | 2,596.7 | 6,456.4 (`S=4096,q25`) |
 | scalar FP16 | 2,055.8 (`S=1024,q50`) | 2,055.8 | 5,056.1 (`S=4096,q25`) |

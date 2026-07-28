@@ -24,10 +24,10 @@
   "sourceInteraction": "not_verified",
   "viewports": [],
   "timings": {
-    "validateAndPackageMs": 77.8,
-    "staticChartExtractionMs": 2.2,
-    "structuralVerificationMs": 4.5,
-    "totalMs": 83
+    "validateAndPackageMs": 87,
+    "staticChartExtractionMs": 2,
+    "structuralVerificationMs": 4.1,
+    "totalMs": 92
   }
 }
 ```

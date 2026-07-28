@@ -1,5 +1,5 @@
 {
-  "analyzed_at": "2026-07-28T20:34:20+09:00",
+  "analyzed_at": "2026-07-28T20:43:04+09:00",
   "coordinate_summary": [
     {
       "actual_grid_sm_coverage": 0.256097560976,
@@ -184,11 +184,11 @@
       "representative_coordinate": true,
       "requested_sm_coverage": 0.5,
       "runtime_sm_count": 82,
-      "sample_std_net_pj": 259.04492229027835,
+      "sample_std_net_pj": 259.0449222902783,
       "softmax_cols": 1024,
       "static_single_wave_capacity_blocks": 492,
       "t95_high_net_pj": 2267.4958491395814,
-      "t95_low_net_pj": 980.4893280937517
+      "t95_low_net_pj": 980.4893280937519
     },
     {
       "actual_grid_sm_coverage": 0.5,
@@ -289,7 +289,7 @@
       "representative_coordinate": false,
       "requested_sm_coverage": 0.5,
       "runtime_sm_count": 82,
-      "sample_std_net_pj": 25.42828671235119,
+      "sample_std_net_pj": 25.428286712351188,
       "softmax_cols": 512,
       "static_single_wave_capacity_blocks": 492,
       "t95_high_net_pj": 1679.5640707497269,
@@ -415,7 +415,7 @@
       "representative_coordinate": false,
       "requested_sm_coverage": 0.25,
       "runtime_sm_count": 82,
-      "sample_std_net_pj": 75.58016365826492,
+      "sample_std_net_pj": 75.58016365826491,
       "softmax_cols": 512,
       "static_single_wave_capacity_blocks": 492,
       "t95_high_net_pj": 2776.265044110819,
@@ -569,7 +569,7 @@
       "representative_mean_net_pj": 1623.9925886166666,
       "representative_median_net_pj": 1738.94464934,
       "representative_t95_high_net_pj": 2267.4958491395814,
-      "representative_t95_low_net_pj": 980.4893280937517,
+      "representative_t95_low_net_pj": 980.4893280937519,
       "worst_coordinate_primary": "s4096_q25",
       "worst_coordinate_set_within_10pct": "s4096_q25;s4096_q50",
       "worst_median_net_pj": 5320.47417723
