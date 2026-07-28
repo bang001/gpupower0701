@@ -30,7 +30,10 @@ const char* header() {
          "gpu_id,gpu_name,compute_capability,cuda_pci_bus_id,cuda_binary_arch,"
          "runtime_sm_count,occupancy_max_blocks_per_sm,smid_unique,"
          "smid_total_blocks,smid_max_blocks_on_sm,smid_histogram_ok,"
-         "grid_blocks,rows_per_block,softmax_cols,logit_scale,seed,iters,logical_input_elements,"
+         "grid_blocks,rows_per_block,softmax_cols,threads_per_block,elements_per_thread,packed_elementwise_mapping,"
+         "static_single_wave_capacity_blocks,grid_nominal_ctas_per_sm,grid_sm_coverage,"
+         "static_single_wave_capacity_gate_pass,range_phase,coordinate_id,requested_sm_coverage,"
+         "logit_scale,seed,iters,logical_input_elements,"
          "logical_output_elements,physical_input_bytes,physical_output_bytes,"
          "elapsed_s,ns_per_output_element,gelement_per_s,idle_elapsed_s,"
          "idle_delta_E_J,idle_power_W,preheat_requested_s,preheat_actual_s,preheat_policy,"
@@ -101,7 +104,13 @@ void CsvWriter::write(const ResultRow& row) {
          << row.smid_total_blocks << ',' << row.smid_max_blocks_on_sm << ','
          << (row.smid_histogram_ok ? "true" : "false") << ','
          << row.grid_blocks << ',' << row.rows_per_block << ','
-         << row.softmax_cols << ',' << row.logit_scale << ',' << row.seed << ','
+         << row.softmax_cols << ',' << row.threads_per_block << ','
+         << row.elements_per_thread << ',' << csv_escape(row.packed_elementwise_mapping) << ','
+         << row.static_single_wave_capacity_blocks << ','
+         << row.grid_nominal_ctas_per_sm << ',' << row.grid_sm_coverage << ','
+         << (row.static_single_wave_capacity_gate_pass ? "true" : "false") << ','
+         << csv_escape(row.range_phase) << ',' << csv_escape(row.coordinate_id) << ','
+         << row.requested_sm_coverage << ',' << row.logit_scale << ',' << row.seed << ','
          << row.iters << ','
          << row.logical_input_elements << ',' << row.logical_output_elements
          << ',' << row.physical_input_bytes << ',' << row.physical_output_bytes

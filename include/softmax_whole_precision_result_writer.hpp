@@ -40,6 +40,16 @@ struct ResultRow {
   std::uint64_t grid_blocks = 0;
   int rows_per_block = 0;
   int softmax_cols = 0;
+  int threads_per_block = 0;
+  int elements_per_thread = 0;
+  std::string packed_elementwise_mapping;
+  std::uint64_t static_single_wave_capacity_blocks = 0;
+  double grid_nominal_ctas_per_sm = 0.0;
+  double grid_sm_coverage = 0.0;
+  bool static_single_wave_capacity_gate_pass = false;
+  std::string range_phase;
+  std::string coordinate_id;
+  double requested_sm_coverage = 0.0;
   float logit_scale = 0.0f;
   std::uint64_t seed = 0;
   std::uint64_t iters = 0;

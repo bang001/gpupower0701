@@ -538,7 +538,8 @@ int dispatch_binary_version(Policy policy) {
 cudaError_t launch_kernel(const LaunchConfig& config) {
   if (!config.input_f16 || !config.input_f32 || !config.output_f16 ||
       !config.output_f32 || config.grid_blocks == 0 || config.iters == 0 ||
-      config.grid_blocks > static_cast<std::uint64_t>(0xffffffffu)) {
+      config.grid_blocks > static_cast<std::uint64_t>(0xffffffffu) ||
+      config.softmax_cols != kSoftmaxCols) {
     return cudaErrorInvalidValue;
   }
   if (uses_native_fp16_ex2(config.policy)) {
@@ -570,11 +571,13 @@ cudaError_t launch_init(half* input_f16, float* input_f32, std::size_t count,
   return cudaGetLastError();
 }
 
-int query_occupancy_max_blocks_per_sm(Policy policy) {
+int query_occupancy_max_blocks_per_sm(Policy policy, int softmax_cols) {
+  if (softmax_cols != kSoftmaxCols) return 0;
   return dispatch_occupancy(policy);
 }
 
-int query_binary_version(Policy policy) {
+int query_binary_version(Policy policy, int softmax_cols) {
+  if (softmax_cols != kSoftmaxCols) return 0;
   return dispatch_binary_version(policy);
 }
 

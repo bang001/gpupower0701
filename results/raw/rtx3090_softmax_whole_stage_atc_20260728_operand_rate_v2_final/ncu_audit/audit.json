@@ -1,0 +1,1992 @@
+{
+  "artifact_path_base": "audit_json_parent",
+  "binary": {
+    "bytes": 1998016,
+    "contract": {
+      "arbitrary_policy_order": true,
+      "bracket_schedule": "ctc,tct",
+      "calibration_before_preheat": true,
+      "calibration_policy_order": [
+        "fp32",
+        "fp16_scalar",
+        "fp16x2"
+      ],
+      "common_preheat_supported": true,
+      "exp_extra_pass": "reuse_primary_subtract+log2e_scale+ex2",
+      "kernel_contract": "whole_softmax_stage_atc_same_symbol_runtime_flag_v2",
+      "normalization_extra_pass": "row_sum_reciprocal_replicated_per_thread+element_multiply",
+      "normalization_fp16_reciprocal_lowering": "f32_rcp_then_round_to_f16",
+      "nvml_total_energy_trace": true,
+      "output_equivalence_validation": true,
+      "per_cell_treatment_calibration": true,
+      "persistent_cuda_context": true,
+      "persistent_policy_schedule": true,
+      "policies": [
+        "fp32",
+        "fp16_scalar",
+        "fp16x2"
+      ],
+      "raw_schema_version": "softmax_whole_stage_atc_raw_v1",
+      "reduction_extra_pass": "max_tree+sum_tree",
+      "rows_per_block": 2,
+      "same_kernel_symbol_control_treatment": true,
+      "schema_version": "softmax_whole_stage_atc_binary_contract_v2",
+      "stages": [
+        "exp",
+        "reduction",
+        "normalization"
+      ],
+      "symmetric_opaque_stage_inputs": true,
+      "trace_schema_version": "softmax_whole_stage_atc_trace_v1",
+      "treatment_invariant_sink": true
+    },
+    "describe_capture": {
+      "bytes": 1080,
+      "path": "binary_describe.json",
+      "sha256": "c32b791468634f230ade9edc8223c30b58411c002cebcf64bff2b9bb21936067"
+    },
+    "known_aborted_binary_rejected": true,
+    "known_aborted_binary_sha256": "115ae86e2bc339fb6163e66c8f9b652adb2e42cc48cc112138616b3986b060bb",
+    "path": "../frozen/a100_fp16_softmax_whole_stage_atc",
+    "sha256": "5dff3859ad319cb37301e68cfc6fde00723e3a42110ca93adb44c05e97098167"
+  },
+  "captures": {
+    "exp": {
+      "capture_ended_at": "2026-07-28T23:09:15+09:00",
+      "capture_started_at": "2026-07-28T23:09:14+09:00",
+      "command": [
+        "/home/bang001/.local/NVIDIA-Nsight-Compute-2026.2.1/ncu",
+        "--target-processes",
+        "all",
+        "--csv",
+        "--page",
+        "raw",
+        "--print-units",
+        "base",
+        "--print-fp",
+        "--cache-control",
+        "none",
+        "--clock-control",
+        "none",
+        "--metrics",
+        "smsp__sass_thread_inst_executed_pred_on.sum,smsp__sass_thread_inst_executed_op_fmul_pred_on.sum,smsp__sass_thread_inst_executed_op_hmul_pred_on.sum,smsp__sass_thread_inst_executed_op_fadd_pred_on.sum,smsp__sass_thread_inst_executed_op_hadd_pred_on.sum,smsp__sass_thread_inst_executed_op_fp16_pred_on.sum,smsp__sass_thread_inst_executed_op_fp32_pred_on.sum,smsp__sass_thread_inst_executed_op_misc_pred_on.sum,smsp__sass_thread_inst_executed_op_conversion_pred_on.sum,smsp__inst_executed_op_global_st.sum",
+        "--kernel-name",
+        "regex:whole_softmax_stage_atc_kernel",
+        "--kernel-name-base",
+        "demangled",
+        "--print-kernel-base",
+        "demangled",
+        "--export",
+        "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/ncu_audit/exp",
+        "--force-overwrite",
+        "--log-file",
+        "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/ncu_audit/exp.ncu.csv",
+        "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/frozen/a100_fp16_softmax_whole_stage_atc",
+        "--validate-only",
+        "--gpu-id",
+        "0",
+        "--target-profile",
+        "rtx3090",
+        "--stage",
+        "exp",
+        "--policy-schedule",
+        "fp32,fp16_scalar,fp16x2",
+        "--calibration-policy-schedule",
+        "fp32,fp16_scalar,fp16x2",
+        "--bracket-schedule",
+        "ctc,tct",
+        "--session-order",
+        "ABC",
+        "--session-index",
+        "1",
+        "--session-id",
+        "ncu_dynamic_audit_exp",
+        "--softmax-cols",
+        "1024",
+        "--grid-blocks",
+        "41",
+        "--threads-per-block",
+        "256",
+        "--rows-per-block",
+        "2"
+      ],
+      "ncu_report": {
+        "bytes": 1662819,
+        "path": "exp.ncu-rep",
+        "sha256": "9c03295816edd60249d30a13a27f263973ede9b958b2852ae83a2e253ce55611"
+      },
+      "raw_csv": {
+        "bytes": 31257,
+        "path": "exp.ncu.csv",
+        "sha256": "5abfcc7e5bcf9122f34ff0ed9e8858079c5e42f0c620b02699ff933fd7617770"
+      },
+      "stage": "exp",
+      "target_stderr": {
+        "bytes": 0,
+        "path": "exp.target.stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "target_stdout": {
+        "bytes": 104,
+        "path": "exp.target.stdout.log",
+        "sha256": "8cc18286f0caa3ef5fca304f9bea12800065964a2a48fcc3c4297b782195a6c9"
+      }
+    },
+    "normalization": {
+      "capture_ended_at": "2026-07-28T23:09:18+09:00",
+      "capture_started_at": "2026-07-28T23:09:17+09:00",
+      "command": [
+        "/home/bang001/.local/NVIDIA-Nsight-Compute-2026.2.1/ncu",
+        "--target-processes",
+        "all",
+        "--csv",
+        "--page",
+        "raw",
+        "--print-units",
+        "base",
+        "--print-fp",
+        "--cache-control",
+        "none",
+        "--clock-control",
+        "none",
+        "--metrics",
+        "smsp__sass_thread_inst_executed_pred_on.sum,smsp__sass_thread_inst_executed_op_fmul_pred_on.sum,smsp__sass_thread_inst_executed_op_hmul_pred_on.sum,smsp__sass_thread_inst_executed_op_fadd_pred_on.sum,smsp__sass_thread_inst_executed_op_hadd_pred_on.sum,smsp__sass_thread_inst_executed_op_fp16_pred_on.sum,smsp__sass_thread_inst_executed_op_fp32_pred_on.sum,smsp__sass_thread_inst_executed_op_misc_pred_on.sum,smsp__sass_thread_inst_executed_op_conversion_pred_on.sum,smsp__inst_executed_op_global_st.sum",
+        "--kernel-name",
+        "regex:whole_softmax_stage_atc_kernel",
+        "--kernel-name-base",
+        "demangled",
+        "--print-kernel-base",
+        "demangled",
+        "--export",
+        "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/ncu_audit/normalization",
+        "--force-overwrite",
+        "--log-file",
+        "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/ncu_audit/normalization.ncu.csv",
+        "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/frozen/a100_fp16_softmax_whole_stage_atc",
+        "--validate-only",
+        "--gpu-id",
+        "0",
+        "--target-profile",
+        "rtx3090",
+        "--stage",
+        "normalization",
+        "--policy-schedule",
+        "fp32,fp16_scalar,fp16x2",
+        "--calibration-policy-schedule",
+        "fp32,fp16_scalar,fp16x2",
+        "--bracket-schedule",
+        "ctc,tct",
+        "--session-order",
+        "ABC",
+        "--session-index",
+        "1",
+        "--session-id",
+        "ncu_dynamic_audit_normalization",
+        "--softmax-cols",
+        "1024",
+        "--grid-blocks",
+        "41",
+        "--threads-per-block",
+        "256",
+        "--rows-per-block",
+        "2"
+      ],
+      "ncu_report": {
+        "bytes": 1662859,
+        "path": "normalization.ncu-rep",
+        "sha256": "b80ed051c7a0de61a087cb789ff642b58b0f8ad3183d65ee5bc9b61f1b7ce9d6"
+      },
+      "raw_csv": {
+        "bytes": 31266,
+        "path": "normalization.ncu.csv",
+        "sha256": "41a0dbf4207adbe945a33e4e9a55006b2edae4ca5c8cb6ecb2fd53fe6bbfc701"
+      },
+      "stage": "normalization",
+      "target_stderr": {
+        "bytes": 0,
+        "path": "normalization.target.stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "target_stdout": {
+        "bytes": 114,
+        "path": "normalization.target.stdout.log",
+        "sha256": "a4adb17165158a331d853bce241c8bc563e1df7b00c0a85afdf7139e973cceb7"
+      }
+    },
+    "reduction": {
+      "capture_ended_at": "2026-07-28T23:09:17+09:00",
+      "capture_started_at": "2026-07-28T23:09:16+09:00",
+      "command": [
+        "/home/bang001/.local/NVIDIA-Nsight-Compute-2026.2.1/ncu",
+        "--target-processes",
+        "all",
+        "--csv",
+        "--page",
+        "raw",
+        "--print-units",
+        "base",
+        "--print-fp",
+        "--cache-control",
+        "none",
+        "--clock-control",
+        "none",
+        "--metrics",
+        "smsp__sass_thread_inst_executed_pred_on.sum,smsp__sass_thread_inst_executed_op_fmul_pred_on.sum,smsp__sass_thread_inst_executed_op_hmul_pred_on.sum,smsp__sass_thread_inst_executed_op_fadd_pred_on.sum,smsp__sass_thread_inst_executed_op_hadd_pred_on.sum,smsp__sass_thread_inst_executed_op_fp16_pred_on.sum,smsp__sass_thread_inst_executed_op_fp32_pred_on.sum,smsp__sass_thread_inst_executed_op_misc_pred_on.sum,smsp__sass_thread_inst_executed_op_conversion_pred_on.sum,smsp__inst_executed_op_global_st.sum",
+        "--kernel-name",
+        "regex:whole_softmax_stage_atc_kernel",
+        "--kernel-name-base",
+        "demangled",
+        "--print-kernel-base",
+        "demangled",
+        "--export",
+        "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/ncu_audit/reduction",
+        "--force-overwrite",
+        "--log-file",
+        "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/ncu_audit/reduction.ncu.csv",
+        "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/frozen/a100_fp16_softmax_whole_stage_atc",
+        "--validate-only",
+        "--gpu-id",
+        "0",
+        "--target-profile",
+        "rtx3090",
+        "--stage",
+        "reduction",
+        "--policy-schedule",
+        "fp32,fp16_scalar,fp16x2",
+        "--calibration-policy-schedule",
+        "fp32,fp16_scalar,fp16x2",
+        "--bracket-schedule",
+        "ctc,tct",
+        "--session-order",
+        "ABC",
+        "--session-index",
+        "1",
+        "--session-id",
+        "ncu_dynamic_audit_reduction",
+        "--softmax-cols",
+        "1024",
+        "--grid-blocks",
+        "41",
+        "--threads-per-block",
+        "256",
+        "--rows-per-block",
+        "2"
+      ],
+      "ncu_report": {
+        "bytes": 1662839,
+        "path": "reduction.ncu-rep",
+        "sha256": "873773758dc1b219172c4d939fb51821381a5c22bc015f99d9a6d85b596ab07b"
+      },
+      "raw_csv": {
+        "bytes": 31260,
+        "path": "reduction.ncu.csv",
+        "sha256": "900fd6cdb31aa213b4e54e97346433bef42f024346f8d5b09b1c3641afa219f8"
+      },
+      "stage": "reduction",
+      "target_stderr": {
+        "bytes": 0,
+        "path": "reduction.target.stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "target_stdout": {
+        "bytes": 110,
+        "path": "reduction.target.stdout.log",
+        "sha256": "ae9582ca251c030b2376ca2600b809d05e43827df8542109d13170ef1d70de5d"
+      }
+    }
+  },
+  "coordinate": {
+    "grid_blocks": 41,
+    "rows_per_block": 2,
+    "softmax_cols": 1024,
+    "threads_per_block": 256
+  },
+  "created_at": "2026-07-28T23:09:18+09:00",
+  "energy_exclusion_reason": "Nsight Compute kernel replay changes execution and timing; this audit is dynamic instruction evidence only",
+  "energy_usable": false,
+  "expected_launch_order_per_stage": [
+    {
+      "policy": "fp32",
+      "role": "control"
+    },
+    {
+      "policy": "fp32",
+      "role": "treatment"
+    },
+    {
+      "policy": "fp16_scalar",
+      "role": "control"
+    },
+    {
+      "policy": "fp16_scalar",
+      "role": "treatment"
+    },
+    {
+      "policy": "fp16x2",
+      "role": "control"
+    },
+    {
+      "policy": "fp16x2",
+      "role": "treatment"
+    }
+  ],
+  "launch_count": 18,
+  "launches": [
+    {
+      "kernel_coordinate": [
+        1024,
+        0,
+        0
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 0, 0>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 0,
+      "metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 286016,
+        "fmul_thread_instructions": 167936,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 729800,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 188969,
+        "total_thread_instructions": 2517072
+      },
+      "policy": "fp32",
+      "role": "control",
+      "stage": "exp"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        0,
+        0
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 0, 0>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 1,
+      "metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 286016,
+        "fmul_thread_instructions": 251904,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 897736,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 188969,
+        "total_thread_instructions": 2685008
+      },
+      "policy": "fp32",
+      "role": "treatment",
+      "stage": "exp"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        0,
+        1
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 0, 1>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 2,
+      "metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 272732,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 115374,
+        "hmul_thread_instructions": 104960,
+        "misc_thread_instructions": 440873,
+        "total_thread_instructions": 2948884
+      },
+      "policy": "fp16_scalar",
+      "role": "control",
+      "stage": "exp"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        0,
+        1
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 0, 1>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 3,
+      "metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 356700,
+        "fp32_thread_instructions": 188928,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 115374,
+        "hmul_thread_instructions": 188928,
+        "misc_thread_instructions": 440873,
+        "total_thread_instructions": 3116820
+      },
+      "policy": "fp16_scalar",
+      "role": "treatment",
+      "stage": "exp"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        0,
+        2
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 0, 2>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 4,
+      "metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 230830,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 104919,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 230953,
+        "total_thread_instructions": 2088540
+      },
+      "policy": "fp16x2",
+      "role": "control",
+      "stage": "exp"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        0,
+        2
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 0, 2>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 5,
+      "metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 272814,
+        "fp32_thread_instructions": 188928,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 104919,
+        "hmul_thread_instructions": 125952,
+        "misc_thread_instructions": 230953,
+        "total_thread_instructions": 2256476
+      },
+      "policy": "fp16x2",
+      "role": "treatment",
+      "stage": "exp"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        1,
+        0
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 1, 0>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 0,
+      "metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 286016,
+        "fmul_thread_instructions": 167936,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 729800,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 178473,
+        "total_thread_instructions": 2296656
+      },
+      "policy": "fp32",
+      "role": "control",
+      "stage": "reduction"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        1,
+        0
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 1, 0>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 1,
+      "metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 404096,
+        "fmul_thread_instructions": 167936,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 965960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 325417,
+        "total_thread_instructions": 3133876
+      },
+      "policy": "fp32",
+      "role": "treatment",
+      "stage": "reduction"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        1,
+        1
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 1, 1>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 2,
+      "metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 251740,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 115374,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 440873,
+        "total_thread_instructions": 2623508
+      },
+      "policy": "fp16_scalar",
+      "role": "control",
+      "stage": "reduction"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        1,
+        1
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 1, 1>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 3,
+      "metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 293560,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 136284,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 860713,
+        "total_thread_instructions": 3819396
+      },
+      "policy": "fp16_scalar",
+      "role": "treatment",
+      "stage": "reduction"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        1,
+        2
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 1, 2>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 4,
+      "metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 230830,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 104919,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 241449,
+        "total_thread_instructions": 2036060
+      },
+      "policy": "fp16x2",
+      "role": "control",
+      "stage": "reduction"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        1,
+        2
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 1, 2>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 5,
+      "metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 251740,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 115374,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 451369,
+        "total_thread_instructions": 2455572
+      },
+      "policy": "fp16x2",
+      "role": "treatment",
+      "stage": "reduction"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        2,
+        0
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 2, 0>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 0,
+      "metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 275848,
+        "fmul_thread_instructions": 167936,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 719632,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 188969,
+        "total_thread_instructions": 2401944
+      },
+      "policy": "fp32",
+      "role": "control",
+      "stage": "normalization"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        2,
+        0
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 2, 0>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 1,
+      "metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 275848,
+        "fmul_thread_instructions": 251904,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 824592,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 188969,
+        "total_thread_instructions": 2506904
+      },
+      "policy": "fp32",
+      "role": "treatment",
+      "stage": "normalization"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        2,
+        1
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 2, 1>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 2,
+      "metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 251740,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 115374,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 440873,
+        "total_thread_instructions": 2801940
+      },
+      "policy": "fp16_scalar",
+      "role": "control",
+      "stage": "normalization"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        2,
+        1
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 2, 1>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 3,
+      "metrics": {
+        "conversion_thread_instructions": 31488,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 356700,
+        "fp32_thread_instructions": 125952,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 136366,
+        "hmul_thread_instructions": 167936,
+        "misc_thread_instructions": 440873,
+        "total_thread_instructions": 3053844
+      },
+      "policy": "fp16_scalar",
+      "role": "treatment",
+      "stage": "normalization"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        2,
+        2
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 2, 2>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 4,
+      "metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 230830,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 104919,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 230953,
+        "total_thread_instructions": 2141020
+      },
+      "policy": "fp16x2",
+      "role": "control",
+      "stage": "normalization"
+    },
+    {
+      "kernel_coordinate": [
+        1024,
+        2,
+        2
+      ],
+      "kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 2, 2>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "launch_id": 5,
+      "metrics": {
+        "conversion_thread_instructions": 31488,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 293806,
+        "fp32_thread_instructions": 125952,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 125911,
+        "hmul_thread_instructions": 125952,
+        "misc_thread_instructions": 230953,
+        "total_thread_instructions": 2266972
+      },
+      "policy": "fp16x2",
+      "role": "treatment",
+      "stage": "normalization"
+    }
+  ],
+  "ncu": {
+    "bytes": 310,
+    "cache_control": "none",
+    "clock_control": "none",
+    "kernel_name_basis": "demangled",
+    "metrics": {
+      "conversion_thread_instructions": "smsp__sass_thread_inst_executed_op_conversion_pred_on.sum",
+      "fadd_thread_instructions": "smsp__sass_thread_inst_executed_op_fadd_pred_on.sum",
+      "fmul_thread_instructions": "smsp__sass_thread_inst_executed_op_fmul_pred_on.sum",
+      "fp16_thread_instructions": "smsp__sass_thread_inst_executed_op_fp16_pred_on.sum",
+      "fp32_thread_instructions": "smsp__sass_thread_inst_executed_op_fp32_pred_on.sum",
+      "global_store_warp_instructions": "smsp__inst_executed_op_global_st.sum",
+      "hadd_thread_instructions": "smsp__sass_thread_inst_executed_op_hadd_pred_on.sum",
+      "hmul_thread_instructions": "smsp__sass_thread_inst_executed_op_hmul_pred_on.sum",
+      "misc_thread_instructions": "smsp__sass_thread_inst_executed_op_misc_pred_on.sum",
+      "total_thread_instructions": "smsp__sass_thread_inst_executed_pred_on.sum"
+    },
+    "path": "/home/bang001/.local/NVIDIA-Nsight-Compute-2026.2.1/ncu",
+    "sha256": "a44ff2c735c4dcf66c78f3f430155805d6a0b1f74f26331f98ecec03bfbf3f1a",
+    "version": "2026.2.1.0 (build 38286902) (public-release)"
+  },
+  "pair_count": 9,
+  "pairs": [
+    {
+      "checks": {
+        "compute_capability_8_6": true,
+        "control_kernel_coordinate": true,
+        "control_precedes_treatment": true,
+        "exact_delta_conversion_thread_instructions": true,
+        "exact_delta_fadd_thread_instructions": true,
+        "exact_delta_fmul_thread_instructions": true,
+        "exact_delta_fp16_thread_instructions": true,
+        "exact_delta_fp32_thread_instructions": true,
+        "exact_delta_global_store_warp_instructions": true,
+        "exact_delta_hadd_thread_instructions": true,
+        "exact_delta_hmul_thread_instructions": true,
+        "exact_delta_misc_thread_instructions": true,
+        "exact_delta_total_thread_instructions": true,
+        "exact_exp_multiply_thread_instructions": true,
+        "exact_exp_special_function_thread_instructions": true,
+        "global_store_equal": true,
+        "grid_blocks_41": true,
+        "grid_multiple_exp_multiply_thread_instructions": true,
+        "grid_multiple_exp_special_function_thread_instructions": true,
+        "nonzero_global_store": true,
+        "positive_exp_multiply_thread_instructions": true,
+        "positive_exp_special_function_thread_instructions": true,
+        "rtx3090_device": true,
+        "same_demangled_kernel_symbol": true,
+        "same_launch_resources": true,
+        "selected_math_delta_exact_grid_multiple": true,
+        "selected_math_instructions_increase": true,
+        "threads_per_block_256": true,
+        "total_thread_delta_exact_grid_multiple": true,
+        "total_thread_instructions_increase": true,
+        "treatment_kernel_coordinate": true
+      },
+      "compute_capability": "8.6",
+      "control_kernel_coordinate": [
+        1024,
+        0,
+        0
+      ],
+      "control_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 0, 0>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "control_launch_id": 0,
+      "control_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 286016,
+        "fmul_thread_instructions": 167936,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 729800,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 188969,
+        "total_thread_instructions": 2517072
+      },
+      "control_selected_math_thread_instructions": 167936,
+      "delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 83968,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 167936,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 0,
+        "total_thread_instructions": 167936
+      },
+      "delta_selected_math_thread_instructions": 83968,
+      "derived_stage_signals": {
+        "exp_multiply_thread_instructions": 83968,
+        "exp_special_function_thread_instructions": 83968
+      },
+      "device_name": "NVIDIA GeForce RTX 3090",
+      "expected_delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 83968,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 167936,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 0,
+        "total_thread_instructions": 167936
+      },
+      "expected_derived_stage_signals": {
+        "exp_multiply_thread_instructions": 83968,
+        "exp_special_function_thread_instructions": 83968
+      },
+      "failure_reasons": [],
+      "grid_blocks": 41,
+      "policy": "fp32",
+      "policy_index": 0,
+      "resource_pairs": {
+        "launch__registers_per_thread": {
+          "control": 40,
+          "treatment": 40
+        },
+        "launch__shared_mem_per_block_static": {
+          "control": 1056,
+          "treatment": 1056
+        }
+      },
+      "selected_math_metric_labels": [
+        "fmul_thread_instructions",
+        "hmul_thread_instructions"
+      ],
+      "stage": "exp",
+      "stage_index": 0,
+      "status": "pass",
+      "threads_per_block": 256,
+      "treatment_kernel_coordinate": [
+        1024,
+        0,
+        0
+      ],
+      "treatment_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 0, 0>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "treatment_launch_id": 1,
+      "treatment_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 286016,
+        "fmul_thread_instructions": 251904,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 897736,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 188969,
+        "total_thread_instructions": 2685008
+      },
+      "treatment_selected_math_thread_instructions": 251904
+    },
+    {
+      "checks": {
+        "compute_capability_8_6": true,
+        "control_kernel_coordinate": true,
+        "control_precedes_treatment": true,
+        "exact_delta_conversion_thread_instructions": true,
+        "exact_delta_fadd_thread_instructions": true,
+        "exact_delta_fmul_thread_instructions": true,
+        "exact_delta_fp16_thread_instructions": true,
+        "exact_delta_fp32_thread_instructions": true,
+        "exact_delta_global_store_warp_instructions": true,
+        "exact_delta_hadd_thread_instructions": true,
+        "exact_delta_hmul_thread_instructions": true,
+        "exact_delta_misc_thread_instructions": true,
+        "exact_delta_total_thread_instructions": true,
+        "exact_exp_multiply_thread_instructions": true,
+        "exact_exp_special_function_thread_instructions": true,
+        "global_store_equal": true,
+        "grid_blocks_41": true,
+        "grid_multiple_exp_multiply_thread_instructions": true,
+        "grid_multiple_exp_special_function_thread_instructions": true,
+        "nonzero_global_store": true,
+        "positive_exp_multiply_thread_instructions": true,
+        "positive_exp_special_function_thread_instructions": true,
+        "rtx3090_device": true,
+        "same_demangled_kernel_symbol": true,
+        "same_launch_resources": true,
+        "selected_math_delta_exact_grid_multiple": true,
+        "selected_math_instructions_increase": true,
+        "threads_per_block_256": true,
+        "total_thread_delta_exact_grid_multiple": true,
+        "total_thread_instructions_increase": true,
+        "treatment_kernel_coordinate": true
+      },
+      "compute_capability": "8.6",
+      "control_kernel_coordinate": [
+        1024,
+        0,
+        1
+      ],
+      "control_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 0, 1>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "control_launch_id": 2,
+      "control_metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 272732,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 115374,
+        "hmul_thread_instructions": 104960,
+        "misc_thread_instructions": 440873,
+        "total_thread_instructions": 2948884
+      },
+      "control_selected_math_thread_instructions": 104960,
+      "delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 83968,
+        "fp32_thread_instructions": 83968,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 0,
+        "total_thread_instructions": 167936
+      },
+      "delta_selected_math_thread_instructions": 83968,
+      "derived_stage_signals": {
+        "exp_multiply_thread_instructions": 83968,
+        "exp_special_function_thread_instructions": 83968
+      },
+      "device_name": "NVIDIA GeForce RTX 3090",
+      "expected_delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 83968,
+        "fp32_thread_instructions": 83968,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 0,
+        "total_thread_instructions": 167936
+      },
+      "expected_derived_stage_signals": {
+        "exp_multiply_thread_instructions": 83968,
+        "exp_special_function_thread_instructions": 83968
+      },
+      "failure_reasons": [],
+      "grid_blocks": 41,
+      "policy": "fp16_scalar",
+      "policy_index": 1,
+      "resource_pairs": {
+        "launch__registers_per_thread": {
+          "control": 39,
+          "treatment": 39
+        },
+        "launch__shared_mem_per_block_static": {
+          "control": 1536,
+          "treatment": 1536
+        }
+      },
+      "selected_math_metric_labels": [
+        "fmul_thread_instructions",
+        "hmul_thread_instructions"
+      ],
+      "stage": "exp",
+      "stage_index": 0,
+      "status": "pass",
+      "threads_per_block": 256,
+      "treatment_kernel_coordinate": [
+        1024,
+        0,
+        1
+      ],
+      "treatment_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 0, 1>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "treatment_launch_id": 3,
+      "treatment_metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 356700,
+        "fp32_thread_instructions": 188928,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 115374,
+        "hmul_thread_instructions": 188928,
+        "misc_thread_instructions": 440873,
+        "total_thread_instructions": 3116820
+      },
+      "treatment_selected_math_thread_instructions": 188928
+    },
+    {
+      "checks": {
+        "compute_capability_8_6": true,
+        "control_kernel_coordinate": true,
+        "control_precedes_treatment": true,
+        "exact_delta_conversion_thread_instructions": true,
+        "exact_delta_fadd_thread_instructions": true,
+        "exact_delta_fmul_thread_instructions": true,
+        "exact_delta_fp16_thread_instructions": true,
+        "exact_delta_fp32_thread_instructions": true,
+        "exact_delta_global_store_warp_instructions": true,
+        "exact_delta_hadd_thread_instructions": true,
+        "exact_delta_hmul_thread_instructions": true,
+        "exact_delta_misc_thread_instructions": true,
+        "exact_delta_total_thread_instructions": true,
+        "exact_exp_multiply_thread_instructions": true,
+        "exact_exp_special_function_thread_instructions": true,
+        "global_store_equal": true,
+        "grid_blocks_41": true,
+        "grid_multiple_exp_multiply_thread_instructions": true,
+        "grid_multiple_exp_special_function_thread_instructions": true,
+        "nonzero_global_store": true,
+        "positive_exp_multiply_thread_instructions": true,
+        "positive_exp_special_function_thread_instructions": true,
+        "rtx3090_device": true,
+        "same_demangled_kernel_symbol": true,
+        "same_launch_resources": true,
+        "selected_math_delta_exact_grid_multiple": true,
+        "selected_math_instructions_increase": true,
+        "threads_per_block_256": true,
+        "total_thread_delta_exact_grid_multiple": true,
+        "total_thread_instructions_increase": true,
+        "treatment_kernel_coordinate": true
+      },
+      "compute_capability": "8.6",
+      "control_kernel_coordinate": [
+        1024,
+        0,
+        2
+      ],
+      "control_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 0, 2>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "control_launch_id": 4,
+      "control_metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 230830,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 104919,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 230953,
+        "total_thread_instructions": 2088540
+      },
+      "control_selected_math_thread_instructions": 83968,
+      "delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 41984,
+        "fp32_thread_instructions": 83968,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 41984,
+        "misc_thread_instructions": 0,
+        "total_thread_instructions": 167936
+      },
+      "delta_selected_math_thread_instructions": 41984,
+      "derived_stage_signals": {
+        "exp_multiply_thread_instructions": 41984,
+        "exp_special_function_thread_instructions": 83968
+      },
+      "device_name": "NVIDIA GeForce RTX 3090",
+      "expected_delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 41984,
+        "fp32_thread_instructions": 83968,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 41984,
+        "misc_thread_instructions": 0,
+        "total_thread_instructions": 167936
+      },
+      "expected_derived_stage_signals": {
+        "exp_multiply_thread_instructions": 41984,
+        "exp_special_function_thread_instructions": 83968
+      },
+      "failure_reasons": [],
+      "grid_blocks": 41,
+      "policy": "fp16x2",
+      "policy_index": 2,
+      "resource_pairs": {
+        "launch__registers_per_thread": {
+          "control": 40,
+          "treatment": 40
+        },
+        "launch__shared_mem_per_block_static": {
+          "control": 1024,
+          "treatment": 1024
+        }
+      },
+      "selected_math_metric_labels": [
+        "fmul_thread_instructions",
+        "hmul_thread_instructions"
+      ],
+      "stage": "exp",
+      "stage_index": 0,
+      "status": "pass",
+      "threads_per_block": 256,
+      "treatment_kernel_coordinate": [
+        1024,
+        0,
+        2
+      ],
+      "treatment_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 0, 2>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "treatment_launch_id": 5,
+      "treatment_metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 272814,
+        "fp32_thread_instructions": 188928,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 104919,
+        "hmul_thread_instructions": 125952,
+        "misc_thread_instructions": 230953,
+        "total_thread_instructions": 2256476
+      },
+      "treatment_selected_math_thread_instructions": 125952
+    },
+    {
+      "checks": {
+        "compute_capability_8_6": true,
+        "control_kernel_coordinate": true,
+        "control_precedes_treatment": true,
+        "exact_delta_conversion_thread_instructions": true,
+        "exact_delta_fadd_thread_instructions": true,
+        "exact_delta_fmul_thread_instructions": true,
+        "exact_delta_fp16_thread_instructions": true,
+        "exact_delta_fp32_thread_instructions": true,
+        "exact_delta_global_store_warp_instructions": true,
+        "exact_delta_hadd_thread_instructions": true,
+        "exact_delta_hmul_thread_instructions": true,
+        "exact_delta_misc_thread_instructions": true,
+        "exact_delta_total_thread_instructions": true,
+        "exact_reduction_max_thread_instructions": true,
+        "exact_reduction_sum_add_thread_instructions": true,
+        "global_store_equal": true,
+        "grid_blocks_41": true,
+        "grid_multiple_reduction_max_thread_instructions": true,
+        "grid_multiple_reduction_sum_add_thread_instructions": true,
+        "nonzero_global_store": true,
+        "positive_reduction_max_thread_instructions": true,
+        "positive_reduction_sum_add_thread_instructions": true,
+        "reduction_math_instructions_increase": true,
+        "rtx3090_device": true,
+        "same_demangled_kernel_symbol": true,
+        "same_launch_resources": true,
+        "selected_math_delta_exact_grid_multiple": true,
+        "selected_math_instructions_increase": true,
+        "threads_per_block_256": true,
+        "total_thread_delta_exact_grid_multiple": true,
+        "total_thread_instructions_increase": true,
+        "treatment_kernel_coordinate": true
+      },
+      "compute_capability": "8.6",
+      "control_kernel_coordinate": [
+        1024,
+        1,
+        0
+      ],
+      "control_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 1, 0>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "control_launch_id": 0,
+      "control_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 286016,
+        "fmul_thread_instructions": 167936,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 729800,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 178473,
+        "total_thread_instructions": 2296656
+      },
+      "control_selected_math_thread_instructions": 286016,
+      "delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 118080,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 236160,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 146944,
+        "total_thread_instructions": 837220
+      },
+      "delta_selected_math_thread_instructions": 118080,
+      "derived_stage_signals": {
+        "reduction_max_thread_instructions": 118080,
+        "reduction_sum_add_thread_instructions": 118080
+      },
+      "device_name": "NVIDIA GeForce RTX 3090",
+      "expected_delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 118080,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 236160,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 146944,
+        "total_thread_instructions": 837220
+      },
+      "expected_derived_stage_signals": {
+        "reduction_max_thread_instructions": 118080,
+        "reduction_sum_add_thread_instructions": 118080
+      },
+      "failure_reasons": [],
+      "grid_blocks": 41,
+      "policy": "fp32",
+      "policy_index": 0,
+      "resource_pairs": {
+        "launch__registers_per_thread": {
+          "control": 34,
+          "treatment": 34
+        },
+        "launch__shared_mem_per_block_static": {
+          "control": 32,
+          "treatment": 32
+        }
+      },
+      "selected_math_metric_labels": [
+        "fadd_thread_instructions",
+        "hadd_thread_instructions"
+      ],
+      "stage": "reduction",
+      "stage_index": 1,
+      "status": "pass",
+      "threads_per_block": 256,
+      "treatment_kernel_coordinate": [
+        1024,
+        1,
+        0
+      ],
+      "treatment_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 1, 0>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "treatment_launch_id": 1,
+      "treatment_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 404096,
+        "fmul_thread_instructions": 167936,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 965960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 325417,
+        "total_thread_instructions": 3133876
+      },
+      "treatment_selected_math_thread_instructions": 404096
+    },
+    {
+      "checks": {
+        "compute_capability_8_6": true,
+        "control_kernel_coordinate": true,
+        "control_precedes_treatment": true,
+        "exact_delta_conversion_thread_instructions": true,
+        "exact_delta_fadd_thread_instructions": true,
+        "exact_delta_fmul_thread_instructions": true,
+        "exact_delta_fp16_thread_instructions": true,
+        "exact_delta_fp32_thread_instructions": true,
+        "exact_delta_global_store_warp_instructions": true,
+        "exact_delta_hadd_thread_instructions": true,
+        "exact_delta_hmul_thread_instructions": true,
+        "exact_delta_misc_thread_instructions": true,
+        "exact_delta_total_thread_instructions": true,
+        "exact_reduction_max_thread_instructions": true,
+        "exact_reduction_sum_add_thread_instructions": true,
+        "global_store_equal": true,
+        "grid_blocks_41": true,
+        "grid_multiple_reduction_max_thread_instructions": true,
+        "grid_multiple_reduction_sum_add_thread_instructions": true,
+        "nonzero_global_store": true,
+        "positive_reduction_max_thread_instructions": true,
+        "positive_reduction_sum_add_thread_instructions": true,
+        "reduction_math_instructions_increase": true,
+        "rtx3090_device": true,
+        "same_demangled_kernel_symbol": true,
+        "same_launch_resources": true,
+        "selected_math_delta_exact_grid_multiple": true,
+        "selected_math_instructions_increase": true,
+        "threads_per_block_256": true,
+        "total_thread_delta_exact_grid_multiple": true,
+        "total_thread_instructions_increase": true,
+        "treatment_kernel_coordinate": true
+      },
+      "compute_capability": "8.6",
+      "control_kernel_coordinate": [
+        1024,
+        1,
+        1
+      ],
+      "control_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 1, 1>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "control_launch_id": 2,
+      "control_metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 251740,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 115374,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 440873,
+        "total_thread_instructions": 2623508
+      },
+      "control_selected_math_thread_instructions": 115374,
+      "delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 41820,
+        "fp32_thread_instructions": 0,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 20910,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 419840,
+        "total_thread_instructions": 1195888
+      },
+      "delta_selected_math_thread_instructions": 20910,
+      "derived_stage_signals": {
+        "reduction_max_thread_instructions": 20910,
+        "reduction_sum_add_thread_instructions": 20910
+      },
+      "device_name": "NVIDIA GeForce RTX 3090",
+      "expected_delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 41820,
+        "fp32_thread_instructions": 0,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 20910,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 419840,
+        "total_thread_instructions": 1195888
+      },
+      "expected_derived_stage_signals": {
+        "reduction_max_thread_instructions": 20910,
+        "reduction_sum_add_thread_instructions": 20910
+      },
+      "failure_reasons": [],
+      "grid_blocks": 41,
+      "policy": "fp16_scalar",
+      "policy_index": 1,
+      "resource_pairs": {
+        "launch__registers_per_thread": {
+          "control": 31,
+          "treatment": 31
+        },
+        "launch__shared_mem_per_block_static": {
+          "control": 512,
+          "treatment": 512
+        }
+      },
+      "selected_math_metric_labels": [
+        "fadd_thread_instructions",
+        "hadd_thread_instructions"
+      ],
+      "stage": "reduction",
+      "stage_index": 1,
+      "status": "pass",
+      "threads_per_block": 256,
+      "treatment_kernel_coordinate": [
+        1024,
+        1,
+        1
+      ],
+      "treatment_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 1, 1>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "treatment_launch_id": 3,
+      "treatment_metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 293560,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 136284,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 860713,
+        "total_thread_instructions": 3819396
+      },
+      "treatment_selected_math_thread_instructions": 136284
+    },
+    {
+      "checks": {
+        "compute_capability_8_6": true,
+        "control_kernel_coordinate": true,
+        "control_precedes_treatment": true,
+        "exact_delta_conversion_thread_instructions": true,
+        "exact_delta_fadd_thread_instructions": true,
+        "exact_delta_fmul_thread_instructions": true,
+        "exact_delta_fp16_thread_instructions": true,
+        "exact_delta_fp32_thread_instructions": true,
+        "exact_delta_global_store_warp_instructions": true,
+        "exact_delta_hadd_thread_instructions": true,
+        "exact_delta_hmul_thread_instructions": true,
+        "exact_delta_misc_thread_instructions": true,
+        "exact_delta_total_thread_instructions": true,
+        "exact_reduction_max_thread_instructions": true,
+        "exact_reduction_sum_add_thread_instructions": true,
+        "global_store_equal": true,
+        "grid_blocks_41": true,
+        "grid_multiple_reduction_max_thread_instructions": true,
+        "grid_multiple_reduction_sum_add_thread_instructions": true,
+        "nonzero_global_store": true,
+        "positive_reduction_max_thread_instructions": true,
+        "positive_reduction_sum_add_thread_instructions": true,
+        "reduction_math_instructions_increase": true,
+        "rtx3090_device": true,
+        "same_demangled_kernel_symbol": true,
+        "same_launch_resources": true,
+        "selected_math_delta_exact_grid_multiple": true,
+        "selected_math_instructions_increase": true,
+        "threads_per_block_256": true,
+        "total_thread_delta_exact_grid_multiple": true,
+        "total_thread_instructions_increase": true,
+        "treatment_kernel_coordinate": true
+      },
+      "compute_capability": "8.6",
+      "control_kernel_coordinate": [
+        1024,
+        1,
+        2
+      ],
+      "control_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 1, 2>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "control_launch_id": 4,
+      "control_metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 230830,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 104919,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 241449,
+        "total_thread_instructions": 2036060
+      },
+      "control_selected_math_thread_instructions": 104919,
+      "delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 20910,
+        "fp32_thread_instructions": 0,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 10455,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 209920,
+        "total_thread_instructions": 419512
+      },
+      "delta_selected_math_thread_instructions": 10455,
+      "derived_stage_signals": {
+        "reduction_max_thread_instructions": 10455,
+        "reduction_sum_add_thread_instructions": 10455
+      },
+      "device_name": "NVIDIA GeForce RTX 3090",
+      "expected_delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 20910,
+        "fp32_thread_instructions": 0,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 10455,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 209920,
+        "total_thread_instructions": 419512
+      },
+      "expected_derived_stage_signals": {
+        "reduction_max_thread_instructions": 10455,
+        "reduction_sum_add_thread_instructions": 10455
+      },
+      "failure_reasons": [],
+      "grid_blocks": 41,
+      "policy": "fp16x2",
+      "policy_index": 2,
+      "resource_pairs": {
+        "launch__registers_per_thread": {
+          "control": 30,
+          "treatment": 30
+        },
+        "launch__shared_mem_per_block_static": {
+          "control": 1024,
+          "treatment": 1024
+        }
+      },
+      "selected_math_metric_labels": [
+        "fadd_thread_instructions",
+        "hadd_thread_instructions"
+      ],
+      "stage": "reduction",
+      "stage_index": 1,
+      "status": "pass",
+      "threads_per_block": 256,
+      "treatment_kernel_coordinate": [
+        1024,
+        1,
+        2
+      ],
+      "treatment_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 1, 2>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "treatment_launch_id": 5,
+      "treatment_metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 251740,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 115374,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 451369,
+        "total_thread_instructions": 2455572
+      },
+      "treatment_selected_math_thread_instructions": 115374
+    },
+    {
+      "checks": {
+        "compute_capability_8_6": true,
+        "control_kernel_coordinate": true,
+        "control_precedes_treatment": true,
+        "exact_delta_conversion_thread_instructions": true,
+        "exact_delta_fadd_thread_instructions": true,
+        "exact_delta_fmul_thread_instructions": true,
+        "exact_delta_fp16_thread_instructions": true,
+        "exact_delta_fp32_thread_instructions": true,
+        "exact_delta_global_store_warp_instructions": true,
+        "exact_delta_hadd_thread_instructions": true,
+        "exact_delta_hmul_thread_instructions": true,
+        "exact_delta_misc_thread_instructions": true,
+        "exact_delta_total_thread_instructions": true,
+        "exact_normalization_multiply_thread_instructions": true,
+        "exact_normalization_reciprocal_thread_instructions": true,
+        "global_store_equal": true,
+        "grid_blocks_41": true,
+        "grid_multiple_normalization_multiply_thread_instructions": true,
+        "grid_multiple_normalization_reciprocal_thread_instructions": true,
+        "nonzero_global_store": true,
+        "positive_normalization_multiply_thread_instructions": true,
+        "positive_normalization_reciprocal_thread_instructions": true,
+        "rtx3090_device": true,
+        "same_demangled_kernel_symbol": true,
+        "same_launch_resources": true,
+        "selected_math_delta_exact_grid_multiple": true,
+        "selected_math_instructions_increase": true,
+        "threads_per_block_256": true,
+        "total_thread_delta_exact_grid_multiple": true,
+        "total_thread_instructions_increase": true,
+        "treatment_kernel_coordinate": true
+      },
+      "compute_capability": "8.6",
+      "control_kernel_coordinate": [
+        1024,
+        2,
+        0
+      ],
+      "control_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 2, 0>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "control_launch_id": 0,
+      "control_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 275848,
+        "fmul_thread_instructions": 167936,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 719632,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 188969,
+        "total_thread_instructions": 2401944
+      },
+      "control_selected_math_thread_instructions": 167936,
+      "delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 83968,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 0,
+        "total_thread_instructions": 104960
+      },
+      "delta_selected_math_thread_instructions": 83968,
+      "derived_stage_signals": {
+        "normalization_multiply_thread_instructions": 83968,
+        "normalization_reciprocal_thread_instructions": 20992
+      },
+      "device_name": "NVIDIA GeForce RTX 3090",
+      "expected_delta_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 83968,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 0,
+        "total_thread_instructions": 104960
+      },
+      "expected_derived_stage_signals": {
+        "normalization_multiply_thread_instructions": 83968,
+        "normalization_reciprocal_thread_instructions": 20992
+      },
+      "failure_reasons": [],
+      "grid_blocks": 41,
+      "policy": "fp32",
+      "policy_index": 0,
+      "resource_pairs": {
+        "launch__registers_per_thread": {
+          "control": 40,
+          "treatment": 40
+        },
+        "launch__shared_mem_per_block_static": {
+          "control": 1056,
+          "treatment": 1056
+        }
+      },
+      "selected_math_metric_labels": [
+        "fmul_thread_instructions",
+        "hmul_thread_instructions"
+      ],
+      "stage": "normalization",
+      "stage_index": 2,
+      "status": "pass",
+      "threads_per_block": 256,
+      "treatment_kernel_coordinate": [
+        1024,
+        2,
+        0
+      ],
+      "treatment_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 2, 0>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "treatment_launch_id": 1,
+      "treatment_metrics": {
+        "conversion_thread_instructions": 0,
+        "fadd_thread_instructions": 275848,
+        "fmul_thread_instructions": 251904,
+        "fp16_thread_instructions": 0,
+        "fp32_thread_instructions": 824592,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 0,
+        "hmul_thread_instructions": 0,
+        "misc_thread_instructions": 188969,
+        "total_thread_instructions": 2506904
+      },
+      "treatment_selected_math_thread_instructions": 251904
+    },
+    {
+      "checks": {
+        "compute_capability_8_6": true,
+        "control_kernel_coordinate": true,
+        "control_precedes_treatment": true,
+        "exact_delta_conversion_thread_instructions": true,
+        "exact_delta_fadd_thread_instructions": true,
+        "exact_delta_fmul_thread_instructions": true,
+        "exact_delta_fp16_thread_instructions": true,
+        "exact_delta_fp32_thread_instructions": true,
+        "exact_delta_global_store_warp_instructions": true,
+        "exact_delta_hadd_thread_instructions": true,
+        "exact_delta_hmul_thread_instructions": true,
+        "exact_delta_misc_thread_instructions": true,
+        "exact_delta_total_thread_instructions": true,
+        "exact_normalization_multiply_thread_instructions": true,
+        "exact_normalization_reciprocal_thread_instructions": true,
+        "global_store_equal": true,
+        "grid_blocks_41": true,
+        "grid_multiple_normalization_multiply_thread_instructions": true,
+        "grid_multiple_normalization_reciprocal_thread_instructions": true,
+        "nonzero_global_store": true,
+        "positive_normalization_multiply_thread_instructions": true,
+        "positive_normalization_reciprocal_thread_instructions": true,
+        "rtx3090_device": true,
+        "same_demangled_kernel_symbol": true,
+        "same_launch_resources": true,
+        "selected_math_delta_exact_grid_multiple": true,
+        "selected_math_instructions_increase": true,
+        "threads_per_block_256": true,
+        "total_thread_delta_exact_grid_multiple": true,
+        "total_thread_instructions_increase": true,
+        "treatment_kernel_coordinate": true
+      },
+      "compute_capability": "8.6",
+      "control_kernel_coordinate": [
+        1024,
+        2,
+        1
+      ],
+      "control_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 2, 1>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "control_launch_id": 2,
+      "control_metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 251740,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 115374,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 440873,
+        "total_thread_instructions": 2801940
+      },
+      "control_selected_math_thread_instructions": 83968,
+      "delta_metrics": {
+        "conversion_thread_instructions": 20992,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 104960,
+        "fp32_thread_instructions": 20992,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 20992,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 0,
+        "total_thread_instructions": 251904
+      },
+      "delta_selected_math_thread_instructions": 83968,
+      "derived_stage_signals": {
+        "normalization_multiply_thread_instructions": 83968,
+        "normalization_reciprocal_thread_instructions": 20992
+      },
+      "device_name": "NVIDIA GeForce RTX 3090",
+      "expected_delta_metrics": {
+        "conversion_thread_instructions": 20992,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 104960,
+        "fp32_thread_instructions": 20992,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 20992,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 0,
+        "total_thread_instructions": 251904
+      },
+      "expected_derived_stage_signals": {
+        "normalization_multiply_thread_instructions": 83968,
+        "normalization_reciprocal_thread_instructions": 20992
+      },
+      "failure_reasons": [],
+      "grid_blocks": 41,
+      "policy": "fp16_scalar",
+      "policy_index": 1,
+      "resource_pairs": {
+        "launch__registers_per_thread": {
+          "control": 33,
+          "treatment": 33
+        },
+        "launch__shared_mem_per_block_static": {
+          "control": 1536,
+          "treatment": 1536
+        }
+      },
+      "selected_math_metric_labels": [
+        "fmul_thread_instructions",
+        "hmul_thread_instructions"
+      ],
+      "stage": "normalization",
+      "stage_index": 2,
+      "status": "pass",
+      "threads_per_block": 256,
+      "treatment_kernel_coordinate": [
+        1024,
+        2,
+        1
+      ],
+      "treatment_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 2, 1>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "treatment_launch_id": 3,
+      "treatment_metrics": {
+        "conversion_thread_instructions": 31488,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 356700,
+        "fp32_thread_instructions": 125952,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 136366,
+        "hmul_thread_instructions": 167936,
+        "misc_thread_instructions": 440873,
+        "total_thread_instructions": 3053844
+      },
+      "treatment_selected_math_thread_instructions": 167936
+    },
+    {
+      "checks": {
+        "compute_capability_8_6": true,
+        "control_kernel_coordinate": true,
+        "control_precedes_treatment": true,
+        "exact_delta_conversion_thread_instructions": true,
+        "exact_delta_fadd_thread_instructions": true,
+        "exact_delta_fmul_thread_instructions": true,
+        "exact_delta_fp16_thread_instructions": true,
+        "exact_delta_fp32_thread_instructions": true,
+        "exact_delta_global_store_warp_instructions": true,
+        "exact_delta_hadd_thread_instructions": true,
+        "exact_delta_hmul_thread_instructions": true,
+        "exact_delta_misc_thread_instructions": true,
+        "exact_delta_total_thread_instructions": true,
+        "exact_normalization_multiply_thread_instructions": true,
+        "exact_normalization_reciprocal_thread_instructions": true,
+        "global_store_equal": true,
+        "grid_blocks_41": true,
+        "grid_multiple_normalization_multiply_thread_instructions": true,
+        "grid_multiple_normalization_reciprocal_thread_instructions": true,
+        "nonzero_global_store": true,
+        "positive_normalization_multiply_thread_instructions": true,
+        "positive_normalization_reciprocal_thread_instructions": true,
+        "rtx3090_device": true,
+        "same_demangled_kernel_symbol": true,
+        "same_launch_resources": true,
+        "selected_math_delta_exact_grid_multiple": true,
+        "selected_math_instructions_increase": true,
+        "threads_per_block_256": true,
+        "total_thread_delta_exact_grid_multiple": true,
+        "total_thread_instructions_increase": true,
+        "treatment_kernel_coordinate": true
+      },
+      "compute_capability": "8.6",
+      "control_kernel_coordinate": [
+        1024,
+        2,
+        2
+      ],
+      "control_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 2, 2>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "control_launch_id": 4,
+      "control_metrics": {
+        "conversion_thread_instructions": 10496,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 230830,
+        "fp32_thread_instructions": 104960,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 104919,
+        "hmul_thread_instructions": 83968,
+        "misc_thread_instructions": 230953,
+        "total_thread_instructions": 2141020
+      },
+      "control_selected_math_thread_instructions": 83968,
+      "delta_metrics": {
+        "conversion_thread_instructions": 20992,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 62976,
+        "fp32_thread_instructions": 20992,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 20992,
+        "hmul_thread_instructions": 41984,
+        "misc_thread_instructions": 0,
+        "total_thread_instructions": 125952
+      },
+      "delta_selected_math_thread_instructions": 41984,
+      "derived_stage_signals": {
+        "normalization_multiply_thread_instructions": 41984,
+        "normalization_reciprocal_thread_instructions": 20992
+      },
+      "device_name": "NVIDIA GeForce RTX 3090",
+      "expected_delta_metrics": {
+        "conversion_thread_instructions": 20992,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 62976,
+        "fp32_thread_instructions": 20992,
+        "global_store_warp_instructions": 0,
+        "hadd_thread_instructions": 20992,
+        "hmul_thread_instructions": 41984,
+        "misc_thread_instructions": 0,
+        "total_thread_instructions": 125952
+      },
+      "expected_derived_stage_signals": {
+        "normalization_multiply_thread_instructions": 41984,
+        "normalization_reciprocal_thread_instructions": 20992
+      },
+      "failure_reasons": [],
+      "grid_blocks": 41,
+      "policy": "fp16x2",
+      "policy_index": 2,
+      "resource_pairs": {
+        "launch__registers_per_thread": {
+          "control": 31,
+          "treatment": 31
+        },
+        "launch__shared_mem_per_block_static": {
+          "control": 1024,
+          "treatment": 1024
+        }
+      },
+      "selected_math_metric_labels": [
+        "fmul_thread_instructions",
+        "hmul_thread_instructions"
+      ],
+      "stage": "normalization",
+      "stage_index": 2,
+      "status": "pass",
+      "threads_per_block": 256,
+      "treatment_kernel_coordinate": [
+        1024,
+        2,
+        2
+      ],
+      "treatment_kernel_name": "void unnamed>::whole_softmax_stage_atc_kernel<1024, 2, 2>(const __half *, const float *, __half *, float *, unsigned int *, int *, unsigned long, int)",
+      "treatment_launch_id": 5,
+      "treatment_metrics": {
+        "conversion_thread_instructions": 31488,
+        "fadd_thread_instructions": 0,
+        "fmul_thread_instructions": 0,
+        "fp16_thread_instructions": 293806,
+        "fp32_thread_instructions": 125952,
+        "global_store_warp_instructions": 3280,
+        "hadd_thread_instructions": 125911,
+        "hmul_thread_instructions": 125952,
+        "misc_thread_instructions": 230953,
+        "total_thread_instructions": 2266972
+      },
+      "treatment_selected_math_thread_instructions": 125952
+    }
+  ],
+  "provenance_payload_sha256": "cf45776ccd0da3d09a354e04e11464ee0603b8648d7256ffebdcfc8b7ffaadb2",
+  "schema_version": "softmax_whole_stage_atc_ncu_audit_v1",
+  "status": "pass",
+  "summary_csv": {
+    "bytes": 8522,
+    "path": "audit.csv",
+    "sha256": "6b0f24b630af5347be178509c7585510fd2962eaa175dffa3fb11c7ccfc65bf3"
+  },
+  "target_profile": "rtx3090"
+}

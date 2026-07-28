@@ -1,0 +1,3491 @@
+{
+  "binary": {
+    "bytes": 742840,
+    "embedded_ptx_architectures": [
+      86
+    ],
+    "native_architectures": [
+      86
+    ],
+    "path": "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/frozen/a100_fp16_softmax_whole_precision_range_energy",
+    "sha256": "65b871492db6c05c5a1a864387458c23029c4d0df1571344df04c1206f35505a"
+  },
+  "captures": {
+    "s2048": {
+      "policy_0": {
+        "elements_per_thread": 8,
+        "pass": true,
+        "policy": "fp32_io_fp32_all",
+        "policy_id": 0,
+        "ptx_checks": [
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+            "id": "ptx_entry_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+            "id": "sass_function_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": "one identical PTX/SASS function name",
+            "explanation": "PTX and native SASS evidence must describe the same specialization.",
+            "id": "ptx_sass_function_name_match",
+            "observed": {
+              "ptx": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ],
+              "sass": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ]
+            },
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 36,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f32_exact_count",
+            "observed": 36,
+            "pass": true
+          },
+          {
+            "expected": 2,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_div_or_rcp_f32_exact_count",
+            "observed": 2,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 16,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f32_exact_count",
+            "observed": 16,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 34,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f32_exact_count",
+            "observed": 34,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 32,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f32_exact_count",
+            "observed": 32,
+            "pass": true
+          },
+          {
+            "expected": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header_contains": "EF_CUDA_SM86"
+            },
+            "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+            "id": "target_native_sass_provenance",
+            "observed": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+            },
+            "pass": true
+          }
+        ],
+        "ptx_counts": {
+          "add_f16": 0,
+          "add_f16x2": 0,
+          "add_f32": 36,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 0,
+          "ex2_f16x2": 0,
+          "ex2_f32": 16,
+          "max_f16": 0,
+          "max_f16x2": 0,
+          "max_f32": 34,
+          "mul_f16": 0,
+          "mul_f16x2": 0,
+          "mul_f32": 32
+        },
+        "ptx_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "ptx_expected_counts": {
+          "add_f16": 0,
+          "add_f16x2": 0,
+          "add_f32": 36,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 0,
+          "ex2_f16x2": 0,
+          "ex2_f32": 16,
+          "max_f16": 0,
+          "max_f16x2": 0,
+          "max_f32": 34,
+          "mul_f16": 0,
+          "mul_f16x2": 0,
+          "mul_f32": 32
+        },
+        "ptx_section_sha256": "f7422ade4e0577b5c42965e84f0bf3fc6d1507ebe6dfff154831534965733d8b",
+        "sass_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass_provenance": {
+          "examples": {
+            "hadd2": [],
+            "hmnmx2": [],
+            "ldl": [],
+            "mufu_ex2": [
+              "/*0ad0*/                   MUFU.EX2 R20, R0 ;                                           /* 0x0000000000147308 */",
+              "/*0af0*/                   MUFU.EX2 R11, R8 ;                                           /* 0x00000008000b7308 */",
+              "/*0b30*/                   MUFU.EX2 R10, R10 ;                                          /* 0x0000000a000a7308 */"
+            ],
+            "mufu_rcp": [
+              "/*1540*/                   MUFU.RCP R33, R33 ;                                          /* 0x0000002100217308 */",
+              "/*16e0*/                   MUFU.RCP R6, R6 ;                                            /* 0x0000000600067308 */"
+            ],
+            "stl": []
+          },
+          "native_arch_header": "sm_86; EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "native_arch_header_present": true,
+          "native_arch_header_raw": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "observed_opcode_counts": {
+            "hadd2": 0,
+            "hmnmx2": 0,
+            "ldl": 0,
+            "mufu_ex2": 16,
+            "mufu_rcp": 2,
+            "stl": 0
+          },
+          "opcode_contract": "observation_only_no_crossarch_claim",
+          "target_native_only": true
+        },
+        "sass_section_sha256": "80f1e7f906a0dd5bd43f651f73c26b973e33c4493228523f524d4dec19f4b129",
+        "softmax_cols": 2048
+      },
+      "policy_8": {
+        "elements_per_thread": 8,
+        "pass": true,
+        "policy": "fp16_scalar_all",
+        "policy_id": 8,
+        "ptx_checks": [
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+            "id": "ptx_entry_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+            "id": "sass_function_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": "one identical PTX/SASS function name",
+            "explanation": "PTX and native SASS evidence must describe the same specialization.",
+            "id": "ptx_sass_function_name_match",
+            "observed": {
+              "ptx": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ],
+              "sass": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ]
+            },
+            "pass": true
+          },
+          {
+            "expected": 30,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16_exact_count",
+            "observed": 30,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 2,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_div_or_rcp_f32_exact_count",
+            "observed": 2,
+            "pass": true
+          },
+          {
+            "expected": 16,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16_exact_count",
+            "observed": 16,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 30,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16_exact_count",
+            "observed": 30,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 32,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16_exact_count",
+            "observed": 32,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header_contains": "EF_CUDA_SM86"
+            },
+            "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+            "id": "target_native_sass_provenance",
+            "observed": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+            },
+            "pass": true
+          }
+        ],
+        "ptx_counts": {
+          "add_f16": 30,
+          "add_f16x2": 0,
+          "add_f32": 0,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 16,
+          "ex2_f16x2": 0,
+          "ex2_f32": 0,
+          "max_f16": 30,
+          "max_f16x2": 0,
+          "max_f32": 0,
+          "mul_f16": 32,
+          "mul_f16x2": 0,
+          "mul_f32": 0
+        },
+        "ptx_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "ptx_expected_counts": {
+          "add_f16": 30,
+          "add_f16x2": 0,
+          "add_f32": 0,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 16,
+          "ex2_f16x2": 0,
+          "ex2_f32": 0,
+          "max_f16": 30,
+          "max_f16x2": 0,
+          "max_f32": 0,
+          "mul_f16": 32,
+          "mul_f16x2": 0,
+          "mul_f32": 0
+        },
+        "ptx_section_sha256": "2e5f31ab621c15993dbeb164c44e5a261c3f2cd5c39ddebd67874583ce382b6c",
+        "sass_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass_provenance": {
+          "examples": {
+            "hadd2": [
+              "/*0c30*/                   HADD2 R11, R11, -R17.reuse ;                                 /* 0x800000110b0b7230 */",
+              "/*0c40*/                   HADD2 R19, R12, -R17.reuse ;                                 /* 0x800000110c137230 */",
+              "/*0c70*/                   HADD2 R10, R10, -R17.reuse ;                                 /* 0x800000110a0a7230 */"
+            ],
+            "hmnmx2": [
+              "/*0480*/                   HMNMX2 R19, R11, R12, !PT ;                                  /* 0x0000000c0b137240 */",
+              "/*04a0*/                   HMNMX2 R19, R19, R10, !PT ;                                  /* 0x0000000a13137240 */",
+              "/*04c0*/                   HMNMX2 R19, R19, R13, !PT ;                                  /* 0x0000000d13137240 */"
+            ],
+            "ldl": [],
+            "mufu_ex2": [
+              "/*0c80*/                   MUFU.EX2.F16 R11, R22 ;                                      /* 0x00000016000b7308 */",
+              "/*0cd0*/                   MUFU.EX2.F16 R12, R22.H1 ;                                   /* 0x10000016000c7308 */",
+              "/*0d20*/                   MUFU.EX2.F16 R19, R23 ;                                      /* 0x0000001700137308 */"
+            ],
+            "mufu_rcp": [
+              "/*12e0*/                   MUFU.RCP R16, R16 ;                                          /* 0x0000001000107308 */",
+              "/*1680*/                   MUFU.RCP R17, R21 ;                                          /* 0x0000001500117308 */"
+            ],
+            "stl": []
+          },
+          "native_arch_header": "sm_86; EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "native_arch_header_present": true,
+          "native_arch_header_raw": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "observed_opcode_counts": {
+            "hadd2": 33,
+            "hmnmx2": 23,
+            "ldl": 0,
+            "mufu_ex2": 16,
+            "mufu_rcp": 2,
+            "stl": 0
+          },
+          "opcode_contract": "observation_only_no_crossarch_claim",
+          "target_native_only": true
+        },
+        "sass_section_sha256": "6969465d3afd1fc7ac9403f8aab1268886a5375c4e2bb90ac5e5460a94c5535f",
+        "softmax_cols": 2048
+      },
+      "policy_9": {
+        "elements_per_thread": 8,
+        "pass": true,
+        "policy": "fp16x2_all",
+        "policy_id": 9,
+        "ptx_checks": [
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+            "id": "ptx_entry_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+            "id": "sass_function_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": "one identical PTX/SASS function name",
+            "explanation": "PTX and native SASS evidence must describe the same specialization.",
+            "id": "ptx_sass_function_name_match",
+            "observed": {
+              "ptx": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ],
+              "sass": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ]
+            },
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 15,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16x2_exact_count",
+            "observed": 15,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 2,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_div_or_rcp_f32_exact_count",
+            "observed": 2,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 8,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16x2_exact_count",
+            "observed": 8,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 15,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16x2_exact_count",
+            "observed": 15,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 16,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16x2_exact_count",
+            "observed": 16,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header_contains": "EF_CUDA_SM86"
+            },
+            "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+            "id": "target_native_sass_provenance",
+            "observed": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+            },
+            "pass": true
+          }
+        ],
+        "ptx_counts": {
+          "add_f16": 0,
+          "add_f16x2": 15,
+          "add_f32": 0,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 0,
+          "ex2_f16x2": 8,
+          "ex2_f32": 0,
+          "max_f16": 0,
+          "max_f16x2": 15,
+          "max_f32": 0,
+          "mul_f16": 0,
+          "mul_f16x2": 16,
+          "mul_f32": 0
+        },
+        "ptx_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "ptx_expected_counts": {
+          "add_f16": 0,
+          "add_f16x2": 15,
+          "add_f32": 0,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 0,
+          "ex2_f16x2": 8,
+          "ex2_f32": 0,
+          "max_f16": 0,
+          "max_f16x2": 15,
+          "max_f32": 0,
+          "mul_f16": 0,
+          "mul_f16x2": 16,
+          "mul_f32": 0
+        },
+        "ptx_section_sha256": "91b2ebdc984efd1d3a23cf44c9e6363fc7e27eab5fcbda50a514aeaf51bbf900",
+        "sass_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass_provenance": {
+          "examples": {
+            "hadd2": [
+              "/*08c0*/                   HADD2 R11, R11, -R10.H0_H0 ;                                 /* 0xa000000a0b0b7230 */",
+              "/*08d0*/                   HADD2 R14, R23, -R10.reuse.H1_H1 ;                           /* 0xb000000a170e7230 */",
+              "/*0910*/                   HADD2 R13, R13, -R10.reuse.H0_H0 ;                           /* 0xa000000a0d0d7230 */"
+            ],
+            "hmnmx2": [
+              "/*04b0*/                   HMNMX2 R10, R10, R25, !PT ;                                  /* 0x000000190a0a7240 */",
+              "/*04f0*/                   HMNMX2 R10, R10, R25, !PT ;                                  /* 0x000000190a0a7240 */",
+              "/*0510*/                   HMNMX2 R10, R10, R13, !PT ;                                  /* 0x0000000d0a0a7240 */"
+            ],
+            "ldl": [],
+            "mufu_ex2": [
+              "/*0900*/                   MUFU.EX2.F16 R11, R28 ;                                      /* 0x0000001c000b7308 */",
+              "/*0950*/                   MUFU.EX2.F16 R26, R28.H1 ;                                   /* 0x1000001c001a7308 */",
+              "/*09a0*/                   MUFU.EX2.F16 R14, R30 ;                                      /* 0x0000001e000e7308 */"
+            ],
+            "mufu_rcp": [
+              "/*1050*/                   MUFU.RCP R26, R26 ;                                          /* 0x0000001a001a7308 */",
+              "/*1060*/                   MUFU.RCP R11, R27 ;                                          /* 0x0000001b000b7308 */"
+            ],
+            "stl": []
+          },
+          "native_arch_header": "sm_86; EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "native_arch_header_present": true,
+          "native_arch_header_raw": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "observed_opcode_counts": {
+            "hadd2": 25,
+            "hmnmx2": 15,
+            "ldl": 0,
+            "mufu_ex2": 16,
+            "mufu_rcp": 2,
+            "stl": 0
+          },
+          "opcode_contract": "observation_only_no_crossarch_claim",
+          "target_native_only": true
+        },
+        "sass_section_sha256": "d545a4d0eae4715289641ae83027b091443ffc7da0472a0921af8d0d65c75fe8",
+        "softmax_cols": 2048
+      }
+    },
+    "s4096": {
+      "policy_0": {
+        "elements_per_thread": 16,
+        "pass": true,
+        "policy": "fp32_io_fp32_all",
+        "policy_id": 0,
+        "ptx_checks": [
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+            "id": "ptx_entry_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+            "id": "sass_function_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": "one identical PTX/SASS function name",
+            "explanation": "PTX and native SASS evidence must describe the same specialization.",
+            "id": "ptx_sass_function_name_match",
+            "observed": {
+              "ptx": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ],
+              "sass": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ]
+            },
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 52,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f32_exact_count",
+            "observed": 52,
+            "pass": true
+          },
+          {
+            "expected": 2,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_div_or_rcp_f32_exact_count",
+            "observed": 2,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 32,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f32_exact_count",
+            "observed": 32,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 50,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f32_exact_count",
+            "observed": 50,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 64,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f32_exact_count",
+            "observed": 64,
+            "pass": true
+          },
+          {
+            "expected": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header_contains": "EF_CUDA_SM86"
+            },
+            "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+            "id": "target_native_sass_provenance",
+            "observed": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+            },
+            "pass": true
+          }
+        ],
+        "ptx_counts": {
+          "add_f16": 0,
+          "add_f16x2": 0,
+          "add_f32": 52,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 0,
+          "ex2_f16x2": 0,
+          "ex2_f32": 32,
+          "max_f16": 0,
+          "max_f16x2": 0,
+          "max_f32": 50,
+          "mul_f16": 0,
+          "mul_f16x2": 0,
+          "mul_f32": 64
+        },
+        "ptx_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "ptx_expected_counts": {
+          "add_f16": 0,
+          "add_f16x2": 0,
+          "add_f32": 52,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 0,
+          "ex2_f16x2": 0,
+          "ex2_f32": 32,
+          "max_f16": 0,
+          "max_f16x2": 0,
+          "max_f32": 50,
+          "mul_f16": 0,
+          "mul_f16x2": 0,
+          "mul_f32": 64
+        },
+        "ptx_section_sha256": "e95a2c04055225f175ddecfea6b69d647a99c687b651af4dbae8df3041089a57",
+        "sass_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass_provenance": {
+          "examples": {
+            "hadd2": [],
+            "hmnmx2": [],
+            "ldl": [],
+            "mufu_ex2": [
+              "/*0d10*/                   MUFU.EX2 R19, R6 ;                                           /* 0x0000000600137308 */",
+              "/*0d90*/                   MUFU.EX2 R20, R7 ;                                           /* 0x0000000700147308 */",
+              "/*0e20*/                   MUFU.EX2 R21, R51 ;                                          /* 0x0000003300157308 */"
+            ],
+            "mufu_rcp": [
+              "/*1e90*/                   MUFU.RCP R6, R47 ;                                           /* 0x0000002f00067308 */",
+              "/*2070*/                   MUFU.RCP R16, R16 ;                                          /* 0x0000001000107308 */"
+            ],
+            "stl": []
+          },
+          "native_arch_header": "sm_86; EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "native_arch_header_present": true,
+          "native_arch_header_raw": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "observed_opcode_counts": {
+            "hadd2": 0,
+            "hmnmx2": 0,
+            "ldl": 0,
+            "mufu_ex2": 32,
+            "mufu_rcp": 2,
+            "stl": 0
+          },
+          "opcode_contract": "observation_only_no_crossarch_claim",
+          "target_native_only": true
+        },
+        "sass_section_sha256": "75e6a28cab7f460c1a40ac4a751e3067a2533d24a3368d40791e619809d450d7",
+        "softmax_cols": 4096
+      },
+      "policy_8": {
+        "elements_per_thread": 16,
+        "pass": true,
+        "policy": "fp16_scalar_all",
+        "policy_id": 8,
+        "ptx_checks": [
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+            "id": "ptx_entry_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+            "id": "sass_function_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": "one identical PTX/SASS function name",
+            "explanation": "PTX and native SASS evidence must describe the same specialization.",
+            "id": "ptx_sass_function_name_match",
+            "observed": {
+              "ptx": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ],
+              "sass": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ]
+            },
+            "pass": true
+          },
+          {
+            "expected": 46,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16_exact_count",
+            "observed": 46,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 2,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_div_or_rcp_f32_exact_count",
+            "observed": 2,
+            "pass": true
+          },
+          {
+            "expected": 32,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16_exact_count",
+            "observed": 32,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 46,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16_exact_count",
+            "observed": 46,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 64,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16_exact_count",
+            "observed": 64,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header_contains": "EF_CUDA_SM86"
+            },
+            "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+            "id": "target_native_sass_provenance",
+            "observed": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+            },
+            "pass": true
+          }
+        ],
+        "ptx_counts": {
+          "add_f16": 46,
+          "add_f16x2": 0,
+          "add_f32": 0,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 32,
+          "ex2_f16x2": 0,
+          "ex2_f32": 0,
+          "max_f16": 46,
+          "max_f16x2": 0,
+          "max_f32": 0,
+          "mul_f16": 64,
+          "mul_f16x2": 0,
+          "mul_f32": 0
+        },
+        "ptx_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "ptx_expected_counts": {
+          "add_f16": 46,
+          "add_f16x2": 0,
+          "add_f32": 0,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 32,
+          "ex2_f16x2": 0,
+          "ex2_f32": 0,
+          "max_f16": 46,
+          "max_f16x2": 0,
+          "max_f32": 0,
+          "mul_f16": 64,
+          "mul_f16x2": 0,
+          "mul_f32": 0
+        },
+        "ptx_section_sha256": "8b869674b10043f32217f12ce95ac6a23bfc06b844f741a0489fa9dcffa1d44d",
+        "sass_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass_provenance": {
+          "examples": {
+            "hadd2": [
+              "/*0df0*/                   HADD2 R6, R6, -R24.reuse ;                                   /* 0x8000001806067230 */",
+              "/*0e00*/                   HADD2 R0, R0, -R24.reuse ;                                   /* 0x8000001800007230 */",
+              "/*0e30*/                   HADD2 R17, R17, -R24.reuse ;                                 /* 0x8000001811117230 */"
+            ],
+            "hmnmx2": [
+              "/*0550*/                   HMNMX2 R3, R6, R0, !PT ;                                     /* 0x0000000006037240 */",
+              "/*0560*/                   HMNMX2 R3, R3, R17, !PT ;                                    /* 0x0000001103037240 */",
+              "/*0570*/                   HMNMX2 R3, R3, R11, !PT ;                                    /* 0x0000000b03037240 */"
+            ],
+            "ldl": [],
+            "mufu_ex2": [
+              "/*0e40*/                   MUFU.EX2.F16 R2, R6 ;                                        /* 0x0000000600027308 */",
+              "/*0e70*/                   MUFU.EX2.F16 R34, R6.H1 ;                                    /* 0x1000000600227308 */",
+              "/*0ea0*/                   MUFU.EX2.F16 R3, R16 ;                                       /* 0x0000001000037308 */"
+            ],
+            "mufu_rcp": [
+              "/*1ad0*/                   MUFU.RCP R18, R18 ;                                          /* 0x0000001200127308 */",
+              "/*1b20*/                   MUFU.RCP R17, R20 ;                                          /* 0x0000001400117308 */"
+            ],
+            "stl": []
+          },
+          "native_arch_header": "sm_86; EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "native_arch_header_present": true,
+          "native_arch_header_raw": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "observed_opcode_counts": {
+            "hadd2": 49,
+            "hmnmx2": 31,
+            "ldl": 0,
+            "mufu_ex2": 32,
+            "mufu_rcp": 2,
+            "stl": 0
+          },
+          "opcode_contract": "observation_only_no_crossarch_claim",
+          "target_native_only": true
+        },
+        "sass_section_sha256": "fd1dd3ddac46c7311dfb5f898c977e3bb24149be15af62ce37d8d72b6f8838cc",
+        "softmax_cols": 4096
+      },
+      "policy_9": {
+        "elements_per_thread": 16,
+        "pass": true,
+        "policy": "fp16x2_all",
+        "policy_id": 9,
+        "ptx_checks": [
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+            "id": "ptx_entry_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+            "id": "sass_function_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": "one identical PTX/SASS function name",
+            "explanation": "PTX and native SASS evidence must describe the same specialization.",
+            "id": "ptx_sass_function_name_match",
+            "observed": {
+              "ptx": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ],
+              "sass": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ]
+            },
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 23,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16x2_exact_count",
+            "observed": 23,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 2,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_div_or_rcp_f32_exact_count",
+            "observed": 2,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 16,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16x2_exact_count",
+            "observed": 16,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 23,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16x2_exact_count",
+            "observed": 23,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 32,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16x2_exact_count",
+            "observed": 32,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header_contains": "EF_CUDA_SM86"
+            },
+            "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+            "id": "target_native_sass_provenance",
+            "observed": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+            },
+            "pass": true
+          }
+        ],
+        "ptx_counts": {
+          "add_f16": 0,
+          "add_f16x2": 23,
+          "add_f32": 0,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 0,
+          "ex2_f16x2": 16,
+          "ex2_f32": 0,
+          "max_f16": 0,
+          "max_f16x2": 23,
+          "max_f32": 0,
+          "mul_f16": 0,
+          "mul_f16x2": 32,
+          "mul_f32": 0
+        },
+        "ptx_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "ptx_expected_counts": {
+          "add_f16": 0,
+          "add_f16x2": 23,
+          "add_f32": 0,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 0,
+          "ex2_f16x2": 16,
+          "ex2_f32": 0,
+          "max_f16": 0,
+          "max_f16x2": 23,
+          "max_f32": 0,
+          "mul_f16": 0,
+          "mul_f16x2": 32,
+          "mul_f32": 0
+        },
+        "ptx_section_sha256": "0eb4b0536aec407371ffd3f56f5d36d59d3c3ff749d4db489ae46c3d691c36cf",
+        "sass_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass_provenance": {
+          "examples": {
+            "hadd2": [
+              "/*0aa0*/                   HADD2 R18, R18, -R15.reuse.H1_H1 ;                           /* 0xb000000f12127230 */",
+              "/*0ab0*/                   HADD2 R33, R33, -R15.reuse.H0_H0 ;                           /* 0xa000000f21217230 */",
+              "/*0ad0*/                   HADD2 R24, R24, -R15.H0_H0 ;                                 /* 0xa000000f18187230 */"
+            ],
+            "hmnmx2": [
+              "/*0540*/                   HMNMX2 R9, R9, R10, !PT ;                                    /* 0x0000000a09097240 */",
+              "/*0560*/                   HMNMX2 R9, R9, R12, !PT ;                                    /* 0x0000000c09097240 */",
+              "/*0580*/                   HMNMX2 R9, R9, R12, !PT ;                                    /* 0x0000000c09097240 */"
+            ],
+            "ldl": [],
+            "mufu_ex2": [
+              "/*0af0*/                   MUFU.EX2.F16 R19, R18 ;                                      /* 0x0000001200137308 */",
+              "/*0b20*/                   MUFU.EX2.F16 R16, R33 ;                                      /* 0x0000002100107308 */",
+              "/*0b40*/                   MUFU.EX2.F16 R17, R33.H1 ;                                   /* 0x1000002100117308 */"
+            ],
+            "mufu_rcp": [
+              "/*1680*/                   MUFU.RCP R16, R35 ;                                          /* 0x0000002300107308 */",
+              "/*1830*/                   MUFU.RCP R4, R4 ;                                            /* 0x0000000400047308 */"
+            ],
+            "stl": []
+          },
+          "native_arch_header": "sm_86; EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "native_arch_header_present": true,
+          "native_arch_header_raw": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "observed_opcode_counts": {
+            "hadd2": 41,
+            "hmnmx2": 23,
+            "ldl": 0,
+            "mufu_ex2": 32,
+            "mufu_rcp": 2,
+            "stl": 0
+          },
+          "opcode_contract": "observation_only_no_crossarch_claim",
+          "target_native_only": true
+        },
+        "sass_section_sha256": "df0d06e2f345f883c7c0988823320293f7f153cd034662e610095b6e883fd979",
+        "softmax_cols": 4096
+      }
+    },
+    "s512": {
+      "policy_0": {
+        "elements_per_thread": 2,
+        "pass": true,
+        "policy": "fp32_io_fp32_all",
+        "policy_id": 0,
+        "ptx_checks": [
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+            "id": "ptx_entry_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+            "id": "sass_function_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": "one identical PTX/SASS function name",
+            "explanation": "PTX and native SASS evidence must describe the same specialization.",
+            "id": "ptx_sass_function_name_match",
+            "observed": {
+              "ptx": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ],
+              "sass": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ]
+            },
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 24,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f32_exact_count",
+            "observed": 24,
+            "pass": true
+          },
+          {
+            "expected": 2,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_div_or_rcp_f32_exact_count",
+            "observed": 2,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 4,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f32_exact_count",
+            "observed": 4,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 22,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f32_exact_count",
+            "observed": 22,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 8,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f32_exact_count",
+            "observed": 8,
+            "pass": true
+          },
+          {
+            "expected": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header_contains": "EF_CUDA_SM86"
+            },
+            "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+            "id": "target_native_sass_provenance",
+            "observed": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+            },
+            "pass": true
+          }
+        ],
+        "ptx_counts": {
+          "add_f16": 0,
+          "add_f16x2": 0,
+          "add_f32": 24,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 0,
+          "ex2_f16x2": 0,
+          "ex2_f32": 4,
+          "max_f16": 0,
+          "max_f16x2": 0,
+          "max_f32": 22,
+          "mul_f16": 0,
+          "mul_f16x2": 0,
+          "mul_f32": 8
+        },
+        "ptx_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "ptx_expected_counts": {
+          "add_f16": 0,
+          "add_f16x2": 0,
+          "add_f32": 24,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 0,
+          "ex2_f16x2": 0,
+          "ex2_f32": 4,
+          "max_f16": 0,
+          "max_f16x2": 0,
+          "max_f32": 22,
+          "mul_f16": 0,
+          "mul_f16x2": 0,
+          "mul_f32": 8
+        },
+        "ptx_section_sha256": "09af3a9a115f5916649cfd39d9dd840db0a4c1546ea7ba5d9a722414b64e205e",
+        "sass_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass_provenance": {
+          "examples": {
+            "hadd2": [],
+            "hmnmx2": [],
+            "ldl": [],
+            "mufu_ex2": [
+              "/*0890*/                   MUFU.EX2 R14, R15 ;                                          /* 0x0000000f000e7308 */",
+              "/*0900*/                   MUFU.EX2 R12, R19 ;                                          /* 0x00000013000c7308 */",
+              "/*0970*/                   MUFU.EX2 R13, R6 ;                                           /* 0x00000006000d7308 */"
+            ],
+            "mufu_rcp": [
+              "/*0e70*/                   MUFU.RCP R19, R19 ;                                          /* 0x0000001300137308 */",
+              "/*0f20*/                   MUFU.RCP R6, R6 ;                                            /* 0x0000000600067308 */"
+            ],
+            "stl": []
+          },
+          "native_arch_header": "sm_86; EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "native_arch_header_present": true,
+          "native_arch_header_raw": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "observed_opcode_counts": {
+            "hadd2": 0,
+            "hmnmx2": 0,
+            "ldl": 0,
+            "mufu_ex2": 4,
+            "mufu_rcp": 2,
+            "stl": 0
+          },
+          "opcode_contract": "observation_only_no_crossarch_claim",
+          "target_native_only": true
+        },
+        "sass_section_sha256": "c16f77eb1ed67d06f8276f82ca1ac48c2677855e39467e0d3a133048655092f6",
+        "softmax_cols": 512
+      },
+      "policy_8": {
+        "elements_per_thread": 2,
+        "pass": true,
+        "policy": "fp16_scalar_all",
+        "policy_id": 8,
+        "ptx_checks": [
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+            "id": "ptx_entry_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+            "id": "sass_function_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": "one identical PTX/SASS function name",
+            "explanation": "PTX and native SASS evidence must describe the same specialization.",
+            "id": "ptx_sass_function_name_match",
+            "observed": {
+              "ptx": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ],
+              "sass": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ]
+            },
+            "pass": true
+          },
+          {
+            "expected": 18,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16_exact_count",
+            "observed": 18,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 2,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_div_or_rcp_f32_exact_count",
+            "observed": 2,
+            "pass": true
+          },
+          {
+            "expected": 4,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16_exact_count",
+            "observed": 4,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 18,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16_exact_count",
+            "observed": 18,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 8,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16_exact_count",
+            "observed": 8,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16x2_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header_contains": "EF_CUDA_SM86"
+            },
+            "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+            "id": "target_native_sass_provenance",
+            "observed": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+            },
+            "pass": true
+          }
+        ],
+        "ptx_counts": {
+          "add_f16": 18,
+          "add_f16x2": 0,
+          "add_f32": 0,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 4,
+          "ex2_f16x2": 0,
+          "ex2_f32": 0,
+          "max_f16": 18,
+          "max_f16x2": 0,
+          "max_f32": 0,
+          "mul_f16": 8,
+          "mul_f16x2": 0,
+          "mul_f32": 0
+        },
+        "ptx_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "ptx_expected_counts": {
+          "add_f16": 18,
+          "add_f16x2": 0,
+          "add_f32": 0,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 4,
+          "ex2_f16x2": 0,
+          "ex2_f32": 0,
+          "max_f16": 18,
+          "max_f16x2": 0,
+          "max_f32": 0,
+          "mul_f16": 8,
+          "mul_f16x2": 0,
+          "mul_f32": 0
+        },
+        "ptx_section_sha256": "1d71888a4378ce3cfbb9fe96e4138820179e181ed30c9f4ecbe6531ba80f7019",
+        "sass_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass_provenance": {
+          "examples": {
+            "hadd2": [
+              "/*0ab0*/                   HADD2 R10, R10, -R13.reuse ;                                 /* 0x8000000d0a0a7230 */",
+              "/*0ac0*/                   HADD2 R11, R11, -R13 ;                                       /* 0x8000000d0b0b7230 */",
+              "/*0b60*/                   HADD2 R12, R10, R11 ;                                        /* 0x0000000b0a0c7230 */"
+            ],
+            "hmnmx2": [
+              "/*03c0*/                   HMNMX2 R12, R10, R11, !PT ;                                  /* 0x0000000b0a0c7240 */",
+              "/*0410*/              @!P2 HMNMX2 R13, R13.H0_H0, R14.H0_H0, !PT ;                      /* 0x2000000e0d0da240 */",
+              "/*0480*/              @!P1 HMNMX2 R13, R13.H0_H0, R14.H0_H0, !PT ;                      /* 0x2000000e0d0d9240 */"
+            ],
+            "ldl": [],
+            "mufu_ex2": [
+              "/*0af0*/                   MUFU.EX2.F16 R12, R10 ;                                      /* 0x0000000a000c7308 */",
+              "/*0b00*/                   MUFU.EX2.F16 R17, R10.H1 ;                                   /* 0x1000000a00117308 */",
+              "/*0b10*/                   MUFU.EX2.F16 R13, R11 ;                                      /* 0x0000000b000d7308 */"
+            ],
+            "mufu_rcp": [
+              "/*0f20*/                   MUFU.RCP R12, R12 ;                                          /* 0x0000000c000c7308 */",
+              "/*12b0*/                   MUFU.RCP R13, R14 ;                                          /* 0x0000000e000d7308 */"
+            ],
+            "stl": []
+          },
+          "native_arch_header": "sm_86; EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "native_arch_header_present": true,
+          "native_arch_header_raw": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "observed_opcode_counts": {
+            "hadd2": 21,
+            "hmnmx2": 17,
+            "ldl": 0,
+            "mufu_ex2": 4,
+            "mufu_rcp": 2,
+            "stl": 0
+          },
+          "opcode_contract": "observation_only_no_crossarch_claim",
+          "target_native_only": true
+        },
+        "sass_section_sha256": "83e01077dda2e2067740b70d951767ad06728c1ecb215eea5890f58948410fef",
+        "softmax_cols": 512
+      },
+      "policy_9": {
+        "elements_per_thread": 2,
+        "pass": true,
+        "policy": "fp16x2_all",
+        "policy_id": 9,
+        "ptx_checks": [
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+            "id": "ptx_entry_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": 1,
+            "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+            "id": "sass_function_multiplicity",
+            "observed": 1,
+            "pass": true
+          },
+          {
+            "expected": "one identical PTX/SASS function name",
+            "explanation": "PTX and native SASS evidence must describe the same specialization.",
+            "id": "ptx_sass_function_name_match",
+            "observed": {
+              "ptx": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ],
+              "sass": [
+                "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+              ]
+            },
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 9,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f16x2_exact_count",
+            "observed": 9,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_add_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 2,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_div_or_rcp_f32_exact_count",
+            "observed": 2,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 2,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f16x2_exact_count",
+            "observed": 2,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_ex2_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 9,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f16x2_exact_count",
+            "observed": 9,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_max_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": 4,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f16x2_exact_count",
+            "observed": 4,
+            "pass": true
+          },
+          {
+            "expected": 0,
+            "explanation": "Fixed range endpoint PTX count/type contract.",
+            "id": "ptx_mul_f32_exact_count",
+            "observed": 0,
+            "pass": true
+          },
+          {
+            "expected": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header_contains": "EF_CUDA_SM86"
+            },
+            "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+            "id": "target_native_sass_provenance",
+            "observed": {
+              "embedded_ptx_architectures": [
+                86
+              ],
+              "native_architectures": [
+                86
+              ],
+              "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+            },
+            "pass": true
+          }
+        ],
+        "ptx_counts": {
+          "add_f16": 0,
+          "add_f16x2": 9,
+          "add_f32": 0,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 0,
+          "ex2_f16x2": 2,
+          "ex2_f32": 0,
+          "max_f16": 0,
+          "max_f16x2": 9,
+          "max_f32": 0,
+          "mul_f16": 0,
+          "mul_f16x2": 4,
+          "mul_f32": 0
+        },
+        "ptx_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "ptx_expected_counts": {
+          "add_f16": 0,
+          "add_f16x2": 9,
+          "add_f32": 0,
+          "div_or_rcp_f32": 2,
+          "ex2_f16": 0,
+          "ex2_f16x2": 2,
+          "ex2_f32": 0,
+          "max_f16": 0,
+          "max_f16x2": 9,
+          "max_f32": 0,
+          "mul_f16": 0,
+          "mul_f16x2": 4,
+          "mul_f32": 0
+        },
+        "ptx_section_sha256": "16a37d8b7f1056566972b925fd40d28cc9376c56a8d26b9f48894d015ce73f56",
+        "sass_entries": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass_provenance": {
+          "examples": {
+            "hadd2": [
+              "/*06c0*/                   HADD2 R11, R12, -R13.H0_H0 ;                                 /* 0xa000000d0c0b7230 */",
+              "/*06d0*/                   HADD2 R13, R10, -R13.H1_H1 ;                                 /* 0xb000000d0a0d7230 */",
+              "/*07c0*/                   HADD2 R15, R15, R12 ;                                        /* 0x0000000c0f0f7230 */"
+            ],
+            "hmnmx2": [
+              "/*03d0*/                   HMNMX2 R13, R13, R12, !PT ;                                  /* 0x0000000c0d0d7240 */",
+              "/*0430*/              @!P2 HMNMX2 R15, R14, R15, !PT ;                                  /* 0x0000000f0e0fa240 */",
+              "/*0490*/              @!P1 HMNMX2 R17, R14, R17, !PT ;                                  /* 0x000000110e119240 */"
+            ],
+            "ldl": [],
+            "mufu_ex2": [
+              "/*0700*/                   MUFU.EX2.F16 R11, R14 ;                                      /* 0x0000000e000b7308 */",
+              "/*0710*/                   MUFU.EX2.F16 R12, R14.H1 ;                                   /* 0x1000000e000c7308 */",
+              "/*0730*/                   MUFU.EX2.F16 R10, R13 ;                                      /* 0x0000000d000a7308 */"
+            ],
+            "mufu_rcp": [
+              "/*0b20*/                   MUFU.RCP R15, R15 ;                                          /* 0x0000000f000f7308 */",
+              "/*0b30*/                   MUFU.RCP R14, R14 ;                                          /* 0x0000000e000e7308 */"
+            ],
+            "stl": []
+          },
+          "native_arch_header": "sm_86; EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "native_arch_header_present": true,
+          "native_arch_header_raw": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)",
+          "observed_opcode_counts": {
+            "hadd2": 13,
+            "hmnmx2": 9,
+            "ldl": 0,
+            "mufu_ex2": 4,
+            "mufu_rcp": 2,
+            "stl": 0
+          },
+          "opcode_contract": "observation_only_no_crossarch_claim",
+          "target_native_only": true
+        },
+        "sass_section_sha256": "9234a79efe178e07a8c6e3885f8d2d46738ac4bc5dc5ef26d59af6ebcdac4257",
+        "softmax_cols": 512
+      }
+    }
+  },
+  "checks": [
+    {
+      "expected": [
+        86
+      ],
+      "explanation": "The executable must contain exactly the target profile's native cubin architecture.",
+      "id": "target_native_cubin_architecture",
+      "observed": [
+        86
+      ],
+      "pass": true
+    },
+    {
+      "expected": [
+        86
+      ],
+      "explanation": "The executable must contain exactly the target profile's embedded PTX architecture.",
+      "id": "target_embedded_ptx_architecture",
+      "observed": [
+        86
+      ],
+      "pass": true
+    },
+    {
+      "expected": [
+        512,
+        2048,
+        4096
+      ],
+      "explanation": "Every requested range width must have at least one endpoint specialization.",
+      "id": "required_range_widths_present",
+      "observed": [
+        512,
+        1024,
+        2048,
+        4096
+      ],
+      "pass": true
+    },
+    {
+      "expected": [
+        512,
+        1024,
+        2048,
+        4096
+      ],
+      "explanation": "The range binary may contain only its four compile-time-supported widths.",
+      "id": "no_unsupported_range_widths",
+      "observed": [
+        512,
+        1024,
+        2048,
+        4096
+      ],
+      "pass": true
+    },
+    {
+      "expected": [
+        0,
+        8,
+        9
+      ],
+      "explanation": "The range binary must not silently add an unreviewed endpoint policy.",
+      "id": "no_unexpected_range_endpoint_policy",
+      "observed": [
+        0,
+        8,
+        9
+      ],
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+      "id": "s512_policy_0_ptx_entry_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+      "id": "s512_policy_0_sass_function_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": "one identical PTX/SASS function name",
+      "explanation": "PTX and native SASS evidence must describe the same specialization.",
+      "id": "s512_policy_0_ptx_sass_function_name_match",
+      "observed": {
+        "ptx": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ]
+      },
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_add_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_add_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 24,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_add_f32_exact_count",
+      "observed": 24,
+      "pass": true
+    },
+    {
+      "expected": 2,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_div_or_rcp_f32_exact_count",
+      "observed": 2,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_ex2_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_ex2_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 4,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_ex2_f32_exact_count",
+      "observed": 4,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_max_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_max_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 22,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_max_f32_exact_count",
+      "observed": 22,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_mul_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_mul_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 8,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_0_ptx_mul_f32_exact_count",
+      "observed": 8,
+      "pass": true
+    },
+    {
+      "expected": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header_contains": "EF_CUDA_SM86"
+      },
+      "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+      "id": "s512_policy_0_target_native_sass_provenance",
+      "observed": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+      },
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+      "id": "s512_policy_8_ptx_entry_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+      "id": "s512_policy_8_sass_function_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": "one identical PTX/SASS function name",
+      "explanation": "PTX and native SASS evidence must describe the same specialization.",
+      "id": "s512_policy_8_ptx_sass_function_name_match",
+      "observed": {
+        "ptx": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ]
+      },
+      "pass": true
+    },
+    {
+      "expected": 18,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_add_f16_exact_count",
+      "observed": 18,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_add_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_add_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 2,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_div_or_rcp_f32_exact_count",
+      "observed": 2,
+      "pass": true
+    },
+    {
+      "expected": 4,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_ex2_f16_exact_count",
+      "observed": 4,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_ex2_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_ex2_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 18,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_max_f16_exact_count",
+      "observed": 18,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_max_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_max_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 8,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_mul_f16_exact_count",
+      "observed": 8,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_mul_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_8_ptx_mul_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header_contains": "EF_CUDA_SM86"
+      },
+      "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+      "id": "s512_policy_8_target_native_sass_provenance",
+      "observed": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+      },
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+      "id": "s512_policy_9_ptx_entry_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+      "id": "s512_policy_9_sass_function_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": "one identical PTX/SASS function name",
+      "explanation": "PTX and native SASS evidence must describe the same specialization.",
+      "id": "s512_policy_9_ptx_sass_function_name_match",
+      "observed": {
+        "ptx": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi512ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ]
+      },
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_add_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 9,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_add_f16x2_exact_count",
+      "observed": 9,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_add_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 2,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_div_or_rcp_f32_exact_count",
+      "observed": 2,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_ex2_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 2,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_ex2_f16x2_exact_count",
+      "observed": 2,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_ex2_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_max_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 9,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_max_f16x2_exact_count",
+      "observed": 9,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_max_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_mul_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 4,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_mul_f16x2_exact_count",
+      "observed": 4,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s512_policy_9_ptx_mul_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header_contains": "EF_CUDA_SM86"
+      },
+      "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+      "id": "s512_policy_9_target_native_sass_provenance",
+      "observed": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+      },
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+      "id": "s2048_policy_0_ptx_entry_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+      "id": "s2048_policy_0_sass_function_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": "one identical PTX/SASS function name",
+      "explanation": "PTX and native SASS evidence must describe the same specialization.",
+      "id": "s2048_policy_0_ptx_sass_function_name_match",
+      "observed": {
+        "ptx": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ]
+      },
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_add_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_add_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 36,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_add_f32_exact_count",
+      "observed": 36,
+      "pass": true
+    },
+    {
+      "expected": 2,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_div_or_rcp_f32_exact_count",
+      "observed": 2,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_ex2_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_ex2_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 16,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_ex2_f32_exact_count",
+      "observed": 16,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_max_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_max_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 34,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_max_f32_exact_count",
+      "observed": 34,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_mul_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_mul_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 32,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_0_ptx_mul_f32_exact_count",
+      "observed": 32,
+      "pass": true
+    },
+    {
+      "expected": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header_contains": "EF_CUDA_SM86"
+      },
+      "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+      "id": "s2048_policy_0_target_native_sass_provenance",
+      "observed": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+      },
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+      "id": "s2048_policy_8_ptx_entry_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+      "id": "s2048_policy_8_sass_function_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": "one identical PTX/SASS function name",
+      "explanation": "PTX and native SASS evidence must describe the same specialization.",
+      "id": "s2048_policy_8_ptx_sass_function_name_match",
+      "observed": {
+        "ptx": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ]
+      },
+      "pass": true
+    },
+    {
+      "expected": 30,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_add_f16_exact_count",
+      "observed": 30,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_add_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_add_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 2,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_div_or_rcp_f32_exact_count",
+      "observed": 2,
+      "pass": true
+    },
+    {
+      "expected": 16,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_ex2_f16_exact_count",
+      "observed": 16,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_ex2_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_ex2_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 30,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_max_f16_exact_count",
+      "observed": 30,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_max_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_max_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 32,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_mul_f16_exact_count",
+      "observed": 32,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_mul_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_8_ptx_mul_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header_contains": "EF_CUDA_SM86"
+      },
+      "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+      "id": "s2048_policy_8_target_native_sass_provenance",
+      "observed": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+      },
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+      "id": "s2048_policy_9_ptx_entry_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+      "id": "s2048_policy_9_sass_function_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": "one identical PTX/SASS function name",
+      "explanation": "PTX and native SASS evidence must describe the same specialization.",
+      "id": "s2048_policy_9_ptx_sass_function_name_match",
+      "observed": {
+        "ptx": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi2048ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ]
+      },
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_add_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 15,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_add_f16x2_exact_count",
+      "observed": 15,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_add_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 2,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_div_or_rcp_f32_exact_count",
+      "observed": 2,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_ex2_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 8,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_ex2_f16x2_exact_count",
+      "observed": 8,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_ex2_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_max_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 15,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_max_f16x2_exact_count",
+      "observed": 15,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_max_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_mul_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 16,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_mul_f16x2_exact_count",
+      "observed": 16,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s2048_policy_9_ptx_mul_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header_contains": "EF_CUDA_SM86"
+      },
+      "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+      "id": "s2048_policy_9_target_native_sass_provenance",
+      "observed": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+      },
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+      "id": "s4096_policy_0_ptx_entry_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+      "id": "s4096_policy_0_sass_function_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": "one identical PTX/SASS function name",
+      "explanation": "PTX and native SASS evidence must describe the same specialization.",
+      "id": "s4096_policy_0_ptx_sass_function_name_match",
+      "observed": {
+        "ptx": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE0EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ]
+      },
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_add_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_add_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 52,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_add_f32_exact_count",
+      "observed": 52,
+      "pass": true
+    },
+    {
+      "expected": 2,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_div_or_rcp_f32_exact_count",
+      "observed": 2,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_ex2_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_ex2_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 32,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_ex2_f32_exact_count",
+      "observed": 32,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_max_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_max_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 50,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_max_f32_exact_count",
+      "observed": 50,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_mul_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_mul_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 64,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_0_ptx_mul_f32_exact_count",
+      "observed": 64,
+      "pass": true
+    },
+    {
+      "expected": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header_contains": "EF_CUDA_SM86"
+      },
+      "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+      "id": "s4096_policy_0_target_native_sass_provenance",
+      "observed": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+      },
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+      "id": "s4096_policy_8_ptx_entry_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+      "id": "s4096_policy_8_sass_function_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": "one identical PTX/SASS function name",
+      "explanation": "PTX and native SASS evidence must describe the same specialization.",
+      "id": "s4096_policy_8_ptx_sass_function_name_match",
+      "observed": {
+        "ptx": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE8EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ]
+      },
+      "pass": true
+    },
+    {
+      "expected": 46,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_add_f16_exact_count",
+      "observed": 46,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_add_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_add_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 2,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_div_or_rcp_f32_exact_count",
+      "observed": 2,
+      "pass": true
+    },
+    {
+      "expected": 32,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_ex2_f16_exact_count",
+      "observed": 32,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_ex2_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_ex2_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 46,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_max_f16_exact_count",
+      "observed": 46,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_max_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_max_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 64,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_mul_f16_exact_count",
+      "observed": 64,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_mul_f16x2_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_8_ptx_mul_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header_contains": "EF_CUDA_SM86"
+      },
+      "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+      "id": "s4096_policy_8_target_native_sass_provenance",
+      "observed": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+      },
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected PTX entry.",
+      "id": "s4096_policy_9_ptx_entry_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": 1,
+      "explanation": "Each required endpoint must have exactly one selected native SASS function.",
+      "id": "s4096_policy_9_sass_function_multiplicity",
+      "observed": 1,
+      "pass": true
+    },
+    {
+      "expected": "one identical PTX/SASS function name",
+      "explanation": "PTX and native SASS evidence must describe the same specialization.",
+      "id": "s4096_policy_9_ptx_sass_function_name_match",
+      "observed": {
+        "ptx": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ],
+        "sass": [
+          "_ZN11fp16softmax15whole_precision73_GLOBAL__N__0552209e_40_softmax_whole_precision_range_kernels_cu_a1a6458d36whole_precision_range_softmax_kernelILi4096ELNS0_6PolicyE9EEEvPK6__halfPKfPS4_PfPjmPiSC_i"
+        ]
+      },
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_add_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 23,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_add_f16x2_exact_count",
+      "observed": 23,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_add_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 2,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_div_or_rcp_f32_exact_count",
+      "observed": 2,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_ex2_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 16,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_ex2_f16x2_exact_count",
+      "observed": 16,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_ex2_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_max_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 23,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_max_f16x2_exact_count",
+      "observed": 23,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_max_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_mul_f16_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": 32,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_mul_f16x2_exact_count",
+      "observed": 32,
+      "pass": true
+    },
+    {
+      "expected": 0,
+      "explanation": "Fixed range endpoint PTX count/type contract.",
+      "id": "s4096_policy_9_ptx_mul_f32_exact_count",
+      "observed": 0,
+      "pass": true
+    },
+    {
+      "expected": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header_contains": "EF_CUDA_SM86"
+      },
+      "explanation": "SASS is provenance for this target-native cubin only; no cross-architecture opcode contract is applied.",
+      "id": "s4096_policy_9_target_native_sass_provenance",
+      "observed": {
+        "embedded_ptx_architectures": [
+          86
+        ],
+        "native_architectures": [
+          86
+        ],
+        "sass_header": "EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+      },
+      "pass": true
+    }
+  ],
+  "contract": {
+    "native_cuda_arch": 86,
+    "native_fp16_ex2_min_cuda_arch": 75,
+    "range_kernel_symbol": "whole_precision_range_softmax_kernel",
+    "required_policies": [
+      {
+        "policy": "fp32_io_fp32_all",
+        "policy_id": 0
+      },
+      {
+        "policy": "fp16_scalar_all",
+        "policy_id": 8
+      },
+      {
+        "policy": "fp16x2_all",
+        "policy_id": 9
+      }
+    ],
+    "required_policy_ids": [
+      0,
+      8,
+      9
+    ],
+    "required_policy_names": [
+      "fp32_io_fp32_all",
+      "fp16_scalar_all",
+      "fp16x2_all"
+    ],
+    "required_softmax_cols": [
+      512,
+      2048,
+      4096
+    ],
+    "rows_per_block": 2,
+    "sass_interpretation": "target_native_provenance_only_no_crossarch_opcode_claim",
+    "target_profile": "rtx3090",
+    "threads_per_block": 256,
+    "unsupported_policies": {}
+  },
+  "cuobjdump_captures": {
+    "capture_dir": "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/static_audit",
+    "dump_ptx": {
+      "bytes": 459969,
+      "lines": 13941,
+      "path": "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/static_audit/dump_ptx.txt",
+      "sha256": "06c3a4c64f3245dd369be1b445bdb50cb6614a98360ebbc9a20aac2f7f1e5c1c"
+    },
+    "dump_sass": {
+      "bytes": 1267071,
+      "lines": 10552,
+      "path": "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/static_audit/dump_sass.txt",
+      "sha256": "ff3210f92edea790046d6f1d71980d33e6e2a3c4df01246f8cb5dc02145a3fa1"
+    },
+    "list_elf": {
+      "bytes": 197,
+      "lines": 3,
+      "path": "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/static_audit/list_elf.txt",
+      "sha256": "2c76cdb9f35eda14015f43a03f974ae872b0bba5ed5c01b699849067ec020caa"
+    },
+    "list_elf_files": [
+      "softmax_whole_precision_main.sm_86.cubin",
+      "softmax_whole_precision_range_kernels.sm_86.cubin",
+      "a100_fp16_softmax_whole_precision_range_energy.3.sm_86.cubin"
+    ],
+    "list_ptx": {
+      "bytes": 117,
+      "lines": 2,
+      "path": "/tmp/gpupower-main-softmax-20260727/results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/static_audit/list_ptx.txt",
+      "sha256": "93f5e7f0e67a5e0bc1577b1bd66e24f7ce244b5edf5905a753ec7f5ee179f6b6"
+    },
+    "list_ptx_files": [
+      "softmax_whole_precision_main.sm_86.ptx",
+      "softmax_whole_precision_range_kernels.sm_86.ptx"
+    ]
+  },
+  "generated_utc": "2026-07-28T11:30:34.291957+00:00",
+  "nonrequired_endpoint_inventory": {},
+  "observed_range_inventory": {
+    "endpoint_policy_ids": [
+      0,
+      8,
+      9
+    ],
+    "softmax_cols": [
+      512,
+      1024,
+      2048,
+      4096
+    ]
+  },
+  "overall": {
+    "fail_on_unexpected": true,
+    "pass": true,
+    "unexpected_check_ids": []
+  },
+  "schema_version": "softmax_whole_precision_range_static_audit_v1",
+  "tool": {
+    "cuobjdump": "/home/bang001/miniforge3/lib/python3.12/site-packages/triton/backends/nvidia/bin/cuobjdump",
+    "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Fri_Jan__3_19:19:51_PST_2025\nCuda compilation tools, release 12.8, V12.8.55\nBuild cuda_12.8.r12.8/compiler.35351055_0"
+  },
+  "unsupported_policies": {}
+}

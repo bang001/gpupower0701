@@ -1,0 +1,2 @@
+PTX file    1: softmax_whole_precision_main.sm_86.ptx
+PTX file    2: softmax_whole_precision_range_kernels.sm_86.ptx

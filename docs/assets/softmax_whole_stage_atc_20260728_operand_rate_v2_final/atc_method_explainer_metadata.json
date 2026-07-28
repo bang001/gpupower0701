@@ -1,0 +1,76 @@
+{
+  "schema_version": "softmax_whole_stage_atc_generated_explainer_v1",
+  "status": "pass",
+  "asset_role": "explanatory_not_measurement_evidence",
+  "use_case": "scientific-educational",
+  "generation_mode": "openai_builtin_image_generation",
+  "generated_at_utc": "2026-07-28T23:04:53Z",
+  "last_edited_at_utc": "2026-07-28T23:40:10Z",
+  "image": {
+    "path": "docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_atc_method_explainer.png",
+    "sha256": "632859720763096e3f2a6df11182afc8bd7e298218d9706687ceb70cdfb2710e",
+    "bytes": 1498680,
+    "width_px": 1672,
+    "height_px": 941,
+    "color_mode": "RGB"
+  },
+  "initial_prompt": {
+    "asset_type": "Korean technical-report infographic, landscape 16:9",
+    "primary_request": "Create a clear educational infographic explaining active-control Operand-rate ATC and why a reduction probe can produce a large negative ATC even though physical energy is not negative.",
+    "required_flow": [
+      "CONTROL (C): Softmax + probe OFF",
+      "TREATMENT (T): Softmax + probe ON",
+      "both roles are active GPU work",
+      "C to T to C and T to C to T brackets",
+      "ATC equals treatment-minus-interpolated-control power divided by treatment logical-output rate",
+      "reduction can have lower treatment power and longer treatment time",
+      "negative ATC does not mean negative physical energy",
+      "same-ITER energy and runtime-matched control are the recommended energy-oriented follow-up"
+    ],
+    "style": "flat vector-like scientific infographic on an off-white technical handout background",
+    "constraints": [
+      "scientifically accurate",
+      "readable Korean sans-serif typography",
+      "no logo",
+      "no trademark",
+      "no watermark",
+      "do not depict control as idle",
+      "do not imply negative energy"
+    ]
+  },
+  "targeted_edits": [
+    {
+      "request": "Change only the center equation from P_C to P_C* so the asterisk denotes time-interpolated active-control power.",
+      "invariants": "Preserve all other text, icons, charts, colors, spacing, panels, and layout."
+    },
+    {
+      "request": "Change only the bottom-right recommendation box so it labels equal-duration power and same-ITER delta-E/N as two separate arms and explicitly says not to add them.",
+      "rendered_text": [
+        "개선: 두 Arm을 별도 보고",
+        "A 동일시간 power",
+        "B same-ITER ΔE/N",
+        "서로 합산하지 않음"
+      ],
+      "invariants": "Preserve all other text, equations, icons, charts, colors, spacing, panels, and layout."
+    },
+    {
+      "request": "Add the label C-T-C 예시 above the center equation so the C-T-C-specific formula is not mistaken for the T-C-T formula.",
+      "rendered_text": "C-T-C 예시",
+      "invariants": "Preserve the P_C* asterisk, separate-arm footer, and all other text, equations, icons, charts, colors, spacing, panels, and layout."
+    }
+  ],
+  "human_qa": {
+    "status": "pass",
+    "checks": {
+      "control_and_treatment_both_active": true,
+      "probe_off_on_distinction_visible": true,
+      "ctc_and_tct_brackets_visible": true,
+      "interpolated_control_star_visible": true,
+      "power_height_and_energy_area_distinguished": true,
+      "negative_atc_not_labeled_negative_energy": true,
+      "korean_text_legible_at_original_resolution": true,
+      "no_clipping_or_watermark": true
+    }
+  },
+  "caveat": "This generated image is a conceptual explainer, not a measured data plot. The adjacent report equations, analyzer outputs, and SHA-bound CSV/JSON evidence are authoritative."
+}

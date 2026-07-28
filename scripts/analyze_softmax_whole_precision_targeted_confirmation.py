@@ -39,9 +39,12 @@ SOFTMAX_COLS = 512
 GRID_BLOCKS = 16
 ROWS_PER_BLOCK = 2
 LOGIT_SCALE = 4.0
-PREHEAT_REQUESTED_S = 20.0
-PREHEAT_MIN_S = 16.0
-PREHEAT_MAX_S = 25.0
+# Match the duration-relative C++ conditioner gate for the new 5 s protocol:
+# max(0.75, 25% of request) gives [3.75, 6.25] seconds. Historical 20 s
+# artifacts stay immutable and are not inputs to this fresh-run analyzer.
+PREHEAT_REQUESTED_S = 5.0
+PREHEAT_MIN_S = 3.75
+PREHEAT_MAX_S = 6.25
 TRACE_MIN_UPDATES = 16
 TRACE_MIN_R2 = 0.98
 T95_N6 = 2.570581835636314
@@ -1011,7 +1014,7 @@ def quality_rows(cells: list[Cell], plans: list[SessionPlan], sass_path: Path, s
             "check": "AB/BA and conditioning",
             "coverage": "exp packed: AB=3 BA=3; reduction scalar: AB=3 BA=3",
             "result": "pass",
-            "meaning": "canonical validation/calibration precede the 20 s common baseline conditioner; no unrecorded policy warm-up",
+            "meaning": "canonical validation/calibration precede the 5 s common baseline conditioner; no unrecorded policy warm-up",
         },
         {
             "check": "trace, placement and numerics",

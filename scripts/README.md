@@ -2,6 +2,76 @@
 
 이 디렉토리에는 현재 finalplan 실행에 필요한 active script만 둔다. 과거 pair-centric, NNLS/regression, reference-aligned, register-footprint diagnostic script는 `archive/legacy_20260707/scripts/`로 이동했다.
 
+## Whole-Softmax stage Operand-rate ATC (RTX 3090, 2026-07-28)
+
+현재 단계별 주 실험은 idle subtraction이 아니라 **Operand-rate ATC**다. 고정 좌표
+`S=1024`, grid `41`(82 SM의 q50), `256 threads/CTA`, `2 rows/CTA`에서
+`exp`, `max+sum reduction`, `normalization` 각각에 FP32/scalar FP16/packed
+FP16x2의 단계 pass 하나를 추가한다. 각 stage×policy는 fresh session 3개이며,
+한 session 안에서 C-T-C와 T-C-T를 모두 측정한다. 공통 FP32 conditioner는 5초다.
+role별 1초 idle trace는 계측 진단 전용이고 ATC 분자에는 들어가지 않는다.
+
+주 단위는 signed
+`Operand-rate ATC ΔpJ/logical Softmax output element for one added stage pass`다.
+complete-Softmax의 idle-subtracted 절대 에너지나 독립 opcode 에너지로 해석하지 않는다.
+packed FP16x2 분모는 이미 두 scalar logical output lane을 모두 세므로 결과를 다시
+2로 나누지 않는다.
+
+```bash
+source scripts/activate_softmax_experiment_env.sh
+cmake -S . -B build-whole-stage-atc-rtx3090 \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=86
+cmake --build build-whole-stage-atc-rtx3090 \
+  --target a100_fp16_softmax_whole_stage_atc -j
+
+TAG="$(date +%Y%m%d)_operand_rate_v2"
+"$GPUPWR_PYTHON_BIN" scripts/run_softmax_whole_stage_atc.py \
+  --build-dir build-whole-stage-atc-rtx3090 \
+  --output-dir results/raw --session-tag "$TAG" --execute
+RUN="results/raw/rtx3090_softmax_whole_stage_atc_${TAG}"
+
+"$GPUPWR_PYTHON_BIN" scripts/audit_softmax_whole_stage_atc_static.py \
+  --binary "$RUN/frozen/a100_fp16_softmax_whole_stage_atc" \
+  --out "$RUN/static_audit.json" \
+  --capture-dir "$RUN/static_audit_captures" --cuobjdump "$CUOBJDUMP"
+"$GPUPWR_PYTHON_BIN" scripts/bind_softmax_whole_stage_atc_static_audit.py "$RUN"
+
+"$GPUPWR_PYTHON_BIN" scripts/audit_softmax_whole_stage_atc_ncu.py \
+  --binary "$RUN/frozen/a100_fp16_softmax_whole_stage_atc" \
+  --out-dir "$RUN/ncu_audit" --ncu "$NCU_BIN" --gpu-id 0
+"$GPUPWR_PYTHON_BIN" scripts/bind_softmax_whole_stage_atc_ncu_audit.py "$RUN"
+
+"$GPUPWR_PYTHON_BIN" scripts/analyze_softmax_whole_stage_atc.py --run-dir "$RUN"
+FIG_DIR="docs/assets/softmax_whole_stage_atc_${TAG}"
+"$GPUPWR_PYTHON_BIN" scripts/plot_softmax_whole_stage_atc.py \
+  --run-dir "$RUN" --analysis-dir "$RUN/analysis" --out-dir "$FIG_DIR" \
+  --prefix "rtx3090_softmax_whole_stage_atc_${TAG}"
+"$GPUPWR_PYTHON_BIN" scripts/build_softmax_whole_stage_atc_report.py \
+  --run-dir "$RUN" --analysis-dir "$RUN/analysis" \
+  --figure-manifest "$FIG_DIR/figure_manifest.json" \
+  --out "docs/results/rtx3090_softmax_whole_stage_atc_${TAG}_ko.md"
+```
+
+공개 Markdown을 저장소 밖에서도 미리보기할 때는 다음 옵션을 추가한다.
+
+```bash
+--image-base-url \
+  "https://raw.githubusercontent.com/OWNER/REPO/COMMIT_SHA/docs/assets/ASSET_DIR"
+```
+
+본문은 immutable HTTPS PNG를 사용하고, 생성기는 동일 그림의 저장소 상대 PNG·SVG
+링크도 fallback으로 남긴다. `COMMIT_SHA`는 branch 이름이 아니라 그림이 검증된
+40자리 고정 commit이어야 하며, 생성기는 다른 형식의 URL을 거부한다.
+
+runner는 binary를 acquisition 전에 freeze하며 9개 fresh process에서 총 162개 C/T
+role을 수집한다. analyzer는 static SASS 및 NCU audit가 manifest에 결속되지 않았거나,
+idle이 주 estimand에 들어가거나, 분모·trace·schedule·binary hash가 달라지면
+fail-closed한다. NCU는 동적 명령 구조의 증거이며 전력 측정은 NVML total-energy trace다.
+analyzer는 primary Operand-rate ATC와 별도로 same-ITER
+`(E_T−E_C)/N` gross board-energy diagnostic도 출력한다. 이 진단은 role별
+qualified trace power×elapsed를 사용하고 idle을 쓰지 않으며 primary를 대체하지
+않는다.
+
 ## Whole-Softmax precision stage isolation (RTX 3090, 2026-07-27)
 
 `a100_fp16_softmax_whole_precision_energy`는 기존 Operand-rate EX2 probe와 별도다.
@@ -54,9 +124,12 @@ python3 scripts/build_softmax_whole_precision_stage_report.py \
 이 bounded follow-up은 stage-isolation 탐색 데이터를 pool하지 않는다. RTX 3090
 sm86의 고정 `S=512`, grid `CTA=16`, 2 rows/CTA에서 `exp_fp16x2`와
 `reduction_fp16_scalar`만 각각 6 fresh pair session(AB 3 + BA 3)으로 재측정한다.
-각 fresh process는 validation과 모든 calibration을 canonical order로 끝낸 뒤 20 s
-`fp16_io_fp32_all` common conditioner를 수행하고, unrecorded policy warm-up 없이
+새 fresh process는 validation과 모든 calibration을 canonical order로 끝낸 뒤 5 s
+`fp16_io_fp32_all` common conditioner를 session당 한 번 수행하고, unrecorded policy warm-up 없이
 원래 AB 또는 BA two-role measurement schedule을 실행한다.
+
+2026-07-27의 기존 결과는 20 s preheat로 얻은 역사적 artifact이므로, 새 5 s run과
+pool하거나 직접 평균 비교하지 않는다.
 
 | 단계 | script | 역할 |
 |---|---|---|
@@ -97,6 +170,72 @@ acquisition 전에 존재했고 SASS 검사는 acquisition 뒤 수행한 정적 
 명시한다. 2026-07-27 결과와 그림은
 `docs/results/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1_*`와
 `docs/assets/softmax_whole_precision_targeted_confirmation/`에 있다.
+
+## Whole-Softmax endpoint range screen (cross-platform)
+
+이 flow는 큰 CTA×S grid가 아니라 complete-Softmax endpoint의 **best / fixed
+representative / worst 관측 범위**를 찾기 위한 작은 screen이다. primary metric은
+`net pJ/logical Softmax output element`이며, EX2 Operand-rate ATC의
+`pJ/logical exponent result`와 같은 표나 평균에 섞지 않는다. 새 target은
+FP32 I/O+all-FP32, scalar-FP16 all, packed-FP16x2 all endpoint만 compile-time
+specialize한다.
+
+첫 screen은 `S=512,q50`, `S=1024,q50`(사전 고정 representative),
+`S=4096,q50`, `S=1024,q25` 네 좌표뿐이다. 3-way GPU는 coordinate별 fresh
+process 세 개를 `ABC/BCA/CAB`으로 돌려 36 role을, V100은 native FP16 EX2가
+sm_75 이상을 요구하므로 FP32-only 12 role만 만든다. conditioner는 각 fresh
+process에서 FP32 endpoint로 한 번, 요청 **5 s**(actual 3.75–6.25 s gate)다.
+
+| 단계 | script / target | 역할 |
+|---|---|---|
+| acquisition | `run_softmax_whole_precision_range.py` | platform profile·native binary·four-coordinate schedule·frozen manifest/raw/trace SHA를 만들고 fresh process를 실행 |
+| static evidence bind | `audit_softmax_whole_precision_range_sass.py` + `bind_softmax_whole_precision_range_sass.py` | run-local frozen binary의 target-native PTX/SASS capture와 raw/trace SHA를 immutable manifest binding으로 결속 |
+| fail-closed analysis | `analyze_softmax_whole_precision_range.py` | profile/architecture, 5 s preheat, trace/numerical/SMID/capacity, ABC/BCA/CAB, denominator를 검증하고 coordinate/range/follow-up summary 생성 |
+| portable report | `build_softmax_whole_precision_range_report.py` | SHA-bound analyzer product만 받아 native chart가 있는 self-contained HTML/Markdown report 생성 |
+| protocol | `docs/methodology/softmax_whole_precision_range_protocol_ko.md` | platform CTA, occupancy boundary, stop rule, interpretation boundary 정의 |
+
+```bash
+source scripts/activate_softmax_experiment_env.sh
+
+# RTX 3090; A100/V100은 아래 architecture/profile만 바꾼다.
+cmake -S . -B build-whole-precision-range-rtx3090 \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=86
+cmake --build build-whole-precision-range-rtx3090 \
+  --target a100_fp16_softmax_whole_precision_range_energy -j
+
+TAG="$(date +%Y%m%d)_range_v1"
+"$GPUPWR_PYTHON_BIN" scripts/run_softmax_whole_precision_range.py \
+  --target-profile rtx3090 --build-dir build-whole-precision-range-rtx3090 \
+  --output-dir results/raw --session-tag "$TAG" --gpu-id 0 --phase screen --execute
+RUN="results/raw/rtx3090_softmax_whole_precision_range_${TAG}_screen"
+"$GPUPWR_PYTHON_BIN" scripts/audit_softmax_whole_precision_range_sass.py \
+  --binary "$RUN/frozen/a100_fp16_softmax_whole_precision_range_energy" \
+  --target-profile rtx3090 --required-softmax-cols 512,1024,4096 \
+  --out "$RUN/sass_audit.json" --capture-dir "$RUN/static_audit" --fail-on-unexpected
+"$GPUPWR_PYTHON_BIN" scripts/bind_softmax_whole_precision_range_sass.py \
+  --run-dir "$RUN" --sass-audit "$RUN/sass_audit.json"
+"$GPUPWR_PYTHON_BIN" scripts/analyze_softmax_whole_precision_range.py --run-dir "$RUN"
+
+# A100: CMAKE_CUDA_ARCHITECTURES=80, --target-profile a100
+# H100 SXM5: CMAKE_CUDA_ARCHITECTURES=90, --target-profile h100, --runtime-sm-count 132
+# H100 PCIe: CMAKE_CUDA_ARCHITECTURES=90, --target-profile h100, --runtime-sm-count 114
+# V100: CUDA 12.x + CMAKE_CUDA_ARCHITECTURES=70, --target-profile v100 (FP32-only)
+```
+
+PTX의 endpoint type/count와 target-native SASS provenance는 post-execution에
+**frozen binary**를 대상으로 audit하고, raw/trace hash와 함께 manifest에 bind한 뒤에만
+analyzer가 진행된다. sm86 lowering을 sm80/sm90에 재사용하지 않는다.
+
+분석 결과의 `followup_plan.json`이 `followup_required`일 때만 `S=2048,q50` 또는
+`S=512/4096,q25`를 새 hash-bound child run으로 추가한다. follow-up 단독 summary는
+parent screen과 자동 pool하지 않으며 representative를 다시 선택하지 않는다. 전체
+screened range를 갱신하려면 **명시적으로** child analyzer에 `--parent-run "$RUN"`을
+지정한다. 이 결합은 child followup phase, parent manifest path+hash, 같은 profile/frozen
+binary SHA, 그리고 parent gate가 요청한 exact coordinate set을 확인한 경우에만 가능하다. child를 만들 때에는
+`--binary "$RUN/frozen/a100_fp16_softmax_whole_precision_range_energy"`를 주어 parent와
+같은 frozen executable을 다시 freeze해야 한다. 결합은 adaptive coordinate의 screened
+range만 갱신하며 independent extrema confirmation이나 platform/historical-cohort pooling을
+의미하지 않는다.
 
 ## Current FP16 Tensor-only v3 Flow
 
