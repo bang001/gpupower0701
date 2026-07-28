@@ -11,7 +11,7 @@ coordinate:
 
 For each contrast, three AB and three BA fresh CUDA-process sessions are
 scheduled.  The confirmation executable enforces canonical preparation before
-a 20-second common baseline conditioner and disables unrecorded policy warm-up.
+a 5-second common baseline conditioner and disables unrecorded policy warm-up.
 The runner freezes the exact executable and itself into the run directory
 before any measurement, then records every raw/trace SHA-256 in an immutable
 manifest.
@@ -51,7 +51,10 @@ SOFTMAX_COLS = 512
 GRID_BLOCKS = 16
 ROWS_PER_BLOCK = 2
 SECONDS = 13.0
-PREHEAT_SECONDS = 20.0
+# A single common conditioner is applied once per fresh AB/BA session.  Five
+# seconds is the current operational setting; prior 20-second results remain
+# historical and must not be pooled with new runs.
+PREHEAT_SECONDS = 5.0
 IDLE_SECONDS = 1.0
 TRACE_SAMPLE_MS = 500.0
 TRACE_MIN_UPDATES = 16

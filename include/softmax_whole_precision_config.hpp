@@ -5,10 +5,11 @@
 
 namespace fp16softmax::whole_precision {
 
-// The first whole-Softmax precision experiment intentionally fixes S=512.
-// It gives each 256-thread CTA two elements per thread, which makes the
-// f16x2 paths real pair operations rather than an even-lane emulation.  Wider
-// S/CTA sweeps are a follow-up decision, not part of the initial attribution.
+// The historical stage-isolation target remains fixed at S=512.  The separate
+// endpoint-range target specializes the same 256-thread / two-row CTA mapping
+// for a deliberately small set of widths.  All supported range widths keep an
+// even number of elements per thread, so f16x2 always represents a genuine
+// adjacent pair within a Softmax row.
 constexpr int kSoftmaxCols = 512;
 constexpr int kThreadsPerBlock = 256;
 constexpr int kElementsPerThread = kSoftmaxCols / kThreadsPerBlock;
@@ -17,6 +18,14 @@ constexpr int kElementsPerThread = kSoftmaxCols / kThreadsPerBlock;
 constexpr int kRowsPerBlock = 2;
 static_assert(kElementsPerThread == 2,
               "whole-precision initial kernel assumes two elements/thread");
+
+constexpr bool is_range_softmax_cols(int cols) {
+  return cols == 512 || cols == 1024 || cols == 2048 || cols == 4096;
+}
+
+constexpr int elements_per_thread_for_cols(int cols) {
+  return is_range_softmax_cols(cols) ? cols / kThreadsPerBlock : 0;
+}
 
 enum class StageImplementation {
   fp32,
@@ -45,6 +54,11 @@ enum class Policy {
   fp16_scalar_all,
   fp16x2_all,
 };
+
+constexpr bool is_endpoint_policy(Policy policy) {
+  return policy == Policy::fp32_io_fp32_all ||
+         policy == Policy::fp16_scalar_all || policy == Policy::fp16x2_all;
+}
 
 struct PolicySpec {
   Policy id;

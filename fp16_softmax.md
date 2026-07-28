@@ -1,6 +1,6 @@
 # FP16 Softmax: Operand-rate ATC와 전체 정밀도 단계 분리 기록
 
-작성일: 2026-07-22 / 최종 갱신: 2026-07-27
+작성일: 2026-07-22 / 최종 갱신: 2026-07-28
 
 상태: direct native FP16 PTX 구현과 RTX 3090 수치/SASS/NCU 검증 완료 /
 사전 지정한 implementation 3 × CTA 4 × Softmax S 5의 **기준/재연 matrix가
@@ -176,7 +176,8 @@ sensitivity run으로 residual variance source를 분리한다. scalar reduction
 재실행은 dedicated confirmation binary를 사용한다. binary 이름만으로 mode가
 compile-time 고정되는 것은 아니며, frozen runner가 `--confirmation-pair`, canonical
 conditioning 및 exact AB/BA schedule contract를 모두 넘기고 C++ CLI가 이를
-검증한다.
+검증한다. 새 runner의 common baseline preheat는 session당 **5 s**다. 기존 2026-07-27
+20 s artifact는 역사적 결과로 보존하며 새 run과 pool하지 않는다.
 
 ```bash
 source scripts/activate_softmax_experiment_env.sh
@@ -204,6 +205,53 @@ FIG="docs/assets/softmax_whole_precision_targeted_confirmation/rtx3090_softmax_w
 "$GPUPWR_PYTHON_BIN" scripts/build_softmax_whole_precision_targeted_confirmation_report.py \
   --run-dir "$RUN" --out-dir docs/results --figure-manifest "$FIG"
 ```
+
+## Complete-Softmax FP32 / FP16 / FP16x2 범위 screen (2026-07-28)
+
+EX2 Operand-rate ATC의 `pJ/logical exponent result`와 stage-isolation의 고정
+`S=512` 결과는 complete-Softmax endpoint의 범위를 답하지 않는다. 그래서 새
+`a100_fp16_softmax_whole_precision_range_energy` target은 FP32, scalar FP16,
+packed FP16x2가 max/subtract, exp, reduction, normalization, I/O를 모두 수행하는
+endpoint만 비교한다. 주 단위는 **net pJ/logical Softmax output element**다.
+
+처음부터 CTA×S factorial sweep을 하지 않는다. `S=512,q50`, `S=1024,q50`
+(사전 고정 representative), `S=4096,q50`, `S=1024,q25` 네 좌표만 사용하고,
+10% practical gate가 실패할 때만 `S=2048,q50` 또는 q25 양 끝점을 추가한다.
+256-thread CTA에서 thread는 `S/256`개의 **연속 column chunk**를 맡는다. 따라서
+packed exp/normalization의 half2는 같은 row의 인접 원소를 묶고, packed reduction의
+half2 lane은 기존과 같이 서로 독립적인 두 CTA row를 묶는다.
+
+new fresh session의 common FP32 conditioner는 요청 **5 s**이며, actual은
+3.75–6.25 s여야 한다. `q=25%/50%`도 단순 grid/SM 요청비가 아니라 initial
+screen에서 `smid_unique=grid_blocks`, `smid_max_blocks_on_sm=1`의 runtime
+placement gate를 통과해야 한다. RTX 3090/A100/H100은 3-way이고, V100은 native
+FP16 EX2가 sm_75 이상이라 CUDA 12.x sm70 build에서 FP32-only로 명시한다.
+
+설계, 플랫폼별 CTA, adaptive 분석 및 실행 명령은
+[Whole-Softmax precision range protocol](docs/methodology/softmax_whole_precision_range_protocol_ko.md)에
+있다. 이 새 5 s cohort는 기존 20 s 역사 artifact와 pool하지 않는다.
+
+RTX 3090에서는 initial 4좌표(36 role) 뒤 두 10% gate가 모두 trigger되어,
+사전 규칙에 따라 `S=2048,q50`, `S=512,q25`, `S=4096,q25`만 27 role 추가했다.
+parent/child manifest, frozen binary/runner, raw/trace SHA, target-native PTX/SASS
+audit, numerical/trace/SMID/denominator gate를 결합 검증한 최종 screened 결과는 다음과
+같다. 단위는 모두 **net pJ/logical Softmax output element**이고 각각 fresh 3-session
+median이다.
+
+| endpoint | screened best | 사전 고정 representative `S=1024,q50` | screened worst |
+|---|---:|---:|---:|
+| FP32 | 2,089.3 (`S=512,q50`) | 2,596.7 | 6,456.4 (`S=4096,q25`) |
+| scalar FP16 | 2,055.8 (`S=1024,q50`) | 2,055.8 | 5,056.1 (`S=4096,q25`) |
+| packed FP16x2 | 1,626.8 (`S=512,q50`) | 1,738.9 | 5,320.5 (`S=4096,q25`) |
+
+대표 좌표에서는 packed FP16x2가 가장 낮다. 그러나 `S=4096,q25`에서는 모든 policy의
+값이 커지고 3-session spread도 넓어져, 이를 “packed가 모든 shape/concurrency에서
+항상 더 효율적”이라는 결론으로 일반화하지 않는다. screened extrema는 별도 fresh
+confirmation 전까지 confirmed observed range가 아니다.
+
+- [RTX 3090 range 분석 보고서](docs/results/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup_analysis_ko.md)
+- [portable HTML visualization report](docs/results/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup_report.html)
+- [bound follow-up manifest](results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/manifest.json)
 
 ## 현재 로컬 저장소와 실험환경
 

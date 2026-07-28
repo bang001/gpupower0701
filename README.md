@@ -452,6 +452,38 @@ external-meter sensitivity run으로 판별하는 것이다.
 - [Static figures / regeneration](docs/assets/softmax_whole_precision_targeted_confirmation/README.md)
 - [Bound raw manifest](results/raw/rtx3090_softmax_whole_precision_targeted_confirmation_20260727_abba_confirm_v1/manifest.json)
 
+### Whole-Softmax endpoint range: minimal cross-platform screen
+
+FP32 / scalar FP16 / packed FP16x2 **complete Softmax endpoint**의 범위를
+보기 위한 새 target은 stage-isolation과 EX2 operand-rate probe를 덮어쓰지 않는다.
+초기 screen은 `S=512,q50`, `S=1024,q50`(사전 고정 대표값), `S=4096,q50`,
+`S=1024,q25`만 사용한다. 3-way GPU는 coordinate당 fresh process 3개를
+`ABC/BCA/CAB`으로 실행하고, V100은 native FP16 EX2 지원 범위 때문에 FP32-only로
+명시한다. session conditioner는 요청 5초이며 actual 3.75–6.25초 gate를 raw row에
+남긴다. 따라서 이 결과의 단위는 EX2 probe의 pJ/result가 아니라
+**net pJ/logical Softmax output element**다.
+
+RTX 3090의 5초 conditioner cohort는 initial 36 role과 gate-triggered adaptive
+27 role, 총 63 role을 통과했다. 아래 값은 사전 지정 envelope 안의 fresh
+3-session median인 **screened** 범위이며, 별도 fresh extrema confirmation 전에는
+보편적인 최저/최고값으로 해석하지 않는다.
+
+| complete Softmax endpoint | screened best | fixed representative `S=1024,q50` | screened worst |
+|---|---:|---:|---:|
+| FP32 | 2,089.3 (`S=512,q50`) | 2,596.7 | 6,456.4 (`S=4096,q25`) |
+| scalar FP16 | 2,055.8 (`S=1024,q50`) | 2,055.8 | 5,056.1 (`S=4096,q25`) |
+| packed FP16x2 | 1,626.8 (`S=512,q50`) | 1,738.9 | 5,320.5 (`S=4096,q25`) |
+
+대표 좌표에서는 packed FP16x2가 가장 낮았지만, 전체 screened 범위는 coordinate에
+따라 겹친다. 따라서 packed가 모든 S·CTA에서 보편적으로 더 효율적이라는 주장은
+하지 않는다.
+
+- [범위 설계, 플랫폼 CTA, stop rule](docs/methodology/softmax_whole_precision_range_protocol_ko.md)
+- [실행/분석 명령](scripts/README.md#whole-softmax-endpoint-range-screen-cross-platform)
+- [RTX 3090 분석 보고서](docs/results/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup_analysis_ko.md)
+- [Portable HTML visualization report](docs/results/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup_report.html)
+- [Bound screen/follow-up manifests](results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_screen/manifest.json) / [follow-up](results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/manifest.json)
+
 ## RTX 3090 Softmax EX2 추가-지수 probe 집중 재현 확인 (2026-07-25)
 
 논쟁 좌표인 `CTA=48, S=1024`를 새 CUDA 세션 3개와 순환 implementation 순서로

@@ -1,0 +1,971 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "RTX 3090 complete-Softmax FP32 / FP16 / FP16x2 range screen",
+    "description": "Minimal cross-platform-ready endpoint range screen with fixed representative and adaptive stop rule.",
+    "generatedAt": "2026-07-28T20:34:14+09:00",
+    "sources": [
+      {
+        "id": "analysis",
+        "label": "Fail-closed whole-Softmax precision range analysis",
+        "path": "results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/analysis/analysis.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT range_summary, coordinate_summary FROM read_json_auto('results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/analysis/analysis.json');",
+          "description": "The report consumes the analyzer's SHA-bound result arrays. The analyzer checks frozen binary/runner, raw/trace SHA, target-native PTX/SASS audit binding, 5-second common conditioning, numerical validation, logical denominator, trace, and one-CTA-per-distinct-SM placement before computing medians.",
+          "tables_used": [
+            "results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/analysis/analysis.json",
+            "results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_screen/manifest.json",
+            "results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/manifest.json"
+          ],
+          "metric_definitions": [
+            "Primary metric = (qualified NVML trace energy − idle power × elapsed) × 1e12 / logical Softmax output elements.",
+            "A coordinate/policy estimate is the median of three fresh CUDA-process sessions.",
+            "Best/worst are screened coordinate medians; the representative is predeclared S=1024,q50."
+          ],
+          "filters": [
+            "complete Softmax forward endpoint",
+            "256 threads/CTA",
+            "2 rows/CTA",
+            "5-second requested common FP32 conditioner",
+            "temperature recorded but not adjusted"
+          ]
+        }
+      }
+    ],
+    "charts": [
+      {
+        "id": "screened_range",
+        "title": "Policy별 screened best / fixed representative / screened worst",
+        "subtitle": "각 bar는 해당 coordinate의 fresh 3-session median; screened extrema는 별도 fresh confirmation 전 확정값이 아니다.",
+        "type": "bar",
+        "intent": "comparison",
+        "question": "각 complete-Softmax precision endpoint에서 사전 지정 envelope의 범위와 대표값은 무엇인가?",
+        "rationale": "best/representative/worst를 한 common pJ/output axis에 두되, coordinate label을 tooltip으로 남겨 post-hoc 단일 우승자로 과장하지 않는다.",
+        "comparisonContext": {
+          "baseline": "not a paired baseline; within-policy coordinate medians",
+          "denominator": "one logical Softmax output element",
+          "grain": "three fresh CUDA-process sessions per coordinate/policy",
+          "unit": "net pJ/logical output element"
+        },
+        "dataset": "range_points",
+        "sourceId": "analysis",
+        "encodings": {
+          "x": {
+            "field": "policy_label",
+            "type": "ordinal",
+            "label": "Complete Softmax endpoint"
+          },
+          "y": {
+            "field": "median_net_pj",
+            "type": "quantitative",
+            "label": "Fresh-session median",
+            "unit": "pJ/logical output element",
+            "format": "number"
+          },
+          "color": {
+            "field": "range_role",
+            "type": "nominal",
+            "label": "Range role"
+          },
+          "tooltip": [
+            {
+              "field": "policy_label",
+              "type": "nominal",
+              "label": "Endpoint"
+            },
+            {
+              "field": "range_role",
+              "type": "nominal",
+              "label": "Role"
+            },
+            {
+              "field": "coordinate_label",
+              "type": "nominal",
+              "label": "Coordinate"
+            },
+            {
+              "field": "median_net_pj",
+              "type": "quantitative",
+              "label": "Median",
+              "unit": "pJ/logical output element",
+              "format": "number"
+            }
+          ]
+        },
+        "palette": {
+          "kind": "hard-three-root",
+          "name": "whole-softmax-range-roles"
+        },
+        "labels": {
+          "values": "auto"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        },
+        "legend": {
+          "position": "bottom"
+        }
+      },
+      {
+        "id": "coordinate_medians",
+        "title": "Coordinate별 fresh-session median",
+        "subtitle": "S width와 requested q의 영향은 endpoint별로 별도 표시한다; platform 간 수치는 pool하지 않는다.",
+        "type": "bar",
+        "intent": "comparison",
+        "question": "initial/adaptive coordinate가 pJ/output에 practical 차이를 보이는가?",
+        "rationale": "adaptive stop decision이 쓰는 coordinate median을 endpoint color로 직접 보여 준다.",
+        "comparisonContext": {
+          "baseline": "not applicable; independent coordinate medians",
+          "denominator": "one logical Softmax output element",
+          "grain": "three fresh CUDA-process sessions per coordinate/policy",
+          "unit": "net pJ/logical output element"
+        },
+        "dataset": "coordinate_summary",
+        "sourceId": "analysis",
+        "encodings": {
+          "x": {
+            "field": "coordinate_label",
+            "type": "ordinal",
+            "label": "Coordinate"
+          },
+          "y": {
+            "field": "median_net_pj",
+            "type": "quantitative",
+            "label": "Fresh-session median",
+            "unit": "pJ/logical output element",
+            "format": "number"
+          },
+          "color": {
+            "field": "policy_label",
+            "type": "nominal",
+            "label": "Endpoint"
+          },
+          "tooltip": [
+            {
+              "field": "coordinate_label",
+              "type": "nominal",
+              "label": "Coordinate"
+            },
+            {
+              "field": "policy_label",
+              "type": "nominal",
+              "label": "Endpoint"
+            },
+            {
+              "field": "median_net_pj",
+              "type": "quantitative",
+              "label": "Median",
+              "unit": "pJ/logical output element",
+              "format": "number"
+            },
+            {
+              "field": "sample_std_net_pj",
+              "type": "quantitative",
+              "label": "Session SD",
+              "unit": "pJ/logical output element",
+              "format": "number"
+            }
+          ]
+        },
+        "palette": {
+          "kind": "hard-three-root",
+          "name": "whole-softmax-range-policies"
+        },
+        "labels": {
+          "values": "auto"
+        },
+        "layout": "full",
+        "surface": {
+          "surface": "export",
+          "showControls": false,
+          "viewMode": "both"
+        },
+        "legend": {
+          "position": "bottom"
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "range_table",
+        "title": "Screened range and fixed representative",
+        "subtitle": "10% tie set is reported rather than forcing a single winner; values are not a pure EX2/SFU energy coefficient.",
+        "dataset": "range_summary",
+        "sourceId": "analysis",
+        "defaultSort": {
+          "field": "policy_label",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "policy_label",
+            "label": "Endpoint"
+          },
+          {
+            "field": "best_coordinate",
+            "label": "Screened best coordinate"
+          },
+          {
+            "field": "best_median_net_pj",
+            "label": "Best median",
+            "format": "number"
+          },
+          {
+            "field": "representative_coordinate",
+            "label": "Fixed representative"
+          },
+          {
+            "field": "representative_median_net_pj",
+            "label": "Representative median",
+            "format": "number"
+          },
+          {
+            "field": "worst_coordinate",
+            "label": "Screened worst coordinate"
+          },
+          {
+            "field": "worst_median_net_pj",
+            "label": "Worst median",
+            "format": "number"
+          },
+          {
+            "field": "range_status",
+            "label": "Status"
+          }
+        ]
+      },
+      {
+        "id": "coordinate_table",
+        "title": "Coordinate summary and repeatability context",
+        "subtitle": "n=3 fresh sessions per endpoint/coordinate; t95 is descriptive, not a cross-platform ranking test.",
+        "dataset": "coordinate_summary",
+        "sourceId": "analysis",
+        "defaultSort": {
+          "field": "coordinate_id",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "coordinate_id",
+            "label": "Coordinate ID"
+          },
+          {
+            "field": "coordinate_label",
+            "label": "Coordinate"
+          },
+          {
+            "field": "policy_label",
+            "label": "Endpoint"
+          },
+          {
+            "field": "fresh_sessions",
+            "label": "Fresh sessions",
+            "format": "number"
+          },
+          {
+            "field": "median_net_pj",
+            "label": "Median",
+            "format": "number"
+          },
+          {
+            "field": "sample_std_net_pj",
+            "label": "Session SD",
+            "format": "number"
+          },
+          {
+            "field": "t95_low_net_pj",
+            "label": "t95 low",
+            "format": "number"
+          },
+          {
+            "field": "t95_high_net_pj",
+            "label": "t95 high",
+            "format": "number"
+          },
+          {
+            "field": "occupancy_max_blocks_per_sm",
+            "label": "Occupancy CTA/SM",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "quality_table",
+        "title": "Evidence-quality gates",
+        "subtitle": "Temperature is recorded as context, not used as a causal correction.",
+        "dataset": "quality",
+        "sourceId": "analysis",
+        "defaultSort": {
+          "field": "check",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "check",
+            "label": "Gate"
+          },
+          {
+            "field": "result",
+            "label": "Result"
+          },
+          {
+            "field": "detail",
+            "label": "Detail"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# RTX 3090 complete-Softmax FP32 / FP16 / FP16x2 range screen"
+      },
+      {
+        "id": "technical_summary",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## 기술 요약\n\n**RTX 3090에서 complete Softmax FP32, scalar FP16, packed FP16x2 endpoint를 작은 사전 지정 envelope로 측정했다.** 대표값은 결과를 본 뒤 고르지 않은 `S=1024,q50`이고, best/worst는 fresh 3-session coordinate median의 screened 범위다. 이 값은 `net pJ/logical Softmax output element`이며 EX2 Operand-rate ATC의 pJ/logical exponent result와 평균·차감·합산할 수 없다.\n\n사전 고정 대표 좌표 `S=1024,q50`의 median은 FP32 2,596.7, scalar FP16 2,055.8, packed FP16x2 1,738.9 pJ/logical output element였다. packed가 이 대표 좌표에서는 가장 낮지만, screened envelope 전체의 범위는 coordinate에 따라 겹친다. 따라서 이를 모든 S·CTA 조건에서 packed가 보편적으로 우월하다는 주장으로 일반화하지 않는다."
+      },
+      {
+        "id": "range_intro",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## Screened range versus fixed representative\n\n아래 chart는 각 policy에서 screened best, 사전 고정 representative, screened worst를 함께 보인다. 10% 안의 tie coordinate는 table에 남기며, extrema를 다시 fresh session으로 확인하기 전에는 `confirmed observed range`라고 부르지 않는다."
+      },
+      {
+        "id": "range_chart",
+        "type": "chart",
+        "chartId": "screened_range"
+      },
+      {
+        "id": "range_table_block",
+        "type": "table",
+        "tableId": "range_table"
+      },
+      {
+        "id": "coordinate_intro",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## 왜 이 좌표만 측정했는가\n\n256-thread CTA에서 S=512는 2 element/thread natural anchor, S=1024는 fixed representative/plateau-entry test, S=4096는 resource boundary, q25는 concurrency sensitivity다. S=128/256 같은 다른 geometry는 처음부터 섞지 않았다. 실제 measured role은 `smid_unique=grid_blocks`, `smid_max_blocks_on_sm=1` gate를 통과해야 q placement로 해석한다."
+      },
+      {
+        "id": "coordinate_chart",
+        "type": "chart",
+        "chartId": "coordinate_medians"
+      },
+      {
+        "id": "coordinate_table_block",
+        "type": "table",
+        "tableId": "coordinate_table"
+      },
+      {
+        "id": "method",
+        "type": "markdown",
+        "sourceId": "analysis",
+        "body": "## Measurement and static-code evidence\n\n각 fresh CUDA process는 canonical policy order로 numerical validation/calibration을 마친 뒤 FP32 endpoint로 요청 5 s common conditioner를 한 번 실행한다. unrecorded policy warm-up은 없고, three-way order는 ABC/BCA/CAB로 회전한다. final analyzer는 frozen binary/runner, raw/trace SHA, 5 s actual gate, qualified NVML trace, logical denominator, SMID placement, FP64-reference numerical validation, 그리고 같은 frozen binary의 target-native PTX/SASS audit binding을 모두 확인한다."
+      },
+      {
+        "id": "quality_table_block",
+        "type": "table",
+        "tableId": "quality_table"
+      },
+      {
+        "id": "interpretation",
+        "type": "markdown",
+        "body": "## 해석 경계\n\nFP32 endpoint는 FP32 I/O이고 FP16 endpoint는 FP16 I/O이므로, 이 비교는 pure EX2/SFU/ALU 회로 에너지가 아니라 I/O·rounding·reduction·normalization을 포함한다. CTA가 repeated iteration에서 같은 row storage를 재사용하므로 cache-reuse/compute 중심 coordinate의 결과다. platform 간 값은 pool하거나 하나의 GPU ranking으로 만들지 않는다. SASS audit도 target-native provenance이며 다른 architecture의 same-lowering, physical two-lane issue, cycle 또는 energy attribution을 주장하지 않는다."
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "body": "## Adaptive decision and next step\n\nanalysis status: `followup_complete_screened_range_not_fresh_extrema_confirmed`. gate-triggered follow-up coordinates were acquired; extrema remain screened, not independently confirmed.\n\nscreened best/worst를 final range로 승격해야 한다면, policy별로 선택된 extrema를 새 fresh 3-session으로 재확인한다. 그 전에는 broad CTA×S sweep이나 cross-platform pJ ranking을 확대하지 않는다."
+      },
+      {
+        "id": "questions",
+        "type": "markdown",
+        "body": "## 추가 확인 질문\n\nA100/H100 native cubin에서 같은 PTX endpoint contract가 어떤 target-specific SASS provenance를 보이는가? workload-level numerical tolerance가 stricter할 때 FP16 reduction boundary는 유지되는가? fixed clock 또는 external meter가 board-level trace variance 해석을 바꾸는가?"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-07-28T20:34:14+09:00",
+    "status": "ready",
+    "datasets": {
+      "range_summary": [
+        {
+          "policy": "fp16_scalar_all",
+          "policy_label": "scalar FP16 endpoint",
+          "range_status": "followup_complete_screened_range_not_fresh_extrema_confirmed",
+          "best_coordinate": "s1024_q50",
+          "best_coordinate_set_within_10pct": "s1024_q50;s512_q25",
+          "best_median_net_pj": 2055.76316951,
+          "representative_coordinate": "s1024_q50",
+          "representative_median_net_pj": 2055.76316951,
+          "representative_mean_net_pj": 2047.5326998033333,
+          "representative_t95_low_net_pj": 1575.1519626289253,
+          "representative_t95_high_net_pj": 2519.9134369777416,
+          "worst_coordinate": "s4096_q25",
+          "worst_coordinate_set_within_10pct": "s4096_q25;s4096_q50",
+          "worst_median_net_pj": 5056.08065522
+        },
+        {
+          "policy": "fp16x2_all",
+          "policy_label": "packed FP16x2 endpoint",
+          "range_status": "followup_complete_screened_range_not_fresh_extrema_confirmed",
+          "best_coordinate": "s512_q50",
+          "best_coordinate_set_within_10pct": "s512_q50;s1024_q50",
+          "best_median_net_pj": 1626.7801485,
+          "representative_coordinate": "s1024_q50",
+          "representative_median_net_pj": 1738.94464934,
+          "representative_mean_net_pj": 1623.9925886166666,
+          "representative_t95_low_net_pj": 980.4893280937519,
+          "representative_t95_high_net_pj": 2267.4958491395814,
+          "worst_coordinate": "s4096_q25",
+          "worst_coordinate_set_within_10pct": "s4096_q25;s4096_q50",
+          "worst_median_net_pj": 5320.47417723
+        },
+        {
+          "policy": "fp32_io_fp32_all",
+          "policy_label": "FP32 endpoint",
+          "range_status": "followup_complete_screened_range_not_fresh_extrema_confirmed",
+          "best_coordinate": "s512_q50",
+          "best_coordinate_set_within_10pct": "s512_q50",
+          "best_median_net_pj": 2089.3303878,
+          "representative_coordinate": "s1024_q50",
+          "representative_median_net_pj": 2596.74700455,
+          "representative_mean_net_pj": 2523.8654138,
+          "representative_t95_low_net_pj": 2210.2186154215983,
+          "representative_t95_high_net_pj": 2837.512212178402,
+          "worst_coordinate": "s4096_q25",
+          "worst_coordinate_set_within_10pct": "s4096_q25;s4096_q50",
+          "worst_median_net_pj": 6456.35630747
+        }
+      ],
+      "range_points": [
+        {
+          "policy": "fp16_scalar_all",
+          "policy_label": "scalar FP16 endpoint",
+          "range_role": "screened best",
+          "coordinate_id": "s1024_q50",
+          "coordinate_label": "S=1024 · q50 (representative)",
+          "median_net_pj": 2055.76316951
+        },
+        {
+          "policy": "fp16_scalar_all",
+          "policy_label": "scalar FP16 endpoint",
+          "range_role": "fixed representative",
+          "coordinate_id": "s1024_q50",
+          "coordinate_label": "S=1024 · q50 (representative)",
+          "median_net_pj": 2055.76316951
+        },
+        {
+          "policy": "fp16_scalar_all",
+          "policy_label": "scalar FP16 endpoint",
+          "range_role": "screened worst",
+          "coordinate_id": "s4096_q25",
+          "coordinate_label": "S=4096 · q25",
+          "median_net_pj": 5056.08065522
+        },
+        {
+          "policy": "fp16x2_all",
+          "policy_label": "packed FP16x2 endpoint",
+          "range_role": "screened best",
+          "coordinate_id": "s512_q50",
+          "coordinate_label": "S=512 · q50",
+          "median_net_pj": 1626.7801485
+        },
+        {
+          "policy": "fp16x2_all",
+          "policy_label": "packed FP16x2 endpoint",
+          "range_role": "fixed representative",
+          "coordinate_id": "s1024_q50",
+          "coordinate_label": "S=1024 · q50 (representative)",
+          "median_net_pj": 1738.94464934
+        },
+        {
+          "policy": "fp16x2_all",
+          "policy_label": "packed FP16x2 endpoint",
+          "range_role": "screened worst",
+          "coordinate_id": "s4096_q25",
+          "coordinate_label": "S=4096 · q25",
+          "median_net_pj": 5320.47417723
+        },
+        {
+          "policy": "fp32_io_fp32_all",
+          "policy_label": "FP32 endpoint",
+          "range_role": "screened best",
+          "coordinate_id": "s512_q50",
+          "coordinate_label": "S=512 · q50",
+          "median_net_pj": 2089.3303878
+        },
+        {
+          "policy": "fp32_io_fp32_all",
+          "policy_label": "FP32 endpoint",
+          "range_role": "fixed representative",
+          "coordinate_id": "s1024_q50",
+          "coordinate_label": "S=1024 · q50 (representative)",
+          "median_net_pj": 2596.74700455
+        },
+        {
+          "policy": "fp32_io_fp32_all",
+          "policy_label": "FP32 endpoint",
+          "range_role": "screened worst",
+          "coordinate_id": "s4096_q25",
+          "coordinate_label": "S=4096 · q25",
+          "median_net_pj": 6456.35630747
+        }
+      ],
+      "coordinate_summary": [
+        {
+          "coordinate_id": "s1024_q25",
+          "coordinate_label": "S=1024 · q25",
+          "policy": "fp16_scalar_all",
+          "policy_label": "scalar FP16 endpoint",
+          "softmax_cols": 1024,
+          "grid_blocks": 21,
+          "requested_sm_coverage": 0.25,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 2518.1736647,
+          "mean_net_pj": 2559.076648463333,
+          "sample_std_net_pj": 110.84885007733847,
+          "min_session_net_pj": 2474.49158955,
+          "max_session_net_pj": 2684.56469114,
+          "t95_low_net_pj": 2283.7128396717026,
+          "t95_high_net_pj": 2834.440457254964
+        },
+        {
+          "coordinate_id": "s1024_q25",
+          "coordinate_label": "S=1024 · q25",
+          "policy": "fp16x2_all",
+          "policy_label": "packed FP16x2 endpoint",
+          "softmax_cols": 1024,
+          "grid_blocks": 21,
+          "requested_sm_coverage": 0.25,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 1961.53711386,
+          "mean_net_pj": 1941.2720753066667,
+          "sample_std_net_pj": 66.61292256639264,
+          "min_session_net_pj": 1866.8801006,
+          "max_session_net_pj": 1995.39901146,
+          "t95_low_net_pj": 1775.796402263363,
+          "t95_high_net_pj": 2106.7477483499706
+        },
+        {
+          "coordinate_id": "s1024_q25",
+          "coordinate_label": "S=1024 · q25",
+          "policy": "fp32_io_fp32_all",
+          "policy_label": "FP32 endpoint",
+          "softmax_cols": 1024,
+          "grid_blocks": 21,
+          "requested_sm_coverage": 0.25,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 2989.92629394,
+          "mean_net_pj": 2996.8529662233336,
+          "sample_std_net_pj": 68.33017311221211,
+          "min_session_net_pj": 2932.24994896,
+          "max_session_net_pj": 3068.38265577,
+          "t95_low_net_pj": 2827.1114063384757,
+          "t95_high_net_pj": 3166.5945261081915
+        },
+        {
+          "coordinate_id": "s1024_q50",
+          "coordinate_label": "S=1024 · q50 (representative)",
+          "policy": "fp16_scalar_all",
+          "policy_label": "scalar FP16 endpoint",
+          "softmax_cols": 1024,
+          "grid_blocks": 41,
+          "requested_sm_coverage": 0.5,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 2055.76316951,
+          "mean_net_pj": 2047.5326998033333,
+          "sample_std_net_pj": 190.1588365742422,
+          "min_session_net_pj": 1853.39226227,
+          "max_session_net_pj": 2233.44266763,
+          "t95_low_net_pj": 1575.1519626289253,
+          "t95_high_net_pj": 2519.9134369777416
+        },
+        {
+          "coordinate_id": "s1024_q50",
+          "coordinate_label": "S=1024 · q50 (representative)",
+          "policy": "fp16x2_all",
+          "policy_label": "packed FP16x2 endpoint",
+          "softmax_cols": 1024,
+          "grid_blocks": 41,
+          "requested_sm_coverage": 0.5,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 1738.94464934,
+          "mean_net_pj": 1623.9925886166666,
+          "sample_std_net_pj": 259.0449222902783,
+          "min_session_net_pj": 1327.36432731,
+          "max_session_net_pj": 1805.6687892,
+          "t95_low_net_pj": 980.4893280937519,
+          "t95_high_net_pj": 2267.4958491395814
+        },
+        {
+          "coordinate_id": "s1024_q50",
+          "coordinate_label": "S=1024 · q50 (representative)",
+          "policy": "fp32_io_fp32_all",
+          "policy_label": "FP32 endpoint",
+          "softmax_cols": 1024,
+          "grid_blocks": 41,
+          "requested_sm_coverage": 0.5,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 2596.74700455,
+          "mean_net_pj": 2523.8654138,
+          "sample_std_net_pj": 126.25982725636013,
+          "min_session_net_pj": 2378.07312426,
+          "max_session_net_pj": 2596.77611259,
+          "t95_low_net_pj": 2210.2186154215983,
+          "t95_high_net_pj": 2837.512212178402
+        },
+        {
+          "coordinate_id": "s2048_q50",
+          "coordinate_label": "S=2048 · q50",
+          "policy": "fp16_scalar_all",
+          "policy_label": "scalar FP16 endpoint",
+          "softmax_cols": 2048,
+          "grid_blocks": 41,
+          "requested_sm_coverage": 0.5,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 3020.94578628,
+          "mean_net_pj": 2990.2430315099996,
+          "sample_std_net_pj": 99.9524541409559,
+          "min_session_net_pj": 2878.54073962,
+          "max_session_net_pj": 3071.24256863,
+          "t95_low_net_pj": 2741.947370787118,
+          "t95_high_net_pj": 3238.538692232881
+        },
+        {
+          "coordinate_id": "s2048_q50",
+          "coordinate_label": "S=2048 · q50",
+          "policy": "fp16x2_all",
+          "policy_label": "packed FP16x2 endpoint",
+          "softmax_cols": 2048,
+          "grid_blocks": 41,
+          "requested_sm_coverage": 0.5,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 2829.6503543,
+          "mean_net_pj": 2835.286564356667,
+          "sample_std_net_pj": 62.60974647632281,
+          "min_session_net_pj": 2775.68547998,
+          "max_session_net_pj": 2900.52385879,
+          "t95_low_net_pj": 2679.755332005857,
+          "t95_high_net_pj": 2990.817796707477
+        },
+        {
+          "coordinate_id": "s2048_q50",
+          "coordinate_label": "S=2048 · q50",
+          "policy": "fp32_io_fp32_all",
+          "policy_label": "FP32 endpoint",
+          "softmax_cols": 2048,
+          "grid_blocks": 41,
+          "requested_sm_coverage": 0.5,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 5031.57201137,
+          "mean_net_pj": 5055.169406756667,
+          "sample_std_net_pj": 151.01298174242842,
+          "min_session_net_pj": 4917.3442666,
+          "max_session_net_pj": 5216.5919423,
+          "t95_low_net_pj": 4680.032363832328,
+          "t95_high_net_pj": 5430.306449681006
+        },
+        {
+          "coordinate_id": "s4096_q25",
+          "coordinate_label": "S=4096 · q25",
+          "policy": "fp16_scalar_all",
+          "policy_label": "scalar FP16 endpoint",
+          "softmax_cols": 4096,
+          "grid_blocks": 21,
+          "requested_sm_coverage": 0.25,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 5056.08065522,
+          "mean_net_pj": 5003.038693070001,
+          "sample_std_net_pj": 723.2457289500466,
+          "min_session_net_pj": 4254.73221953,
+          "max_session_net_pj": 5698.30320446,
+          "t95_low_net_pj": 3206.396702855265,
+          "t95_high_net_pj": 6799.680683284736
+        },
+        {
+          "coordinate_id": "s4096_q25",
+          "coordinate_label": "S=4096 · q25",
+          "policy": "fp16x2_all",
+          "policy_label": "packed FP16x2 endpoint",
+          "softmax_cols": 4096,
+          "grid_blocks": 21,
+          "requested_sm_coverage": 0.25,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 5320.47417723,
+          "mean_net_pj": 4848.429702593334,
+          "sample_std_net_pj": 831.3510267246511,
+          "min_session_net_pj": 3888.51172685,
+          "max_session_net_pj": 5336.3032037,
+          "t95_low_net_pj": 2783.2392653266047,
+          "t95_high_net_pj": 6913.620139860062
+        },
+        {
+          "coordinate_id": "s4096_q25",
+          "coordinate_label": "S=4096 · q25",
+          "policy": "fp32_io_fp32_all",
+          "policy_label": "FP32 endpoint",
+          "softmax_cols": 4096,
+          "grid_blocks": 21,
+          "requested_sm_coverage": 0.25,
+          "occupancy_max_blocks_per_sm": 4,
+          "fresh_sessions": 3,
+          "median_net_pj": 6456.35630747,
+          "mean_net_pj": 6570.36971285,
+          "sample_std_net_pj": 256.71877174178394,
+          "min_session_net_pj": 6390.40545675,
+          "max_session_net_pj": 6864.34737433,
+          "t95_low_net_pj": 5932.6449306280265,
+          "t95_high_net_pj": 7208.094495071973
+        },
+        {
+          "coordinate_id": "s4096_q50",
+          "coordinate_label": "S=4096 · q50",
+          "policy": "fp16_scalar_all",
+          "policy_label": "scalar FP16 endpoint",
+          "softmax_cols": 4096,
+          "grid_blocks": 41,
+          "requested_sm_coverage": 0.5,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 4989.37915454,
+          "mean_net_pj": 4976.761989783333,
+          "sample_std_net_pj": 377.64273593254586,
+          "min_session_net_pj": 4592.96878339,
+          "max_session_net_pj": 5347.93803142,
+          "t95_low_net_pj": 4038.645427849444,
+          "t95_high_net_pj": 5914.878551717222
+        },
+        {
+          "coordinate_id": "s4096_q50",
+          "coordinate_label": "S=4096 · q50",
+          "policy": "fp16x2_all",
+          "policy_label": "packed FP16x2 endpoint",
+          "softmax_cols": 4096,
+          "grid_blocks": 41,
+          "requested_sm_coverage": 0.5,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 4797.91699826,
+          "mean_net_pj": 4794.307144316666,
+          "sample_std_net_pj": 371.03220132756184,
+          "min_session_net_pj": 4421.48318665,
+          "max_session_net_pj": 5163.52124804,
+          "t95_low_net_pj": 3872.6120606904665,
+          "t95_high_net_pj": 5716.002227942867
+        },
+        {
+          "coordinate_id": "s4096_q50",
+          "coordinate_label": "S=4096 · q50",
+          "policy": "fp32_io_fp32_all",
+          "policy_label": "FP32 endpoint",
+          "softmax_cols": 4096,
+          "grid_blocks": 41,
+          "requested_sm_coverage": 0.5,
+          "occupancy_max_blocks_per_sm": 4,
+          "fresh_sessions": 3,
+          "median_net_pj": 5979.34494163,
+          "mean_net_pj": 5978.551123733334,
+          "sample_std_net_pj": 201.36896695140337,
+          "min_session_net_pj": 5776.78642133,
+          "max_session_net_pj": 6179.52200824,
+          "t95_low_net_pj": 5478.322878934335,
+          "t95_high_net_pj": 6478.779368532333
+        },
+        {
+          "coordinate_id": "s512_q25",
+          "coordinate_label": "S=512 · q25",
+          "policy": "fp16_scalar_all",
+          "policy_label": "scalar FP16 endpoint",
+          "softmax_cols": 512,
+          "grid_blocks": 21,
+          "requested_sm_coverage": 0.25,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 2209.90202159,
+          "mean_net_pj": 2435.45358048,
+          "sample_std_net_pj": 786.1622560383213,
+          "min_session_net_pj": 1786.72035569,
+          "max_session_net_pj": 3309.73836416,
+          "t95_low_net_pj": 482.5182726270418,
+          "t95_high_net_pj": 4388.388888332958
+        },
+        {
+          "coordinate_id": "s512_q25",
+          "coordinate_label": "S=512 · q25",
+          "policy": "fp16x2_all",
+          "policy_label": "packed FP16x2 endpoint",
+          "softmax_cols": 512,
+          "grid_blocks": 21,
+          "requested_sm_coverage": 0.25,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 2131.18939131,
+          "mean_net_pj": 2090.5701882333333,
+          "sample_std_net_pj": 127.11579360568754,
+          "min_session_net_pj": 1948.10910189,
+          "max_session_net_pj": 2192.4120715,
+          "t95_low_net_pj": 1774.7970515664979,
+          "t95_high_net_pj": 2406.3433249001687
+        },
+        {
+          "coordinate_id": "s512_q25",
+          "coordinate_label": "S=512 · q25",
+          "policy": "fp32_io_fp32_all",
+          "policy_label": "FP32 endpoint",
+          "softmax_cols": 512,
+          "grid_blocks": 21,
+          "requested_sm_coverage": 0.25,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 2611.22365807,
+          "mean_net_pj": 2588.5135093000004,
+          "sample_std_net_pj": 75.58016365826491,
+          "min_session_net_pj": 2504.18208261,
+          "max_session_net_pj": 2650.13478722,
+          "t95_low_net_pj": 2400.7619744891817,
+          "t95_high_net_pj": 2776.265044110819
+        },
+        {
+          "coordinate_id": "s512_q50",
+          "coordinate_label": "S=512 · q50",
+          "policy": "fp16_scalar_all",
+          "policy_label": "scalar FP16 endpoint",
+          "softmax_cols": 512,
+          "grid_blocks": 41,
+          "requested_sm_coverage": 0.5,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 2455.60346494,
+          "mean_net_pj": 2455.4304209966667,
+          "sample_std_net_pj": 11.924288450085568,
+          "min_session_net_pj": 2443.42055231,
+          "max_session_net_pj": 2467.26724574,
+          "t95_low_net_pj": 2425.8088463709064,
+          "t95_high_net_pj": 2485.051995622427
+        },
+        {
+          "coordinate_id": "s512_q50",
+          "coordinate_label": "S=512 · q50",
+          "policy": "fp16x2_all",
+          "policy_label": "packed FP16x2 endpoint",
+          "softmax_cols": 512,
+          "grid_blocks": 41,
+          "requested_sm_coverage": 0.5,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 1626.7801485,
+          "mean_net_pj": 1616.39670478,
+          "sample_std_net_pj": 25.428286712351188,
+          "min_session_net_pj": 1587.41978085,
+          "max_session_net_pj": 1634.99018499,
+          "t95_low_net_pj": 1553.229338810273,
+          "t95_high_net_pj": 1679.5640707497269
+        },
+        {
+          "coordinate_id": "s512_q50",
+          "coordinate_label": "S=512 · q50",
+          "policy": "fp32_io_fp32_all",
+          "policy_label": "FP32 endpoint",
+          "softmax_cols": 512,
+          "grid_blocks": 41,
+          "requested_sm_coverage": 0.5,
+          "occupancy_max_blocks_per_sm": 6,
+          "fresh_sessions": 3,
+          "median_net_pj": 2089.3303878,
+          "mean_net_pj": 2067.7735264099997,
+          "sample_std_net_pj": 69.34826552093666,
+          "min_session_net_pj": 1990.20693639,
+          "max_session_net_pj": 2123.78325504,
+          "t95_low_net_pj": 1895.502884778487,
+          "t95_high_net_pj": 2240.0441680415124
+        }
+      ],
+      "quality": [
+        {
+          "check": "evidence binding",
+          "detail": "63 raw roles are SHA-256 bound across manifest.json, manifest.json",
+          "result": "pass"
+        },
+        {
+          "check": "target-native PTX/SASS binding",
+          "detail": "sass_audit.json SHA-256 ae956aa53147b00ac82cb7fa240ebd60846d3bb961677fe6c5d6fca9fbcb7182; sass_audit.json SHA-256 e0ce2cabf1a0c19c148064e4a6d066e8180ec35748933f16c563eb406d01d024",
+          "result": "pass"
+        },
+        {
+          "check": "5 s common conditioning",
+          "detail": "actual preheat 4.958-5.108 s",
+          "result": "pass"
+        },
+        {
+          "check": "trace/numerical/capacity",
+          "detail": "trace R² 0.999763-1.000000; all static single-wave gates pass",
+          "result": "pass"
+        },
+        {
+          "check": "thermal context",
+          "detail": "45-71 C; temperature is not a rejection or causal correction",
+          "result": "recorded_not_adjusted"
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "analysis",
+      "label": "Fail-closed whole-Softmax precision range analysis",
+      "path": "results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/analysis/analysis.json",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT range_summary, coordinate_summary FROM read_json_auto('results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/analysis/analysis.json');",
+        "description": "The report consumes the analyzer's SHA-bound result arrays. The analyzer checks frozen binary/runner, raw/trace SHA, target-native PTX/SASS audit binding, 5-second common conditioning, numerical validation, logical denominator, trace, and one-CTA-per-distinct-SM placement before computing medians.",
+        "tables_used": [
+          "results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/analysis/analysis.json",
+          "results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_screen/manifest.json",
+          "results/raw/rtx3090_softmax_whole_precision_range_20260728_range_v2_contiguous_followup_followup/manifest.json"
+        ],
+        "metric_definitions": [
+          "Primary metric = (qualified NVML trace energy − idle power × elapsed) × 1e12 / logical Softmax output elements.",
+          "A coordinate/policy estimate is the median of three fresh CUDA-process sessions.",
+          "Best/worst are screened coordinate medians; the representative is predeclared S=1024,q50."
+        ],
+        "filters": [
+          "complete Softmax forward endpoint",
+          "256 threads/CTA",
+          "2 rows/CTA",
+          "5-second requested common FP32 conditioner",
+          "temperature recorded but not adjusted"
+        ]
+      }
+    }
+  ]
+}

@@ -174,3 +174,44 @@ set_target_properties(a100_fp16_softmax_whole_precision_confirmation_energy PROP
   CUDA_SEPARABLE_COMPILATION OFF
   CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
+
+# The endpoint-range binary is intentionally distinct from the frozen
+# stage-isolation and confirmation binaries.  It compiles only complete
+# FP32/scalar-FP16/packed-FP16x2 policies at the small set of range widths,
+# which keeps historical S=512 SASS and binary hashes reproducible.
+add_executable(a100_fp16_softmax_whole_precision_range_energy
+  src/softmax_whole_precision_main.cu
+  src/softmax_whole_precision_range_kernels.cu
+  src/softmax_whole_precision_result_writer.cpp
+  src/nvml_energy.cpp
+)
+
+target_include_directories(a100_fp16_softmax_whole_precision_range_energy PRIVATE
+  include
+)
+
+if(NVML_INCLUDE_DIR)
+  target_include_directories(a100_fp16_softmax_whole_precision_range_energy PRIVATE
+    "${NVML_INCLUDE_DIR}"
+  )
+endif()
+
+target_link_libraries(a100_fp16_softmax_whole_precision_range_energy PRIVATE
+  CUDA::cudart
+  "${NVML_LIBRARY}"
+)
+
+target_compile_definitions(a100_fp16_softmax_whole_precision_range_energy PRIVATE
+  FP16SOFTMAX_WHOLE_PRECISION_RANGE_BUILD=1
+)
+
+target_compile_options(a100_fp16_softmax_whole_precision_range_energy PRIVATE
+  $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+  $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>
+  $<$<COMPILE_LANGUAGE:CUDA>:-Xptxas=-v>
+)
+
+set_target_properties(a100_fp16_softmax_whole_precision_range_energy PROPERTIES
+  CUDA_SEPARABLE_COMPILATION OFF
+  CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)

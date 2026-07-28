@@ -46,13 +46,20 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
+#if defined(FP16SOFTMAX_WHOLE_PRECISION_RANGE_BUILD)
+constexpr bool kEndpointRangeBuild = true;
+#else
+constexpr bool kEndpointRangeBuild = false;
+#endif
+
 struct Options {
   int gpu_id = 0;
   std::string target_profile = "rtx3090";
   std::vector<std::vector<Policy>> schedule;
   std::uint64_t grid_blocks = 16;
+  int softmax_cols = kSoftmaxCols;
   double seconds = 13.0;
-  double preheat_seconds = 20.0;
+  double preheat_seconds = 5.0;
   double idle_seconds = 1.0;
   double trace_sample_ms = 500.0;
   int trace_min_updates = 16;
@@ -72,6 +79,9 @@ struct Options {
   std::string protocol_revision = "whole_softmax_precision_stage_isolation_v1";
   std::string conditioning_mode = "legacy_stage_isolation_v1";
   std::string confirmation_pair;
+  std::string range_phase;
+  std::string coordinate_id;
+  double requested_sm_coverage = std::numeric_limits<double>::quiet_NaN();
   bool validate_only = false;
   bool dry_run = false;
 };
@@ -92,6 +102,9 @@ struct DeviceState {
   int gpu_id = -1;
   std::string pci_bus_id;
   std::uint64_t grid_blocks = 0;
+  int softmax_cols = kSoftmaxCols;
+  int threads_per_block = kThreadsPerBlock;
+  int elements_per_thread = kElementsPerThread;
   std::uint64_t rows = 0;
   std::size_t element_count = 0;
   half* input_f16 = nullptr;
@@ -234,20 +247,23 @@ std::string default_trace_path(const std::string& output) {
 void usage(const char* program) {
   std::cout
       << "Usage: " << program << " [options]\n\n"
-      << "Whole-Softmax precision options (initial S=512 design):\n"
+      << "Whole-Softmax precision options:\n"
       << "  --policy <id>                         one policy, one measured role\n"
       << "  --policy-schedule A,B,C;A,C,B;...      persistent ordered policy blocks\n"
       << "  --grid-blocks <n>                      default 16 underfilled CTAs\n"
+      << "  --softmax-cols 512|1024|2048|4096      range target only; legacy target is S=512\n"
       << "  --seconds <s>                          per-policy calibrated role duration\n"
-      << "  --preheat-seconds <s>                  nominal per-policy preheat (default 20)\n"
+      << "  --preheat-seconds <s>                  nominal session preheat (default 5)\n"
       << "  --idle-seconds <s>                     per-role idle baseline\n"
       << "  --energy-trace-sample-ms <ms>          default 500\n"
       << "  --energy-trace-min-updates <n>         default 16\n"
-      << "  --target-profile rtx3090|auto\n"
-      << "  --conditioning-mode legacy_stage_isolation_v1|canonical_common_v1\n"
+      << "  --target-profile rtx3090|v100|a100|h100|auto (range target); legacy rtx3090|auto\n"
+      << "  --conditioning-mode legacy_stage_isolation_v1|canonical_common_v1|endpoint_range_common_v1\n"
       << "  --confirmation-pair exp_packed|reduction_scalar\n"
       << "  --schema-version <id> --experiment-kind <id> --protocol-revision <id>\n"
       << "  --design-id <id> --stage-group <id> --session-order <id>\n"
+      << "  --range-phase <screen|followup|confirmation> --coordinate-id <id>\n"
+      << "  --requested-sm-coverage <fraction>     range metadata only\n"
       << "  --session-id <id> --output <csv> --energy-trace-output <csv>\n"
       << "  --binary-sha256 <hex> --validate-only --dry-run\n\n"
       << "Policy IDs:\n";
@@ -287,6 +303,8 @@ Options parse_options(int argc, char** argv) {
       options.target_profile = value();
     } else if (argument == "--grid-blocks") {
       options.grid_blocks = std::stoull(value());
+    } else if (argument == "--softmax-cols") {
+      options.softmax_cols = std::stoi(value());
     } else if (argument == "--seconds") {
       options.seconds = std::stod(value());
     } else if (argument == "--preheat-seconds") {
@@ -325,6 +343,12 @@ Options parse_options(int argc, char** argv) {
       options.conditioning_mode = value();
     } else if (argument == "--confirmation-pair") {
       options.confirmation_pair = value();
+    } else if (argument == "--range-phase") {
+      options.range_phase = value();
+    } else if (argument == "--coordinate-id") {
+      options.coordinate_id = value();
+    } else if (argument == "--requested-sm-coverage") {
+      options.requested_sm_coverage = std::stod(value());
     } else if (argument == "--validate-only") {
       options.validate_only = true;
     } else if (argument == "--dry-run") {
@@ -344,16 +368,111 @@ Options parse_options(int argc, char** argv) {
                               : policy_from_string(single_policy);
     options.schedule = {{policy}};
   }
-  if (options.target_profile != "rtx3090" && options.target_profile != "auto") {
-    throw std::invalid_argument("--target-profile must be rtx3090 or auto");
-  }
-  if (options.conditioning_mode != "legacy_stage_isolation_v1" &&
-      options.conditioning_mode != "canonical_common_v1") {
-    throw std::invalid_argument(
-        "--conditioning-mode must be legacy_stage_isolation_v1 or canonical_common_v1");
+  if constexpr (kEndpointRangeBuild) {
+    if (options.target_profile != "rtx3090" && options.target_profile != "v100" &&
+        options.target_profile != "a100" && options.target_profile != "h100" &&
+        options.target_profile != "auto") {
+      throw std::invalid_argument(
+          "range --target-profile must be rtx3090, v100, a100, h100, or auto");
+    }
+    if (options.conditioning_mode != "endpoint_range_common_v1") {
+      throw std::invalid_argument(
+          "range target requires --conditioning-mode endpoint_range_common_v1");
+    }
+    if (!options.confirmation_pair.empty()) {
+      throw std::invalid_argument("range target does not accept --confirmation-pair");
+    }
+    if (!is_range_softmax_cols(options.softmax_cols)) {
+      throw std::invalid_argument(
+          "range --softmax-cols must be one of 512, 1024, 2048, 4096");
+    }
+    if (options.range_phase != "screen" && options.range_phase != "followup" &&
+        options.range_phase != "confirmation") {
+      throw std::invalid_argument(
+          "range --range-phase must be screen, followup, or confirmation");
+    }
+    if (options.coordinate_id.empty()) {
+      throw std::invalid_argument("range target requires --coordinate-id");
+    }
+    if (!(options.requested_sm_coverage > 0.0 &&
+          options.requested_sm_coverage <= 1.0)) {
+      throw std::invalid_argument(
+          "range --requested-sm-coverage must be in (0, 1]");
+    }
+    if (options.schedule.size() != 1 || options.schedule.front().empty()) {
+      throw std::invalid_argument("range target requires one non-empty policy schedule block");
+    }
+    std::vector<Policy> scheduled;
+    for (const Policy policy : options.schedule.front()) {
+      if (std::find(scheduled.begin(), scheduled.end(), policy) == scheduled.end()) {
+        scheduled.push_back(policy);
+      }
+    }
+    if (scheduled.size() != options.schedule.front().size() ||
+        !std::all_of(scheduled.begin(), scheduled.end(), is_endpoint_policy)) {
+      throw std::invalid_argument(
+          "range policy schedule must contain distinct complete-Softmax endpoints");
+    }
+    const bool fp32_only = scheduled.size() == 1 &&
+        scheduled.front() == Policy::fp32_io_fp32_all;
+    const bool three_endpoints = scheduled.size() == 3 &&
+        std::find(scheduled.begin(), scheduled.end(), Policy::fp32_io_fp32_all) != scheduled.end() &&
+        std::find(scheduled.begin(), scheduled.end(), Policy::fp16_scalar_all) != scheduled.end() &&
+        std::find(scheduled.begin(), scheduled.end(), Policy::fp16x2_all) != scheduled.end();
+    if (!fp32_only && !three_endpoints) {
+      throw std::invalid_argument(
+          "range schedule must be FP32 alone (V100) or FP32/scalar-FP16/packed-FP16x2 exactly once");
+    }
+    if (options.target_profile == "v100" && !fp32_only) {
+      throw std::invalid_argument(
+          "V100 range profile must use the FP32-only endpoint schedule");
+    }
+    if (options.target_profile != "v100" && options.target_profile != "auto" &&
+        !three_endpoints) {
+      throw std::invalid_argument(
+          "RTX 3090/A100/H100 range profiles require all three endpoint policies");
+    }
+    if ((fp32_only && options.session_order != "A") ||
+        (three_endpoints && options.session_order != "ABC" &&
+         options.session_order != "BCA" && options.session_order != "CAB")) {
+      throw std::invalid_argument(
+          "range session_order must match the predeclared A or ABC/BCA/CAB rotation");
+    }
+    if (three_endpoints) {
+      const std::vector<Policy> abc = {
+          Policy::fp32_io_fp32_all, Policy::fp16_scalar_all, Policy::fp16x2_all};
+      std::vector<Policy> expected = abc;
+      if (options.session_order == "BCA") {
+        expected = {abc[1], abc[2], abc[0]};
+      } else if (options.session_order == "CAB") {
+        expected = {abc[2], abc[0], abc[1]};
+      }
+      if (options.schedule.front() != expected) {
+        throw std::invalid_argument(
+            "range policy schedule does not match its declared ABC/BCA/CAB order");
+      }
+    }
+    if (options.schema_version != "softmax_whole_precision_range_v1" ||
+        options.experiment_kind != "whole_softmax_precision_range" ||
+        options.protocol_revision != "whole_softmax_precision_range_common_v1" ||
+        options.design_id != "whole_precision_range_v1") {
+      throw std::invalid_argument("range metadata contract is incomplete or inconsistent");
+    }
+  } else {
+    if (options.target_profile != "rtx3090" && options.target_profile != "auto") {
+      throw std::invalid_argument("--target-profile must be rtx3090 or auto");
+    }
+    if (options.softmax_cols != kSoftmaxCols) {
+      throw std::invalid_argument("legacy whole-precision target is fixed at S=512");
+    }
+    if (options.conditioning_mode != "legacy_stage_isolation_v1" &&
+        options.conditioning_mode != "canonical_common_v1") {
+      throw std::invalid_argument(
+          "--conditioning-mode must be legacy_stage_isolation_v1 or canonical_common_v1");
+    }
   }
   const std::optional<Policy> treatment = confirmation_treatment(options.confirmation_pair);
-  if (treatment.has_value()) {
+  if (!kEndpointRangeBuild && treatment.has_value()) {
     if (options.conditioning_mode != "canonical_common_v1") {
       throw std::invalid_argument(
           "confirmation pairs require --conditioning-mode canonical_common_v1");
@@ -387,7 +506,7 @@ Options parse_options(int argc, char** argv) {
       throw std::invalid_argument(
           "confirmation session_order does not match the supplied policy schedule");
     }
-  } else if (options.conditioning_mode == "canonical_common_v1") {
+  } else if (!kEndpointRangeBuild && options.conditioning_mode == "canonical_common_v1") {
     throw std::invalid_argument(
         "canonical_common_v1 requires an explicit --confirmation-pair");
   }
@@ -423,17 +542,76 @@ void require_profile(const Options& options, const DeviceState& state,
   std::transform(name.begin(), name.end(), name.begin(), [](unsigned char value) {
     return static_cast<char>(std::tolower(value));
   });
-  if (state.properties.major != 8 || state.properties.minor != 6 ||
-      name.find("rtx 3090") == std::string::npos ||
-      state.properties.multiProcessorCount != 82) {
-    throw std::runtime_error(
-        "whole-precision rtx3090 profile requires a full 82-SM NVIDIA GeForce RTX 3090");
-  }
-  for (const Policy policy : policies) {
-    if (query_binary_version(policy) != 86) {
+  if constexpr (kEndpointRangeBuild) {
+    int expected_major = 0;
+    int expected_minor = 0;
+    int expected_binary_arch = 0;
+    std::string required_name;
+    std::vector<int> allowed_sm_counts;
+    if (options.target_profile == "rtx3090") {
+      expected_major = 8;
+      expected_minor = 6;
+      expected_binary_arch = 86;
+      required_name = "rtx 3090";
+      allowed_sm_counts = {82};
+    } else if (options.target_profile == "v100") {
+      expected_major = 7;
+      expected_minor = 0;
+      expected_binary_arch = 70;
+      required_name = "v100";
+      allowed_sm_counts = {80};
+    } else if (options.target_profile == "a100") {
+      expected_major = 8;
+      expected_minor = 0;
+      expected_binary_arch = 80;
+      required_name = "a100";
+      allowed_sm_counts = {108};
+    } else if (options.target_profile == "h100") {
+      expected_major = 9;
+      expected_minor = 0;
+      expected_binary_arch = 90;
+      required_name = "h100";
+      // Keep PCIe 114-SM evidence separate in analysis; this gate merely
+      // verifies that the process sees a complete non-MIG H100 device.
+      allowed_sm_counts = {114, 132};
+    }
+    const bool sm_count_ok = std::find(allowed_sm_counts.begin(), allowed_sm_counts.end(),
+                                       state.properties.multiProcessorCount) !=
+        allowed_sm_counts.end();
+    if (state.properties.major != expected_major ||
+        state.properties.minor != expected_minor ||
+        name.find(required_name) == std::string::npos || !sm_count_ok) {
       throw std::runtime_error(
-          "whole-precision rtx3090 profile requires sm_86 loaded device code for " +
-          std::string(policy_spec(policy).name));
+          "whole-precision range profile does not match the required full-device identity");
+    }
+    if (options.target_profile == "v100") {
+      for (const Policy policy : policies) {
+        if (policy != Policy::fp32_io_fp32_all) {
+          throw std::runtime_error(
+              "V100 range profile supports FP32 endpoint only: native FP16 EX2 requires sm_75");
+        }
+      }
+    }
+    for (const Policy policy : policies) {
+      if (query_binary_version(policy, state.softmax_cols) != expected_binary_arch) {
+        throw std::runtime_error(
+            "whole-precision range profile requires matching native device code for " +
+            std::string(policy_spec(policy).name));
+      }
+    }
+  } else {
+    if (state.properties.major != 8 || state.properties.minor != 6 ||
+        name.find("rtx 3090") == std::string::npos ||
+        state.properties.multiProcessorCount != 82) {
+      throw std::runtime_error(
+          "whole-precision rtx3090 profile requires a full 82-SM NVIDIA GeForce RTX 3090");
+    }
+    for (const Policy policy : policies) {
+      if (query_binary_version(policy) != 86) {
+        throw std::runtime_error(
+            "whole-precision rtx3090 profile requires sm_86 loaded device code for " +
+            std::string(policy_spec(policy).name));
+      }
     }
   }
 }
@@ -450,9 +628,14 @@ DeviceState create_state(const Options& options, const std::vector<Policy>& poli
   DeviceState state;
   state.gpu_id = options.gpu_id;
   state.grid_blocks = options.grid_blocks;
+  state.softmax_cols = options.softmax_cols;
+  state.threads_per_block = kThreadsPerBlock;
+  state.elements_per_thread = kEndpointRangeBuild
+      ? elements_per_thread_for_cols(options.softmax_cols)
+      : kElementsPerThread;
   state.rows = checked_multiply(state.grid_blocks, 2, "allocated rows");
   state.element_count = static_cast<std::size_t>(checked_multiply(
-      state.rows, static_cast<std::uint64_t>(kSoftmaxCols), "allocated elements"));
+      state.rows, static_cast<std::uint64_t>(state.softmax_cols), "allocated elements"));
   CUDA_CHECK(cudaSetDevice(state.gpu_id));
   CUDA_CHECK(cudaGetDeviceProperties(&state.properties, state.gpu_id));
   char pci_bus_id[32] = {};
@@ -474,6 +657,28 @@ DeviceState create_state(const Options& options, const std::vector<Policy>& poli
                          options.logit_scale, options.seed, state.stream));
   CUDA_CHECK(cudaStreamSynchronize(state.stream));
   return state;
+}
+
+void require_single_wave_capacity(const DeviceState& state,
+                                  const std::vector<Policy>& policies) {
+  for (const Policy policy : policies) {
+    const int occupancy = query_occupancy_max_blocks_per_sm(
+        policy, state.softmax_cols);
+    if (occupancy <= 0) {
+      throw std::runtime_error(
+          "failed to query positive occupancy for whole-precision policy " +
+          std::string(policy_spec(policy).name));
+    }
+    const std::uint64_t capacity = checked_multiply(
+        static_cast<std::uint64_t>(state.properties.multiProcessorCount),
+        static_cast<std::uint64_t>(occupancy), "static single-wave CTA capacity");
+    if (state.grid_blocks > capacity) {
+      std::ostringstream error;
+      error << "requested grid " << state.grid_blocks << " exceeds static single-wave capacity "
+            << capacity << " for policy " << policy_spec(policy).name;
+      throw std::runtime_error(error.str());
+    }
+  }
 }
 
 void destroy_state(DeviceState& state) {
@@ -502,6 +707,7 @@ LaunchConfig make_launch(const DeviceState& state, Policy policy,
   config.sm_count_capacity = state.properties.multiProcessorCount;
   config.grid_blocks = state.grid_blocks;
   config.iters = iters;
+  config.softmax_cols = state.softmax_cols;
   config.stream = state.stream;
   return config;
 }
@@ -600,7 +806,10 @@ SmidCheck collect_smid(const DeviceState& state) {
   for (const int smid : smids) {
     if (smid < 0 || smid >= state.properties.multiProcessorCount) in_range = false;
   }
-  result.ok = in_range && summed == result.total_blocks && result.unique > 0;
+  const int expected_distinct = std::min(
+      result.total_blocks, state.properties.multiProcessorCount);
+  result.ok = in_range && summed == result.total_blocks &&
+      result.unique == expected_distinct && result.max_blocks_on_sm == 1;
   return result;
 }
 
@@ -768,7 +977,11 @@ KernelMeasurement measure_kernel(Policy policy, const DeviceState& state,
       ? result.trace_power_w * result.elapsed_s
       : result.endpoint_delta_j;
   result.smid = collect_smid(state);
-  if (!result.smid.ok) throw std::runtime_error("SMID assignment check failed");
+  if (!result.smid.ok) {
+    throw std::runtime_error(
+        "SMID assignment check failed: range coordinates require one observed CTA per "
+        "distinct SM while grid_blocks does not exceed runtime SM count");
+  }
   return result;
 }
 
@@ -799,16 +1012,16 @@ void write_trace_csv(const std::string& path, const ResultRow& row,
   }
 }
 
-std::vector<float> validation_stimulus() {
-  std::vector<float> values(static_cast<std::size_t>(4 * kSoftmaxCols));
-  for (int column = 0; column < kSoftmaxCols; ++column) {
+std::vector<float> validation_stimulus(int softmax_cols) {
+  std::vector<float> values(static_cast<std::size_t>(4 * softmax_cols));
+  for (int column = 0; column < softmax_cols; ++column) {
     values[column] = __half2float(__float2half_rn(0.0f));
-    values[kSoftmaxCols + column] = __half2float(__float2half_rn(
+    values[softmax_cols + column] = __half2float(__float2half_rn(
         column == 0 ? 16.0f : -16.0f));
-    values[2 * kSoftmaxCols + column] = __half2float(__float2half_rn(
+    values[2 * softmax_cols + column] = __half2float(__float2half_rn(
         0.25f + static_cast<float>(column % 7) * 0x1p-11f));
     const float random = static_cast<float>((column * 37 + 11) % 97) / 12.0f - 4.0f;
-    values[3 * kSoftmaxCols + column] =
+    values[3 * softmax_cols + column] =
         __half2float(__float2half_rn(random));
   }
   return values;
@@ -834,7 +1047,7 @@ ValidationResult validate_policy(Policy policy, DeviceState& state,
   if (state.grid_blocks < 2) {
     throw std::runtime_error("validation requires at least two CTA blocks");
   }
-  const std::vector<float> canonical = validation_stimulus();
+  const std::vector<float> canonical = validation_stimulus(state.softmax_cols);
   std::vector<half> quantized(canonical.size());
   for (std::size_t index = 0; index < canonical.size(); ++index) {
     quantized[index] = __float2half_rn(canonical[index]);
@@ -873,16 +1086,16 @@ ValidationResult validate_policy(Policy policy, DeviceState& state,
   std::vector<double> observed_row_sums;
   observed_row_sums.reserve(4);
   for (int row = 0; row < 4; ++row) {
-    const std::size_t begin = static_cast<std::size_t>(row) * kSoftmaxCols;
+    const std::size_t begin = static_cast<std::size_t>(row) * state.softmax_cols;
     const auto max_it = std::max_element(canonical.begin() + begin,
-                                         canonical.begin() + begin + kSoftmaxCols);
+                                         canonical.begin() + begin + state.softmax_cols);
     const long double row_max = static_cast<long double>(*max_it);
     long double denominator = 0.0L;
-    for (int column = 0; column < kSoftmaxCols; ++column) {
+    for (int column = 0; column < state.softmax_cols; ++column) {
       denominator += std::exp(static_cast<long double>(canonical[begin + column]) - row_max);
     }
     double observed_sum = 0.0;
-    for (int column = 0; column < kSoftmaxCols; ++column) {
+    for (int column = 0; column < state.softmax_cols; ++column) {
       const double reference = static_cast<double>(
           std::exp(static_cast<long double>(canonical[begin + column]) - row_max) /
           denominator);
@@ -923,11 +1136,20 @@ ValidationResult validate_policy(Policy policy, DeviceState& state,
 
 double preheat_policy(Policy policy, const DeviceState& state,
                       const Options& options, std::uint64_t one_second_iters) {
-  // One-second chunks keep the requested 20 s preheat close to its contract
-  // without the 5 s quantization overshoot of the early implementation.
+  // One-second chunks keep the requested preheat close to its contract
+  // without the coarse quantization overshoot of the early implementation.
   if (one_second_iters == 0) {
     throw std::runtime_error("whole-precision preheat requires a positive calibrated iteration count");
   }
+  // The session conditioner is deliberately short in the current protocol.
+  // Keep a duration-relative acceptance gate: a hard-coded 16--25 s gate
+  // would silently make the documented 5 s setting impossible to execute.
+  // The one-second calibration is intentionally approximate, so allow enough
+  // headroom to reject a clearly wrong duration without rejecting a valid
+  // final fractional chunk.
+  const double tolerance_s = std::max(0.75, options.preheat_seconds * 0.25);
+  const double lower_gate_s = std::max(0.25, options.preheat_seconds - tolerance_s);
+  const double upper_gate_s = options.preheat_seconds + tolerance_s;
   double elapsed = 0.0;
   while (elapsed < options.preheat_seconds - 0.15) {
     const double remaining = options.preheat_seconds - elapsed;
@@ -936,12 +1158,18 @@ double preheat_policy(Policy policy, const DeviceState& state,
               static_cast<long double>(one_second_iters) * remaining)))
         : one_second_iters;
     elapsed += time_kernel(policy, state, chunk_iters);
-    if (elapsed > 25.0) {
-      throw std::runtime_error("whole-precision preheat exceeded 25-second bound");
+    if (elapsed > upper_gate_s) {
+      std::ostringstream error;
+      error << "whole-precision preheat exceeded duration-relative upper gate "
+            << upper_gate_s << " s";
+      throw std::runtime_error(error.str());
     }
   }
-  if (elapsed < 16.0 || elapsed > 25.0) {
-    throw std::runtime_error("whole-precision preheat outside 16-25 second gate");
+  if (elapsed < lower_gate_s || elapsed > upper_gate_s) {
+    std::ostringstream error;
+    error << "whole-precision preheat outside " << lower_gate_s << '-' << upper_gate_s
+          << " second duration-relative gate";
+    throw std::runtime_error(error.str());
   }
   return elapsed;
 }
@@ -953,7 +1181,8 @@ ResultRow make_row(const Options& options, const DeviceState& state,
                    const KernelMeasurement& measurement,
                    const ValidationResult& validation,
                    double preheat_actual_s,
-                   const ConditioningMetadata& conditioning) {
+                   const ConditioningMetadata& conditioning,
+                   Policy conditioner_policy) {
   const auto spec = policy_spec(policy);
   ResultRow row;
   row.schema_version = options.schema_version;
@@ -982,22 +1211,43 @@ ResultRow make_row(const Options& options, const DeviceState& state,
   row.compute_capability = std::to_string(state.properties.major) + "." +
       std::to_string(state.properties.minor);
   row.cuda_pci_bus_id = state.pci_bus_id;
-  row.cuda_binary_arch = query_binary_version(policy);
+  row.cuda_binary_arch = query_binary_version(policy, state.softmax_cols);
   row.runtime_sm_count = state.properties.multiProcessorCount;
-  row.occupancy_max_blocks_per_sm = query_occupancy_max_blocks_per_sm(policy);
+  row.occupancy_max_blocks_per_sm = query_occupancy_max_blocks_per_sm(
+      policy, state.softmax_cols);
   row.smid_unique = measurement.smid.unique;
   row.smid_total_blocks = measurement.smid.total_blocks;
   row.smid_max_blocks_on_sm = measurement.smid.max_blocks_on_sm;
   row.smid_histogram_ok = measurement.smid.ok;
   row.grid_blocks = state.grid_blocks;
   row.rows_per_block = kRowsPerBlock;
-  row.softmax_cols = kSoftmaxCols;
+  row.softmax_cols = state.softmax_cols;
+  row.threads_per_block = state.threads_per_block;
+  row.elements_per_thread = state.elements_per_thread;
+  row.packed_elementwise_mapping = kEndpointRangeBuild
+      ? "adjacent_within_row_contiguous_thread_chunk"
+      : "legacy_not_applicable";
+  row.static_single_wave_capacity_blocks = checked_multiply(
+      static_cast<std::uint64_t>(row.runtime_sm_count),
+      static_cast<std::uint64_t>(row.occupancy_max_blocks_per_sm),
+      "row static single-wave CTA capacity");
+  row.grid_nominal_ctas_per_sm = std::ceil(
+      static_cast<double>(state.grid_blocks) / static_cast<double>(row.runtime_sm_count));
+  row.grid_sm_coverage = static_cast<double>(state.grid_blocks) /
+      static_cast<double>(row.runtime_sm_count);
+  row.static_single_wave_capacity_gate_pass =
+      row.occupancy_max_blocks_per_sm > 0 &&
+      state.grid_blocks <= row.static_single_wave_capacity_blocks;
+  row.range_phase = options.range_phase;
+  row.coordinate_id = options.coordinate_id;
+  row.requested_sm_coverage = options.requested_sm_coverage;
   row.logit_scale = options.logit_scale;
   row.seed = options.seed;
   row.iters = iters;
   row.logical_input_elements = checked_multiply(
       checked_multiply(state.grid_blocks, kRowsPerBlock, "logical rows"),
-      checked_multiply(iters, kSoftmaxCols, "logical elements per row"),
+      checked_multiply(iters, static_cast<std::uint64_t>(state.softmax_cols),
+                       "logical elements per row"),
       "logical input elements");
   row.logical_output_elements = row.logical_input_elements;
   const std::uint64_t storage_bytes = spec.io == IoImplementation::fp32 ? 4u : 2u;
@@ -1015,7 +1265,7 @@ ResultRow make_row(const Options& options, const DeviceState& state,
   row.idle_power_W = idle.power_w;
   row.preheat_requested_s = options.preheat_seconds;
   row.preheat_actual_s = preheat_actual_s;
-  row.preheat_policy = policy_spec(Policy::fp16_io_fp32_all).name;
+  row.preheat_policy = policy_spec(conditioner_policy).name;
   row.conditioning_mode = conditioning.mode;
   row.conditioning_policy = conditioning.policy;
   row.conditioning_requested_s = options.preheat_seconds;
@@ -1063,15 +1313,25 @@ ResultRow make_row(const Options& options, const DeviceState& state,
   row.validation_underflow_count = validation.underflow_count;
   row.binary_sha256 = options.binary_sha256;
   std::ostringstream notes;
-  notes << "harness_revision=whole_softmax_precision_v2;"
+  notes << "harness_revision="
+        << (kEndpointRangeBuild ? "whole_softmax_precision_range_v1"
+                                : "whole_softmax_precision_v2")
+        << ';'
         << "canonical_input=fp16_quantized_promoted_to_fp32_v1;"
-        << "preheat_policy=fp16_io_fp32_all;"
+        << "preheat_policy=" << policy_spec(conditioner_policy).name << ";"
         << "preheat_actual_s=" << preheat_actual_s << ";"
         << "conditioning_mode=" << conditioning.mode << ";"
         << "preparation_order=" << conditioning.preparation_order << ";"
         << "preparation_policy_order=" << conditioning.preparation_policy_order << ";"
         << "premeasurement_schedule_warmup=" << conditioning.schedule_warmup << ";"
         << "packed_reduction_semantics=half2_across_two_rows_then_vector_tree;"
+        << "packed_range_exp_normalization_semantics="
+        << row.packed_elementwise_mapping << ";"
+        << "threads_per_block=" << state.threads_per_block << ";"
+        << "elements_per_thread=" << state.elements_per_thread << ";"
+        << "static_single_wave_capacity_blocks="
+        << row.static_single_wave_capacity_blocks << ";"
+        << "grid_sm_coverage=" << row.grid_sm_coverage << ";"
         << "metric=net_pJ_per_logical_output_element;"
         << "sfu_attribution=not_claimed;"
         << "temperature_not_hard_fail=" << measurement.before.temp_c << "->"
@@ -1087,9 +1347,13 @@ void print_dry_run(const DeviceState& state, const Options& options,
             << state.properties.minor << "\n"
             << "runtime_sm_count=" << state.properties.multiProcessorCount << "\n"
             << "cuda_pci_bus_id=" << state.pci_bus_id << "\n"
-            << "whole_precision_softmax_cols=" << kSoftmaxCols << "\n"
+            << "whole_precision_softmax_cols=" << state.softmax_cols << "\n"
             << "grid_blocks=" << state.grid_blocks << "\n"
             << "rows_per_block=" << kRowsPerBlock << "\n"
+            << "threads_per_block=" << state.threads_per_block << "\n"
+            << "elements_per_thread=" << state.elements_per_thread << "\n"
+            << "grid_sm_coverage=" << static_cast<double>(state.grid_blocks) /
+                   static_cast<double>(state.properties.multiProcessorCount) << "\n"
             << "logical_input_contract=fp16_quantized_promoted_to_fp32\n"
             << "conditioning_mode=" << options.conditioning_mode << "\n"
             << "confirmation_pair=" << options.confirmation_pair << "\n";
@@ -1099,22 +1363,28 @@ void print_dry_run(const DeviceState& state, const Options& options,
               << " exp=" << to_string(spec.exp)
               << " reduction=" << to_string(spec.reduction)
               << " normalization=" << to_string(spec.normalization)
-              << " binary_arch=" << query_binary_version(policy)
+              << " binary_arch=" << query_binary_version(policy, state.softmax_cols)
               << " occupancy_max_blocks_per_sm="
-              << query_occupancy_max_blocks_per_sm(policy) << "\n";
+              << query_occupancy_max_blocks_per_sm(policy, state.softmax_cols) << "\n";
   }
   (void)options;
 }
 
 int run(const Options& options) {
   const std::vector<Policy> policies = unique_policies(options);
-  const bool canonical_common = options.conditioning_mode == "canonical_common_v1";
+  const bool endpoint_range_common = kEndpointRangeBuild &&
+      options.conditioning_mode == "endpoint_range_common_v1";
+  const bool canonical_common = options.conditioning_mode == "canonical_common_v1" ||
+      endpoint_range_common;
+  const Policy conditioner_policy = endpoint_range_common
+      ? Policy::fp32_io_fp32_all
+      : Policy::fp16_io_fp32_all;
   const std::vector<Policy> preparation_policies = canonical_common
       ? canonical_policy_order(policies)
       : policies;
   ConditioningMetadata conditioning;
   conditioning.mode = options.conditioning_mode;
-  conditioning.policy = policy_spec(Policy::fp16_io_fp32_all).name;
+  conditioning.policy = policy_spec(conditioner_policy).name;
   conditioning.preparation_order = canonical_common
       ? "canonical_policy_enum_ascending"
       : "schedule_first_seen_legacy";
@@ -1127,6 +1397,7 @@ int run(const Options& options) {
   conditioning.schedule_warmup = canonical_common ? "none" : "schedule_front_once";
   DeviceState state = create_state(options, policies);
   try {
+    require_single_wave_capacity(state, policies);
     print_dry_run(state, options, policies);
     std::cout << "preparation_order=" << conditioning.preparation_order
               << " preparation_policy_order=" << conditioning.preparation_policy_order
@@ -1156,9 +1427,9 @@ int run(const Options& options) {
     // runner across fresh processes.
     std::uint64_t conditioner_one_second_iters = 0;
     if (canonical_common) {
-      conditioner_one_second_iters = calibrate_iters(
-          Policy::fp16_io_fp32_all, state, 1.0);
-      std::cout << "conditioning_calibration_policy=fp16_io_fp32_all"
+      conditioner_one_second_iters = calibrate_iters(conditioner_policy, state, 1.0);
+      std::cout << "conditioning_calibration_policy="
+                << policy_spec(conditioner_policy).name
                 << " one_second_iters=" << conditioner_one_second_iters << "\n";
       for (const Policy policy : preparation_policies) {
         iters.emplace(policy, calibrate_iters(policy, state, options.seconds));
@@ -1168,15 +1439,15 @@ int run(const Options& options) {
     } else {
       // Preserve the legacy stage-isolation sequence for the original target:
       // only the one-second conditioner calibration precedes preheat.
-      conditioner_one_second_iters = calibrate_iters(
-          Policy::fp16_io_fp32_all, state, 1.0);
+      conditioner_one_second_iters = calibrate_iters(conditioner_policy, state, 1.0);
     }
     // A fixed baseline establishes the thermal state once per session.  It is
     // deliberately not repeated per policy, which would inject a policy-order
     // dependent thermal workload before measurement.
     const double preheat_actual_s = preheat_policy(
-        Policy::fp16_io_fp32_all, state, options, conditioner_one_second_iters);
-    std::cout << "preheat_policy=fp16_io_fp32_all preheat_actual_s="
+        conditioner_policy, state, options, conditioner_one_second_iters);
+    std::cout << "preheat_policy=" << policy_spec(conditioner_policy).name
+              << " preheat_actual_s="
               << preheat_actual_s << "\n";
     if (!canonical_common) {
       for (const Policy policy : preparation_policies) {
@@ -1212,7 +1483,7 @@ int run(const Options& options) {
         const ResultRow row = make_row(
             options, state, policy, schedule_id.str(), static_cast<int>(block_index),
             static_cast<int>(sequence_index), iters.at(policy), idle, measurement,
-            validation.at(policy), preheat_actual_s, conditioning);
+            validation.at(policy), preheat_actual_s, conditioning, conditioner_policy);
         writer.write(row);
         write_trace_csv(options.trace_output, row, measurement);
         std::cout << "run_id=" << row.run_id << " policy=" << row.policy

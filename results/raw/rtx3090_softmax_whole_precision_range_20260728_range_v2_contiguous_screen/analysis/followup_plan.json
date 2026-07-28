@@ -1,0 +1,44 @@
+{
+  "coordinates": [
+    "s2048_q50",
+    "s512_q25",
+    "s4096_q25"
+  ],
+  "load_gate": [
+    {
+      "policy": "fp16_scalar_all",
+      "relative_difference": 0.20219365153076777,
+      "triggered": true
+    },
+    {
+      "policy": "fp16x2_all",
+      "relative_difference": 0.12030458668036384,
+      "triggered": true
+    },
+    {
+      "policy": "fp32_io_fp32_all",
+      "relative_difference": 0.14075614176195733,
+      "triggered": true
+    }
+  ],
+  "plateau_gate": [
+    {
+      "policy": "fp16_scalar_all",
+      "relative_difference": 0.8328053146678148,
+      "triggered": true
+    },
+    {
+      "policy": "fp16x2_all",
+      "relative_difference": 0.9359146678721882,
+      "triggered": true
+    },
+    {
+      "policy": "fp32_io_fp32_all",
+      "relative_difference": 0.78884367339058,
+      "triggered": true
+    }
+  ],
+  "practical_difference_fraction": 0.1,
+  "rationale": "Only gate-triggered midpoint or low-coverage extremes are added; no full factorial sweep.",
+  "status": "followup_required"
+}

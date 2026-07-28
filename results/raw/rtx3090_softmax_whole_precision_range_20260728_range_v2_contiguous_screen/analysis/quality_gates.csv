@@ -1,0 +1,6 @@
+check,result,detail
+evidence binding,pass,36 raw roles are SHA-256 bound across manifest.json
+target-native PTX/SASS binding,pass,sass_audit.json SHA-256 ae956aa53147b00ac82cb7fa240ebd60846d3bb961677fe6c5d6fca9fbcb7182
+5 s common conditioning,pass,actual preheat 4.958-5.046 s
+trace/numerical/capacity,pass,trace R² 0.999763-0.999999; all static single-wave gates pass
+thermal context,recorded_not_adjusted,51-71 C; temperature is not a rejection or causal correction

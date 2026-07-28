@@ -101,7 +101,7 @@ def require(condition: bool, message: str) -> None:
 def load_evidence(
     run_dir: Path,
     figure_manifest: Path | None,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None]:
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None, float]:
     analysis_dir = run_dir / "analysis"
     analysis = read_json(analysis_dir / "analysis.json")
     manifest = read_json(run_dir / "manifest.json")
@@ -114,6 +114,10 @@ def load_evidence(
     require(analysis.get("exploratory_pooling_prohibited") is True, "analysis permits exploratory pooling")
     require(analysis.get("interpretation_boundary") == INTERPRETATION_BOUNDARY,
             "analysis interpretation boundary drifted")
+    design = manifest.get("design")
+    require(isinstance(design, dict), "manifest design is missing")
+    preheat_seconds = number(design, "preheat_seconds")
+    require(preheat_seconds > 0.0, "manifest preheat duration is not positive")
     current_manifest_sha = sha256_file(run_dir / "manifest.json")
     analysis_manifest = analysis.get("manifest", {})
     require(analysis_manifest.get("sha256") == current_manifest_sha,
@@ -155,7 +159,7 @@ def load_evidence(
                 "figure manifest does not bind the current analysis")
         require(figures.get("analysis", {}).get("manifest_sha256") == current_manifest_sha,
                 "figure manifest does not bind the current manifest")
-    return analysis, manifest, sass, summary, pairs, orientation, quality, figures
+    return analysis, manifest, sass, summary, pairs, orientation, quality, figures, preheat_seconds
 
 
 def friendly_summary(summary: list[dict[str, str]]) -> list[dict[str, Any]]:
@@ -275,6 +279,7 @@ def report_markdown(
     rows: list[dict[str, Any]],
     quality: list[dict[str, str]],
     figures: dict[str, Any] | None,
+    preheat_seconds: float,
 ) -> str:
     by_candidate = {row["candidate_id"]: row for row in rows}
     exp = by_candidate["exp_packed"]
@@ -313,11 +318,11 @@ def report_markdown(
         "",
         "## 범위와 metric 정의",
         "",
-        "RTX 3090 sm86(82-SM device), S=512, grid=16 CTA, CTA당 독립 row 2개, logit scale=4, 13 s role, 1 s idle baseline, 20 s conditioner를 고정했다. grid=16은 full-SM saturation 실험이 아니다. 모든 비교는 complete Softmax forward이며, `net pJ/output = (qualified trace energy − idle power × elapsed) × 1e12 / logical output elements`다. 이는 기존 EX2 Operand-rate ATC의 `pJ/added logical exponent result`와 다른 단위이므로 비교·합산·차감하지 않는다.",
+        f"RTX 3090 sm86(82-SM device), S=512, grid=16 CTA, CTA당 독립 row 2개, logit scale=4, 13 s role, 1 s idle baseline, {preheat_seconds:g} s conditioner를 고정했다. grid=16은 full-SM saturation 실험이 아니다. 모든 비교는 complete Softmax forward이며, `net pJ/output = (qualified trace energy − idle power × elapsed) × 1e12 / logical output elements`다. 이는 기존 EX2 Operand-rate ATC의 `pJ/added logical exponent result`와 다른 단위이므로 비교·합산·차감하지 않는다.",
         "",
         "## 순서 효과를 줄인 방법",
         "",
-        "각 fresh process는 정확히 두 role만 실행한다. 두 policy의 numerical validation과 calibrated iteration count는 measurement order와 무관한 canonical enum 순서로 먼저 완료하고, 이후 `fp16_io_fp32_all`만 20초 conditioning한다. 그 뒤 unrecorded policy warm-up 없이 AB 또는 BA를 측정한다. AB/BA 3회씩은 각 treatment의 first/second position과 directed predecessor를 균형화한다.",
+        f"각 fresh process는 정확히 두 role만 실행한다. 두 policy의 numerical validation과 calibrated iteration count는 measurement order와 무관한 canonical enum 순서로 먼저 완료하고, 이후 `fp16_io_fp32_all`만 {preheat_seconds:g}초 conditioning한다. 그 뒤 unrecorded policy warm-up 없이 AB 또는 BA를 측정한다. AB/BA 3회씩은 각 treatment의 first/second position과 directed predecessor를 균형화한다.",
         image_markdown(figures, "orientation_diagnostic"),
         "",
         "",
@@ -354,6 +359,7 @@ def artifact_payload(
     pairs: list[dict[str, Any]],
     orientation: list[dict[str, Any]],
     quality: list[dict[str, str]],
+    preheat_seconds: float,
 ) -> dict[str, Any]:
     analysis_dir = run_dir / "analysis"
     analysis_source = {
@@ -508,8 +514,8 @@ def artifact_payload(
                 {"id": "orientation_intro", "type": "markdown", "sourceId": "analysis", "body": "## AB/BA balance는 순서효과를 진단하기 위한 장치다\n\n각 candidate에서 AB와 BA를 세 번씩 실행해 first/second position과 directed predecessor를 균형화했다. order별 bar는 carryover diagnostic일 뿐, small-n order effect의 causal estimate나 post-hoc selection rule이 아니다."},
                 {"id": "orientation_block", "type": "chart", "chartId": "order_orientation"},
                 {"id": "pair_table_block", "type": "table", "tableId": "pair_table"},
-                {"id": "scope", "type": "markdown", "sourceId": "analysis", "body": "## Scope, data, and metric definition\n\nRTX 3090 sm86 is an 82-SM device, but this fixed grid uses 16 CTA and is not a full-SM-saturation experiment. S=512, two independent rows/CTA, logit scale=4, ~13 s role and 20 s baseline conditioner are fixed. `net pJ/output = (qualified trace energy − idle power × elapsed) × 1e12 / logical output elements`. This is complete Softmax forward, not the older EX2 Operand-rate ATC denominator."},
-                {"id": "method", "type": "markdown", "sourceId": "analysis", "body": "## Canonical preparation and common conditioning\n\nWithin each fresh process, validation and all calibration happen in canonical policy-enum order before a fixed 20 s `fp16_io_fp32_all` conditioner. There is no unrecorded policy warm-up. Only then does the untouched two-role AB or BA schedule run, with the same 1 s idle baseline before each role."},
+                {"id": "scope", "type": "markdown", "sourceId": "analysis", "body": f"## Scope, data, and metric definition\n\nRTX 3090 sm86 is an 82-SM device, but this fixed grid uses 16 CTA and is not a full-SM-saturation experiment. S=512, two independent rows/CTA, logit scale=4, ~13 s role and {preheat_seconds:g} s baseline conditioner are fixed. `net pJ/output = (qualified trace energy − idle power × elapsed) × 1e12 / logical output elements`. This is complete Softmax forward, not the older EX2 Operand-rate ATC denominator."},
+                {"id": "method", "type": "markdown", "sourceId": "analysis", "body": f"## Canonical preparation and common conditioning\n\nWithin each fresh process, validation and all calibration happen in canonical policy-enum order before a fixed {preheat_seconds:g} s `fp16_io_fp32_all` conditioner. There is no unrecorded policy warm-up. Only then does the untouched two-role AB or BA schedule run, with the same 1 s idle baseline before each role."},
                 {"id": "quality_intro", "type": "markdown", "sourceId": "analysis", "body": "## Trace, placement, numerical, and static-code evidence\n\nAll 24 roles passed qualified Theil-Sen trace, SMID placement, logical denominator, and FP64-reference numerical gates. The manifest binds the frozen executable, runner, raw/trace SHA-256, and a passing sm86 SASS audit for that exact binary."},
                 {"id": "quality_table_block", "type": "table", "tableId": "quality_table"},
                 {"id": "limitations", "type": "markdown", "body": "## What this result does not establish\n\nCandidate choice came from exploratory evidence, so the intervals are descriptive targeted-replication summaries, not a broad generalization or pure unit-energy measurement. AB/BA reduces a documented order problem but does not remove all DVFS, temperature, or device-state variation. The result does not transfer automatically to other S/CTA coordinates or V100/A100/H100; stage deltas are not additive all-FP16 endpoint predictions."},
@@ -543,14 +549,16 @@ def main() -> int:
     run_dir = args.run_dir.resolve()
     out_dir = args.out_dir.resolve()
     figure_manifest = args.figure_manifest.resolve() if args.figure_manifest else None
-    analysis, _manifest, sass, raw_summary, raw_pairs, raw_orientation, quality, figures = load_evidence(run_dir, figure_manifest)
+    (analysis, _manifest, sass, raw_summary, raw_pairs, raw_orientation, quality, figures,
+     preheat_seconds) = load_evidence(run_dir, figure_manifest)
     summary = friendly_summary(raw_summary)
     pairs = friendly_pairs(raw_pairs)
     orientation = friendly_orientation(raw_orientation)
     tag = str(analysis["manifest"]["run_tag"])
     prefix = f"rtx3090_softmax_whole_precision_targeted_confirmation_{tag}"
-    markdown = report_markdown(summary, quality, figures)
-    artifact = artifact_payload(run_dir, analysis, sass, summary, pairs, orientation, quality)
+    markdown = report_markdown(summary, quality, figures, preheat_seconds)
+    artifact = artifact_payload(run_dir, analysis, sass, summary, pairs, orientation, quality,
+                               preheat_seconds)
     markdown_path = out_dir / f"{prefix}_analysis_ko.md"
     artifact_path = out_dir / f"{prefix}_artifact.json"
     html_path = out_dir / f"{prefix}_report.html"

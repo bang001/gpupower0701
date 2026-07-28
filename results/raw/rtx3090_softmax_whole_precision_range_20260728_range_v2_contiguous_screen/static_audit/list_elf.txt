@@ -1,0 +1,3 @@
+ELF file    1: softmax_whole_precision_main.sm_86.cubin
+ELF file    2: softmax_whole_precision_range_kernels.sm_86.cubin
+ELF file    3: a100_fp16_softmax_whole_precision_range_energy.3.sm_86.cubin
