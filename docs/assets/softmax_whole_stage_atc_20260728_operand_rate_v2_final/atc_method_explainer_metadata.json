@@ -5,11 +5,11 @@
   "use_case": "scientific-educational",
   "generation_mode": "openai_builtin_image_generation",
   "generated_at_utc": "2026-07-28T23:04:53Z",
-  "last_edited_at_utc": "2026-07-28T23:30:57Z",
+  "last_edited_at_utc": "2026-07-28T23:40:10Z",
   "image": {
     "path": "docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_atc_method_explainer.png",
-    "sha256": "3bdc046345f4c6f41e54be7393b6a97b70cbc441b2f4a853fe963fcd03de4488",
-    "bytes": 1558090,
+    "sha256": "632859720763096e3f2a6df11182afc8bd7e298218d9706687ceb70cdfb2710e",
+    "bytes": 1498680,
     "width_px": 1672,
     "height_px": 941,
     "color_mode": "RGB"
@@ -52,6 +52,11 @@
         "서로 합산하지 않음"
       ],
       "invariants": "Preserve all other text, equations, icons, charts, colors, spacing, panels, and layout."
+    },
+    {
+      "request": "Add the label C-T-C 예시 above the center equation so the C-T-C-specific formula is not mistaken for the T-C-T formula.",
+      "rendered_text": "C-T-C 예시",
+      "invariants": "Preserve the P_C* asterisk, separate-arm footer, and all other text, equations, icons, charts, colors, spacing, panels, and layout."
     }
   ],
   "human_qa": {
