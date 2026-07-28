@@ -16,7 +16,27 @@ logical-output rate로 나눈 B, 즉 **paired incremental Operand-rate ATC
 | 구분 | numerator | denominator | idle의 역할 |
 |---|---|---|---|
 | absolute complete-Softmax endpoint (A) | `qualified trace energy - idle power × elapsed` | complete Softmax logical output 수 | absolute endpoint 식에 포함 |
-| paired incremental whole-stage ATC (B) | 시간 보간한 `treatment - active control` power contrast | treatment의 added-stage logical output rate 또는 수 | role 전 상태 진단에만 기록, primary numerator에서 제외 |
+| paired incremental whole-stage ATC (B) | 시간 보간한 `treatment - active control` power contrast | treatment의 added-stage logical output rate 또는 수 | role 전 상태 진단에만 기록, ATC numerator에서 제외 |
+
+감사 후 판정은 측정 계약의 성립과 energy estimand의 적합성을 분리한다. 같은
+symbol·geometry·I/O·resource와 runtime flag를 사용하는 active control은
+**probe ON/OFF의 signed board-power contrast**에는 구조적으로 적절하다. 그러나
+C와 T의 runtime이 다르면 B는 role-energy contrast가 아니라 power 차이를
+treatment rate로 투영하므로, 물리적 stage energy 질문의 primary estimator로는
+불충분하다.
+따라서 역사적 B는 energy 질문에서 **secondary diagnostic**으로 재분류한다. ATC가
+양수라는 사실도 이 estimand 문제를 해결하거나 물리적 energy 추정의 타당성을
+증명하지 않는다.
+C-T-C fixed-work 식은 `(E_hat_T-E_hat_C*)/N`, T-C-T 식은
+`(E_hat_T*-E_hat_C)/N`이다. `E_hat_role=P_hat_trace×t_CUDA`이며 별표는 두 outer
+role의 추정 energy를 middle 시점으로 보간했다는 뜻이다.
+
+![Operand-rate ATC 실험 방법 개념도](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_atc_method_explainer.png)
+
+위 생성형 이미지는 측정 plot이 아니라 power(높이), runtime(폭), energy(면적)의
+차이를 설명한다. 초록 상자의 A/B는 서로 다른 두 후속 arm이며 결과를 합산하지
+않는다. 정확한 정량 근거는 [완료 보고서](../results/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final_ko.md)의
+식과 SHA-bound CSV/JSON이다.
 
 비교 대상은 다음 아홉 cell이다.
 
@@ -36,13 +56,16 @@ Normalization의 row-sum reciprocal은 물리적으로 row당 한 번만 실행�
 multiply한다. FP16 정책의 reciprocal은 native FP16 RCP가 아니라
 FP32 RCP 후 FP16으로 반올림하는 경로다.
 
-## primary estimand
+## 역사적 acquisition estimand와 현재 해석 등급
 
-Primary 지표의 정확한 이름은 다음과 같다.
+V2 manifest/CSV에 당시 `primary_estimand`로 기록한 정확한 이름은 다음과 같다.
 
 ```text
 active-control Operand-rate ATC delta pJ per logical Softmax output element for one added <stage> pass
 ```
+
+이 artifact 내부 이름과 계산식은 provenance를 위해 변경하지 않는다. 다만 현재의
+물리적 energy 질문에서는 이 값을 secondary signed-power diagnostic으로 해석한다.
 
 `C-T-C` bracket에서는 treatment 시점의 active-control power를 두 control에서
 시간 보간한다.
@@ -81,7 +104,7 @@ Packed FP16x2의 두 lane은 서로 다른 scalar logical output 두 개다.
 Packed PTX instruction당 값을 보조적으로 표시할 때만 logical-result 값의 2배다.
 
 Idle power와 A인 `absolute idle-subtracted complete-Softmax net pJ/logical
-output`은 진단값으로만 남긴다. Idle은 primary ATC numerator에 들어가지 않는다.
+output`은 진단값으로만 남긴다. Idle은 ATC numerator에 들어가지 않는다.
 
 ## 완료 결과 상태 (2026-07-28)
 
@@ -90,9 +113,10 @@ output`은 진단값으로만 남긴다. Idle은 primary ATC numerator에 들어
 `3 stages × 3 endpoints × 3 sessions × 6 roles = 162 measured roles`를
 완료하고 모든 fail-closed gate를 통과했다. 아래 각 cell은 fresh session
 `n=3`의 **mean ± sample SD; [descriptive t95]**이며, 단위는 manifest/CSV의
-정확한 `primary_estimand` template인
+역사적 `primary_estimand` template인
 **`active-control Operand-rate ATC delta pJ per logical Softmax output element
-for one added <stage> pass`**다.
+for one added <stage> pass`**다. 이 이름은 acquisition provenance이고 현재 energy
+질문의 해석 등급은 secondary diagnostic이다.
 
 | Added stage | FP32 | scalar FP16 | packed FP16x2 |
 |---|---:|---:|---:|
@@ -100,14 +124,17 @@ for one added <stage> pass`**다.
 | Max + sum reduction | −600.909 ± 103.083; [−856.981, −344.836] | −700.436 ± 116.748; [−990.453, −410.419] | −473.433 ± 51.194; [−600.606, −346.260] |
 | Normalization | +34.630 ± 98.027; [−208.883, +278.143] | +47.067 ± 15.392; [+8.832, +85.302] | −52.910 ± 13.889; [−87.414, −18.407] |
 
+![Whole-stage Operand-rate ATC mean, descriptive t95, and fresh sessions](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_mean_t95_sessions.png)
+
 > **Reduction의 세 음수값은 음의 물리적 에너지나 stage 원가가 아니다.**
 > Treatment 평균 전력이 active control보다 낮고 treatment runtime은 더 길었던
 > 관측에서 생긴 **signed Operand-rate power projection**이다. GPU가 에너지를
 > 생성했다는 뜻이 아니며, 세 stage 값을 합해 complete-Softmax 에너지를 만들 수
-> 없다.
+> 없다. 반대로 양수 ATC도 물리적 stage-energy estimator가 타당하다는 증거가
+> 아니다.
 
 Role 전 1초 idle은 `diagnostic_only_excluded_from_ATC_numerator`로 기록됐고
-primary numerator에는 사용하지 않았다. Packed FP16x2는 두 scalar logical lane을
+ATC numerator에는 사용하지 않았다. Packed FP16x2는 두 scalar logical lane을
 분모가 이미 모두 세므로 결과에 `/2`를 적용하지 않는다. Frozen sm86 binary의
 static added-stage audit은 9/9 specialization, NCU dynamic instruction audit은
 18/18 target launch와 9/9 C/T pair를 통과했다. NCU는 added-instruction 증거만
@@ -119,22 +146,24 @@ static added-stage audit은 9/9 specialization, NCU dynamic instruction audit은
 
 세부 session 산포, C-T-C/T-C-T disagreement와 Matplotlib 그림은
 [완료 보고서](../results/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final_ko.md)에
-있다. 보고서에는 primary와 섞지 않은 **non-primary same-ITER gross
-board-energy diagnostic**도 포함했다. 각 role에서
-`E_role = qualified trace power × elapsed`를 만든 뒤 같은 midpoint 보간으로
-`(E_T−E_C)×1e12/N_same_ITER`를 계산하며 idle은 쓰지 않는다.
+있다. 보고서에는 당시 ATC primary와 섞지 않은 **historical non-primary
+same-ITER gross board-energy diagnostic**도 포함했다. 각 role에서
+`E_hat_role=P_hat_trace×t_CUDA`를 만든다. C-T-C는
+`(E_hat_T−E_hat_C*)×1e12/N_same_ITER`, T-C-T는
+`(E_hat_T*−E_hat_C)×1e12/N_same_ITER`를 계산하고 두 orientation을 평균한다.
+Idle은 쓰지 않는다.
 
-| Reduction implementation | primary mean ATC ΔpJ/output | mean T/C elapsed | non-primary same-ITER gross ΔE/N |
+| Reduction implementation | historical mean ATC ΔpJ/output | mean T/C elapsed | historical same-ITER gross ΔE/N |
 |---|---:|---:|---:|
 | FP32 | −600.909 | 1.390× | +1,826.390 |
 | scalar FP16 | −700.436 | 1.726× | +3,530.892 |
 | packed FP16x2 | −473.433 | 1.442× | +1,423.060 |
 
 Reduction 진단은 18/18 bracket에서 양수였다. 이는 음수 ATC가 음의 물리적
-에너지를 뜻하지 않음을 확인하지만, complete Softmax 공통 작업의 늘어난 runtime도
-포함하므로 pure stage 원가는 아니다. 후속은 Operand-rate ATC를 primary로
-유지하고 두 추정량을 계속 분리한 뒤, 해석이 민감한 cell만 fixed-clock에서
-targeted 재측정한다. 넓은 CTA×S sweep은 우선하지 않는다.
+에너지를 뜻하지 않음을 확인한다. 동시에 `1.390× / 1.726× / 1.442×`의 runtime
+차이 때문에 signed power와 fixed-work energy가 서로 반대 부호가 될 수 있음을
+보여준다. Same-ITER gross 값도 complete Softmax 공통 작업의 늘어난 runtime을
+포함하므로 pure stage 또는 opcode 원가는 아니다.
 
 기존 `82.164 / 19.393 / 25.055`는 이 아홉 whole-stage cell의 선행 결과가 아니라,
 별도 geometry와 control shell에서 얻은 **EX2-only paired incremental
@@ -142,7 +171,56 @@ targeted 재측정한다. 넓은 CTA×S sweep은 우선하지 않는다.
 **absolute idle-subtracted complete-Softmax net pJ/logical output**이다.
 어느 쪽도 이번 whole-stage ATC 결과로 재표기하지 않는다.
 
+## 제안된 v3 energy primary와 제한된 two-arm 후속 (미구현)
+
+이 절은 **proposed v3 / not implemented**다. 완료된 v2의 code, manifest, raw
+data, `primary_estimand` 이름 또는 fail-closed gate를 소급 변경하지 않는다.
+실행 전 별도 preregistration과 runner/analyzer 구현·self-test가 필요하다.
+
+질문에 따라 primary를 다음처럼 고정한다.
+
+| 질문 | Primary | 보조 진단 |
+|---|---|---|
+| 이 concrete probe ON/OFF 구현의 고정 작업량 증분 board energy는 얼마인가? | C-T-C `(E_hat_T−E_hat_C*)/N`, T-C-T `(E_hat_T*−E_hat_C)/N`의 exact same-ITER 평균 | equal-duration C/T power와 output rate, 역사적 Operand-rate ATC |
+| 실제 Softmax에서 precision stage를 바꾸면 energy/output이 어떻게 달라지는가? | complete-Softmax 또는 stage-replacement endpoint energy/output | SASS/NCU instruction delta와 probe ATC |
+| opcode 또는 회로 고유 에너지는 얼마인가? | 이 protocol만으로 식별하지 않음 | 어느 위 지표도 opcode 계수로 재명명하지 않음 |
+
+Fixed-work `ΔE_hat/N`도 added pass 때문에 늘어난 시간 동안 실행된 공통 Softmax
+board energy estimate를 포함한다. 따라서 이것은 해당 concrete implementation의
+증분 board-energy primary estimate이지, 순수 stage/opcode 원가가 아니다. 실제
+precision 선택은 primary stage를 교체한 complete-Softmax endpoint에서 별도로
+판단한다.
+
+넓은 CTA×S sweep 대신 현재 `S=1024`, grid 41 CTA(q50), 256 threads/CTA,
+2 rows/CTA 좌표에서 **scalar FP16 exp, reduction, normalization 세 cell**만
+후속 측정한다.
+
+- 각 cell은 fresh CUDA-process session **4회**를 사용한다. Arm 순서는 `A→B`
+  2회와 `B→A` 2회, bracket 시작 순서는 `C-T-C→T-C-T` 2회와
+  `T-C-T→C-T-C` 2회를 2×2로 교차 균형화한다.
+- 각 session은 **equal-duration power-rate arm**과 **exact same-ITER energy
+  arm**을 모두 실행한다.
+- Equal-duration arm은 C와 T를 같은 목표 wall time으로 보정하고 `P_C`, `P_T`,
+  `R_C`, `R_T`를 분리 보고한다. 이는 clock/power-state와 처리율을 설명하는
+  secondary sensitivity다. Role elapsed ratio `0.98–1.02`를 v3 사전 gate로
+  사용한다. 이 범위는 완료 v2에는 없었던 2026-07-29 사후 진단 기준이다.
+- Exact same-ITER arm은 C와 T에 동일한 `ITER`와 logical output 수를 고정하고
+  `E_hat_role=P_hat_trace×t_CUDA`를 계산한다. 사전 지정 primary는 orientation별
+  두 식의 평균 `ΔE_hat/N_same_ITER`이다. 직접 joule endpoint를 적분한 값으로
+  부르지 않는다.
+- 공통 preheat는 **5초**이며, idle·온도·SM clock은 진단값으로 기록한다.
+- 기본 clock run 뒤 해석이 남는 경우에만 동일 3-cell/4-session 설계를 fixed SM
+  clock에서 반복한다. Fixed-clock은 optional sensitivity이지 기본 결과와
+  자동 pooling하지 않는다.
+
+이 후속도 CTA와 `S`를 추가 sweep하지 않으며, 양수/음수 부호 자체를 validity
+gate로 사용하지 않는다.
+
 ## 동일-symbol 반사실
+
+아래 exact same-`ITER` 계약은 완료 v2와 proposed v3의 Arm B에 적용한다. Arm A는
+equal-duration을 위해 C/T `ITER`만 독립 보정하되, 그 차이를 manifest에 기록하고
+나머지 symbol·geometry·I/O·resource 계약은 유지한다.
 
 각 `(stage, endpoint)` cell의 control과 treatment는 다음 항목이 같아야 한다.
 
@@ -162,6 +240,9 @@ treatment: complete Softmax + extra_stage_pass=true
 모든 thread가 같은 flag를 보며, reduction probe의 barrier도 block 전체가 함께
 진입한다. Control/treatment를 서로 다른 kernel symbol로 만들거나 treatment만
 다른 compile-time specialization을 쓰면 이 protocol의 ATC로 인정하지 않는다.
+이 동일-symbol 계약은 signed probe ON/OFF power contrast의 구조적 타당성을
+지지하지만, runtime이 다른 두 role의 물리적 energy를 ATC 식이 식별한다는 증거는
+아니다.
 
 Observer가 treatment 자체의 부하를 만들지 않도록 C/T는 같은 opaque
 materialization, sink mixing, store와 같은 최종 sink data bits를 가져야 한다.
@@ -201,7 +282,7 @@ SMID histogram에서 41개 CTA가 41개 고유 SM에 놓이고 한 SM의 최대 
 온도는 Softmax workload의 결과로 상승할 수 있으므로 hard reject 조건으로 쓰지
 않는다. 대신 role 전후 온도와 SM clock을 저장하고 session 편차와 함께 보고한다.
 
-## 수집 순서
+## 완료 v2 수집 순서
 
 Stage마다 세 fresh CUDA process/session을 사용한다. 한 process 안에서는 모든
 policy와 role을 같은 CUDA context에서 실행한다.
@@ -233,7 +314,7 @@ treatment가 세 번씩 등장하므로 role count와 위치가 균형을 이룬
 독립 fresh-session 값 세 개(`n=3`)의 평균, sample SD, min/max, descriptive t95를
 제시한다.
 
-측정 전 작업은 다음 순서를 따른다.
+완료 v2의 측정 전 작업은 다음 순서를 따른다.
 
 1. 세 endpoint의 numerical validation과 treatment 기준 `ITER` calibration을
    canonical endpoint 순서로 완료한다.
@@ -265,14 +346,15 @@ treatment가 세 번씩 등장하므로 role count와 위치가 균형을 이룬
 - runtime occupancy/capacity 또는 SMID placement gate 실패
 - treatment의 추가 stage가 static/dynamic audit에서 확인되지 않음
 
-온도 차이, signed negative effect, 또는 descriptive t95가 0을 포함하는 것은 자동
-삭제 조건이 아니다. 이들은 결과가 식별되지 않았거나 noise floor에 가깝다는 중요한
-관측으로 그대로 보고한다.
+온도 차이, signed effect의 양수/음수, 또는 descriptive t95가 0을 포함하는 것은
+자동 삭제 조건이 아니다. 이들은 결과가 식별되지 않았거나 noise floor에 가깝다는
+중요한 관측으로 그대로 보고한다. 특히 양수 부호는 contract 통과나 physical
+stage-energy estimator의 타당성을 증명하지 않는다.
 
 ## 해석 경계
 
 - 완료 결과의 범위는 RTX 3090, `S=1024`, q50, 이 persistent cache-reuse
-  kernel의 board-level stage increment다.
+  kernel의 signed probe ON/OFF board-power contrast다.
 - 세 fresh session은 같은 GPU에서 순차 실행한 fresh CUDA context 세 개이며
   독립 모집단 표본이 아니다. 전체 stage 위치는 Latin rotation으로 균형화하지만
   각 cell의 C-T-C→T-C-T 순서는 고정되어 있으므로 t95는 descriptive

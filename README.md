@@ -402,7 +402,26 @@ logical `m16n16k16` op. Raw inline PTX `mma.sync.aligned.m16n8k16` and explicit
 | 구분 | 정확한 지표 이름 | numerator / denominator | 해석 |
 |---|---|---|---|
 | A | **absolute idle-subtracted complete-Softmax net pJ/logical output** | `(qualified trace energy - idle power × elapsed) × 1e12 / logical output count` | complete forward의 board-level 절대 endpoint. 여기서 `net`은 idle만 뺀다는 뜻이며 C/T 차감이 아니다. |
-| B | **`active-control Operand-rate ATC delta pJ per logical Softmax output element for one added <stage> pass`** | 시간 보간한 `treatment - active control` power / treatment added-output rate | complete Softmax 공통 작업 위에 stage pass 하나를 더했을 때의 signed rate projection. 이 ATC에서 role 전 idle은 진단 전용이며 primary numerator에 들어가지 않는다. |
+| B | **`active-control Operand-rate ATC delta pJ per logical Softmax output element for one added <stage> pass`** | 시간 보간한 `treatment - active control` power / treatment added-output rate | complete Softmax 공통 작업 위에 stage pass 하나를 더했을 때의 signed rate projection. 이 ATC에서 role 전 idle은 진단 전용이며 numerator에 들어가지 않는다. |
+
+Active control은 같은 symbol·geometry·I/O·resource에서 probe ON/OFF의 **signed
+board-power contrast**를 보는 대조군으로는 구조적으로 적절하다. 그러나 C와 T의
+runtime이 다를 때 B는 role-energy contrast가 아니라 power 차이를 treatment
+rate로 투영하므로, 물리적 stage energy 질문에서는 **secondary diagnostic**으로만
+사용한다. 양수 부호도 이 한계를 해소하거나 물리적 에너지 추정의 타당성을
+증명하지 않는다. 고정 작업량의 증분 board energy가 질문이면 C-T-C의
+`(E_hat_T-E_hat_C*)/N`과 T-C-T의 `(E_hat_T*-E_hat_C)/N`을 평균한 exact
+same-ITER contrast를 사용한다. `E_hat_role=P_hat_trace×t_CUDA`이며 별표는 두
+outer role의 추정 energy를 middle 시점으로 보간했다는 뜻이다. 실제 precision
+선택이 질문이면 complete-Softmax 또는 stage-replacement endpoint의
+energy/output을 primary로 사용한다.
+
+![Operand-rate ATC 실험 방법 개념도](docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_atc_method_explainer.png)
+
+위 생성형 이미지는 측정 plot이 아니라 power(높이), runtime(폭), energy(면적)의
+차이를 설명하는 개념도다. 초록 상자의 A/B는 서로 다른 두 후속 arm이며 결과를
+합산하지 않는다. 정량 판단은 [완료 보고서](docs/results/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final_ko.md)의
+식과 SHA-bound CSV/JSON을 따른다.
 
 기존 `82.164 / 19.393 / 25.055`는 B 중에서도 **EX2-only added pass**의
 `ΔpJ/added logical EX2 result`다. 수천 pJ 범위의 값은 A이므로 계산 대상이 다르며,
@@ -417,10 +436,11 @@ mismatch는 0이고 저장값과의 최대 차이는 `9e-8 pJ/logical output` �
 [`rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final`](results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final/manifest.json)은
 `S=1024`, grid 41 CTA(q50), 256 threads/CTA, 2 rows/CTA와 5초 preheat에서
 3 stage × 3 implementation × fresh 3 session을 완료했다. 아래 각 cell은
-**mean ± sample SD; [descriptive t95]**이며, 단위는 manifest/CSV의 정확한
-`primary_estimand` template인
+**mean ± sample SD; [descriptive t95]**이다. 단위는 manifest/CSV에 당시
+`primary_estimand`로 기록된
 **`active-control Operand-rate ATC delta pJ per logical Softmax output element
-for one added <stage> pass`**다.
+for one added <stage> pass`**다. 이 artifact 내부 이름은 provenance로 보존하지만,
+현재의 물리적 energy 질문에서는 위 값을 secondary diagnostic으로 재분류한다.
 
 | Added stage | FP32 | scalar FP16 | packed FP16x2 |
 |---|---:|---:|---:|
@@ -428,11 +448,14 @@ for one added <stage> pass`**다.
 | Max + sum reduction | −600.909 ± 103.083; [−856.981, −344.836] | −700.436 ± 116.748; [−990.453, −410.419] | −473.433 ± 51.194; [−600.606, −346.260] |
 | Normalization | +34.630 ± 98.027; [−208.883, +278.143] | +47.067 ± 15.392; [+8.832, +85.302] | −52.910 ± 13.889; [−87.414, −18.407] |
 
+![Whole-stage Operand-rate ATC mean, descriptive t95, and fresh sessions](docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_mean_t95_sessions.png)
+
 > **중요:** reduction의 세 음수값은 treatment 평균 전력이 control보다 낮고
 > treatment 실행시간은 더 길었던 상황에서 나온 **signed Operand-rate power
 > projection**이다. 음의 물리적 에너지, GPU가 에너지를 생성했다는 뜻, 또는
 > reduction stage의 음수 원가가 아니다. 세 stage 값을 더해 complete-Softmax
-> 에너지로 만들 수도 없다.
+> 에너지로 만들 수도 없다. 반대로 양수인 ATC도 물리적 stage-energy estimator가
+> 타당하다는 증거가 아니다.
 
 Idle은 role 전 상태를 확인하는 진단값으로만 기록했고 위 ATC numerator에서는
 완전히 제외했다. Packed FP16x2의 분모는 두 scalar logical output lane을 이미 모두
@@ -443,15 +466,32 @@ pair를 통과했다. NCU는 instruction-delta 증거만 제공하며 energy 산
 
 해석·Matplotlib 시각화·재현 근거는
 [완료 보고서](docs/results/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final_ko.md)에
-정리했다. 보고서에는 primary를 바꾸지 않고 같은 좌표의
-**non-primary same-ITER gross board-energy diagnostic**도 별도 표기했다.
-Reduction의 FP32/scalar FP16/packed FP16x2 진단값은 각각
-`+1,826.390 / +3,530.892 / +1,423.060 pJ/logical output`이고 18/18 bracket이
-양수였다. 이는 위 음수 ATC가 음의 물리적 에너지를 뜻하지 않음을 확인하지만,
-complete Softmax 공통 작업의 늘어난 runtime까지 포함하므로 순수 reduction
-stage 원가는 아니다. 다음 단계는 이 두 추정량을 계속 분리하고 논쟁 cell만
-fixed-clock에서 targeted 재측정하는 것이다. CTA×S 전체 sweep은 우선순위가
-아니다.
+정리했다. Reduction의 FP32/scalar FP16/packed FP16x2 treatment/control elapsed
+비는 각각 `1.390× / 1.726× / 1.442×`였다. 역사적 ATC는
+`−600.909 / −700.436 / −473.433 pJ/logical output`으로 모두 음수였지만, 실제
+role runtime을 결합한 same-ITER gross board-energy diagnostic은
+`+1,826.390 / +3,530.892 / +1,423.060 pJ/logical output`으로 모두 양수였고
+18/18 bracket이 양수였다. 이 대조는 runtime이 다른 ATC가 energy primary가 될 수
+없는 estimand 한계를 실증적으로 드러낸다. 따라서 active-control ATC는 signed
+power diagnostic으로 재분류한다. Same-ITER gross 값도 complete Softmax 공통
+작업의 늘어난 runtime을 포함하므로 opcode나 순수 stage 원가는 아니다.
+
+아래 후속은 **proposed v3 / not implemented**이며 완료 v2 artifact를 소급
+변경하지 않는다. CTA×S sweep 대신 scalar FP16의 exp, reduction, normalization
+세 cell만 같은 좌표에서 fresh session 4회씩 확인한다.
+
+- **Equal-duration power-rate arm:** C와 T를 같은 목표시간 동안 실행해 board
+  power와 logical-output rate를 분리 보고한다. 이는 power/state sensitivity용
+  secondary diagnostic이다.
+- **Exact same-ITER energy arm:** C와 T의 `ITER`와 logical output 수를 정확히
+  같게 고정하고 `E_hat_role=P_hat_trace×t_CUDA`로 orientation-specific
+  fixed-work `ΔE_hat/N`을 energy primary로 보고한다.
+
+네 session에서 arm 순서는 `A→B`와 `B→A`를 2:2, bracket 시작 순서는
+`C-T-C→T-C-T`와 `T-C-T→C-T-C`를 2:2로 교차 균형화한다. 공통 preheat는
+5초로 유지한다. 필요할 때만 동일 3-cell 설계를 fixed SM clock에서 반복해 DVFS
+sensitivity를 확인한다. 실제 precision-stage 선택의 결론은 별도의
+complete-Softmax 또는 stage-replacement endpoint에서 내린다.
 
 ## RTX 3090 전체 Softmax 정밀도 단계 분리 (2026-07-27)
 
@@ -549,9 +589,11 @@ RTX 3090의 5초 conditioner cohort는 initial 36 role과 gate-triggered adaptiv
 ## RTX 3090 Softmax EX2 추가-지수 probe 집중 재현 확인 (2026-07-25)
 
 논쟁 좌표인 `CTA=48, S=1024`를 새 CUDA 세션 3개와 순환 implementation 순서로
-재측정했다. 주 지표는 **입력 원소당 추가 EX2 결과 하나의 증분 에너지**다. 이 설계에서는
-`ΔpJ/added logical EX2 result`이며, A의 absolute idle-subtracted
-complete-Softmax net pJ/logical output이나 순수 MUFU 에너지를 뜻하지 않는다.
+재측정했다. 당시 acquisition은 **입력 원소당 추가 EX2 결과 하나의 Operand-rate
+ATC**를 주 지표로 기록했다. 단위는 `ΔpJ/added logical EX2 result`이지만 실제
+C/T role energy를 직접 뺀 값은 아니다. 따라서 현재 energy 질문에서는 secondary
+signed-power diagnostic이며, A의 absolute idle-subtracted complete-Softmax net
+pJ/logical output이나 순수 MUFU 에너지를 뜻하지 않는다.
 
 | Exponent path | Fresh-session mean Operand-rate ATC ΔpJ/added logical EX2 result |
 |---|---:|

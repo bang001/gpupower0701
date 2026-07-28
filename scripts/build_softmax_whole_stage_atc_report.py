@@ -18,7 +18,9 @@ import math
 import os
 import re
 import shlex
+import struct
 import tempfile
+import zlib
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 from urllib.parse import urlsplit
@@ -28,6 +30,19 @@ import plot_softmax_whole_stage_atc as plotter
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_SCHEMA = "softmax_whole_stage_atc_report_v1"
+EXPLAINER_SCHEMA = "softmax_whole_stage_atc_generated_explainer_v1"
+REQUIRED_EXPLAINER_QA_CHECKS = frozenset(
+    {
+        "control_and_treatment_both_active",
+        "probe_off_on_distinction_visible",
+        "ctc_and_tct_brackets_visible",
+        "interpolated_control_star_visible",
+        "power_height_and_energy_area_distinguished",
+        "negative_atc_not_labeled_negative_energy",
+        "korean_text_legible_at_original_resolution",
+        "no_clipping_or_watermark",
+    }
+)
 REQUIRED_FIGURES = (
     "mean_t95_sessions",
     "stage_policy_heatmap",
@@ -111,6 +126,173 @@ def normalize_image_base_url(value: str | None) -> str | None:
         "image base URL must pin a full 40-character Git commit SHA",
     )
     return normalized
+
+
+def require_image_base_directory_match(
+    normalized_base_url: str | None,
+    local_directory: Path,
+) -> None:
+    if normalized_base_url is None:
+        return
+    try:
+        relative_directory = local_directory.resolve().relative_to(ROOT.resolve())
+    except ValueError:
+        return
+    path_parts = [
+        part for part in urlsplit(normalized_base_url).path.split("/") if part
+    ]
+    require(
+        tuple(path_parts[3:]) == relative_directory.parts,
+        "image base URL directory does not match the local repository asset directory",
+    )
+
+
+def png_metadata(path: Path) -> tuple[int, int, str]:
+    try:
+        data = path.read_bytes()
+    except OSError as error:
+        raise ReportError(f"cannot inspect PNG {path}: {error}") from error
+    require(
+        len(data) >= 8 and data[:8] == b"\x89PNG\r\n\x1a\n",
+        f"generated explainer is not a valid PNG: {path}",
+    )
+    offset = 8
+    chunk_index = 0
+    width = height = bit_depth = color_type = 0
+    interlace = -1
+    idat = bytearray()
+    saw_ihdr = False
+    saw_iend = False
+    while offset < len(data):
+        require(
+            offset + 12 <= len(data),
+            f"generated explainer PNG has a truncated chunk header: {path}",
+        )
+        length = struct.unpack(">I", data[offset : offset + 4])[0]
+        kind = data[offset + 4 : offset + 8]
+        payload_start = offset + 8
+        payload_end = payload_start + length
+        crc_end = payload_end + 4
+        require(
+            crc_end <= len(data),
+            f"generated explainer PNG has a truncated {kind!r} chunk: {path}",
+        )
+        payload = data[payload_start:payload_end]
+        recorded_crc = struct.unpack(">I", data[payload_end:crc_end])[0]
+        require(
+            recorded_crc == (zlib.crc32(kind + payload) & 0xFFFFFFFF),
+            f"generated explainer PNG chunk CRC mismatch: {kind!r}",
+        )
+        if chunk_index == 0:
+            require(
+                kind == b"IHDR" and length == 13,
+                "generated explainer PNG must begin with a 13-byte IHDR",
+            )
+        if kind == b"IHDR":
+            require(not saw_ihdr, "generated explainer PNG has duplicate IHDR")
+            (
+                width,
+                height,
+                bit_depth,
+                color_type,
+                compression,
+                filter_method,
+                interlace,
+            ) = struct.unpack(">IIBBBBB", payload)
+            require(
+                compression == 0 and filter_method == 0 and interlace == 0,
+                "generated explainer PNG uses unsupported encoding options",
+            )
+            saw_ihdr = True
+        elif kind == b"IDAT":
+            require(saw_ihdr and not saw_iend, "generated explainer PNG IDAT order is invalid")
+            idat.extend(payload)
+        elif kind == b"IEND":
+            require(
+                saw_ihdr and idat and length == 0 and not saw_iend,
+                "generated explainer PNG IEND is invalid",
+            )
+            saw_iend = True
+            require(
+                crc_end == len(data),
+                "generated explainer PNG has trailing bytes after IEND",
+            )
+        offset = crc_end
+        chunk_index += 1
+    require(
+        saw_ihdr and saw_iend and idat,
+        "generated explainer PNG is missing IHDR, IDAT, or IEND",
+    )
+    require(
+        width > 0 and height > 0 and bit_depth == 8 and color_type == 2,
+        "generated explainer must be a non-empty 8-bit RGB PNG",
+    )
+    require(
+        width * height <= 100_000_000,
+        "generated explainer PNG dimensions exceed the validation limit",
+    )
+    expected_scanline_bytes = height * (1 + width * 3)
+    try:
+        pixels = zlib.decompress(bytes(idat))
+    except zlib.error as error:
+        raise ReportError(
+            f"generated explainer PNG IDAT stream cannot be decoded: {error}"
+        ) from error
+    require(
+        len(pixels) == expected_scanline_bytes,
+        "generated explainer PNG decoded byte count is inconsistent with IHDR",
+    )
+    row_stride = 1 + width * 3
+    require(
+        all(pixels[row * row_stride] <= 4 for row in range(height)),
+        "generated explainer PNG contains an invalid scanline filter",
+    )
+    return width, height, "RGB"
+
+
+def load_explainer_metadata(
+    metadata_path: Path,
+) -> tuple[dict[str, Any], Path]:
+    payload = read_json(metadata_path)
+    require(
+        payload.get("schema_version") == EXPLAINER_SCHEMA,
+        "generated explainer metadata schema is not certified",
+    )
+    require(
+        payload.get("status") == "pass"
+        and payload.get("asset_role") == "explanatory_not_measurement_evidence",
+        "generated explainer metadata is not a passing explanatory asset",
+    )
+    image = payload.get("image")
+    require(isinstance(image, dict), "generated explainer image binding is missing")
+    image_path = resolve_artifact_path(image.get("path", ""))
+    require(image_path.is_file(), f"generated explainer image is missing: {image_path}")
+    require(
+        image_path.suffix.lower() == ".png",
+        "generated explainer image must use a .png extension",
+    )
+    width, height, color_mode = png_metadata(image_path)
+    require(
+        image.get("sha256") == sha256_file(image_path)
+        and image.get("bytes") == image_path.stat().st_size
+        and image.get("width_px") == width
+        and image.get("height_px") == height
+        and image.get("color_mode") == color_mode,
+        "generated explainer image binding does not match the current PNG",
+    )
+    human_qa = payload.get("human_qa")
+    require(
+        isinstance(human_qa, dict) and human_qa.get("status") == "pass",
+        "generated explainer human QA is not pass",
+    )
+    checks = human_qa.get("checks")
+    require(
+        isinstance(checks, dict)
+        and set(checks) == set(REQUIRED_EXPLAINER_QA_CHECKS)
+        and all(value is True for value in checks.values()),
+        "generated explainer human QA checks do not match the required contract",
+    )
+    return payload, image_path
 
 
 def numeric(row: Mapping[str, Any], field: str) -> float:
@@ -300,7 +482,10 @@ def result_table(cells: list[dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
-def reduction_diagnostic_table(cells: list[dict[str, str]]) -> str:
+def reduction_diagnostic_table(
+    cells: list[dict[str, str]],
+    matched: list[dict[str, str]],
+) -> str:
     ordered = [
         row
         for row in sorted(
@@ -310,11 +495,33 @@ def reduction_diagnostic_table(cells: list[dict[str, str]]) -> str:
         if row["stage"] == "reduction"
     ]
     require(len(ordered) == 3, "reduction diagnostic matrix is incomplete")
+    effects_by_policy = {
+        policy: [
+            effect
+            for effect in matched
+            if effect.get("stage") == "reduction"
+            and effect.get("policy") == policy
+        ]
+        for policy in plotter.POLICIES
+    }
+    require(
+        all(len(effects) == 6 for effects in effects_by_policy.values()),
+        "reduction diagnostic requires six bracket effects per policy",
+    )
     lines = [
-        "| Implementation | primary mean ATC ΔpJ/output | mean ΔP | mean T/C elapsed | non-primary same-ITER gross ΔE/N | diagnostic descriptive t95 |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| Implementation | historical mean ATC ΔpJ/output | mean ΔP | mean T elapsed | mean C elapsed | mean T/C | same-ITER gross ΔE/N | diagnostic descriptive t95 |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in ordered:
+        effects = effects_by_policy[row["policy"]]
+        treatment_elapsed = sum(
+            numeric(effect, "treatment_elapsed_at_contrast_s")
+            for effect in effects
+        ) / len(effects)
+        control_elapsed = sum(
+            numeric(effect, "control_elapsed_at_contrast_s")
+            for effect in effects
+        ) / len(effects)
         diagnostic_mean = numeric(
             row,
             "mean_same_iter_gross_board_energy_contrast_pJ_per_logical_output",
@@ -331,6 +538,8 @@ def reduction_diagnostic_table(cells: list[dict[str, str]]) -> str:
             f"| {plotter.POLICY_LABELS[row['policy']]} | "
             f"{signed(numeric(row, 'mean_atc_delta_pJ_per_logical_output_element'))} | "
             f"{signed(numeric(row, 'mean_delta_power_W'))} W | "
+            f"{fmt(treatment_elapsed)} s | "
+            f"{fmt(control_elapsed)} s | "
             f"{fmt(numeric(row, 'mean_treatment_over_control_elapsed_ratio'))}× | "
             f"{signed(diagnostic_mean)} | "
             f"[{signed(diagnostic_low)}, {signed(diagnostic_high)}] |"
@@ -393,6 +602,10 @@ def report_markdown(
     figure_payload: dict[str, Any],
     figures: dict[str, dict[str, Path]],
     image_base_url: str | None = None,
+    explainer_metadata_path: Path | None = None,
+    explainer_payload: dict[str, Any] | None = None,
+    explainer_image_path: Path | None = None,
+    explainer_image_base_url: str | None = None,
 ) -> str:
     means = [
         numeric(row, "mean_atc_delta_pJ_per_logical_output_element") for row in cells
@@ -496,6 +709,29 @@ def report_markdown(
     ]
 
     normalized_image_base_url = normalize_image_base_url(image_base_url)
+    require_image_base_directory_match(
+        normalized_image_base_url,
+        figures[REQUIRED_FIGURES[0]]["png"].parent,
+    )
+    explainer_parts = (
+        explainer_metadata_path,
+        explainer_payload,
+        explainer_image_path,
+        explainer_image_base_url,
+    )
+    require(
+        all(value is None for value in explainer_parts)
+        or all(value is not None for value in explainer_parts),
+        "generated explainer metadata, image, and immutable URL must be supplied together",
+    )
+    normalized_explainer_image_base_url = normalize_image_base_url(
+        explainer_image_base_url
+    )
+    if explainer_image_path is not None:
+        require_image_base_directory_match(
+            normalized_explainer_image_base_url,
+            explainer_image_path.parent,
+        )
 
     def png(identifier: str) -> str:
         return markdown_path(figures[identifier]["png"], report_path)
@@ -508,6 +744,15 @@ def report_markdown(
     def svg(identifier: str) -> str:
         return markdown_path(figures[identifier]["svg"], report_path)
 
+    def explainer_image() -> str:
+        require(
+            explainer_image_path is not None,
+            "generated explainer image was not configured",
+        )
+        if normalized_explainer_image_base_url is None:
+            return markdown_path(explainer_image_path, report_path)
+        return f"{normalized_explainer_image_base_url}/{explainer_image_path.name}"
+
     source_paths = {
         "run manifest": source_artifact_paths["manifest"],
         "analysis JSON": source_artifact_paths["analysis_json"],
@@ -517,6 +762,9 @@ def report_markdown(
         "quality gates": source_artifact_paths["quality_gates"],
         "figure manifest": figure_manifest_path,
     }
+    if explainer_metadata_path is not None and explainer_image_path is not None:
+        source_paths["ATC generated explainer metadata"] = explainer_metadata_path
+        source_paths["ATC generated explainer PNG"] = explainer_image_path
     is_fixture = manifest.get("analysis_test_fixture") is True
     ncu_binding = manifest.get("ncu_audit")
     if is_fixture:
@@ -574,47 +822,40 @@ def report_markdown(
             else " --image-base-url "
             f"{shlex.quote(normalized_image_base_url)}"
         )
+        + (
+            ""
+            if explainer_metadata_path is None
+            else " --explainer-metadata "
+            f"{shlex.quote(repo_path(explainer_metadata_path))}"
+            " --explainer-image-base-url "
+            f"{shlex.quote(str(normalized_explainer_image_base_url))}"
+        )
         + " --out "
         f"{shlex.quote(repo_path(report_path))}"
     )
 
-    unresolved = [
-        row
-        for row in cells
-        if interval_status(row) == "t95 includes 0"
-        or numeric(
-            row, "mean_orientation_disagreement_abs_pJ_per_logical_output_element"
-        )
-        > abs(numeric(row, "mean_atc_delta_pJ_per_logical_output_element"))
-    ]
-    unresolved.sort(
-        key=lambda row: numeric(
-            row, "mean_orientation_disagreement_abs_pJ_per_logical_output_element"
-        ),
-        reverse=True,
-    )
-    if unresolved:
-        targeted = ", ".join(cell_name(row) for row in unresolved[:3])
-        recommendation = (
-            f"넓은 CTA×S sweep 전에 불확실성이 큰 `{targeted}`만 같은 좌표에서 "
-            "fresh session을 추가하거나 fixed-clock/external-meter sensitivity로 확인한다."
-        )
-    else:
-        recommendation = (
-            "현재 좌표에서는 먼저 같은 설계를 한 차례 독립 재현한 뒤, 넓은 sweep 대신 "
-            "S 또는 CTA 한 축의 양 끝점 두 곳만 targeted verification으로 추가한다."
-        )
-
-    scalar_reduction_rows = [
-        row
-        for row in cells
-        if row.get("stage") == "reduction" and row.get("policy") == "fp16_scalar"
-    ]
+    reduction_by_policy = {
+        row["policy"]: row for row in cells if row.get("stage") == "reduction"
+    }
     require(
-        len(scalar_reduction_rows) == 1,
-        "report requires one scalar FP16 reduction summary",
+        set(reduction_by_policy) == set(plotter.POLICIES),
+        "report requires one reduction summary for every policy",
     )
-    scalar_reduction = scalar_reduction_rows[0]
+    scalar_reduction = reduction_by_policy["fp16_scalar"]
+    reduction_posthoc_elapsed_match = all(
+        0.98
+        <= numeric(row, "mean_treatment_over_control_elapsed_ratio")
+        <= 1.02
+        for row in reduction_by_policy.values()
+    )
+    reduction_posthoc_elapsed_status = (
+        "근사 범위 안" if reduction_posthoc_elapsed_match else "근사 범위 밖"
+    )
+    reduction_posthoc_elapsed_conclusion = (
+        "`t_T≈t_C`가 세 구현에서 성립한다."
+        if reduction_posthoc_elapsed_match
+        else "`t_T≈t_C`가 세 구현에서 성립하지 않는다."
+    )
     fp32_by_stage = {
         row["stage"]: row for row in cells if row.get("policy") == "fp32"
     }
@@ -629,16 +870,64 @@ def report_markdown(
         )
         for stage in plotter.STAGES
     )
+    exp_rows = [row for row in cells if row.get("stage") == "exp"]
+    require(
+        len(exp_rows) == 3,
+        "report requires three Exp summaries",
+    )
+    exp_t95_crossing_count = sum(
+        interval_status(row) == "t95 includes 0" for row in exp_rows
+    )
+    packed_normalization_rows = [
+        row
+        for row in cells
+        if row.get("stage") == "normalization" and row.get("policy") == "fp16x2"
+    ]
+    require(
+        len(packed_normalization_rows) == 1,
+        "report requires one packed FP16x2 normalization summary",
+    )
+    packed_normalization = packed_normalization_rows[0]
+    if explainer_image_path is None:
+        explainer_lines: list[str] = []
+    else:
+        assert explainer_metadata_path is not None
+        assert explainer_payload is not None
+        explainer_lines = [
+            "### 그림으로 보는 ATC: power는 높이, energy는 면적이다",
+            "",
+            "아래 생성형 이미지는 계산 절차를 쉽게 설명하기 위한 **개념도**이며 측정 "
+            "그래프가 아니다. 세로 높이는 평균 power, 가로 폭은 runtime, 사각형의 "
+            "면적은 energy를 뜻한다. Reduction처럼 treatment가 더 낮은 높이로 더 "
+            "오래 실행되면 `P_T−P_C*`는 음수여도 same-work energy contrast는 "
+            "양수일 수 있다. 초록 상자의 A와 B는 **서로 다른 두 후속 arm**이며 "
+            "두 결과를 더하지 않는다. 정확한 식과 수치는 이 문서의 SHA-bound "
+            "CSV/JSON이 기준이다.",
+            "",
+            f"![Operand-rate ATC 실험 방법 개념도]({explainer_image()})",
+            "",
+            f"[PNG 파일]({markdown_path(explainer_image_path, report_path)}) · "
+            f"[생성·검수 metadata]({markdown_path(explainer_metadata_path, report_path)})",
+            "",
+            f"> 이미지 역할: `{explainer_payload.get('asset_role')}`. "
+            "측정 데이터 도표가 아닌 개념 설명용 그림이며, 인접한 식과 "
+            "SHA-bound CSV/JSON을 정량 근거로 사용한다.",
+            "",
+        ]
 
     lines = [
         "# RTX 3090 Whole-Softmax stage Operand-rate ATC 보고서",
         "",
         "## 기술 요약",
         "",
-        "**이 보고서의 primary 결과는 idle-subtracted complete-Softmax energy나 "
-        "stage의 물리적 에너지 원가가 아니라, 동일 active-control 대비 treatment의 "
-        "signed Operand-rate power projection이다.** 즉 `(P_T-P_C)/treatment "
-        "logical-output rate`를 ΔpJ/logical output으로 표시한다. "
+        "**Base 검토 결론: active control은 probe OFF/ON의 signed power contrast를 "
+        "위한 구조적 대조군으로는 적절하지만, stage의 물리적 에너지 원가를 추정하는 "
+        "base로는 충분하지 않다.** 특히 treatment와 control의 runtime이 달라지면 "
+        "`(P_T−P_C*)/treatment rate`는 실제 두 role의 energy 차가 아니다. 따라서 "
+        "acquisition contract에서 primary로 명명한 Operand-rate ATC는 보존하되, "
+        "에너지 질문에서는 **secondary power-behavior diagnostic**으로 재분류한다. "
+        "Fixed-work `ΔE_hat/N` 또는 complete-Softmax/stage-replacement endpoint를 "
+        "energy-oriented primary로 사용해야 한다. "
         f"Fail-closed 분석은 {analysis['role_count']}개 measured role, "
         f"{analysis['cell_count']}개 fresh-session cell, "
         f"{analysis['orientation_effect_count']}개 bracket effect와 9개 "
@@ -658,7 +947,14 @@ def report_markdown(
         "낮아진 signed contrast이며, 추가 연산이 음의 물리 에너지를 소비하거나 "
         "Softmax 에너지를 절감했다는 뜻이 아니다.",
         "",
-        "## Primary Operand-rate ATC를 stage의 물리적 에너지 원가와 구분하는 법",
+        "양수라는 부호 자체는 base 타당성 검사가 아니다. Exp의 "
+        f"{exp_t95_crossing_count}/3 cell은 descriptive t95가 0을 포함했고, "
+        "normalization도 packed FP16x2에서는 "
+        f"{signed(numeric(packed_normalization, 'mean_atc_delta_pJ_per_logical_output_element'))} "
+        "pJ/output으로 음수였다. Reduction의 큰 음수가 power와 runtime을 분리해서 "
+        "보아야 한다는 설계 한계를 가장 선명하게 드러냈다.",
+        "",
+        "## Operand-rate ATC를 stage의 물리적 에너지 원가와 구분하는 법",
         "",
         "### 비교 대상은 idle(유휴 상태)이 아니라 같은 Softmax를 실행하는 "
         "active control(활성 대조군)이다",
@@ -674,6 +970,7 @@ def report_markdown(
         "실행이다. Primary output path는 그대로 유지되며 control과 treatment의 main "
         "Softmax output은 bit-identical gate를 통과해야 한다.",
         "",
+        *explainer_lines,
         "따라서 C와 T 모두 GPU가 실제 작업을 수행한다. 이 비교가 묻는 질문은 "
         "“Softmax 한 번의 절대 에너지는 얼마인가?”가 아니라 다음과 같다.",
         "",
@@ -718,6 +1015,57 @@ def report_markdown(
         "`P_T × t_T`에서 빼는 계산이 아니므로 **power projection**이라고 부른다. "
         "`signed`는 절댓값을 취하지 않고 `P_T−P_C*`의 방향을 그대로 보존한다는 뜻이다.",
         "",
+        "두 식을 나란히 쓰면 차이가 더 분명하다.",
+        "",
+        "```text",
+        "현재 Operand-rate ATC = P_T×t_T/N − P_C*×t_T/N",
+        "C-T-C fixed-work = (E_hat_T − E_hat_C*)/N",
+        "T-C-T fixed-work = (E_hat_T* − E_hat_C)/N",
+        "E_hat_role = P_hat_trace,role × t_CUDA,role",
+        "```",
+        "",
+        "현재 ATC의 control 항은 outer-control 추정 role energy `E_hat_C*`가 아니라 "
+        "보간 power `P_C*`에 treatment 시간 `t_T`를 곱한 투영값이다. 반면 "
+        "C-T-C의 `E_hat_C*`는 두 outer control의 추정 role energy를 treatment "
+        "시점으로 보간하고, T-C-T의 `E_hat_T*`는 두 outer treatment의 추정 role "
+        "energy를 control 시점으로 보간한다. 여기서 `P_hat_trace`는 qualified "
+        "cumulative-energy trace의 guarded Theil–Sen slope이며 `t_CUDA`는 CUDA "
+        "elapsed다. 직접 joule endpoint를 적분한 값이라고 과장하지 않는다. "
+        "`t_T≈t_C`일 때에는 ATC와 fixed-work 값이 우연히 비슷해질 수 있지만, "
+        "runtime이 갈라지면 서로 다른 질문에 답한다.",
+        "",
+        "### Base 검토 결론: 구조 비교에는 적절하지만 물리 에너지 base로는 불충분하다",
+        "",
+        "| 검토 항목 | 결과 | 의미 |",
+        "|---|---|---|",
+        "| 같은 kernel symbol, grid/CTA, ITER, I/O, resource와 main output | 통과 | "
+        "probe OFF/ON의 구조적 counterfactual은 성립한다. |",
+        "| C-T-C와 T-C-T의 시간보간 | 통과 | 선형 drift와 중간 위치 편향을 완화하지만 "
+        "서로 다른 runtime·throughput을 같게 만들지는 않는다. |",
+        "| Static/NCU instruction delta | 통과 | treatment의 added path가 실제 실행됐다는 "
+        "근거이며 power 또는 energy 측정은 아니다. |",
+        "| Reduction의 사후 elapsed 근사 진단 (`0.98–1.02`) | "
+        f"**{reduction_posthoc_elapsed_status}** | "
+        "FP32 `"
+        f"{fmt(numeric(reduction_by_policy['fp32'], 'mean_treatment_over_control_elapsed_ratio'))}×`, "
+        "scalar FP16 `"
+        f"{fmt(numeric(reduction_by_policy['fp16_scalar'], 'mean_treatment_over_control_elapsed_ratio'))}×`, "
+        "packed FP16x2 `"
+        f"{fmt(numeric(reduction_by_policy['fp16x2'], 'mean_treatment_over_control_elapsed_ratio'))}×`로 "
+        f"{reduction_posthoc_elapsed_conclusion} 이 범위는 완료 v2의 원래 "
+        "fail-closed gate가 아니다. |",
+        "",
+        "즉 baseline 실행 자체가 잘못 구성된 것은 아니다. **문제는 그 baseline과 "
+        "추정량을 stage energy라는 질문에 사용한 estimand mismatch**다. Exp와 "
+        "FP32/scalar normalization은 elapsed 비가 거의 1이어서 ATC와 same-ITER "
+        "energy contrast가 비슷하게 보였을 뿐이며, 양수 부호가 이 mismatch를 "
+        "검증하거나 해소한 것은 아니다.",
+        "",
+        "`0.98–1.02`는 2026-07-29 감사에서 ATC와 fixed-work contrast가 가까워질 "
+        "조건을 설명하기 위해 추가한 **사후 민감도 기준**이다. 완료 v2의 원래 "
+        "quality gate가 아니며, fixed-work energy contrast의 유효 조건도 아니다. "
+        "후속 equal-duration arm에서만 사전 gate로 사용할 것을 제안한다.",
+        "",
         "### 왜 added stage의 물리적 에너지 원가가 아닌가",
         "",
         "Active-control 차분은 두 실행의 공통 complete-Softmax board-power 성분을 "
@@ -742,7 +1090,7 @@ def report_markdown(
         "",
         "### 부호는 물리적 stage energy의 부호가 아니라 active-power contrast의 부호다",
         "",
-        "| Primary 결과 | 말할 수 있는 것 | 말하면 안 되는 것 |",
+        "| ATC 결과 | 말할 수 있는 것 | 말하면 안 되는 것 |",
         "|---|---|---|",
         "| 양수 | Treatment의 active board power가 대응 control보다 높았고, 이를 "
         "treatment rate로 환산한 값이 양수다. | Added stage가 그만큼의 독립적인 "
@@ -762,23 +1110,27 @@ def report_markdown(
         "",
         "| 지표 | 계산의 핵심 | 실행시간을 다루는 방식 | 대답하는 질문 |",
         "|---|---|---|---|",
-        "| **Primary Operand-rate ATC** | `(P_T−P_C*)/(N_T/t_T)` | Treatment "
+        "| **Operand-rate ATC (power diagnostic)** | `(P_T−P_C*)/(N_T/t_T)` | Treatment "
         "처리율로 active-power 차이를 투영 | Active control 대비 power contrast는 "
         "treatment output 하나당 얼마인가? |",
         "| **Idle-subtracted complete-Softmax energy** | 예: "
         "`(E_softmax−P_idle×t_softmax)/N` | Complete workload의 실제 실행시간과 "
         "idle baseline을 사용 | Softmax 전체가 idle 위에서 소비한 energy/output은 "
-        "얼마인가? **이번 primary estimand가 아니며 ATC 값으로 복원할 수 없다.** |",
-        "| **Same-ITER gross ΔE/N diagnostic** | `(E_T−E_C*)/N`, "
-        "`E_role=P_role×t_role` | C와 T 각각의 실제 runtime을 energy에 포함 | 같은 "
+        "얼마인가? **이번 added-pass acquisition에서 직접 측정한 값이 아니며 ATC로 "
+        "복원할 수 없다.** |",
+        "| **Same-ITER gross ΔE/N diagnostic** | C-T-C "
+        "`(E_hat_T−E_hat_C*)/N`; T-C-T `(E_hat_T*−E_hat_C)/N`; "
+        "`E_hat_role=P_hat_trace×t_CUDA` | C와 T 각각의 CUDA runtime을 추정 "
+        "role energy에 포함 | 같은 "
         "ITER에서 treatment와 active control의 gross board-energy 차이는 얼마인가? |",
         "",
-        "표의 `E_C*`는 두 outer control 각각의 `E_role=P_role×t_role`을 treatment "
-        "midpoint에 보간한 energy이며, T-C-T에서는 같은 방식의 `E_T*`를 사용한다. "
+        "표의 `E_hat_C*`는 두 outer control 각각의 "
+        "`E_hat_role=P_hat_trace×t_CUDA`를 treatment midpoint에 보간한 추정 "
+        "energy이며, T-C-T에서는 같은 방식의 `E_hat_T*`를 사용한다. "
         "Same-ITER 진단도 idle을 빼지 않으며 treatment의 늘어난 실행시간 동안 반복된 "
-        "complete-Softmax 공통 작업까지 포함한다. 따라서 primary를 대체하지 않고, "
-        "그 자체도 순수 added-stage 원가로 재명명하지 않는다. "
-        f"실제 scalar FP16 reduction은 primary가 "
+        "complete-Softmax 공통 작업까지 포함한다. 에너지 질문에는 ATC보다 적절한 "
+        "intervention contrast지만, 그 자체도 순수 added-stage 원가로 재명명하지 않는다. "
+        f"실제 scalar FP16 reduction은 ATC가 "
         f"{signed(numeric(scalar_reduction, 'mean_atc_delta_pJ_per_logical_output_element'))} "
         "pJ/output이지만 treatment/control elapsed 비가 "
         f"{fmt(numeric(scalar_reduction, 'mean_treatment_over_control_elapsed_ratio'), 3)}×이고, "
@@ -824,19 +1176,19 @@ def report_markdown(
         "## 음수 ATC와 same-ITER gross board-energy 진단은 서로 다른 질문이다",
         "",
         f"Reduction의 {negative_reduction_power_count}/18 bracket에서 "
-        "`P_T−P_C`가 음수였지만, 같은 ITER의 role energy를 비교한 비-primary "
+        "`P_T−P_C`가 음수였지만, 같은 ITER의 role energy를 비교한 "
         f"diagnostic은 {positive_reduction_same_iter_count}/18 bracket에서 양수였다. "
-        "아래 `same-ITER gross ΔE/N`은 각 role의 qualified trace power에 실제 "
-        "elapsed를 곱한 뒤 같은 midpoint 규칙으로 role energy를 보간해 계산한다. "
-        "Idle은 사용하지 않는다.",
+        "아래 `same-ITER gross ΔE/N`은 각 role의 guarded Theil–Sen trace-power "
+        "estimate `P_hat_trace`에 CUDA elapsed를 곱해 `E_hat_role`을 만든 뒤, "
+        "orientation별 midpoint 규칙으로 보간해 계산한다. Idle은 사용하지 않는다.",
         "",
-        reduction_diagnostic_table(cells),
+        reduction_diagnostic_table(cells, matched),
         "",
         "이 진단은 treatment가 더 오래 실행된다는 사실을 회계에 포함하므로 reduction "
         "ATC 음수가 물리적 에너지 절감을 뜻하지 않음을 보여준다. 다만 complete "
         "Softmax 공통 작업의 추가 runtime까지 포함한 gross board-energy contrast이므로 "
-        "순수 reduction stage 원가로 재명명해서도 안 된다. Primary Operand-rate ATC를 "
-        "대체하거나 두 값을 합산하지 않는다.",
+        "순수 reduction stage 원가로 재명명해서도 안 된다. 두 값은 서로 다른 "
+        "estimand이므로 합산하지 않는다.",
         "",
         "## stage×implementation 행렬은 부호와 크기만 요약한다",
         "",
@@ -884,7 +1236,8 @@ def report_markdown(
         f"{coordinate.get('rows_per_block')} rows/CTA.",
         f"- 실험 행렬: added stage 3종 × implementation 3종 × fresh session "
         f"{design.get('fresh_sessions_per_stage')}회 = {design.get('total_cells')} cell.",
-        f"- primary 단위: `{plotter.METRIC_LABEL}`.",
+        f"- acquisition contract에 기록된 ATC 단위: `{plotter.METRIC_LABEL}`. "
+        "Base 사후검토 뒤 에너지 해석에서는 secondary diagnostic으로 분류한다.",
         "- logical denominator: `grid_blocks × 2 rows/CTA × observed ITER × S`. "
         "FP16x2도 두 scalar output을 각각 세며 별도의 `/2` 보정은 없다.",
         "- C-T-C: middle treatment power에서 두 outer active-control power의 시간보간값을 "
@@ -894,10 +1247,12 @@ def report_markdown(
         "- session effect: C-T-C와 T-C-T의 signed effect 평균. Cell summary는 "
         "fresh 3-session mean, sample SD, `t(0.975, df=2)` descriptive interval이다.",
         "- non-primary same-ITER diagnostic: 각 role에서 "
-        "`E_role = qualified trace power × elapsed`를 계산하고, 같은 bracket "
-        "midpoint 보간 뒤 `(E_T−E_C) × 1e12 / N_same_ITER`로 낸다. Idle을 쓰지 "
-        "않으며 primary ATC를 대체하지 않는다.",
-        f"- idle: `{metric.get('idle_usage')}`. 즉 기록은 하지만 primary numerator에 "
+        "`E_hat_role = P_hat_trace × t_CUDA`를 계산한다. C-T-C는 "
+        "`(E_hat_T−E_hat_C*)×1e12/N_same_ITER`, T-C-T는 "
+        "`(E_hat_T*−E_hat_C)×1e12/N_same_ITER`이며 두 orientation을 평균한다. "
+        "Idle을 쓰지 않는다. 순수 stage energy는 아니지만 runtime이 다른 fixed-work "
+        "intervention의 gross energy 차에는 ATC보다 직접적이다.",
+        f"- idle: `{metric.get('idle_usage')}`. 즉 기록은 하지만 ATC numerator에 "
         "사용하지 않는다.",
         "",
         "## 실험 설계와 fail-closed 검증",
@@ -944,17 +1299,32 @@ def report_markdown(
         "code-path와 실제 instruction delta의 frozen-binary 근거다. NCU/SASS "
         "자체가 board power를 측정한 것은 아니며 에너지 결과는 NVML 기반이다.",
         "",
-        "## 다음 실험은 불확실한 cell만 좁게 확인한다",
+        "## 다음 실험은 3개 cell의 두 추정량만 좁게 확인한다",
         "",
-        f"1. {recommendation}",
-        "2. Operand-rate ATC를 primary로 유지하고 이번에 추가한 same-ITER gross "
-        "board-energy diagnostic도 계속 별도 표기한다. 어느 쪽도 다른 쪽으로 "
-        "재명명하거나 두 값을 합산하지 않는다.",
-        "3. 추가 확인에서도 같은 symbol/geometry/ITER와 C-T-C/T-C-T balance를 유지하고 "
-        "가능하면 fixed clock 또는 외부 전력계 sensitivity를 추가한다.",
-        "4. 한두 targeted 좌표에서 방향이 재현된 뒤에만 S 또는 CTA 한 축을 증분한다. "
-        "stage×policy×S×CTA 전체 sweep을 바로 열지 않는다.",
-        "5. 플랫폼 비교는 각 GPU의 native binary/static audit와 동일 logical denominator를 "
+        "**상태: proposed v3 / not implemented.** 아래 설계는 완료된 v2의 manifest, "
+        "raw data 또는 quality gate를 소급 변경하지 않는다.",
+        "",
+        "1. 넓은 CTA×S sweep은 열지 않고 scalar FP16의 Exp, Reduction, "
+        "Normalization 세 cell만 동일 좌표에서 다시 측정한다.",
+        "2. **Arm A — equal-duration power-rate:** C와 T의 ITER를 독립 보정해 각 role을 "
+        "약 13 s로 맞추고 elapsed ratio gate를 `0.98–1.02`로 둔다. C-T-C/T-C-T는 "
+        "선형 drift 완화용으로 유지하며 ATC는 power-behavior diagnostic으로 보고한다.",
+        "3. **Arm B — exact same-work energy:** C와 T에 동일 ITER를 주고 각 role의 "
+        "`E_hat_role=P_hat_trace×t_CUDA`로 만든 orientation-specific fixed-work "
+        "gross `ΔE_hat/N`을 energy-oriented primary로 보고한다. 충분히 긴 "
+        "bracketed idle을 새로 수집할 수 있을 때만 idle-adjusted 값은 sensitivity로 "
+        "추가한다.",
+        "4. 각 cell은 4개 fresh session으로 한다. Arm 순서는 `A→B` 2회와 `B→A` "
+        "2회, bracket 시작 순서는 `C-T-C→T-C-T` 2회와 "
+        "`T-C-T→C-T-C` 2회를 2×2로 교차 균형화한다. Preheat는 5 s를 유지한다. "
+        "해석이 남을 때만 동일 3-cell/4-session 구성의 fixed-SM-clock sensitivity "
+        "cohort를 한 번 추가한다.",
+        "5. 원래 목표인 FP32/scalar FP16/packed FP16x2 complete-Softmax 비교는 "
+        "각 구현의 고정 logical workload endpoint energy/output으로 판단한다. 한 stage의 "
+        "precision 효과는 나머지 I/O·stage를 고정한 stage-replacement endpoint로 판단한다.",
+        "6. 이 3-cell 결과가 재현된 뒤에도 좌표 의존성을 확인해야 할 때만 S 또는 CTA "
+        "한 축의 끝점 하나를 추가하고, stage×policy×S×CTA 전체 sweep은 열지 않는다.",
+        "7. 플랫폼 비교는 각 GPU의 native binary/static audit와 동일 logical denominator를 "
         "별도로 검증하고, 플랫폼 간 절대 pJ를 clock/thermal 조건 없이 직접 순위화하지 않는다.",
         "",
         "## 남은 질문",
@@ -990,6 +1360,8 @@ def build_report(
     figure_manifest_path: Path,
     report_path: Path,
     image_base_url: str | None = None,
+    explainer_metadata_path: Path | None = None,
+    explainer_image_base_url: str | None = None,
 ) -> str:
     (
         analysis,
@@ -1005,6 +1377,17 @@ def build_report(
         source_paths["analysis_json"],
         source_paths["manifest"],
     )
+    require(
+        (explainer_metadata_path is None) == (explainer_image_base_url is None),
+        "--explainer-metadata and --explainer-image-base-url must be supplied together",
+    )
+    if explainer_metadata_path is None:
+        explainer_payload = None
+        explainer_image_path = None
+    else:
+        explainer_payload, explainer_image_path = load_explainer_metadata(
+            explainer_metadata_path
+        )
     return report_markdown(
         report_path,
         run_dir.resolve(),
@@ -1019,6 +1402,10 @@ def build_report(
         figure_payload,
         figures,
         image_base_url,
+        explainer_metadata_path,
+        explainer_payload,
+        explainer_image_path,
+        explainer_image_base_url,
     )
 
 
@@ -1054,8 +1441,9 @@ def self_test() -> None:
         require(first == second, "self-test report generation is not deterministic")
         required_text = (
             "## 기술 요약",
-            "## Primary Operand-rate ATC를 stage의 물리적 에너지 원가와 구분하는 법",
+            "## Operand-rate ATC를 stage의 물리적 에너지 원가와 구분하는 법",
             "### 계산식은 active-power 차이를 treatment 처리율로 환산한다",
+            "### Base 검토 결론: 구조 비교에는 적절하지만 물리 에너지 base로는 불충분하다",
             "### 왜 added stage의 물리적 에너지 원가가 아닌가",
             "Same-ITER gross ΔE/N diagnostic",
             "stage끼리 합산할 수 없다",
@@ -1064,7 +1452,7 @@ def self_test() -> None:
             "## 측정 범위와 metric 정의",
             "## 실험 설계와 fail-closed 검증",
             "## 불확실성, 한계, 강건성 범위",
-            "## 다음 실험은 불확실한 cell만 좁게 확인한다",
+            "## 다음 실험은 3개 cell의 두 추정량만 좁게 확인한다",
             "## 남은 질문",
             "## 근거 파일과 재현 경로",
             plotter.METRIC_LABEL,
@@ -1097,6 +1485,168 @@ def self_test() -> None:
             remote.count("[PNG 파일](") == 4,
             "self-test remote report lost local PNG fallbacks",
         )
+        require_image_base_directory_match(
+            remote_base,
+            ROOT / "docs" / "assets" / "report",
+        )
+        try:
+            require_image_base_directory_match(
+                remote_base,
+                ROOT / "docs" / "assets" / "different-report",
+            )
+        except ReportError as error:
+            require(
+                "directory" in str(error),
+                "self-test image directory mismatch rejection reason",
+            )
+        else:
+            raise ReportError("self-test accepted a mismatched image asset directory")
+        explainer_png = root / "explainer.png"
+
+        def png_chunk(kind: bytes, data: bytes) -> bytes:
+            return (
+                struct.pack(">I", len(data))
+                + kind
+                + data
+                + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+            )
+
+        explainer_png.write_bytes(
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00\xff\xff\xff"))
+            + png_chunk(b"IEND", b"")
+        )
+        explainer_metadata = root / "explainer_metadata.json"
+        explainer_record = {
+            "schema_version": EXPLAINER_SCHEMA,
+            "status": "pass",
+            "asset_role": "explanatory_not_measurement_evidence",
+            "image": {
+                "path": str(explainer_png),
+                "sha256": sha256_file(explainer_png),
+                "bytes": explainer_png.stat().st_size,
+                "width_px": 2,
+                "height_px": 1,
+                "color_mode": "RGB",
+            },
+            "human_qa": {
+                "status": "pass",
+                "checks": {
+                    name: True for name in sorted(REQUIRED_EXPLAINER_QA_CHECKS)
+                },
+            },
+            "caveat": "Synthetic explanatory image for report self-test.",
+        }
+        atomic_write_text(
+            explainer_metadata,
+            json.dumps(explainer_record, ensure_ascii=False, indent=2) + "\n",
+        )
+        explainer_remote_base = (
+            "https://raw.githubusercontent.com/example/project/"
+            "89abcdef0123456789abcdef0123456789abcdef/docs/assets/explainer"
+        )
+        with_explainer = build_report(
+            run_dir,
+            None,
+            figure_manifest,
+            report_path,
+            image_base_url=remote_base,
+            explainer_metadata_path=explainer_metadata,
+            explainer_image_base_url=explainer_remote_base,
+        )
+        require(
+            with_explainer.count("![") == 5
+            and with_explainer.count("[PNG 파일](") == 5
+            and "### 그림으로 보는 ATC: power는 높이, energy는 면적이다"
+            in with_explainer
+            and f"]({explainer_remote_base}/explainer.png)" in with_explainer
+            and "ATC generated explainer metadata" in with_explainer,
+            "self-test generated explainer integration is incomplete",
+        )
+        truncated_png = root / "truncated.png"
+        truncated_png.write_bytes(explainer_png.read_bytes()[:26])
+        truncated_record = json.loads(json.dumps(explainer_record))
+        truncated_record["image"].update(
+            {
+                "path": str(truncated_png),
+                "sha256": sha256_file(truncated_png),
+                "bytes": truncated_png.stat().st_size,
+            }
+        )
+        truncated_metadata = root / "truncated_metadata.json"
+        atomic_write_text(
+            truncated_metadata,
+            json.dumps(truncated_record, ensure_ascii=False, indent=2) + "\n",
+        )
+        try:
+            build_report(
+                run_dir,
+                None,
+                figure_manifest,
+                report_path,
+                explainer_metadata_path=truncated_metadata,
+                explainer_image_base_url=explainer_remote_base,
+            )
+        except ReportError as error:
+            require(
+                "truncated" in str(error) or "missing" in str(error),
+                "self-test truncated PNG rejection reason",
+            )
+        else:
+            raise ReportError("self-test accepted a truncated generated explainer PNG")
+        invalid_explainer_record = json.loads(json.dumps(explainer_record))
+        invalid_explainer_record["image"]["sha256"] = "0" * 64
+        invalid_explainer_metadata = root / "invalid_explainer_metadata.json"
+        atomic_write_text(
+            invalid_explainer_metadata,
+            json.dumps(invalid_explainer_record, ensure_ascii=False, indent=2) + "\n",
+        )
+        try:
+            build_report(
+                run_dir,
+                None,
+                figure_manifest,
+                report_path,
+                explainer_metadata_path=invalid_explainer_metadata,
+                explainer_image_base_url=explainer_remote_base,
+            )
+        except ReportError as error:
+            require(
+                "binding" in str(error),
+                "self-test generated explainer rejection reason",
+            )
+        else:
+            raise ReportError(
+                "self-test failed to reject tampered generated explainer metadata"
+            )
+        invalid_qa_record = json.loads(json.dumps(explainer_record))
+        invalid_qa_record["human_qa"]["checks"].pop(
+            "interpolated_control_star_visible"
+        )
+        invalid_qa_metadata = root / "invalid_qa_metadata.json"
+        atomic_write_text(
+            invalid_qa_metadata,
+            json.dumps(invalid_qa_record, ensure_ascii=False, indent=2) + "\n",
+        )
+        try:
+            build_report(
+                run_dir,
+                None,
+                figure_manifest,
+                report_path,
+                explainer_metadata_path=invalid_qa_metadata,
+                explainer_image_base_url=explainer_remote_base,
+            )
+        except ReportError as error:
+            require(
+                "human QA checks" in str(error),
+                "self-test generated explainer QA rejection reason",
+            )
+        else:
+            raise ReportError(
+                "self-test accepted incomplete generated explainer human QA"
+            )
         try:
             normalize_image_base_url("http://example.invalid/report-assets")
         except ReportError as error:
@@ -1136,8 +1686,9 @@ def self_test() -> None:
             raise ReportError("self-test failed to reject a tampered figure")
     print(
         "self_test=pass scenarios=deterministic_report,required_sections,"
-        "four_figures,dual_path_images,immutable_url_enforcement,"
-        "figure_hash_rejection"
+        "four_measured_figures,generated_explainer,dual_path_images,"
+        "immutable_url_enforcement,url_directory_binding,truncated_png_rejection,"
+        "explainer_hash_rejection,explainer_qa_rejection,figure_hash_rejection"
     )
 
 
@@ -1151,6 +1702,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help=(
             "optional immutable HTTPS directory used for rendered PNGs; local PNG "
             "and SVG links remain as fallbacks"
+        ),
+    )
+    parser.add_argument(
+        "--explainer-metadata",
+        type=Path,
+        help=(
+            "optional passing metadata JSON for a generated explanatory PNG; "
+            "requires --explainer-image-base-url"
+        ),
+    )
+    parser.add_argument(
+        "--explainer-image-base-url",
+        help=(
+            "immutable HTTPS directory for the generated explanatory PNG; "
+            "requires --explainer-metadata"
         ),
     )
     parser.add_argument("--out", type=Path)
@@ -1182,7 +1748,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         analysis_dir,
         figure_manifest,
         report_path,
-        args.image_base_url,
+        image_base_url=args.image_base_url,
+        explainer_metadata_path=(
+            args.explainer_metadata.resolve() if args.explainer_metadata else None
+        ),
+        explainer_image_base_url=args.explainer_image_base_url,
     )
     atomic_write_text(report_path, report.rstrip() + "\n")
     print("report_status=pass")
