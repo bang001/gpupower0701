@@ -16,10 +16,12 @@ import importlib
 import json
 import math
 import os
+import re
 import shlex
 import tempfile
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+from urllib.parse import urlsplit
 
 import plot_softmax_whole_stage_atc as plotter
 
@@ -77,6 +79,38 @@ def repo_path(path: Path) -> str:
 
 def markdown_path(target: Path, report_path: Path) -> str:
     return Path(os.path.relpath(target.resolve(), report_path.parent.resolve())).as_posix()
+
+
+def normalize_image_base_url(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.rstrip("/")
+    parsed = urlsplit(normalized)
+    require(parsed.scheme == "https", "image base URL must use HTTPS")
+    require(
+        parsed.netloc == "raw.githubusercontent.com",
+        "image base URL must use raw.githubusercontent.com without credentials or a port",
+    )
+    require(
+        not parsed.query and not parsed.fragment,
+        "image base URL must not contain a query or fragment",
+    )
+    require("%" not in parsed.path, "image base URL must not use percent-encoded paths")
+    require("//" not in parsed.path, "image base URL path must be canonical")
+    path_parts = [part for part in parsed.path.split("/") if part]
+    require(
+        all(part not in {".", ".."} for part in path_parts),
+        "image base URL must not contain dot path segments",
+    )
+    require(
+        len(path_parts) >= 4,
+        "image base URL must include owner, repository, commit, and asset directory",
+    )
+    require(
+        re.fullmatch(r"[0-9a-fA-F]{40}", path_parts[2]) is not None,
+        "image base URL must pin a full 40-character Git commit SHA",
+    )
+    return normalized
 
 
 def numeric(row: Mapping[str, Any], field: str) -> float:
@@ -358,6 +392,7 @@ def report_markdown(
     figure_manifest_path: Path,
     figure_payload: dict[str, Any],
     figures: dict[str, dict[str, Path]],
+    image_base_url: str | None = None,
 ) -> str:
     means = [
         numeric(row, "mean_atc_delta_pJ_per_logical_output_element") for row in cells
@@ -460,8 +495,15 @@ def report_markdown(
         ],
     ]
 
-    def image(identifier: str) -> str:
+    normalized_image_base_url = normalize_image_base_url(image_base_url)
+
+    def png(identifier: str) -> str:
         return markdown_path(figures[identifier]["png"], report_path)
+
+    def image(identifier: str) -> str:
+        if normalized_image_base_url is None:
+            return png(identifier)
+        return f"{normalized_image_base_url}/{figures[identifier]['png'].name}"
 
     def svg(identifier: str) -> str:
         return markdown_path(figures[identifier]["svg"], report_path)
@@ -525,7 +567,14 @@ def report_markdown(
     report_command = (
         "python3 scripts/build_softmax_whole_stage_atc_report.py --run-dir "
         f"{shlex.quote(repo_path(run_dir))}{analysis_option} --figure-manifest "
-        f"{shlex.quote(repo_path(figure_manifest_path))} --out "
+        f"{shlex.quote(repo_path(figure_manifest_path))}"
+        + (
+            ""
+            if normalized_image_base_url is None
+            else " --image-base-url "
+            f"{shlex.quote(normalized_image_base_url)}"
+        )
+        + " --out "
         f"{shlex.quote(repo_path(report_path))}"
     )
 
@@ -589,9 +638,18 @@ def report_markdown(
         "아래 도표에서 채운 marker는 fresh 3-session mean과 descriptive t95이고, "
         "빈 marker 1–3은 독립 CUDA process session이다. t95는 n=3의 기술적 "
         "불확실성 표시이며 다중비교 보정된 추론 구간이 아니다.",
+        (
+            "본문 그림은 저장소 상대경로로 렌더링하며 각 그림 아래에 PNG와 SVG "
+            "원본 링크를 함께 둔다."
+            if normalized_image_base_url is None
+            else "본문 그림은 위치가 바뀌어도 렌더링되도록 immutable commit의 HTTPS "
+            "PNG를 사용한다. 각 그림 아래의 저장소 상대경로 PNG와 SVG는 offline "
+            "fallback 및 원본 검증용이다."
+        ),
         "",
         f"![3×3 mean, t95, and raw sessions]({image('mean_t95_sessions')})",
         "",
+        f"[PNG 파일]({png('mean_t95_sessions')}) · "
         f"[SVG 원본]({svg('mean_t95_sessions')})",
         "",
         *stage_findings(cells),
@@ -623,6 +681,7 @@ def report_markdown(
         "",
         f"![Stage by policy heatmap]({image('stage_policy_heatmap')})",
         "",
+        f"[PNG 파일]({png('stage_policy_heatmap')}) · "
         f"[SVG 원본]({svg('stage_policy_heatmap')})",
         "",
         "## C-T-C와 T-C-T는 중간 위치 편향을 서로 반대 방향에서 진단한다",
@@ -635,6 +694,7 @@ def report_markdown(
         "",
         f"![C-T-C versus T-C-T]({image('ctc_vs_tct')})",
         "",
+        f"[PNG 파일]({png('ctc_vs_tct')}) · "
         f"[SVG 원본]({svg('ctc_vs_tct')})",
         "",
         "## cyclic policy position은 안정성 문맥이지 독립 position 실험이 아니다",
@@ -648,6 +708,7 @@ def report_markdown(
         "",
         f"![Policy position stability]({image('position_stability')})",
         "",
+        f"[PNG 파일]({png('position_stability')}) · "
         f"[SVG 원본]({svg('position_stability')})",
         "",
         "## 측정 범위와 metric 정의",
@@ -761,6 +822,7 @@ def build_report(
     analysis_dir: Path | None,
     figure_manifest_path: Path,
     report_path: Path,
+    image_base_url: str | None = None,
 ) -> str:
     (
         analysis,
@@ -789,6 +851,7 @@ def build_report(
         figure_manifest_path.resolve(),
         figure_payload,
         figures,
+        image_base_url,
     )
 
 
@@ -839,6 +902,51 @@ def self_test() -> None:
             "self-test report required structure is incomplete",
         )
         require(first.count("![") == 4, "self-test report figure count is not four")
+        require(
+            first.count("[PNG 파일](") == 4,
+            "self-test report PNG fallback count is not four",
+        )
+        remote_base = (
+            "https://raw.githubusercontent.com/example/project/"
+            "0123456789abcdef0123456789abcdef01234567/docs/assets/report"
+        )
+        remote = build_report(
+            run_dir,
+            None,
+            figure_manifest,
+            report_path,
+            image_base_url=remote_base,
+        )
+        require(
+            remote.count(f"]({remote_base}/") == 4,
+            "self-test remote image count is not four",
+        )
+        require(
+            remote.count("[PNG 파일](") == 4,
+            "self-test remote report lost local PNG fallbacks",
+        )
+        try:
+            normalize_image_base_url("http://example.invalid/report-assets")
+        except ReportError as error:
+            require("HTTPS" in str(error), "self-test insecure URL rejection reason")
+        else:
+            raise ReportError("self-test accepted an insecure image base URL")
+        invalid_remote_bases = (
+            "https://raw.githubusercontent.com/example/project/main/docs/assets/report",
+            "https://example.invalid/example/project/"
+            "0123456789abcdef0123456789abcdef01234567/docs/assets/report",
+            "https://raw.githubusercontent.com/example/project/"
+            "0123456789abcdef0123456789abcdef01234567/docs/%2e%2e/report",
+        )
+        for invalid_remote_base in invalid_remote_bases:
+            try:
+                normalize_image_base_url(invalid_remote_base)
+            except ReportError:
+                pass
+            else:
+                raise ReportError(
+                    "self-test accepted a mutable or non-canonical image base URL"
+                )
         atomic_write_text(report_path, first)
         require(report_path.is_file() and report_path.stat().st_size > 0,
                 "self-test report file is missing")
@@ -856,7 +964,8 @@ def self_test() -> None:
             raise ReportError("self-test failed to reject a tampered figure")
     print(
         "self_test=pass scenarios=deterministic_report,required_sections,"
-        "four_figures,figure_hash_rejection"
+        "four_figures,dual_path_images,immutable_url_enforcement,"
+        "figure_hash_rejection"
     )
 
 
@@ -865,6 +974,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--run-dir", type=Path)
     parser.add_argument("--analysis-dir", type=Path)
     parser.add_argument("--figure-manifest", type=Path)
+    parser.add_argument(
+        "--image-base-url",
+        help=(
+            "optional immutable HTTPS directory used for rendered PNGs; local PNG "
+            "and SVG links remain as fallbacks"
+        ),
+    )
     parser.add_argument("--out", type=Path)
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args(argv)
@@ -889,7 +1005,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.out
         else (analysis_dir or run_dir / "analysis") / "report_ko.md"
     )
-    report = build_report(run_dir, analysis_dir, figure_manifest, report_path)
+    report = build_report(
+        run_dir,
+        analysis_dir,
+        figure_manifest,
+        report_path,
+        args.image_base_url,
+    )
     atomic_write_text(report_path, report.rstrip() + "\n")
     print("report_status=pass")
     print(f"report={report_path}")

@@ -9,10 +9,11 @@
 ## 3×3 결과와 fresh-session 편차
 
 아래 도표에서 채운 marker는 fresh 3-session mean과 descriptive t95이고, 빈 marker 1–3은 독립 CUDA process session이다. t95는 n=3의 기술적 불확실성 표시이며 다중비교 보정된 추론 구간이 아니다.
+본문 그림은 위치가 바뀌어도 렌더링되도록 immutable commit의 HTTPS PNG를 사용한다. 각 그림 아래의 저장소 상대경로 PNG와 SVG는 offline fallback 및 원본 검증용이다.
 
-![3×3 mean, t95, and raw sessions](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_mean_t95_sessions.png)
+![3×3 mean, t95, and raw sessions](https://raw.githubusercontent.com/bang001/gpupower0701/f2df8b4df44cbe809110549e29d7330ae49a7cc3/docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_mean_t95_sessions.png)
 
-[SVG 원본](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_mean_t95_sessions.svg)
+[PNG 파일](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_mean_t95_sessions.png) · [SVG 원본](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_mean_t95_sessions.svg)
 
 - **Exp:** FP32 +34.978 (t95 includes 0, positive 1/3); scalar FP16 +16.335 (t95 includes 0, positive 2/3); packed FP16x2 +12.169 (t95 includes 0, positive 2/3).
 - **Max + sum reduction:** FP32 -600.909 (t95 < 0, positive 0/3); scalar FP16 -700.436 (t95 < 0, positive 0/3); packed FP16x2 -473.433 (t95 < 0, positive 0/3).
@@ -46,25 +47,25 @@ Reduction의 18/18 bracket에서 `P_T−P_C`가 음수였지만, 같은 ITER의 
 
 Heatmap은 각 cell의 mean과 3개 session 중 양수 개수를 직접 표시한다. 서로 다른 added stage의 값은 완전한 Softmax의 구성비로 더할 수 없으며, packed FP16x2도 scalar logical output element 기준이므로 2로 나누지 않는다.
 
-![Stage by policy heatmap](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_stage_policy_heatmap.png)
+![Stage by policy heatmap](https://raw.githubusercontent.com/bang001/gpupower0701/f2df8b4df44cbe809110549e29d7330ae49a7cc3/docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_stage_policy_heatmap.png)
 
-[SVG 원본](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_stage_policy_heatmap.svg)
+[PNG 파일](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_stage_policy_heatmap.png) · [SVG 원본](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_stage_policy_heatmap.svg)
 
 ## C-T-C와 T-C-T는 중간 위치 편향을 서로 반대 방향에서 진단한다
 
 27개 fresh-session cell 중 두 bracket의 부호가 일치한 것은 19/27개였다. orientation 간 절대 차이의 범위는 1.814–731.484 pJ/output이었다. 대각선에서 멀수록 bracket 방향에 민감했음을 뜻하지만, 그 차이를 별도 causal order effect로 해석하지 않는다.
 
-![C-T-C versus T-C-T](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_ctc_vs_tct.png)
+![C-T-C versus T-C-T](https://raw.githubusercontent.com/bang001/gpupower0701/f2df8b4df44cbe809110549e29d7330ae49a7cc3/docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_ctc_vs_tct.png)
 
-[SVG 원본](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_ctc_vs_tct.svg)
+[PNG 파일](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_ctc_vs_tct.png) · [SVG 원본](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_ctc_vs_tct.svg)
 
 ## cyclic policy position은 안정성 문맥이지 독립 position 실험이 아니다
 
 ABC/BCA/CAB 순환으로 각 implementation이 first, second, third position에 한 번씩 배치됐다. 가장 큰 세 position 관측 범위는 Exp · FP32에서 235.166 pJ/output이었다. position마다 한 fresh session뿐이므로 이 선은 drift 진단이며 position 효과 추정치가 아니다.
 
-![Policy position stability](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_position_stability.png)
+![Policy position stability](https://raw.githubusercontent.com/bang001/gpupower0701/f2df8b4df44cbe809110549e29d7330ae49a7cc3/docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_position_stability.png)
 
-[SVG 원본](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_position_stability.svg)
+[PNG 파일](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_position_stability.png) · [SVG 원본](../assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/rtx3090_softmax_whole_stage_atc_operand_rate_v2_position_stability.svg)
 
 ## 측정 범위와 metric 정의
 
@@ -150,5 +151,5 @@ Manifest에 결합된 NCU dynamic instruction audit는 18개 target launch와 9�
 
 ```bash
 python3 scripts/plot_softmax_whole_stage_atc.py --run-dir results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final --out-dir docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final --prefix rtx3090_softmax_whole_stage_atc_operand_rate_v2
-python3 scripts/build_softmax_whole_stage_atc_report.py --run-dir results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final --figure-manifest docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/figure_manifest.json --out docs/results/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final_ko.md
+python3 scripts/build_softmax_whole_stage_atc_report.py --run-dir results/raw/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final --figure-manifest docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final/figure_manifest.json --image-base-url https://raw.githubusercontent.com/bang001/gpupower0701/f2df8b4df44cbe809110549e29d7330ae49a7cc3/docs/assets/softmax_whole_stage_atc_20260728_operand_rate_v2_final --out docs/results/rtx3090_softmax_whole_stage_atc_20260728_operand_rate_v2_final_ko.md
 ```

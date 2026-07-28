@@ -52,6 +52,17 @@ FIG_DIR="docs/assets/softmax_whole_stage_atc_${TAG}"
   --out "docs/results/rtx3090_softmax_whole_stage_atc_${TAG}_ko.md"
 ```
 
+공개 Markdown을 저장소 밖에서도 미리보기할 때는 다음 옵션을 추가한다.
+
+```bash
+--image-base-url \
+  "https://raw.githubusercontent.com/OWNER/REPO/COMMIT_SHA/docs/assets/ASSET_DIR"
+```
+
+본문은 immutable HTTPS PNG를 사용하고, 생성기는 동일 그림의 저장소 상대 PNG·SVG
+링크도 fallback으로 남긴다. `COMMIT_SHA`는 branch 이름이 아니라 그림이 검증된
+40자리 고정 commit이어야 하며, 생성기는 다른 형식의 URL을 거부한다.
+
 runner는 binary를 acquisition 전에 freeze하며 9개 fresh process에서 총 162개 C/T
 role을 수집한다. analyzer는 static SASS 및 NCU audit가 manifest에 결속되지 않았거나,
 idle이 주 estimand에 들어가거나, 분모·trace·schedule·binary hash가 달라지면
